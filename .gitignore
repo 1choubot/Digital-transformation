@@ -45,3 +45,7 @@ rendered/
 Thumbs.db
 .idea/
 .vscode/
+
+#workbuddy files
+.workbuddy/
+    

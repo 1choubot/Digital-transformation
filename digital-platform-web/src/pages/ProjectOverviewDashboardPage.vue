@@ -102,7 +102,10 @@
             <div class="overview-project__identity">
               <span class="mono">{{ project.projectCode }}</span>
               <strong>{{ project.projectName }}</strong>
-              <small>{{ project.customerName }} / {{ project.projectManager }}</small>
+              <small>
+                {{ project.customerName }} / {{ formatProjectMode(project.projectMode) }} /
+                {{ formatUser(project.projectManagerUser) }}
+              </small>
             </div>
             <StatusBadge :status="project.status" />
             <div class="overview-project__stage">
@@ -158,7 +161,7 @@ import { computed, onMounted, ref } from 'vue';
 import { getProjectOverviewDashboard } from '../api/projects.js';
 import { toReadableApiError } from '../api/http.js';
 import StatusBadge from '../components/StatusBadge.vue';
-import { formatDate, formatUser } from '../utils/format.js';
+import { formatDate, formatProjectMode, formatUser } from '../utils/format.js';
 
 const props = defineProps({
   authToken: {

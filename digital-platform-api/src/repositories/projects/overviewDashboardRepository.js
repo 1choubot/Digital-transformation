@@ -6,9 +6,11 @@ import { mapCreator } from '../userRepository.js';
 import {
   buildInClause,
   groupRowsBy,
+  mapProjectManagerUser,
   PROJECT_OVERVIEW_DASHBOARD_ERROR,
   ProjectOverviewDashboardQueryError
 } from './shared.js';
+import { buildProjectVisibilityCondition } from './visibility.js';
 
 const PROJECT_OVERVIEW_STATUS_FILTERS = new Set(Object.values(PROJECT_STATUS));
 
@@ -83,9 +85,13 @@ export function normalizeProjectOverviewDashboardFilters(query = {}) {
   };
 }
 
-function buildProjectOverviewWhereClause(filters) {
+function buildProjectOverviewWhereClause(filters, user) {
   const conditions = [];
   const params = [];
+  const visibility = buildProjectVisibilityCondition(user, 'p');
+
+  conditions.push(visibility.sql);
+  params.push(...visibility.params);
 
   if (filters.status) {
     conditions.push('p.status = ?');
@@ -132,7 +138,10 @@ function buildProjectOverviewCard(projectRow, stages, documents) {
     projectCode: projectRow.project_code,
     projectName: projectRow.project_name,
     customerName: projectRow.customer_name,
-    projectManager: projectRow.project_manager,
+    projectMode: projectRow.project_mode,
+    projectManagerUserId: projectRow.project_manager_user_id,
+    projectManagerUser: mapProjectManagerUser(projectRow),
+    projectManager: projectRow.project_manager_display_name || projectRow.project_manager,
     status: projectRow.status,
     currentStageId: null,
     currentStageName: null,
@@ -213,15 +222,17 @@ function buildOverviewSummary(projects, myPendingStageDocumentTasks) {
   };
 }
 
-async function selectProjectOverviewRows(filters) {
-  const { whereClause, params } = buildProjectOverviewWhereClause(filters);
+async function selectProjectOverviewRows(filters, user) {
+  const { whereClause, params } = buildProjectOverviewWhereClause(filters, user);
   const [rows] = await pool.execute(
     `SELECT
       p.id,
       p.project_code,
       p.project_name,
       p.customer_name,
+      p.project_mode,
       p.project_manager,
+      p.project_manager_user_id,
       p.status,
       p.planned_start_date,
       p.planned_end_date,
@@ -229,12 +240,22 @@ async function selectProjectOverviewRows(filters) {
       u.account AS creator_account,
       u.display_name AS creator_display_name,
       u.department AS creator_department,
+      u.organization_role AS creator_organization_role,
       u.role AS creator_role,
       u.is_enabled AS creator_is_enabled,
-      u.file_platform_user_id AS creator_file_platform_user_id
+      u.file_platform_user_id AS creator_file_platform_user_id,
+      pm.account AS project_manager_account,
+      pm.display_name AS project_manager_display_name,
+      pm.department AS project_manager_department,
+      pm.organization_role AS project_manager_organization_role,
+      pm.role AS project_manager_role,
+      pm.is_enabled AS project_manager_is_enabled,
+      pm.file_platform_user_id AS project_manager_file_platform_user_id
     FROM projects p
     LEFT JOIN users u
       ON u.id = p.created_by_user_id
+    LEFT JOIN users pm
+      ON pm.id = p.project_manager_user_id
     ${whereClause}
     ORDER BY p.project_code ASC, p.id ASC`,
     params
@@ -304,10 +325,10 @@ async function countMyPendingStageDocumentTasks(userId) {
   return Number(rows[0].count);
 }
 
-export async function getProjectOverviewDashboard(userId, filters) {
+export async function getProjectOverviewDashboard(user, filters) {
   const [projectRows, myPendingStageDocumentTasks] = await Promise.all([
-    selectProjectOverviewRows(filters),
-    countMyPendingStageDocumentTasks(userId)
+    selectProjectOverviewRows(filters, user),
+    countMyPendingStageDocumentTasks(user.id)
   ]);
   const projectIds = projectRows.map((project) => project.id);
   const [stageRows, documentRows] = await Promise.all([

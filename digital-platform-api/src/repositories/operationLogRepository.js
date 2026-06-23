@@ -60,6 +60,7 @@ function mapActor(row) {
     account: row.actor_account,
     name: row.actor_display_name,
     department: row.actor_department,
+    organizationRole: row.actor_organization_role,
     role: row.actor_role,
     isEnabled: row.actor_is_enabled === null ? null : Boolean(row.actor_is_enabled),
     filePlatformUserId: row.actor_file_platform_user_id
@@ -133,6 +134,7 @@ export async function listProjectOperationLogs(projectId, limit = DEFAULT_OPERAT
       u.account AS actor_account,
       u.display_name AS actor_display_name,
       u.department AS actor_department,
+      u.organization_role AS actor_organization_role,
       u.role AS actor_role,
       u.is_enabled AS actor_is_enabled,
       u.file_platform_user_id AS actor_file_platform_user_id

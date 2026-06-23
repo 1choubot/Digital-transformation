@@ -13,7 +13,8 @@
       <div><span>项目编号</span><strong>{{ detail.project.projectCode }}</strong></div>
       <div><span>项目名称</span><strong>{{ detail.project.projectName }}</strong></div>
       <div><span>客户</span><strong>{{ detail.project.customerName }}</strong></div>
-      <div><span>项目经理</span><strong>{{ detail.project.projectManager }}</strong></div>
+      <div><span>项目模式</span><strong>{{ formatProjectMode(detail.project.projectMode) }}</strong></div>
+      <div><span>项目经理</span><strong>{{ formatUser(detail.project.projectManagerUser) }}</strong></div>
       <div><span>参与部门</span><strong>{{ formatDepartments(detail.project.participatingDepartments) }}</strong></div>
       <div><span>项目状态</span><StatusBadge :status="detail.project.status" /></div>
       <div><span>创建人</span><strong>{{ formatUser(detail.project.createdBy) }}</strong></div>
@@ -26,7 +27,12 @@
 
 <script setup>
 import StatusBadge from '../StatusBadge.vue';
-import { formatDate, formatDepartments, formatUser } from '../../utils/format.js';
+import {
+  formatDate,
+  formatDepartments,
+  formatProjectMode,
+  formatUser
+} from '../../utils/format.js';
 
 defineProps({
   detail: {

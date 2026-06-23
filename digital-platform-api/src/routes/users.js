@@ -1,5 +1,9 @@
 import { Router } from 'express';
 import { hashPassword } from '../domain/auth.js';
+import {
+  normalizeEnumText,
+  normalizeNullableEnumText
+} from '../domain/organization.js';
 import { requireAuth, requirePlatformAdmin } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import {
@@ -27,6 +31,14 @@ function normalizeText(value) {
 function normalizeNullableText(value) {
   const text = normalizeText(value);
   return text === '' ? null : text;
+}
+
+function normalizeOrganizationRole(value) {
+  return normalizeEnumText(value);
+}
+
+function normalizeDepartment(value) {
+  return normalizeNullableEnumText(value);
 }
 
 function normalizeBoolean(value, fallback) {
@@ -82,12 +94,13 @@ function assertRequiredFields(payload, fields) {
 }
 
 function normalizeCreateUserInput(payload) {
-  assertRequiredFields(payload, ['account', 'displayName', 'department', 'role', 'password']);
+  assertRequiredFields(payload, ['account', 'displayName', 'organizationRole', 'role', 'password']);
 
   return {
     account: normalizeText(payload.account),
     displayName: normalizeText(payload.displayName),
-    department: normalizeText(payload.department),
+    department: normalizeDepartment(payload.department),
+    organizationRole: normalizeOrganizationRole(payload.organizationRole),
     role: normalizeText(payload.role),
     password: String(payload.password),
     isEnabled: normalizeBoolean(payload.isEnabled, true),
@@ -114,13 +127,17 @@ function normalizeUpdateUserInput(payload) {
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, 'department')) {
-    patch.department = normalizeText(payload.department);
-    if (!patch.department) {
+    patch.department = normalizeDepartment(payload.department);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'organizationRole')) {
+    patch.organizationRole = normalizeOrganizationRole(payload.organizationRole);
+    if (!patch.organizationRole) {
       throw new UserManagementError(
         USER_MANAGEMENT_ERROR.REQUIRED_FIELDS,
         'Missing required user fields',
         400,
-        ['department']
+        ['organizationRole']
       );
     }
   }

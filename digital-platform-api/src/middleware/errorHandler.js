@@ -4,6 +4,8 @@ import { StageDocumentApplicabilityError } from '../domain/stageDocumentApplicab
 import { StageDocumentStatusError } from '../domain/stageDocumentStatus.js';
 import {
   DuplicateProjectCodeError,
+  ProjectAuthorizationError,
+  ProjectManagerUserError,
   ProjectNotFoundError,
   ProjectOverviewDashboardQueryError,
   ProjectStageAdvanceError
@@ -35,7 +37,7 @@ export function errorHandler(error, req, res, next) {
   if (error instanceof ValidationError) {
     res.status(error.statusCode).json({
       error: {
-        code: 'VALIDATION_ERROR',
+        code: error.code || 'VALIDATION_ERROR',
         message: error.message,
         details: error.details
       }
@@ -70,6 +72,28 @@ export function errorHandler(error, req, res, next) {
         code: 'PROJECT_NOT_FOUND',
         message: 'Project not found',
         projectId: error.projectId
+      }
+    });
+    return;
+  }
+
+  if (error instanceof ProjectAuthorizationError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      }
+    });
+    return;
+  }
+
+  if (error instanceof ProjectManagerUserError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details
       }
     });
     return;

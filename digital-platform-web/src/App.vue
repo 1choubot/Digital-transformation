@@ -37,7 +37,7 @@
           我的资料任务
         </button>
         <button
-          v-if="currentUser.isPlatformAdmin"
+          v-if="canAccessUserManagement"
           type="button"
           :class="{ active: route.name === 'users' }"
           @click="navigate('/users')"
@@ -48,7 +48,11 @@
       <div class="current-user">
         <div>
           <strong>{{ currentUser.name }}</strong>
-          <span>{{ currentUser.department }} / {{ currentUser.role }}</span>
+          <span>
+            {{ formatOrganizationRole(currentUser.organizationRole) }} /
+            {{ currentUser.department ? formatBusinessDepartment(currentUser.department) : '全局角色' }} /
+            {{ currentUser.role }}
+          </span>
         </div>
         <button type="button" class="ghost-button" :disabled="loggingOut" @click="handleLogout">
           {{ loggingOut ? '正在退出...' : '退出登录' }}
@@ -108,7 +112,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { getCurrentUser, logout as logoutRequest } from './api/auth.js';
 import {
   clearAuthSession,
@@ -125,6 +129,10 @@ import ProjectListPage from './pages/ProjectListPage.vue';
 import ProjectOverviewDashboardPage from './pages/ProjectOverviewDashboardPage.vue';
 import UserManagementPage from './pages/UserManagementPage.vue';
 import { useHashRouter } from './router.js';
+import {
+  formatBusinessDepartment,
+  formatOrganizationRole
+} from './utils/format.js';
 
 const { route, navigate } = useHashRouter();
 const authLoading = ref(true);
@@ -132,6 +140,9 @@ const loggingOut = ref(false);
 const authToken = ref('');
 const currentUser = ref(null);
 const authMessage = ref('');
+const canAccessUserManagement = computed(
+  () => currentUser.value?.isPlatformAdmin && currentUser.value?.organizationRole === 'system_admin'
+);
 
 function setAuth(token, user) {
   authToken.value = token;

@@ -40,6 +40,7 @@
           <span>项目编号</span>
           <span>项目名称</span>
           <span>客户</span>
+          <span>模式</span>
           <span>项目经理</span>
           <span>项目状态</span>
           <span>当前阶段</span>
@@ -52,7 +53,8 @@
           <span class="mono">{{ project.projectCode }}</span>
           <strong>{{ project.projectName }}</strong>
           <span>{{ project.customerName }}</span>
-          <span>{{ project.projectManager }}</span>
+          <span>{{ formatProjectMode(project.projectMode) }}</span>
+          <span>{{ formatUser(project.projectManagerUser) }}</span>
           <StatusBadge :status="project.status" />
           <span>{{ project.currentStage?.stageName || '-' }}</span>
           <span>{{ formatUser(project.createdBy) }}</span>
@@ -68,7 +70,7 @@
 import { onMounted, ref } from 'vue';
 import { getApiBaseUrlLabel, listProjects, toReadableApiError } from '../api/projects.js';
 import StatusBadge from '../components/StatusBadge.vue';
-import { formatDate, formatUser } from '../utils/format.js';
+import { formatDate, formatProjectMode, formatUser } from '../utils/format.js';
 
 const props = defineProps({
   authToken: {

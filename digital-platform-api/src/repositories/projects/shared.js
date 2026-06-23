@@ -18,11 +18,21 @@ export class ProjectNotFoundError extends Error {
   }
 }
 
+export class ProjectAuthorizationError extends Error {
+  constructor(code = 'FORBIDDEN_OPERATION', message = 'Current user cannot access this project', details = ['projectId']) {
+    super(message);
+    this.name = 'ProjectAuthorizationError';
+    this.statusCode = 403;
+    this.code = code;
+    this.details = details;
+  }
+}
+
 export class ProjectStageAdvanceError extends Error {
-  constructor(code, message, details = {}) {
+  constructor(code, message, details = {}, statusCode = 409) {
     super(message);
     this.name = 'ProjectStageAdvanceError';
-    this.statusCode = 409;
+    this.statusCode = statusCode;
     this.code = code;
     this.details = details;
   }
@@ -38,9 +48,24 @@ export class ProjectOverviewDashboardQueryError extends Error {
   }
 }
 
+export class ProjectManagerUserError extends Error {
+  constructor(code, message, statusCode = 409, details = ['projectManagerUserId']) {
+    super(message);
+    this.name = 'ProjectManagerUserError';
+    this.statusCode = statusCode;
+    this.code = code;
+    this.details = details;
+  }
+}
+
 export const PROJECT_OVERVIEW_DASHBOARD_ERROR = {
   INVALID_PROJECT_STATUS_FILTER: 'INVALID_PROJECT_STATUS_FILTER',
   INVALID_STAGE_ORDER: 'INVALID_STAGE_ORDER'
+};
+
+export const PROJECT_MANAGER_ERROR = {
+  NOT_FOUND_OR_DISABLED: 'PROJECT_MANAGER_USER_NOT_FOUND_OR_DISABLED',
+  ROLE_NOT_ALLOWED: 'PROJECT_MANAGER_USER_ROLE_NOT_ALLOWED'
 };
 
 function parseJsonValue(value) {
@@ -64,7 +89,9 @@ export function toProjectRow(project) {
     project_code: project.projectCode,
     project_name: project.projectName,
     customer_name: project.customerName,
+    project_mode: project.projectMode,
     project_manager: project.projectManager,
+    project_manager_user_id: project.projectManagerUserId,
     participating_departments:
       project.participatingDepartments === null ? null : JSON.stringify(project.participatingDepartments),
     status: project.status,
@@ -75,13 +102,33 @@ export function toProjectRow(project) {
   };
 }
 
+export function mapProjectManagerUser(row) {
+  if (row.project_manager_user_id === null || row.project_manager_user_id === undefined) {
+    return null;
+  }
+
+  return {
+    id: row.project_manager_user_id,
+    account: row.project_manager_account,
+    name: row.project_manager_display_name,
+    department: row.project_manager_department,
+    organizationRole: row.project_manager_organization_role,
+    role: row.project_manager_role,
+    isEnabled: row.project_manager_is_enabled === null ? null : Boolean(row.project_manager_is_enabled),
+    filePlatformUserId: row.project_manager_file_platform_user_id
+  };
+}
+
 export function mapProject(row) {
   return {
     id: row.id,
     projectCode: row.project_code,
     projectName: row.project_name,
     customerName: row.customer_name,
-    projectManager: row.project_manager,
+    projectMode: row.project_mode,
+    projectManagerUserId: row.project_manager_user_id,
+    projectManagerUser: mapProjectManagerUser(row),
+    projectManager: row.project_manager_display_name || row.project_manager,
     participatingDepartments: parseJsonValue(row.participating_departments),
     status: row.status,
     plannedStartDate: row.planned_start_date,
@@ -110,7 +157,10 @@ export function mapProjectListItem(row) {
     projectCode: row.project_code,
     projectName: row.project_name,
     customerName: row.customer_name,
-    projectManager: row.project_manager,
+    projectMode: row.project_mode,
+    projectManagerUserId: row.project_manager_user_id,
+    projectManagerUser: mapProjectManagerUser(row),
+    projectManager: row.project_manager_display_name || row.project_manager,
     status: row.status,
     plannedStartDate: row.planned_start_date,
     plannedEndDate: row.planned_end_date,
@@ -161,11 +211,20 @@ export function selectProjectWithCreatorById(connection, projectId) {
         u.account AS creator_account,
         u.display_name AS creator_display_name,
         u.department AS creator_department,
+        u.organization_role AS creator_organization_role,
         u.role AS creator_role,
         u.is_enabled AS creator_is_enabled,
-        u.file_platform_user_id AS creator_file_platform_user_id
+        u.file_platform_user_id AS creator_file_platform_user_id,
+        pm.account AS project_manager_account,
+        pm.display_name AS project_manager_display_name,
+        pm.department AS project_manager_department,
+        pm.organization_role AS project_manager_organization_role,
+        pm.role AS project_manager_role,
+        pm.is_enabled AS project_manager_is_enabled,
+        pm.file_platform_user_id AS project_manager_file_platform_user_id
       FROM projects p
       LEFT JOIN users u ON u.id = p.created_by_user_id
+      LEFT JOIN users pm ON pm.id = p.project_manager_user_id
       WHERE p.id = ?`,
       [projectId]
     )

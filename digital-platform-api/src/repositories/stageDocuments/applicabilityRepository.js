@@ -1,7 +1,9 @@
 import { pool } from '../../db/pool.js';
+import { canManageStageDocumentApplicability } from '../../domain/organization.js';
 import {
   buildDocumentApplicabilityTransition,
-  DOCUMENT_APPLICABILITY_ACTION
+  DOCUMENT_APPLICABILITY_ACTION,
+  StageDocumentApplicabilityError
 } from '../../domain/stageDocumentApplicability.js';
 import {
   insertOperationLog,
@@ -13,6 +15,18 @@ import {
   selectProjectStageDocument,
   selectProjectStageDocumentForUpdate
 } from './shared.js';
+import { selectProjectPermissionContext } from './permissionContext.js';
+
+function assertUserCanManageApplicability({ user, project, currentDocument }) {
+  if (!canManageStageDocumentApplicability(user, { project, document: currentDocument })) {
+    throw new StageDocumentApplicabilityError(
+      'FORBIDDEN_OPERATION',
+      'Current user cannot change stage document applicability',
+      403,
+      ['organizationRole']
+    );
+  }
+}
 
 async function applyDocumentApplicabilityUpdate(connection, projectId, documentId, action, userId, transition) {
   if (action === DOCUMENT_APPLICABILITY_ACTION.MARK_NOT_APPLICABLE) {
@@ -91,7 +105,7 @@ export async function updateProjectStageDocumentApplicability({
   projectId,
   documentId,
   action,
-  userId,
+  user,
   notApplicableReason = ''
 }) {
   const connection = await pool.getConnection();
@@ -99,17 +113,19 @@ export async function updateProjectStageDocumentApplicability({
   try {
     await connection.beginTransaction();
     const currentDocument = await selectProjectStageDocumentForUpdate(connection, projectId, documentId);
+    const project = await selectProjectPermissionContext(connection, projectId, user);
+    assertUserCanManageApplicability({ user, project, currentDocument });
     const transition = buildDocumentApplicabilityTransition({
       action,
       isApplicable: currentDocument.is_applicable === undefined ? true : Boolean(currentDocument.is_applicable),
       notApplicableReason
     });
 
-    await applyDocumentApplicabilityUpdate(connection, projectId, documentId, action, userId, transition);
+    await applyDocumentApplicabilityUpdate(connection, projectId, documentId, action, user.id, transition);
     const updatedDocument = await selectProjectStageDocument(connection, projectId, documentId);
     await insertOperationLog(
       connection,
-      buildApplicabilityOperationLogPayload({ projectId, documentId, action, userId, currentDocument, transition })
+      buildApplicabilityOperationLogPayload({ projectId, documentId, action, userId: user.id, currentDocument, transition })
     );
     await connection.commit();
 

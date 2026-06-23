@@ -23,7 +23,7 @@ import {
 
 export const projectsRouter = Router();
 
-projectsRouter.get('/', asyncHandler(listProjectsHandler));
+projectsRouter.get('/', requireAuth, asyncHandler(listProjectsHandler));
 projectsRouter.post('/', requireAuth, asyncHandler(createProjectHandler));
 
 projectsRouter.get(
@@ -110,4 +110,4 @@ projectsRouter.delete(
   asyncHandler(deleteStageDocumentAttachmentHandler)
 );
 
-projectsRouter.get('/:projectId', asyncHandler(getProjectDetailHandler));
+projectsRouter.get('/:projectId', requireAuth, asyncHandler(getProjectDetailHandler));

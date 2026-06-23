@@ -50,6 +50,7 @@ function mapResponsibleUser(row) {
     account: row.responsible_account,
     name: row.responsible_display_name,
     department: row.responsible_department,
+    organizationRole: row.responsible_organization_role,
     role: row.responsible_role,
     isEnabled: row.responsible_is_enabled === null ? null : Boolean(row.responsible_is_enabled),
     filePlatformUserId: row.responsible_file_platform_user_id
@@ -155,10 +156,20 @@ export function buildStageCompletenessSummary(documents) {
 
 export async function selectProjectStageDocumentForUpdate(connection, projectId, documentId) {
   const [rows] = await connection.execute(
-    `SELECT *
-    FROM project_stage_documents
-    WHERE project_id = ?
-      AND id = ?
+    `SELECT
+      d.*,
+      u.account AS responsible_account,
+      u.display_name AS responsible_display_name,
+      u.department AS responsible_department,
+      u.organization_role AS responsible_organization_role,
+      u.role AS responsible_role,
+      u.is_enabled AS responsible_is_enabled,
+      u.file_platform_user_id AS responsible_file_platform_user_id
+    FROM project_stage_documents d
+    LEFT JOIN users u
+      ON u.id = d.responsible_user_id
+    WHERE d.project_id = ?
+      AND d.id = ?
     LIMIT 1
     FOR UPDATE`,
     [projectId, documentId]
@@ -182,6 +193,7 @@ export async function selectProjectStageDocumentWithResponsibleUser(connection, 
       u.account AS responsible_account,
       u.display_name AS responsible_display_name,
       u.department AS responsible_department,
+      u.organization_role AS responsible_organization_role,
       u.role AS responsible_role,
       u.is_enabled AS responsible_is_enabled,
       u.file_platform_user_id AS responsible_file_platform_user_id

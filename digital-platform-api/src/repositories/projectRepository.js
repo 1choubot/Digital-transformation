@@ -1,11 +1,14 @@
 export {
   DuplicateProjectCodeError,
+  ProjectAuthorizationError,
   ProjectNotFoundError,
+  ProjectManagerUserError,
   ProjectOverviewDashboardQueryError,
   PROJECT_OVERVIEW_DASHBOARD_ERROR,
   ProjectStageAdvanceError
 } from './projects/shared.js';
 export {
+  assertProjectViewable,
   createProject,
   getProjectDetail,
   listProjects,

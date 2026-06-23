@@ -36,6 +36,7 @@
         :current-stage-completeness="currentStageCompleteness"
         :missing-documents="currentStageAdvanceMissingDocuments"
         :can-advance-current-stage="canAdvanceCurrentStage"
+        :show-advance-action="canCurrentUserAdvanceProject"
         :pending="stageAdvancePending"
         :message="stageAdvanceMessage"
         :error-message="stageAdvanceErrorMessage"
@@ -51,8 +52,12 @@
         :action-error-message="actionErrorMessage"
         :responsibility-candidates-error-message="responsibilityCandidatesErrorMessage"
         :responsibility-candidates-loading="responsibilityCandidatesLoading"
-        :responsibility-candidates="responsibilityCandidates"
+        :responsibility-candidates="visibleResponsibilityCandidates"
         :responsibility-selections="responsibilitySelections"
+        :can-submit-document="canSubmitDocument"
+        :can-confirm-return-document="canConfirmReturnDocument"
+        :can-manage-responsibility="canManageResponsibility"
+        :can-change-applicability="canChangeApplicability"
         :return-reasons="returnReasons"
         :not-applicable-reasons="notApplicableReasons"
         :is-action-pending="isActionPending"
@@ -177,6 +182,49 @@ const currentStageCompleteness = computed(() => {
 
   return stageCompleteness(currentChecklistStage.value);
 });
+const currentUserOrganizationRole = computed(() => props.currentUser?.organizationRole || '');
+const isCurrentUserProjectManager = computed(() => {
+  const projectManagerUserId = detail.value?.project?.projectManagerUserId;
+  return Boolean(projectManagerUserId) && String(projectManagerUserId) === String(props.currentUser?.id);
+});
+const isCurrentUserGeneralManager = computed(() => currentUserOrganizationRole.value === 'general_manager');
+const isCurrentUserCenterManager = computed(() => currentUserOrganizationRole.value === 'center_manager');
+const isCurrentUserGeneralManagerAssistant = computed(
+  () => currentUserOrganizationRole.value === 'general_manager_assistant'
+);
+const isCurrentUserSystemAdmin = computed(() => currentUserOrganizationRole.value === 'system_admin');
+const currentUserDepartment = computed(() => props.currentUser?.department || '');
+const projectParticipatingDepartments = computed(() => {
+  const value = detail.value?.project?.participatingDepartments;
+  return Array.isArray(value) ? value : [];
+});
+const isProjectRelatedToCurrentCenter = computed(() => {
+  if (!isCurrentUserCenterManager.value || !currentUserDepartment.value) {
+    return false;
+  }
+
+  if (projectParticipatingDepartments.value.includes(currentUserDepartment.value)) {
+    return true;
+  }
+
+  return (checklist.value?.stages || []).some((stage) =>
+    (stage.documents || []).some((document) => document.responsibleUser?.department === currentUserDepartment.value)
+  );
+});
+const visibleResponsibilityCandidates = computed(() => {
+  if (!isCurrentUserCenterManager.value || isCurrentUserProjectManager.value || isCurrentUserGeneralManager.value) {
+    return responsibilityCandidates.value;
+  }
+
+  return responsibilityCandidates.value.filter((candidate) => candidate.department === currentUserDepartment.value);
+});
+const canCurrentUserAdvanceProject = computed(() => {
+  if (isCurrentUserGeneralManagerAssistant.value || isCurrentUserSystemAdmin.value) {
+    return false;
+  }
+
+  return isCurrentUserGeneralManager.value || isCurrentUserProjectManager.value || isProjectRelatedToCurrentCenter.value;
+});
 const currentStageAdvanceMissingDocuments = computed(() => {
   if (stageAdvanceErrorMessage.value && stageAdvanceMissingDocuments.value.length > 0) {
     return stageAdvanceMissingDocuments.value;
@@ -188,6 +236,7 @@ const canAdvanceCurrentStage = computed(
   () =>
     Boolean(detail.value?.currentStage) &&
     !isProjectCompleted.value &&
+    canCurrentUserAdvanceProject.value &&
     Boolean(currentStageCompleteness.value) &&
     currentStageCompleteness.value.incompleteRequiredCount === 0
 );
@@ -209,6 +258,67 @@ function getAttachmentState(documentId) {
   }
 
   return attachmentStates[documentId];
+}
+
+function isDocumentRelatedToCurrentCenter(document) {
+  if (!isCurrentUserCenterManager.value || !currentUserDepartment.value) {
+    return false;
+  }
+
+  if (document?.responsibleUser?.department) {
+    return document.responsibleUser.department === currentUserDepartment.value;
+  }
+
+  return isProjectRelatedToCurrentCenter.value;
+}
+
+function isCurrentUserResponsibleForDocument(document) {
+  return (
+    document?.responsibleUserId !== null &&
+    document?.responsibleUserId !== undefined &&
+    String(document.responsibleUserId) === String(props.currentUser?.id)
+  );
+}
+
+function canConfirmReturnDocument(document) {
+  if (isCurrentUserGeneralManagerAssistant.value || isCurrentUserSystemAdmin.value) {
+    return false;
+  }
+
+  return isCurrentUserGeneralManager.value || isDocumentRelatedToCurrentCenter(document);
+}
+
+function canManageResponsibility(document) {
+  if (isCurrentUserGeneralManagerAssistant.value || isCurrentUserSystemAdmin.value) {
+    return false;
+  }
+
+  return (
+    isCurrentUserGeneralManager.value ||
+    isCurrentUserProjectManager.value ||
+    isDocumentRelatedToCurrentCenter(document)
+  );
+}
+
+function canSubmitDocument(document) {
+  if (isCurrentUserGeneralManagerAssistant.value || isCurrentUserSystemAdmin.value) {
+    return false;
+  }
+
+  return (
+    isCurrentUserGeneralManager.value ||
+    isCurrentUserProjectManager.value ||
+    isDocumentRelatedToCurrentCenter(document) ||
+    isCurrentUserResponsibleForDocument(document)
+  );
+}
+
+function canChangeApplicability(document) {
+  if (isCurrentUserGeneralManagerAssistant.value || isCurrentUserSystemAdmin.value) {
+    return false;
+  }
+
+  return isCurrentUserGeneralManager.value || isDocumentRelatedToCurrentCenter(document);
 }
 
 function clearAttachmentStates() {

@@ -1,6 +1,7 @@
 import { env } from '../src/config/env.js';
 import { pool, closePool } from '../src/db/pool.js';
 import { hashPassword } from '../src/domain/auth.js';
+import { ORGANIZATION_ROLE } from '../src/domain/organization.js';
 import { upsertInitialUser } from '../src/repositories/userRepository.js';
 
 async function hasColumn(tableName, columnName) {
@@ -48,7 +49,8 @@ async function ensureSchema() {
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
       account VARCHAR(64) NOT NULL,
       display_name VARCHAR(128) NOT NULL,
-      department VARCHAR(128) NOT NULL,
+      department VARCHAR(128) NULL,
+      organization_role VARCHAR(64) NOT NULL DEFAULT 'employee',
       role VARCHAR(64) NOT NULL,
       is_enabled TINYINT(1) NOT NULL DEFAULT 1,
       is_platform_admin TINYINT(1) NOT NULL DEFAULT 0,
@@ -65,6 +67,14 @@ async function ensureSchema() {
   if (!(await hasColumn('users', 'is_platform_admin'))) {
     await pool.execute('ALTER TABLE users ADD COLUMN is_platform_admin TINYINT(1) NOT NULL DEFAULT 0 AFTER is_enabled');
   }
+
+  if (!(await hasColumn('users', 'organization_role'))) {
+    await pool.execute(
+      "ALTER TABLE users ADD COLUMN organization_role VARCHAR(64) NOT NULL DEFAULT 'employee' AFTER department"
+    );
+  }
+
+  await pool.execute('ALTER TABLE users MODIFY COLUMN department VARCHAR(128) NULL');
 
   await pool.execute(
     `CREATE TABLE IF NOT EXISTS auth_sessions (
@@ -108,16 +118,24 @@ async function seedInitialUser() {
 
   await upsertInitialUser({
     ...initialUser,
+    department: null,
+    organizationRole: ORGANIZATION_ROLE.SYSTEM_ADMIN,
+    role: initialUser.role || '系统管理员',
     isEnabled: true,
     isPlatformAdmin: true,
     passwordHash: hashPassword(initialUser.password)
   });
 
   const [adminRows] = await pool.execute(
-    'SELECT COUNT(*) AS count FROM users WHERE is_enabled = 1 AND is_platform_admin = 1'
+    `SELECT COUNT(*) AS count
+    FROM users
+    WHERE is_enabled = 1
+      AND organization_role = ?
+      AND is_platform_admin = 1`,
+    [ORGANIZATION_ROLE.SYSTEM_ADMIN]
   );
   if (Number(adminRows[0].count) <= 0) {
-    throw new Error('Initial auth setup must leave at least one enabled platform admin');
+    throw new Error('Initial auth setup must leave at least one enabled system admin with platform admin permission');
   }
 
   console.log(`Initial user ready: ${initialUser.account}`);

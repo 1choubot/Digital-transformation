@@ -28,8 +28,8 @@ export const env = {
       account: process.env.INITIAL_USER_ACCOUNT || 'admin',
       password: process.env.INITIAL_USER_PASSWORD || 'Admin@123456',
       displayName: process.env.INITIAL_USER_DISPLAY_NAME || '系统管理员',
-      department: process.env.INITIAL_USER_DEPARTMENT || '数字化管理组',
-      role: process.env.INITIAL_USER_ROLE || 'system_admin',
+      department: process.env.INITIAL_USER_DEPARTMENT || '',
+      role: process.env.INITIAL_USER_ROLE || '系统管理员',
       filePlatformUserId: process.env.INITIAL_USER_FILE_PLATFORM_USER_ID || ''
     }
   },

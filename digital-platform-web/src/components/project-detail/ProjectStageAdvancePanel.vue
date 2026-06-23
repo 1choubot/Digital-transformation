@@ -9,7 +9,7 @@
         </p>
       </div>
       <button
-        v-if="currentStage"
+        v-if="currentStage && showAdvanceAction"
         type="button"
         class="primary-button"
         :disabled="!canAdvanceCurrentStage || pending"
@@ -112,6 +112,10 @@ defineProps({
   canAdvanceCurrentStage: {
     type: Boolean,
     default: false
+  },
+  showAdvanceAction: {
+    type: Boolean,
+    default: true
   },
   pending: {
     type: Boolean,

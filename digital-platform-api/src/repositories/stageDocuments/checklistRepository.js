@@ -1,0 +1,214 @@
+import { pool } from '../../db/pool.js';
+import {
+  DOCUMENT_STATUS,
+  EXPECTED_STAGE_DOCUMENT_ITEM_COUNT,
+  STAGE_DOCUMENT_TEMPLATE_VERSION
+} from '../../domain/stageDocumentTemplates.js';
+import { STANDARD_PROJECT_STAGES } from '../../domain/stages.js';
+import { buildStageCompletenessSummary, mapDocument } from './shared.js';
+
+function assertTemplateRowsReady(rows) {
+  if (rows.length !== EXPECTED_STAGE_DOCUMENT_ITEM_COUNT) {
+    throw new Error(
+      `Stage document templates are not ready: expected ${EXPECTED_STAGE_DOCUMENT_ITEM_COUNT}, got ${rows.length}`
+    );
+  }
+
+  const nonEmptyFolderIds = rows.filter((row) => row.target_folder_id !== null);
+  if (nonEmptyFolderIds.length > 0) {
+    throw new Error('Stage document templates must keep targetFolderId empty in v1');
+  }
+}
+
+export async function upsertStageDocumentTemplates(executor, templateItems) {
+  if (templateItems.length !== EXPECTED_STAGE_DOCUMENT_ITEM_COUNT) {
+    throw new Error(
+      `Expected ${EXPECTED_STAGE_DOCUMENT_ITEM_COUNT} stage document template items, got ${templateItems.length}`
+    );
+  }
+
+  const placeholders = templateItems.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+  const values = templateItems.flatMap((item) => [
+    item.templateVersion,
+    item.stageOrder,
+    item.stageKey,
+    item.stageName,
+    item.documentCode,
+    item.documentOrder,
+    item.documentName,
+    item.isRequired ? 1 : 0,
+    item.defaultResponsibilityRole,
+    item.confirmRole,
+    item.submitMode,
+    item.targetFolderPath,
+    item.targetFolderId,
+    1
+  ]);
+
+  await executor.execute(
+    `INSERT INTO stage_document_templates (
+      template_version,
+      stage_order,
+      stage_key,
+      stage_name,
+      document_code,
+      document_order,
+      document_name,
+      is_required,
+      default_responsibility_role,
+      confirm_role,
+      submit_mode,
+      target_folder_path,
+      target_folder_id,
+      is_active
+    ) VALUES ${placeholders}
+    ON DUPLICATE KEY UPDATE
+      stage_order = VALUES(stage_order),
+      stage_key = VALUES(stage_key),
+      stage_name = VALUES(stage_name),
+      document_order = VALUES(document_order),
+      document_name = VALUES(document_name),
+      is_required = VALUES(is_required),
+      default_responsibility_role = VALUES(default_responsibility_role),
+      confirm_role = VALUES(confirm_role),
+      submit_mode = VALUES(submit_mode),
+      target_folder_path = VALUES(target_folder_path),
+      target_folder_id = VALUES(target_folder_id),
+      is_active = VALUES(is_active)`,
+    values
+  );
+
+  await executor.execute(
+    `UPDATE stage_document_templates
+    SET is_active = 0
+    WHERE template_version = ?
+      AND document_code NOT IN (${templateItems.map(() => '?').join(', ')})`,
+    [STAGE_DOCUMENT_TEMPLATE_VERSION, ...templateItems.map((item) => item.documentCode)]
+  );
+}
+
+async function getActiveTemplateRows(executor) {
+  const [rows] = await executor.execute(
+    `SELECT *
+    FROM stage_document_templates
+    WHERE template_version = ?
+      AND is_active = 1
+    ORDER BY stage_order ASC, document_order ASC`,
+    [STAGE_DOCUMENT_TEMPLATE_VERSION]
+  );
+
+  assertTemplateRowsReady(rows);
+  return rows;
+}
+
+export async function initializeProjectStageDocuments(executor, projectId) {
+  const templateRows = await getActiveTemplateRows(executor);
+  const [beforeRows] = await executor.execute(
+    'SELECT COUNT(*) AS count FROM project_stage_documents WHERE project_id = ?',
+    [projectId]
+  );
+  const placeholders = templateRows.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+  const values = templateRows.flatMap((template) => [
+    projectId,
+    template.id,
+    template.template_version,
+    template.stage_order,
+    template.stage_key,
+    template.stage_name,
+    template.document_code,
+    template.document_order,
+    template.document_name,
+    template.is_required,
+    template.default_responsibility_role,
+    template.confirm_role,
+    template.submit_mode,
+    template.target_folder_path,
+    null,
+    DOCUMENT_STATUS.NOT_SUBMITTED,
+    1
+  ]);
+
+  await executor.execute(
+    `INSERT INTO project_stage_documents (
+      project_id,
+      template_id,
+      template_version,
+      stage_order,
+      stage_key,
+      stage_name,
+      document_code,
+      document_order,
+      document_name,
+      is_required,
+      default_responsibility_role,
+      confirm_role,
+      submit_mode,
+      target_folder_path,
+      target_folder_id,
+      status,
+      is_applicable
+    ) VALUES ${placeholders}
+    ON DUPLICATE KEY UPDATE id = id`,
+    values
+  );
+  const [afterRows] = await executor.execute(
+    'SELECT COUNT(*) AS count FROM project_stage_documents WHERE project_id = ?',
+    [projectId]
+  );
+
+  return {
+    expectedCount: templateRows.length,
+    insertedCount: Number(afterRows[0].count) - Number(beforeRows[0].count)
+  };
+}
+
+export async function listProjectsForStageDocumentBackfill(executor = pool) {
+  const [rows] = await executor.execute('SELECT id, project_code, project_name FROM projects ORDER BY id ASC');
+  return rows.map((row) => ({
+    id: row.id,
+    projectCode: row.project_code,
+    projectName: row.project_name
+  }));
+}
+
+export async function getProjectStageDocumentChecklist(projectId) {
+  const [rows] = await pool.execute(
+    `SELECT
+      d.*,
+      u.account AS responsible_account,
+      u.display_name AS responsible_display_name,
+      u.department AS responsible_department,
+      u.role AS responsible_role,
+      u.is_enabled AS responsible_is_enabled,
+      u.file_platform_user_id AS responsible_file_platform_user_id
+    FROM project_stage_documents d
+    LEFT JOIN users u
+      ON u.id = d.responsible_user_id
+    WHERE d.project_id = ?
+    ORDER BY d.stage_order ASC, d.document_order ASC`,
+    [projectId]
+  );
+
+  const documentsByStage = new Map(STANDARD_PROJECT_STAGES.map((stage) => [stage.stageKey, []]));
+  for (const row of rows) {
+    const documents = documentsByStage.get(row.stage_key);
+    if (documents) {
+      documents.push(mapDocument(row));
+    }
+  }
+
+  return {
+    projectId,
+    stages: STANDARD_PROJECT_STAGES.map((stage) => {
+      const documents = documentsByStage.get(stage.stageKey) || [];
+
+      return {
+        stageOrder: stage.stageOrder,
+        stageKey: stage.stageKey,
+        stageName: stage.stageName,
+        completenessSummary: buildStageCompletenessSummary(documents),
+        documents
+      };
+    })
+  };
+}

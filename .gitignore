@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Local environment
+.env
+**/.env
+!.env.example
+
+# Build output
+dist/
+**/dist/
+
+# Local runtime/storage data
+digital-platform-api/storage/
+digital-platform-api/.npm-cache/
+*.log
+npm-debug.log*
+
+# Local tool/agent metadata
+.codex/
+.agents/
+
+# Local reference/output folders not committed by default
+digital-demo/
+rendered/
+历史归档/
+智能制造项目管理文件模板/
+
+# Large/local office and binary reference files at repo root
+/*.pdf
+/*.xlsx
+/*.xls
+/*.docx
+/*.doc
+/*.pptx
+/*.ppt
+/*.ico
+*.zip
+*.rar
+*.7z
+
+# Editor/OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

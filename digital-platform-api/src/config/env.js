@@ -1,0 +1,44 @@
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+function readInteger(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') {
+    return fallback;
+  }
+
+  const value = Number.parseInt(raw, 10);
+  if (Number.isNaN(value)) {
+    throw new Error(`${name} must be an integer`);
+  }
+
+  return value;
+}
+
+export const env = {
+  nodeEnv: process.env.NODE_ENV || 'development',
+  port: readInteger('PORT', 3001),
+  attachments: {
+    storageDir: process.env.STAGE_DOCUMENT_ATTACHMENT_STORAGE_DIR || ''
+  },
+  auth: {
+    sessionTtlHours: readInteger('AUTH_SESSION_TTL_HOURS', 12),
+    initialUser: {
+      account: process.env.INITIAL_USER_ACCOUNT || 'admin',
+      password: process.env.INITIAL_USER_PASSWORD || 'Admin@123456',
+      displayName: process.env.INITIAL_USER_DISPLAY_NAME || '系统管理员',
+      department: process.env.INITIAL_USER_DEPARTMENT || '数字化管理组',
+      role: process.env.INITIAL_USER_ROLE || 'system_admin',
+      filePlatformUserId: process.env.INITIAL_USER_FILE_PLATFORM_USER_ID || ''
+    }
+  },
+  db: {
+    host: process.env.DB_HOST || '127.0.0.1',
+    port: readInteger('DB_PORT', 3306),
+    user: process.env.DB_USER || 'digital_platform',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'digital_platform',
+    connectionLimit: readInteger('DB_CONNECTION_LIMIT', 10)
+  }
+};

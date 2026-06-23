@@ -1,0 +1,313 @@
+import { normalizeCreateProjectInput, ValidationError } from '../domain/projects.js';
+import { DOCUMENT_APPLICABILITY_ACTION } from '../domain/stageDocumentApplicability.js';
+import { DOCUMENT_STATUS_ACTION } from '../domain/stageDocumentStatus.js';
+import {
+  advanceProjectStage,
+  createProject,
+  getProjectDetail,
+  getProjectOverviewDashboard,
+  listProjects,
+  normalizeProjectOverviewDashboardFilters,
+  ProjectNotFoundError,
+  projectExists
+} from '../repositories/projectRepository.js';
+import {
+  listProjectOperationLogs,
+  normalizeOperationLogLimit
+} from '../repositories/operationLogRepository.js';
+import {
+  getProjectStageDocumentChecklist,
+  updateProjectStageDocumentApplicability,
+  updateProjectStageDocumentResponsibleUser,
+  updateProjectStageDocumentStatus
+} from '../repositories/stageDocumentRepository.js';
+import {
+  assertStageDocumentAttachmentUploadTarget,
+  deleteStageDocumentAttachment,
+  getStageDocumentAttachmentDownload,
+  listStageDocumentAttachments,
+  STAGE_DOCUMENT_ATTACHMENT_ERROR,
+  StageDocumentAttachmentError,
+  uploadStageDocumentAttachment
+} from '../repositories/stageDocumentAttachmentRepository.js';
+import { readMultipartFile } from '../middleware/multipartFile.js';
+
+function parsePositiveId(rawValue, fieldName) {
+  const id = Number.parseInt(rawValue, 10);
+
+  if (!Number.isSafeInteger(id) || id <= 0 || String(id) !== String(rawValue)) {
+    throw new ValidationError(`Invalid ${fieldName}`, [fieldName]);
+  }
+
+  return id;
+}
+
+function parseProjectId(rawValue) {
+  return parsePositiveId(rawValue, 'projectId');
+}
+
+function parseDocumentId(rawValue) {
+  return parsePositiveId(rawValue, 'documentId');
+}
+
+function parseAttachmentPositiveId(rawValue, code, fieldName) {
+  const text = String(rawValue ?? '').trim();
+  if (!/^[1-9]\d*$/.test(text)) {
+    throw new StageDocumentAttachmentError(code, `Invalid ${fieldName}`, 400, [fieldName]);
+  }
+
+  const id = Number(text);
+  if (!Number.isSafeInteger(id)) {
+    throw new StageDocumentAttachmentError(code, `Invalid ${fieldName}`, 400, [fieldName]);
+  }
+
+  return id;
+}
+
+function parseAttachmentProjectId(rawValue) {
+  return parseAttachmentPositiveId(
+    rawValue,
+    STAGE_DOCUMENT_ATTACHMENT_ERROR.INVALID_PROJECT_ID,
+    'projectId'
+  );
+}
+
+function parseAttachmentDocumentId(rawValue) {
+  return parseAttachmentPositiveId(
+    rawValue,
+    STAGE_DOCUMENT_ATTACHMENT_ERROR.INVALID_STAGE_DOCUMENT_ID,
+    'documentId'
+  );
+}
+
+function parseAttachmentId(rawValue) {
+  return parseAttachmentPositiveId(
+    rawValue,
+    STAGE_DOCUMENT_ATTACHMENT_ERROR.INVALID_ATTACHMENT_ID,
+    'attachmentId'
+  );
+}
+
+async function handleStageDocumentStatusAction(req, res, action) {
+  const projectId = parseProjectId(req.params.projectId);
+  const documentId = parseDocumentId(req.params.documentId);
+
+  const document = await updateProjectStageDocumentStatus({
+    projectId,
+    documentId,
+    action,
+    userId: req.auth.user.id,
+    returnReason: req.body?.returnReason
+  });
+
+  res.json({
+    data: {
+      document
+    }
+  });
+}
+
+async function handleStageDocumentApplicabilityAction(req, res, action) {
+  const projectId = parseProjectId(req.params.projectId);
+  const documentId = parseDocumentId(req.params.documentId);
+
+  const document = await updateProjectStageDocumentApplicability({
+    projectId,
+    documentId,
+    action,
+    userId: req.auth.user.id,
+    notApplicableReason: req.body?.notApplicableReason
+  });
+
+  res.json({
+    data: {
+      document
+    }
+  });
+}
+
+export async function listProjectsHandler(req, res) {
+  const projects = await listProjects();
+
+  res.json({
+    data: projects
+  });
+}
+
+export async function createProjectHandler(req, res) {
+  const project = normalizeCreateProjectInput(req.body || {});
+  const created = await createProject(project, req.auth.user.id);
+
+  res.status(201).json({
+    data: created
+  });
+}
+
+export async function getProjectOverviewDashboardHandler(req, res) {
+  const filters = normalizeProjectOverviewDashboardFilters(req.query);
+  const dashboard = await getProjectOverviewDashboard(req.auth.user.id, filters);
+
+  res.json({
+    data: dashboard
+  });
+}
+
+export async function listProjectOperationLogsHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+
+  if (!(await projectExists(projectId))) {
+    throw new ProjectNotFoundError(projectId);
+  }
+
+  const limit = normalizeOperationLogLimit(req.query.limit);
+  const logs = await listProjectOperationLogs(projectId, limit);
+
+  res.json({
+    data: logs
+  });
+}
+
+export async function getStageDocumentChecklistHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+
+  if (!(await projectExists(projectId))) {
+    throw new ProjectNotFoundError(projectId);
+  }
+
+  const checklist = await getProjectStageDocumentChecklist(projectId);
+
+  res.json({
+    data: checklist
+  });
+}
+
+export async function advanceProjectStageHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const detail = await advanceProjectStage(projectId, req.auth.user.id);
+
+  res.json({
+    data: detail
+  });
+}
+
+export async function submitStageDocumentHandler(req, res) {
+  await handleStageDocumentStatusAction(req, res, DOCUMENT_STATUS_ACTION.SUBMIT);
+}
+
+export async function confirmStageDocumentHandler(req, res) {
+  await handleStageDocumentStatusAction(req, res, DOCUMENT_STATUS_ACTION.CONFIRM);
+}
+
+export async function returnStageDocumentHandler(req, res) {
+  await handleStageDocumentStatusAction(req, res, DOCUMENT_STATUS_ACTION.RETURN);
+}
+
+export async function markStageDocumentNotApplicableHandler(req, res) {
+  await handleStageDocumentApplicabilityAction(req, res, DOCUMENT_APPLICABILITY_ACTION.MARK_NOT_APPLICABLE);
+}
+
+export async function restoreStageDocumentApplicableHandler(req, res) {
+  await handleStageDocumentApplicabilityAction(req, res, DOCUMENT_APPLICABILITY_ACTION.RESTORE_APPLICABLE);
+}
+
+export async function updateStageDocumentResponsibleUserHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const documentId = parseDocumentId(req.params.documentId);
+
+  if (!(await projectExists(projectId))) {
+    throw new ProjectNotFoundError(projectId);
+  }
+
+  const document = await updateProjectStageDocumentResponsibleUser({
+    projectId,
+    documentId,
+    responsibleUserId: req.body?.responsibleUserId,
+    userId: req.auth.user.id
+  });
+
+  res.json({
+    data: {
+      document
+    }
+  });
+}
+
+export async function uploadStageDocumentAttachmentHandler(req, res) {
+  const projectId = parseAttachmentProjectId(req.params.projectId);
+  const documentId = parseAttachmentDocumentId(req.params.documentId);
+
+  await assertStageDocumentAttachmentUploadTarget({ projectId, documentId });
+  const file = await readMultipartFile(req);
+  const attachment = await uploadStageDocumentAttachment({
+    projectId,
+    documentId,
+    userId: req.auth.user.id,
+    file
+  });
+
+  res.status(201).json({
+    data: attachment
+  });
+}
+
+export async function listStageDocumentAttachmentsHandler(req, res) {
+  const projectId = parseAttachmentProjectId(req.params.projectId);
+  const documentId = parseAttachmentDocumentId(req.params.documentId);
+  const attachments = await listStageDocumentAttachments({ projectId, documentId });
+
+  res.json({
+    data: attachments
+  });
+}
+
+export async function downloadStageDocumentAttachmentHandler(req, res) {
+  const projectId = parseAttachmentProjectId(req.params.projectId);
+  const documentId = parseAttachmentDocumentId(req.params.documentId);
+  const attachmentId = parseAttachmentId(req.params.attachmentId);
+  const download = await getStageDocumentAttachmentDownload({ projectId, documentId, attachmentId });
+
+  await new Promise((resolve, reject) => {
+    res.download(
+      download.filePath,
+      download.originalFileName,
+      {
+        headers: {
+          'Content-Type': download.mimeType,
+          'Content-Length': String(download.fileSize)
+        }
+      },
+      (error) => {
+        if (error && !res.headersSent) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      }
+    );
+  });
+}
+
+export async function deleteStageDocumentAttachmentHandler(req, res) {
+  const projectId = parseAttachmentProjectId(req.params.projectId);
+  const documentId = parseAttachmentDocumentId(req.params.documentId);
+  const attachmentId = parseAttachmentId(req.params.attachmentId);
+
+  await deleteStageDocumentAttachment({
+    projectId,
+    documentId,
+    attachmentId,
+    userId: req.auth.user.id
+  });
+
+  res.status(204).send();
+}
+
+export async function getProjectDetailHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const detail = await getProjectDetail(projectId);
+
+  res.json({
+    data: detail
+  });
+}

@@ -1,0 +1,133 @@
+﻿## 1. 后端接口与查询
+
+- [x] 1.1 新增 `GET /api/projects/overview-dashboard` 路由
+- [x] 1.2 为项目总览看板接口添加 `requireAuth`
+- [x] 1.3 确保项目总览看板接口不要求 `requirePlatformAdmin`
+- [x] 1.4 确保第一版不做项目成员权限、项目经理权限、复杂权限、角色权限或轻角色校验
+- [x] 1.5 确认 `overview-dashboard` 静态路由注册在 `/:projectId` 动态项目详情路由之前
+- [x] 1.6 实现返回所有项目的总览数据
+- [x] 1.7 返回 `summary.totalProjects`
+- [x] 1.8 返回 `summary.activeProjects`
+- [x] 1.9 返回 `summary.completedProjects`
+- [x] 1.10 返回 `summary.riskProjects`，按 `status = risk` 或 `status = delayed` 统计
+- [x] 1.11 返回 `summary.myPendingStageDocumentTasks`
+- [x] 1.12 `myPendingStageDocumentTasks` 使用当前登录用户 ID，不信任前端传入用户 ID
+- [x] 1.13 `myPendingStageDocumentTasks` 复用 pending 资料任务口径：责任人为当前用户、适用、状态为 `not_submitted`、`submitted` 或 `returned`
+- [x] 1.14 确保 `myPendingStageDocumentTasks` 不受项目总览筛选影响
+- [x] 1.15 项目卡片返回 `projectId`、`projectCode`、`projectName`、`customerName`、`projectManager` 和 `status`
+- [x] 1.16 项目卡片返回 `currentStageId`、`currentStageName`、`currentStageOrder` 和 `currentStageStatus`
+- [x] 1.17 项目卡片返回 `currentStageCompletenessSummary`
+- [x] 1.18 项目卡片返回 `currentStageIncompleteRequiredDocuments`
+- [x] 1.19 项目卡片返回 `currentStageIssue`
+- [x] 1.20 项目卡片返回 `createdBy`、`plannedStartDate` 和 `plannedEndDate`
+- [x] 1.21 已完成项目允许当前阶段字段和齐套摘要为空
+- [x] 1.22 未完成项目缺失当前阶段时返回 `currentStageIssue = missing_current_stage`
+- [x] 1.23 未完成项目存在多个当前阶段时返回 `currentStageIssue = multiple_current_stages`
+- [x] 1.24 当前阶段资料清单未初始化时返回 `currentStageCompletenessSummary = null`
+- [x] 1.25 当前阶段资料清单未初始化时返回 `currentStageIssue = checklist_not_initialized`
+- [x] 1.26 当前阶段资料清单未初始化时不自动初始化资料清单
+- [x] 1.27 实现当前阶段齐套摘要只统计适用必填资料
+- [x] 1.28 实现已确认适用必填资料计入 `confirmedRequiredCount`
+- [x] 1.29 实现未确认适用必填资料计入 `incompleteRequiredCount`
+- [x] 1.30 实现不适用资料不计入 `requiredTotal` 且不进入缺失列表
+- [x] 1.31 实现 `requiredTotal = 0` 时 `completionPercent = 100`
+- [x] 1.32 缺失资料列表返回 `id`、`documentCode`、`documentName` 和 `status`
+- [x] 1.33 支持可选 `status` 筛选
+- [x] 1.34 校验 `status` 必须是 `normal`、`risk`、`paused`、`delayed` 或 `completed`
+- [x] 1.35 非法 `status` 返回 `INVALID_PROJECT_STATUS_FILTER`
+- [x] 1.36 支持可选 `currentStageOrder` 筛选
+- [x] 1.37 校验 `currentStageOrder` 必须为 1 到 8 的正整数
+- [x] 1.38 非法 `currentStageOrder` 返回 `INVALID_STAGE_ORDER`
+- [x] 1.39 支持可选 `keyword` 按项目编号、项目名称或客户名称模糊筛选
+- [x] 1.40 trim 后为空的 `keyword` 等同未提供
+- [x] 1.41 合法筛选无匹配项目时返回空项目列表
+- [x] 1.42 实现项目列表按 `projectCode ASC, projectId ASC` 稳定排序
+- [x] 1.43 确保第一版不实现分页
+- [x] 1.44 确保查询接口不写业务日志
+- [x] 1.45 确保查询接口不改变项目状态、阶段状态、资料状态、适用性、责任人、齐套摘要或阶段推进状态
+- [x] 1.46 通过统一 `errorHandler` 返回 `INVALID_PROJECT_STATUS_FILTER`，HTTP 状态建议为 400
+- [x] 1.47 通过统一 `errorHandler` 返回 `INVALID_STAGE_ORDER`，HTTP 状态建议为 400
+
+## 2. 前端页面
+
+- [x] 2.1 封装 `GET /api/projects/overview-dashboard` API 客户端方法
+- [x] 2.2 在 `http.js` 为 `INVALID_PROJECT_STATUS_FILTER` 增加中文提示
+- [x] 2.3 在 `http.js` 为 `INVALID_STAGE_ORDER` 增加中文提示
+- [x] 2.4 新增“项目总览”页面
+- [x] 2.5 在主导航中新增项目总览入口
+- [x] 2.6 页面加载时携带登录态请求项目总览接口
+- [x] 2.7 未登录或登录态失效时按现有机制跳转登录或显示未登录提示
+- [x] 2.8 展示项目总数指标
+- [x] 2.9 展示进行中项目数指标
+- [x] 2.10 展示已完成项目数指标
+- [x] 2.11 展示风险/延期项目数指标
+- [x] 2.12 展示我的待办资料数量指标
+- [x] 2.13 页面文案说明我的待办资料为当前登录用户全局待办资料数量，不随项目状态、当前阶段或关键字筛选变化
+- [x] 2.14 点击我的待办资料指标跳转我的资料任务页
+- [x] 2.15 展示项目总览列表或卡片
+- [x] 2.16 每个项目展示项目编号、项目名称、客户、项目经理和项目状态
+- [x] 2.17 每个项目展示当前阶段名称或当前阶段异常提示
+- [x] 2.18 每个项目展示当前阶段齐套率
+- [x] 2.19 每个项目展示未完成适用必填资料数量
+- [x] 2.20 展示或允许展开未完成适用必填资料清单
+- [x] 2.21 支持状态筛选并调用后端接口
+- [x] 2.22 支持当前阶段筛选并调用后端接口
+- [x] 2.23 支持关键字筛选并调用后端接口
+- [x] 2.24 处理加载中、失败和空项目状态
+- [x] 2.25 点击项目跳转对应项目详情页
+- [x] 2.26 页面文案说明齐套率基于当前手工状态和人工适用性判断
+- [x] 2.27 页面文案说明齐套率不代表文件已上传或在线表单已填写
+- [x] 2.28 不新增文件上传/下载、在线表单、消息提醒、超期提醒、大屏图表、分页、导出、批量操作、复杂权限或项目成员权限入口
+
+## 3. README 文档
+
+- [x] 3.1 更新 `digital-platform-api/README.md`，说明 `GET /api/projects/overview-dashboard`
+- [x] 3.2 更新 `digital-platform-api/README.md`，说明登录态、非平台管理员边界和不做复杂权限
+- [x] 3.3 更新 `digital-platform-api/README.md`，说明 summary 指标字段和 `myPendingStageDocumentTasks` 口径
+- [x] 3.4 更新 `digital-platform-api/README.md`，说明项目卡片字段和当前阶段异常 issue 字段
+- [x] 3.5 更新 `digital-platform-api/README.md`，说明当前阶段齐套摘要口径和资料清单未初始化口径
+- [x] 3.6 更新 `digital-platform-api/README.md`，说明 status、currentStageOrder、keyword 筛选规则和错误码
+- [x] 3.7 更新 `digital-platform-api/README.md`，说明稳定排序、不分页、只读和不写业务日志边界
+- [x] 3.8 更新 `digital-platform-web/README.md`，说明项目总览页面、导航入口和筛选能力
+- [x] 3.9 更新 `digital-platform-web/README.md`，说明我的待办资料指标为当前登录用户全局口径且不随项目总览筛选变化
+- [x] 3.10 更新 `digital-platform-web/README.md`，说明页面边界：手工状态、不代表文件上传或在线表单填写、不做大屏图表和复杂权限
+
+## 4. 验证
+
+- [x] 4.1 验证未登录调用 `GET /api/projects/overview-dashboard` 返回 401
+- [x] 4.2 验证非平台管理员可调用项目总览接口
+- [x] 4.3 HTTP smoke 验证 `GET /api/projects/overview-dashboard` 命中看板接口，而不是项目详情接口或项目 ID 校验错误
+- [x] 4.4 验证项目总览返回所有项目，不按当前用户或项目经理过滤
+- [x] 4.5 验证 summary 返回 `totalProjects`、`activeProjects`、`completedProjects`、`riskProjects` 和 `myPendingStageDocumentTasks`
+- [x] 4.6 验证 `riskProjects` 统计 `risk` 和 `delayed`
+- [x] 4.7 验证 `myPendingStageDocumentTasks` 只统计当前登录用户 pending 适用责任资料
+- [x] 4.8 验证 `myPendingStageDocumentTasks` 不受项目筛选影响
+- [x] 4.9 验证项目卡片返回项目基础字段、当前阶段字段、创建人和计划时间
+- [x] 4.10 验证已完成项目当前阶段字段可为空
+- [x] 4.11 验证未完成项目缺失当前阶段返回 `missing_current_stage`
+- [x] 4.12 验证多个当前阶段返回 `multiple_current_stages`
+- [x] 4.13 验证当前阶段资料清单未初始化返回 `checklist_not_initialized`
+- [x] 4.14 验证资料清单未初始化时不自动初始化资料清单
+- [x] 4.15 验证当前阶段齐套摘要只统计适用必填资料
+- [x] 4.16 验证 `requiredTotal = 0` 时 `completionPercent = 100`
+- [x] 4.17 验证缺失资料列表字段包含 `id`、`documentCode`、`documentName` 和 `status`
+- [x] 4.18 验证 `status` 筛选
+- [x] 4.19 验证非法 `status` 返回 `INVALID_PROJECT_STATUS_FILTER`
+- [x] 4.20 验证 `currentStageOrder` 筛选
+- [x] 4.21 验证非法 `currentStageOrder` 返回 `INVALID_STAGE_ORDER`
+- [x] 4.22 验证 `keyword` 按项目编号、项目名称或客户名称筛选
+- [x] 4.23 验证合法筛选无匹配项目返回空列表
+- [x] 4.24 验证项目总览按 `projectCode ASC, projectId ASC` 稳定排序
+- [x] 4.25 验证查询接口不写业务日志
+- [x] 4.26 验证查询接口不改变项目状态、阶段状态、资料状态、适用性、责任人、齐套摘要或阶段推进状态
+- [x] 4.27 验证前端项目总览页面可加载 summary 和项目列表
+- [x] 4.28 验证前端状态筛选、当前阶段筛选和关键字筛选
+- [x] 4.29 验证点击项目跳转项目详情页
+- [x] 4.30 验证点击我的待办资料指标跳转我的资料任务页
+- [x] 4.31 验证页面展示我的待办资料全局口径说明
+- [x] 4.32 验证页面展示齐套率手工状态和边界说明
+- [x] 4.33 运行后端 `npm.cmd run check`
+- [x] 4.34 运行前端 `cmd /c npm.cmd run build`
+- [x] 4.35 运行 `cmd /c openspec validate add-project-overview-dashboard --strict`
+- [x] 4.36 运行 `cmd /c openspec validate --all --strict`
+- [x] 4.37 运行 `cmd /c openspec list --json`

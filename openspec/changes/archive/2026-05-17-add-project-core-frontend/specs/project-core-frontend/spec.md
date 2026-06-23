@@ -1,0 +1,116 @@
+## ADDED Requirements
+
+### Requirement: API base URL 配置
+
+前端 MUST 支持配置数字化平台后端 API base URL，并 MUST 通过该配置访问 `digital-platform-api`。
+
+#### Scenario: 读取 API base URL
+
+- **WHEN** 前端应用启动
+- **THEN** 系统必须读取已配置的 API base URL，并用于项目核心 API 请求
+
+#### Scenario: 禁止硬编码正式 API 地址
+
+- **WHEN** 页面调用项目列表、创建或详情接口
+- **THEN** 页面不能直接硬编码完整后端服务地址
+
+### Requirement: 项目列表页
+
+前端 MUST 提供项目列表页，并 MUST 调用 `GET /api/projects` 获取正式项目数据。
+
+#### Scenario: 加载项目列表
+
+- **WHEN** 用户打开项目列表页
+- **THEN** 前端必须调用 `GET /api/projects` 并展示返回的项目列表
+
+#### Scenario: 展示列表基础字段
+
+- **WHEN** 项目列表接口返回项目数据
+- **THEN** 页面必须展示项目编号、项目名称、客户、项目经理、项目状态、当前阶段、计划开始时间和计划完成时间
+
+#### Scenario: 项目列表空状态
+
+- **WHEN** 项目列表接口返回空数组
+- **THEN** 页面必须展示空状态，并提供新建项目入口
+
+#### Scenario: 列表接口失败
+
+- **WHEN** 项目列表接口请求失败
+- **THEN** 页面必须展示可读错误提示，并允许用户重新加载
+
+#### Scenario: 列表不展示排除能力
+
+- **WHEN** 用户打开项目列表页
+- **THEN** 页面不能展示看板指标、资料齐套率、资料缺失统计、文件归档状态、权限入口或日志入口
+
+### Requirement: 新建项目页
+
+前端 MUST 提供新建项目页，并 MUST 调用 `POST /api/projects` 创建项目。
+
+#### Scenario: 提交有效项目
+
+- **WHEN** 用户填写项目编号、项目名称、客户和项目经理等必需信息并提交
+- **THEN** 前端必须调用 `POST /api/projects` 创建项目，并在成功后展示成功结果或进入项目详情
+
+#### Scenario: 提交缺少必填字段
+
+- **WHEN** 用户提交缺少必需字段的项目
+- **THEN** 页面必须展示校验提示，且不得假装创建成功
+
+#### Scenario: 后端返回重复项目编号
+
+- **WHEN** `POST /api/projects` 返回 `PROJECT_CODE_EXISTS`
+- **THEN** 页面必须展示项目编号已存在的提示
+
+#### Scenario: 新建项目不触发排除能力
+
+- **WHEN** 用户创建项目
+- **THEN** 页面不能触发在线表单、文件上传、文件下载、文件管理平台联动、权限配置、日志记录、阶段推进或资料齐套率计算
+
+### Requirement: 项目详情页
+
+前端 MUST 提供项目详情页，并 MUST 调用 `GET /api/projects/:projectId` 获取项目基础状态。
+
+#### Scenario: 加载项目详情
+
+- **WHEN** 用户从项目列表进入某个项目详情
+- **THEN** 前端必须调用 `GET /api/projects/:projectId` 加载该项目详情
+
+#### Scenario: 展示项目基础信息
+
+- **WHEN** 项目详情接口返回项目数据
+- **THEN** 页面必须展示项目编号、项目名称、客户、项目经理、参与部门、项目状态、计划时间和备注
+
+#### Scenario: 展示当前阶段
+
+- **WHEN** 项目详情接口返回当前阶段
+- **THEN** 页面必须突出展示当前阶段名称和状态
+
+#### Scenario: 展示 8 阶段基础状态
+
+- **WHEN** 项目详情接口返回阶段列表
+- **THEN** 页面必须按阶段顺序展示全部 8 个阶段的阶段名称、阶段状态和当前阶段标记
+
+#### Scenario: 项目不存在
+
+- **WHEN** `GET /api/projects/:projectId` 返回 `PROJECT_NOT_FOUND`
+- **THEN** 页面必须展示项目不存在的提示，并提供返回项目列表的入口
+
+#### Scenario: 详情不展示排除能力
+
+- **WHEN** 用户打开项目详情页
+- **THEN** 页面不能展示在线表单、文件上传、文件下载、文件管理平台同步状态、权限控制、业务日志、看板指标、阶段推进、资料清单或资料齐套率
+
+### Requirement: Demo 使用边界
+
+前端实现 MUST 只把现有 Demo 作为页面参考，不能使用 Demo 静态数据作为正式项目核心数据来源。
+
+#### Scenario: 页面参考 Demo
+
+- **WHEN** 团队实现项目列表、新建项目和项目详情页面
+- **THEN** 可以参考 Demo 的布局、视觉样式和交互形态
+
+#### Scenario: 禁止使用 Demo 静态数据
+
+- **WHEN** 页面需要展示项目、阶段或创建结果
+- **THEN** 页面必须使用 `digital-platform-api` 返回的数据，不能使用 Demo 静态项目数据作为正式数据来源

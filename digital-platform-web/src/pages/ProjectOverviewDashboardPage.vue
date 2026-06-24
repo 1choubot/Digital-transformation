@@ -1,177 +1,269 @@
 <template>
-  <section class="page-stack">
-    <!-- 精简标题行 -->
+  <section class="page-stack animate-fadeIn">
+    <!-- STREAMING_CHUNK: 页面顶栏状态与说明信息... -->
     <div class="page-title-row">
       <div class="title-left">
         <span class="section-eyebrow">跨项目只读视图</span>
         <h2>项目总览</h2>
-        <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
+        <div class="user-meta">
+          <svg class="meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+          <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
+        </div>
         <p class="manual-status-note">
-          齐套率基于当前手工状态和人工适用性判断，不代表文件已上传，也不代表在线表单已填写。
+          提示：齐套率基于当前手工状态和人工适用性判断，不代表物理文件已全部完成上传或在线表单已真实填写完毕。
         </p>
       </div>
-      <button type="button" class="ghost-button" :disabled="loading" @click="loadDashboard">
-        <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-          stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 2v6h-6" />
-          <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-          <path d="M3 22v-6h6" />
-          <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+      <button type="button" class="ghost-button reload-btn" :disabled="loading" @click="loadDashboard">
+        <svg v-if="loading" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+          <circle cx="12" cy="12" r="10" stroke="rgba(0,0,0,0.1)" stroke-top="currentColor" />
         </svg>
-        {{ loading ? '加载中...' : '重新加载' }}
+        <span>{{ loading ? '加载中...' : '重新加载' }}</span>
       </button>
     </div>
 
-    <!-- 概览指标卡片 -->
+    <!-- STREAMING_CHUNK: 核心统计指标卡片网格渲染... -->
     <section class="overview-summary-grid" aria-label="项目总览指标">
-      <div class="overview-metric">
-        <span class="metric-label">项目总数</span>
-        <strong class="metric-value">{{ summary.totalProjects }}</strong>
+      <div class="overview-metric metric-total">
+        <span class="metric-title">项目总数</span>
+        <strong class="metric-number">{{ summary.totalProjects }}</strong>
       </div>
-      <div class="overview-metric">
-        <span class="metric-label">进行中</span>
-        <strong class="metric-value metric-value--active">{{ summary.activeProjects }}</strong>
+      <div class="overview-metric metric-active">
+        <span class="metric-title">进行中</span>
+        <strong class="metric-number">{{ summary.activeProjects }}</strong>
       </div>
-      <div class="overview-metric">
-        <span class="metric-label">已完成</span>
-        <strong class="metric-value metric-value--completed">{{ summary.completedProjects }}</strong>
+      <div class="overview-metric metric-completed">
+        <span class="metric-title">已完成</span>
+        <strong class="metric-number">{{ summary.completedProjects }}</strong>
       </div>
-      <div class="overview-metric">
-        <span class="metric-label">风险/延期</span>
-        <strong class="metric-value metric-value--risk">{{ summary.riskProjects }}</strong>
+      <div class="overview-metric metric-risk">
+        <span class="metric-title">风险/延期</span>
+        <strong class="metric-number">{{ summary.riskProjects }}</strong>
       </div>
-      <button type="button" class="overview-metric overview-metric--button"
-        @click="navigate('/my-stage-document-tasks')">
-        <span class="metric-label">我的待办资料</span>
-        <strong class="metric-value metric-value--pending">{{ summary.myPendingStageDocumentTasks }}</strong>
+      <button type="button" class="overview-metric overview-metric--button metric-todo" @click="navigate('/my-stage-document-tasks')">
+        <span class="metric-title">我的待办资料</span>
+        <strong class="metric-number">{{ summary.myPendingStageDocumentTasks }}</strong>
+        <span class="todo-btn-hint">立即处理 →</span>
       </button>
     </section>
 
-    <p class="manual-status-note manual-status-note--bottom">
-      “我的待办资料”为当前登录用户全局待办资料数量，不随项目状态、当前阶段或关键字筛选变化。
+    <p class="summary-note">
+      * “我的待办资料”为当前登录用户全局待办数量，不随下方的项目状态、当前阶段或关键字筛选结果而变化。
     </p>
 
-    <!-- 筛选面板 -->
+    <!-- 过滤器面板 -->
     <section class="panel overview-filter-panel">
       <form class="overview-filters" @submit.prevent="loadDashboard">
-        <div class="filter-group">
-          <label>
-            <span class="filter-label">项目状态</span>
+        <label class="filter-group">
+          <span class="filter-label">项目状态</span>
+          <div class="select-wrapper">
             <select v-model="statusFilter" :disabled="loading" @change="loadDashboard">
               <option v-for="option in statusOptions" :key="option.value" :value="option.value">
                 {{ option.label }}
               </option>
             </select>
-          </label>
-          <label>
-            <span class="filter-label">当前阶段</span>
+          </div>
+        </label>
+
+        <label class="filter-group">
+          <span class="filter-label">当前阶段</span>
+          <div class="select-wrapper">
             <select v-model="stageOrderFilter" :disabled="loading" @change="loadDashboard">
               <option value="">全部阶段</option>
               <option v-for="option in stageOrderOptions" :key="option.value" :value="option.value">
                 {{ option.label }}
               </option>
             </select>
-          </label>
-          <label>
-            <span class="filter-label">关键字</span>
-            <input v-model="keywordFilter" type="search" autocomplete="off" placeholder="项目编号、项目名称或客户名称" />
-          </label>
-        </div>
-        <button type="submit" class="primary-button" :disabled="loading">
-          应用筛选
+          </div>
+        </label>
+
+        <label class="filter-group flex-1">
+          <span class="filter-label">关键字</span>
+          <div class="input-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              v-model="keywordFilter"
+              type="search"
+              autocomplete="off"
+              placeholder="项目编号、项目名称或客户名称"
+            />
+          </div>
+        </label>
+        
+        <button type="submit" class="primary-button apply-btn" :disabled="loading">
+          <span>应用筛选</span>
         </button>
       </form>
     </section>
 
-    <!-- 列表面板 -->
+    <!-- STREAMING_CHUNK: 看板下侧卡片树列表组件渲染... -->
     <section class="panel overview-list-panel">
       <div class="panel-toolbar">
-        <div>
-          <strong>项目总览列表</strong>
-          <span>共 {{ projects.length }} 个项目，按项目编号和项目 ID 稳定排序。</span>
+        <div class="toolbar-info">
+          <strong class="toolbar-title">项目总览列表</strong>
+          <span class="toolbar-subtitle">共 {{ projects.length }} 个项目，按项目编号稳定排序</span>
         </div>
       </div>
 
+      <!-- 数据加载中 -->
       <div v-if="loading" class="state-panel state-panel--inline">
-        <p>正在加载项目总览...</p>
+        <div class="loading-wave">
+          <div class="wave-bar"></div>
+          <div class="wave-bar"></div>
+          <div class="wave-bar"></div>
+        </div>
+        <p>正在为您汇总全项目齐套看板，请稍候...</p>
       </div>
 
+      <!-- 异常处理 -->
       <div v-else-if="errorMessage" class="state-panel state-panel--error">
-        <h3>项目总览加载失败</h3>
-        <p>{{ errorMessage }}</p>
-        <button type="button" class="primary-button" @click="loadDashboard">重试</button>
+        <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+        <div class="error-details">
+          <h3>项目总览加载失败</h3>
+          <p>{{ errorMessage }}</p>
+        </div>
+        <button type="button" class="primary-button inline-btn" @click="loadDashboard">重新尝试</button>
       </div>
 
-      <div v-else-if="projects.length === 0" class="state-panel state-panel--inline">
+      <!-- 空白状态 -->
+      <div v-else-if="projects.length === 0" class="state-panel state-panel--empty">
+        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
         <h3>暂无匹配项目</h3>
-        <p>当前筛选条件下没有可展示的项目。</p>
+        <p>当前筛选条件和搜索词下没有对应的匹配项目，请重新输入或清空重置。</p>
       </div>
 
-      <!-- 项目卡片列表 -->
+      <!-- 高保真卡片列表 -->
       <div v-else class="overview-list">
         <article v-for="project in projects" :key="project.projectId" class="overview-project">
+          
+          <!-- 核心信息行 -->
           <div class="overview-project__main">
             <div class="overview-project__identity">
-              <span class="mono">{{ project.projectCode }}</span>
-              <strong>{{ project.projectName }}</strong>
-              <small>{{ project.customerName }} / {{ project.projectManager }}</small>
+              <span class="mono-badge">{{ project.projectCode }}</span>
+              <strong class="project-name">{{ project.projectName }}</strong>
+              <small class="project-meta-desc">
+                {{ project.customerName }} <span class="divider">/</span> {{ formatProjectMode(project.projectMode) }} <span class="divider">/</span> 经理: {{ formatUser(project.projectManagerUser) }}
+              </small>
             </div>
-            <StatusBadge :status="project.status" />
+            
+            <div class="cell-status">
+              <StatusBadge :status="project.status" />
+            </div>
+
             <div class="overview-project__stage">
-              <span class="field-label">当前阶段</span>
-              <strong>{{ formatCurrentStage(project) }}</strong>
-              <small v-if="project.currentStageIssue" class="field-issue">{{ formatStageIssue(project.currentStageIssue)
-                }}</small>
+              <span class="column-lbl">当前阶段</span>
+              <strong class="stage-name-text">{{ formatCurrentStage(project) }}</strong>
+              <span v-if="project.currentStageIssue" class="stage-warning-badge">{{ formatStageIssue(project.currentStageIssue) }}</span>
             </div>
+
+            <!-- 齐套率仪表盘 -->
             <div class="overview-project__completion">
-              <span class="field-label">当前阶段齐套率</span>
-              <strong>{{ formatCompletionPercent(project.currentStageCompletenessSummary) }}</strong>
-              <small>{{ formatCompletionSummary(project.currentStageCompletenessSummary) }}</small>
+              <span class="column-lbl">当前阶段齐套率</span>
+              <div class="rate-bar-container">
+                <strong class="rate-number">{{ formatCompletionPercent(project.currentStageCompletenessSummary) }}</strong>
+                <div v-if="project.currentStageCompletenessSummary" class="progress-bar-bg">
+                  <div class="progress-bar-fill" :style="{ width: `${project.currentStageCompletenessSummary.completionPercent}%` }"></div>
+                </div>
+              </div>
+              <small class="rate-summary-lbl">{{ formatCompletionSummary(project.currentStageCompletenessSummary) }}</small>
             </div>
+
             <div class="overview-project__dates">
-              <span class="field-label">计划时间</span>
-              <strong>{{ formatDate(project.plannedStartDate) }} 至 {{ formatDate(project.plannedEndDate) }}</strong>
-              <small>创建人：{{ formatUser(project.createdBy) }}</small>
+              <span class="column-lbl">计划周期</span>
+              <strong class="date-text">{{ formatDate(project.plannedStartDate) }} 至 {{ formatDate(project.plannedEndDate) }}</strong>
+              <small class="creator-lbl">创建人: {{ formatUser(project.createdBy) }}</small>
             </div>
-            <button type="button" class="ghost-button" @click="navigate(`/projects/${project.projectId}`)">
-              查看详情
+
+            <button type="button" class="action-button-main" @click="navigate(`/projects/${project.projectId}`)">
+              <span>进入详情</span>
+              <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
             </button>
           </div>
 
+          <!-- 子表：未完成适用必填资料清单 (折叠区域) -->
           <div class="overview-project__documents">
-            <div class="documents-header">
-              <span class="field-label">未完成适用必填资料</span>
-              <strong class="documents-count">{{ project.currentStageIncompleteRequiredDocuments.length }}</strong>
+            <div class="docs-summary-header">
+              <div class="docs-count-pill" :class="{ 'docs-count-pill--alert': project.currentStageIncompleteRequiredDocuments.length > 0 }">
+                <span>未完成适用必填资料</span>
+                <strong>{{ project.currentStageIncompleteRequiredDocuments.length }}</strong>
+              </div>
             </div>
-            <details v-if="project.currentStageIncompleteRequiredDocuments.length > 0" class="documents-details">
-              <summary>查看资料清单</summary>
-              <ul class="documents-list">
-                <li v-for="document in project.currentStageIncompleteRequiredDocuments" :key="document.id">
-                  <span class="mono">{{ document.documentCode }}</span>
-                  <span class="document-name">{{ document.documentName }}</span>
+            
+            <details v-if="project.currentStageIncompleteRequiredDocuments.length > 0" class="docs-details">
+              <summary class="docs-toggle-btn">
+                <span>展开未齐套文件清单</span>
+                <span class="toggle-icon"></span>
+              </summary>
+              <ul class="incomplete-docs-list">
+                <li v-for="document in project.currentStageIncompleteRequiredDocuments" :key="document.id" class="doc-list-item">
+                  <span class="doc-code">{{ document.documentCode }}</span>
+                  <strong class="doc-name">{{ document.documentName }}</strong>
                   <StatusBadge :status="document.status" />
                 </li>
               </ul>
             </details>
-            <p v-else-if="project.currentStageCompletenessSummary" class="documents-empty">
-              当前阶段暂无未完成适用必填资料。
+            
+            <p v-else-if="project.currentStageCompletenessSummary" class="checklist-finished-placeholder">
+              <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              <span>当前阶段已全部齐套（无未完成适用必填资料）。</span>
             </p>
-            <p v-else class="documents-empty">
-              {{ formatStageIssue(project.currentStageIssue) || '当前阶段齐套摘要为空。' }}
+            
+            <p v-else class="checklist-empty-placeholder">
+              {{ formatStageIssue(project.currentStageIssue) || '暂无齐套及清单摘要数据。' }}
             </p>
           </div>
+
         </article>
       </div>
     </section>
+
+    <!-- STREAMING_CHUNK: 统一样式的 Toast 消息弹出浮层... -->
+    <Transition name="toast">
+      <div v-if="toastVisible" class="toast" :class="{ 'toast--error': toastType === 'error', 'toast--success': toastType === 'success' }">
+        <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <template v-if="toastType === 'error'">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </template>
+          <template v-else>
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+            <polyline points="22 4 12 14.01 9 11.01" />
+          </template>
+        </svg>
+        <span>{{ toastMessage }}</span>
+        <button type="button" class="toast-close" @click="hideToast">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+    </Transition>
   </section>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { getProjectOverviewDashboard } from '../api/projects.js';
 import { toReadableApiError } from '../api/http.js';
 import StatusBadge from '../components/StatusBadge.vue';
-import { formatDate, formatUser } from '../utils/format.js';
+import { formatDate, formatProjectMode, formatUser } from '../utils/format.js';
 
 const props = defineProps({
   authToken: {
@@ -228,6 +320,31 @@ const dashboard = ref({
   projects: []
 });
 
+// STREAMING_CHUNK: 统一定义 Toast 控制状态...
+const toastVisible = ref(false);
+const toastMessage = ref('');
+const toastType = ref('error');
+let toastTimer = null;
+
+function showToast(msg, type = 'error') {
+  if (toastTimer) clearTimeout(toastTimer);
+  toastMessage.value = msg;
+  toastType.value = type;
+  toastVisible.value = true;
+  toastTimer = setTimeout(() => {
+    toastVisible.value = false;
+  }, 3000);
+}
+
+function hideToast() {
+  if (toastTimer) clearTimeout(toastTimer);
+  toastVisible.value = false;
+}
+
+onUnmounted(() => {
+  if (toastTimer) clearTimeout(toastTimer);
+});
+
 const summary = computed(() => dashboard.value.summary || emptySummary);
 const projects = computed(() => dashboard.value.projects || []);
 
@@ -265,6 +382,7 @@ function formatCompletionSummary(summaryValue) {
   return `适用必填 ${summaryValue.requiredTotal} 项，已确认 ${summaryValue.confirmedRequiredCount} 项，未完成 ${summaryValue.incompleteRequiredCount} 项`;
 }
 
+// STREAMING_CHUNK: 异步同步看板，失败时推送 Toast 异常提示弹窗...
 async function loadDashboard() {
   loading.value = true;
   errorMessage.value = '';
@@ -281,6 +399,7 @@ async function loadDashboard() {
   } catch (error) {
     const message = toReadableApiError(error);
     errorMessage.value = message;
+    showToast(message, 'error');
 
     if (error.code === 'UNAUTHENTICATED') {
       emit('auth-expired', message);
@@ -294,829 +413,839 @@ onMounted(loadDashboard);
 </script>
 
 <style scoped>
-/* ===== 全局重置 & 基础 ===== */
+/* 全局页面容器 */
 .page-stack {
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 1.5rem 1.5rem 2rem;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  color: #1e293b;
-  background: #f8fafc;
-  min-height: 100vh;
-}
-
-/* ===== 标题行 ===== */
-.page-title-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 1rem;
-  margin-bottom: 0.75rem;
-  padding: 0 0.25rem;
-  flex-shrink: 0;
-}
-
-.title-left {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  min-height: 100vh;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #0f172a;
+  position: relative;
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.4s ease-out;
+}
+
+/* 顶部标题行 */
+.page-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  padding-bottom: 0.5rem;
 }
 
 .section-eyebrow {
-  font-size: 0.65rem;
+  display: inline-block;
+  font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #94a3b8;
+  color: #64748b;
+  background: #e2e8f0;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  margin-bottom: 0.5rem;
 }
 
 .page-title-row h2 {
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-size: 2rem;
+  font-weight: 700;
   color: #0f172a;
-  word-break: break-word;
-  line-height: 1.3;
+  letter-spacing: -0.025em;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.user-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  color: #475569;
+}
+
+.meta-icon {
+  width: 16px;
+  height: 16px;
+  stroke: #64748b;
 }
 
 .page-user {
-  font-size: 0.8rem;
-  color: #94a3b8;
-  font-weight: 400;
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 .manual-status-note {
-  font-size: 0.7rem;
-  color: #94a3b8;
-  margin: 0.15rem 0 0 0;
-  max-width: 600px;
-  line-height: 1.4;
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+  color: #64748b;
+  line-height: 1.5;
+  background: #f1f5f9;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  border-left: 3px solid #cbd5e1;
 }
 
-.manual-status-note--bottom {
-  margin: 0.25rem 0 0.75rem 0;
-  max-width: 600px;
-}
-
-/* ===== 按钮 ===== */
+/* 重新加载按钮 */
 .ghost-button {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  padding: 0.625rem 1.125rem;
+  font-size: 0.875rem;
+  font-weight: 500;
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  padding: 0.4rem 1rem;
-  border-radius: 10px;
-  font-weight: 500;
-  font-size: 0.8rem;
+  border-radius: 8px;
   color: #334155;
   cursor: pointer;
   transition: all 0.2s ease;
-  white-space: nowrap;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-  flex-shrink: 0;
-  margin-top: 0.1rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
 .ghost-button:hover:not(:disabled) {
-  background: #f1f5f9;
-  border-color: #94a3b8;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.04);
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #0f172a;
 }
 
 .ghost-button:disabled {
-  opacity: 0.5;
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
-.button-icon {
-  width: 16px;
-  height: 16px;
+/* 核心指标仪表盘网格样式 */
+.overview-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1.25rem;
+  margin-top: 0.5rem;
+}
+
+.overview-metric {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 1.25rem 1.5rem;
+  border-left: 4px solid #cbd5e1;
+  box-shadow: 0 10px 25px rgba(0, 20, 40, 0.03);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+  border-top: 1px solid rgba(0,0,0,0.01);
+  border-right: 1px solid rgba(0,0,0,0.01);
+  border-bottom: 1px solid rgba(0,0,0,0.01);
+}
+
+.overview-metric:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(0, 20, 40, 0.08);
+}
+
+.metric-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.metric-number {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.1;
+}
+
+/* 带有独特高亮条的指标样式 */
+.metric-total { border-left-color: #3b82f6; }
+.metric-active { border-left-color: #0284c7; }
+.metric-completed { border-left-color: #10b981; }
+.metric-risk { border-left-color: #f59e0b; }
+
+/* 待办资料特殊大卡片按钮 */
+.metric-todo {
+  border-left-color: #ec4899;
+  background: linear-gradient(135deg, #ffffff 0%, #fff1f2 100%);
+  cursor: pointer;
+  text-align: left;
+  border: 1px solid #fecdd3;
+  border-left-width: 4px;
+}
+
+.metric-todo .metric-number {
+  color: #be123c;
+}
+
+.todo-btn-hint {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #e11d48;
+}
+
+.summary-note {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-top: -0.25rem;
+}
+
+/* 过滤栏设计 */
+.overview-filter-panel {
+  padding: 1.25rem 1.5rem;
+}
+
+.overview-filters {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.flex-1 {
+  flex: 1;
+  min-width: 280px;
+}
+
+.filter-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475569;
+  letter-spacing: 0.02em;
+}
+
+/* 统一输入包装层 */
+.select-wrapper {
+  position: relative;
+  width: 160px;
+}
+
+.select-wrapper select {
+  width: 100%;
+  padding: 0.625rem 1rem;
+  font-size: 0.9rem;
+  border: 1px solid #cbd5e1;
+  background-color: #f8fafc;
+  border-radius: 8px;
+  color: #0f172a;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  transition: all 0.2s;
+}
+
+.select-wrapper::after {
+  content: '';
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid #64748b;
+  pointer-events: none;
+}
+
+.select-wrapper select:focus {
+  border-color: #2563eb;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  transition: all 0.2s;
+  padding-left: 0.75rem;
+}
+
+.input-wrapper:focus-within {
+  border-color: #2563eb;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.search-icon {
+  width: 18px;
+  height: 18px;
+  stroke: #94a3b8;
   flex-shrink: 0;
 }
 
-.primary-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  background: #0f172a;
+.input-wrapper input {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
   border: none;
-  padding: 0.5rem 1.4rem;
-  border-radius: 10px;
-  font-weight: 500;
-  font-size: 0.8rem;
-  color: white;
+  background: transparent;
+  font-size: 0.9rem;
+  color: #0f172a;
+  outline: none;
+}
+
+.primary-button {
+  background: #0f172a;
+  color: #ffffff;
+  border: none;
+  font-weight: 600;
+  padding: 0.625rem 1.5rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
   cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
   height: 38px;
 }
 
 .primary-button:hover:not(:disabled) {
   background: #1e293b;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
 }
 
-.primary-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* ===== 面板 ===== */
+/* 主面板 */
 .panel {
-  background: white;
-  border-radius: 1rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.03);
-  padding: 1.25rem 1.5rem;
-  margin-bottom: 1rem;
-  transition: box-shadow 0.2s ease;
-}
-
-.panel:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-}
-
-/* ===== 概览指标卡片 ===== */
-.overview-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 0.75rem;
-  margin-bottom: 0.5rem;
-}
-
-.overview-metric {
-  background: white;
-  border-radius: 0.75rem;
-  padding: 1rem 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.02);
-  transition: all 0.2s ease;
-  border: 1px solid #f1f5f9;
-  text-align: left;
-}
-
-.overview-metric:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-}
-
-.overview-metric--button {
-  background: transparent;
+  background: #ffffff;
+  border-radius: 16px;
   border: 1px solid #e2e8f0;
-  cursor: pointer;
-  font: inherit;
-  color: inherit;
-  align-items: flex-start;
+  box-shadow: 0 10px 25px rgba(0, 20, 40, 0.03);
 }
 
-.overview-metric--button:hover {
-  background: #f8fafc;
-  border-color: #94a3b8;
-}
-
-.metric-label {
-  font-size: 0.7rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #94a3b8;
-}
-
-.metric-value {
-  font-size: 1.75rem;
-  font-weight: 600;
-  color: #0f172a;
-  line-height: 1.2;
-}
-
-.metric-value--active {
-  color: #2563eb;
-}
-
-.metric-value--completed {
-  color: #16a34a;
-}
-
-.metric-value--risk {
-  color: #dc2626;
-}
-
-.metric-value--pending {
-  color: #d97706;
-}
-
-/* ===== 筛选面板 ===== */
-.overview-filter-panel {
-  padding: 1rem 1.5rem;
-  margin-bottom: 1rem;
-}
-
-.overview-filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.75rem 1.25rem;
-}
-
-.filter-group {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.75rem 1.25rem;
-  flex: 1;
-}
-
-.overview-filters label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  min-width: 140px;
-  flex: 0 1 auto;
-}
-
-.filter-label {
-  font-size: 0.65rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #94a3b8;
-}
-
-.overview-filters select,
-.overview-filters input {
-  padding: 0.4rem 0.6rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 0.8rem;
-  font-family: inherit;
-  color: #1e293b;
-  background: white;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  min-height: 38px;
-  min-width: 140px;
-}
-
-.overview-filters select:focus,
-.overview-filters input:focus {
-  outline: none;
-  border-color: #94a3b8;
-  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.12);
-}
-
-.overview-filters select:disabled,
-.overview-filters input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.overview-filters input {
-  min-width: 200px;
-}
-
-/* ===== 工具栏 ===== */
 .panel-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-bottom: 1.25rem;
-  padding-bottom: 0.6rem;
+  padding: 1.25rem 1.5rem;
   border-bottom: 1px solid #f1f5f9;
 }
 
-.panel-toolbar strong {
-  font-size: 1rem;
-  font-weight: 600;
+.toolbar-title {
+  font-size: 1.1rem;
+  font-weight: 700;
   color: #0f172a;
-  margin-right: 0.6rem;
 }
 
-.panel-toolbar span {
+.toolbar-subtitle {
+  display: block;
+  font-size: 0.85rem;
   color: #64748b;
-  font-size: 0.8rem;
+  margin-top: 0.2rem;
 }
 
-/* ===== 状态面板 ===== */
+/* 数据页状态 */
 .state-panel {
-  text-align: center;
-  padding: 2.5rem 1.5rem;
-  border-radius: 0.75rem;
-  background: #f8fafc;
-  min-height: 180px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
 }
 
 .state-panel--inline {
-  padding: 2rem 1.5rem;
-  min-height: 180px;
-}
-
-.state-panel--error {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-}
-
-.state-panel h3 {
-  margin: 0 0 0.35rem 0;
-  font-weight: 600;
-  color: #1e293b;
-  font-size: 1.1rem;
+  padding: 3.5rem 1.5rem;
 }
 
 .state-panel p {
-  color: #64748b;
-  margin: 0 0 1rem 0;
   font-size: 0.9rem;
+  color: #64748b;
 }
 
-.state-panel--error p {
-  color: #b91c1c;
+/* 加载动画 */
+.loading-wave {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 1rem;
 }
 
-.state-panel .primary-button {
-  margin-top: 0.25rem;
+.wave-bar {
+  width: 4px;
+  height: 24px;
+  background: #0f172a;
+  border-radius: 4px;
+  animation: wave 1s ease-in-out infinite;
 }
 
-/* ===== 项目卡片列表 ===== */
+.wave-bar:nth-child(2) { animation-delay: 0.15s; }
+.wave-bar:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes wave {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  animation: spin 0.8s linear infinite;
+  stroke: currentColor;
+}
+
+/* 空状态 */
+.empty-icon {
+  width: 48px;
+  height: 48px;
+  stroke: #94a3b8;
+  margin-bottom: 1rem;
+}
+
+/* 错误状态 */
+.state-panel--error {
+  background: #fef2f2;
+  border: 1px solid #fee2e2;
+  border-radius: 12px;
+  margin: 1.5rem;
+  padding: 2.5rem;
+}
+
+.error-icon {
+  width: 32px;
+  height: 32px;
+  stroke: #ef4444;
+  margin-bottom: 0.75rem;
+}
+
+.inline-btn {
+  margin-top: 1.25rem;
+}
+
+/* 项目卡片列表 */
 .overview-list {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 1rem;
+  padding: 1.5rem;
 }
 
 .overview-project {
-  background: #fafcff;
-  border: 1px solid #f1f5f9;
-  border-radius: 0.75rem;
-  padding: 1rem 1.25rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
   transition: all 0.2s ease;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  overflow: hidden;
 }
 
 .overview-project:hover {
-  border-color: #e2e8f0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
 }
 
+/* 列表内的主布局，极其精细的响应式弹性网格 */
 .overview-project__main {
   display: grid;
-  grid-template-columns: 1.3fr 0.8fr 1.2fr 1fr 1.2fr 0.8fr;
-  gap: 0.5rem 0.75rem;
+  grid-template-columns: 2.5fr 1fr 1.8fr 2fr 1.8fr 1fr;
+  padding: 1.25rem;
   align-items: center;
+  gap: 1.25rem;
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .overview-project__identity {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
+  gap: 0.35rem;
 }
 
-.overview-project__identity .mono {
-  font-size: 0.65rem;
+.mono-badge {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.725rem;
+  font-weight: 700;
+  color: #0f172a;
+  background: #f1f5f9;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  width: fit-content;
 }
 
-.overview-project__identity strong {
-  font-size: 0.85rem;
+.project-name {
+  font-size: 1rem;
   font-weight: 600;
   color: #0f172a;
-  word-break: break-word;
 }
 
-.overview-project__identity small {
-  font-size: 0.7rem;
-  color: #94a3b8;
-}
-
-.overview-project__stage,
-.overview-project__completion,
-.overview-project__dates {
-  display: flex;
-  flex-direction: column;
-  gap: 0.05rem;
-  min-width: 0;
-}
-
-.field-label {
-  font-size: 0.6rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #94a3b8;
-}
-
-.overview-project__stage strong,
-.overview-project__completion strong,
-.overview-project__dates strong {
+.project-meta-desc {
   font-size: 0.8rem;
-  font-weight: 500;
-  color: #1e293b;
-  word-break: break-word;
+  color: #64748b;
+  font-weight: 400;
 }
 
-.overview-project__stage small,
-.overview-project__completion small,
-.overview-project__dates small {
-  font-size: 0.65rem;
+.divider {
+  color: #cbd5e1;
+  margin: 0 0.1rem;
+}
+
+.column-lbl {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
   color: #94a3b8;
+  text-transform: uppercase;
+  margin-bottom: 0.2rem;
 }
 
-.field-issue {
-  color: #dc2626 !important;
-}
-
-.overview-project__main .ghost-button {
-  padding: 0.25rem 0.8rem;
-  font-size: 0.7rem;
-  border-radius: 24px;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+.stage-name-text {
+  font-size: 0.9rem;
+  font-weight: 600;
   color: #334155;
-  box-shadow: none;
-  min-width: auto;
-  justify-self: flex-end;
-  margin-top: 0.1rem;
 }
 
-.overview-project__main .ghost-button:hover {
-  background: #2563eb;
-  color: white;
-  border-color: #2563eb;
-  transform: none;
+.stage-warning-badge {
+  display: inline-block;
+  margin-top: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  background-color: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fee2e2;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
 }
 
-/* ===== 文档区域 ===== */
-.overview-project__documents {
-  border-top: 1px solid #f1f5f9;
-  padding-top: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
+/* 齐套进度条 */
+.rate-number {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0f172a;
 }
 
-.documents-header {
+.rate-bar-container {
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
-.documents-count {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #0f172a;
+.progress-bar-bg {
+  flex: 1;
+  height: 6px;
   background: #f1f5f9;
-  padding: 0 0.6rem;
-  border-radius: 12px;
-  line-height: 1.6;
+  border-radius: 9999px;
+  overflow: hidden;
+  max-width: 120px;
 }
 
-.documents-details summary {
+.progress-bar-fill {
+  height: 100%;
+  background: #10b981;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+.rate-summary-lbl {
+  display: block;
   font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 0.2rem;
+}
+
+.date-text {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #334155;
+}
+
+.creator-lbl {
+  display: block;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+/* 操作进入按钮 */
+.action-button-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: #f1f5f9;
+  border: none;
+  color: #334155;
+  font-size: 0.825rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  transition: all 0.2s;
+  width: fit-content;
+  margin-left: auto;
+}
+
+.action-button-main:hover {
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.chevron-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* 未完成清单区域 */
+.overview-project__documents {
+  padding: 1rem 1.25rem;
+  background-color: #fafbfc;
+}
+
+.docs-summary-header {
+  margin-bottom: 0.5rem;
+}
+
+.docs-count-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #f1f5f9;
+  padding: 0.25rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: #475569;
+  font-weight: 500;
+  border: 1px solid #e2e8f0;
+}
+
+.docs-count-pill--alert {
+  background: #fff5f5;
+  color: #c53030;
+  border-color: #feb2b2;
+}
+
+.docs-count-pill--alert strong {
+  background: #e53e3e;
+  color: #ffffff;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+/* 详情拉伸样式 */
+.docs-details {
+  border-top: 1px dashed #e2e8f0;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+.docs-toggle-btn {
+  font-size: 0.8rem;
+  font-weight: 600;
   color: #2563eb;
   cursor: pointer;
-  padding: 0.15rem 0;
-  font-weight: 500;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: fit-content;
 }
 
-.documents-details summary:hover {
+.docs-toggle-btn::-webkit-details-marker {
+  display: none;
+}
+
+.docs-toggle-btn:hover {
   color: #1d4ed8;
 }
 
-.documents-list {
+.incomplete-docs-list {
   list-style: none;
-  padding: 0.5rem 0 0 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+  padding-left: 0;
+  margin-top: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.6rem 1.5rem;
 }
 
-.documents-list li {
+.doc-list-item {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.25rem 0.5rem;
-  background: #f8fafc;
+  background: #ffffff;
+  padding: 0.5rem 0.75rem;
   border-radius: 6px;
+  border: 1px solid #f1f5f9;
+}
+
+.doc-code {
+  font-family: monospace;
   font-size: 0.75rem;
+  color: #64748b;
+  background-color: #f8fafc;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
 }
 
-.documents-list .mono {
-  font-size: 0.6rem;
-  flex-shrink: 0;
-}
-
-.documents-list .document-name {
-  flex: 1;
+.doc-name {
+  font-size: 0.85rem;
+  font-weight: 500;
   color: #1e293b;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.documents-empty {
-  font-size: 0.75rem;
+.checklist-finished-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.825rem;
+  color: #15803d;
+  font-weight: 500;
+  margin: 0;
+}
+
+.check-icon {
+  width: 16px;
+  height: 16px;
+  stroke: #16a34a;
+}
+
+.checklist-empty-placeholder {
+  font-size: 0.825rem;
   color: #94a3b8;
   margin: 0;
 }
 
-/* ===== 共用工具类 ===== */
-.mono {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 0.7rem;
-  color: #475569;
-  background: #f1f5f9;
-  padding: 0.05rem 0.35rem;
-  border-radius: 4px;
-  display: inline-block;
-  letter-spacing: 0.02em;
+/* STREAMING_CHUNK: 统一样式的 Toast 消息弹出浮层 CSS... */
+.toast {
+  position: fixed;
+  top: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 1rem 0.7rem 1.2rem;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #0f172a;
+  z-index: 9999;
+  border: 1px solid #f1f5f9;
+  max-width: 90%;
 }
 
-/* ===== 响应式 ===== */
-@media (max-width: 1200px) {
-  .overview-project__main {
-    grid-template-columns: 1.2fr 0.7fr 1.1fr 0.9fr 1.1fr 0.7fr;
-    gap: 0.4rem 0.6rem;
-  }
+.toast--error {
+  border-left: 4px solid #ef4444;
+}
 
+.toast--error .toast-icon {
+  stroke: #dc2626;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+}
+
+.toast--success {
+  border-left: 4px solid #22c55e;
+}
+
+.toast--success .toast-icon {
+  stroke: #16a34a;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+}
+
+.toast-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 0.5rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  transition: background 0.2s;
+  color: #94a3b8;
+}
+.metric-todo:hover {
+  border-color: #f9a8d4;      /* 比原本 #fecdd3 深一点 */
+  border-left-color: #be123c;  /* 比原本 #ec4899 深 */
+  /* 如果担心 box-shadow 或 outline 干扰，可同时重置 */
+  outline: none;               /* 移除默认轮廓（若有） */
+  box-shadow: 0 12px 30px rgba(190, 18, 60, 0.12); /* 可选，阴影微调 */
+}
+.toast-close:hover {
+  background: #f1f5f9;
+}
+
+.toast-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toast-enter-from {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-20px) scale(0.95);
+}
+
+.toast-enter-to {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+
+.toast-leave-from {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-20px) scale(0.95);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 响应式调整 */
+@media (max-width: 1200px) {
   .overview-summary-grid {
     grid-template-columns: repeat(3, 1fr);
   }
 }
 
-@media (max-width: 992px) {
-  .page-stack {
-    padding: 1.25rem 1rem;
-  }
-
-  .page-title-row {
-    padding: 0.75rem 1rem;
-    margin-bottom: 1rem;
-  }
-
-  .panel {
-    padding: 1rem 1.25rem;
-  }
-
-  .overview-project__main {
-    grid-template-columns: 1fr 0.6fr;
-    grid-template-rows: auto auto auto auto;
-    gap: 0.4rem 0.75rem;
-  }
-
-  .overview-project__identity {
-    grid-row: 1 / 2;
-    grid-column: 1 / 2;
-  }
-
-  .overview-project__main> :nth-child(2) {
-    grid-row: 1 / 2;
-    grid-column: 2 / 3;
-    justify-self: flex-end;
-  }
-
-  .overview-project__stage {
-    grid-row: 2 / 3;
-    grid-column: 1 / 2;
-  }
-
-  .overview-project__completion {
-    grid-row: 2 / 3;
-    grid-column: 2 / 3;
-  }
-
-  .overview-project__dates {
-    grid-row: 3 / 4;
-    grid-column: 1 / 3;
-  }
-
-  .overview-project__main .ghost-button {
-    grid-row: 4 / 5;
-    grid-column: 1 / 3;
-    justify-self: flex-start;
-  }
-
+@media (max-width: 900px) {
   .overview-summary-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-
-  .overview-filters {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .filter-group {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .overview-filters label {
-    min-width: auto;
-  }
-
-  .overview-filters select,
-  .overview-filters input {
-    min-width: auto;
-    width: 100%;
-  }
-
-  .overview-filters .primary-button {
-    align-self: flex-start;
-  }
-}
-
-@media (max-width: 768px) {
-  .page-title-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.5rem;
-    padding: 0;
-  }
-
-  .title-left {
-    gap: 0.1rem;
-  }
-
-  .page-title-row .ghost-button {
-    align-self: flex-start;
-  }
-
-  .panel-toolbar {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.5rem;
-  }
-
-  .overview-summary-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.5rem;
-  }
-
-  .overview-metric {
-    padding: 0.75rem 1rem;
-  }
-
-  .metric-value {
-    font-size: 1.5rem;
-  }
-
-  .overview-project {
-    padding: 0.75rem 1rem;
-  }
-
   .overview-project__main {
     grid-template-columns: 1fr;
-    grid-template-rows: auto;
-    gap: 0.4rem;
+    gap: 0.75rem;
   }
-
-  .overview-project__identity {
-    grid-row: auto;
-    grid-column: auto;
+  .action-button-main {
+    margin-left: 0;
   }
-
-  .overview-project__main> :nth-child(2) {
-    grid-row: auto;
-    grid-column: auto;
-    justify-self: flex-start;
-  }
-
-  .overview-project__stage,
-  .overview-project__completion,
-  .overview-project__dates {
-    grid-row: auto;
-    grid-column: auto;
-  }
-
-  .overview-project__main .ghost-button {
-    grid-row: auto;
-    grid-column: auto;
-    justify-self: flex-start;
-  }
-}
-
-@media (max-width: 480px) {
-  .page-stack {
-    padding: 1rem 0.75rem;
-  }
-
-  .page-title-row h2 {
-    font-size: 1.1rem;
-  }
-
-  .section-eyebrow {
-    font-size: 0.55rem;
-  }
-
-  .page-user {
-    font-size: 0.7rem;
-  }
-
-  .manual-status-note {
-    font-size: 0.6rem;
-  }
-
-  .ghost-button {
-    padding: 0.3rem 0.7rem;
-    font-size: 0.7rem;
-  }
-
-  .panel {
-    padding: 0.75rem 0.85rem;
-    border-radius: 0.75rem;
-  }
-
-  .overview-summary-grid {
-    grid-template-columns: 1fr 1fr;
-    gap: 0.4rem;
-  }
-
-  .overview-metric {
-    padding: 0.6rem 0.75rem;
-    border-radius: 0.5rem;
-  }
-
-  .metric-value {
-    font-size: 1.25rem;
-  }
-
-  .metric-label {
-    font-size: 0.6rem;
-  }
-
-  .overview-project {
-    padding: 0.6rem 0.75rem;
-    border-radius: 0.5rem;
-  }
-
-  .overview-project__identity strong {
-    font-size: 0.8rem;
-  }
-
-  .overview-project__stage strong,
-  .overview-project__completion strong,
-  .overview-project__dates strong {
-    font-size: 0.75rem;
-  }
-
-  .overview-project__main .ghost-button {
-    padding: 0.2rem 0.5rem;
-    font-size: 0.6rem;
-  }
-
-  .button-icon {
-    width: 14px;
-    height: 14px;
-  }
-
-  .panel-toolbar {
-    margin-bottom: 0.75rem;
-    padding-bottom: 0.4rem;
-  }
-
-  .panel-toolbar strong {
-    font-size: 0.85rem;
-  }
-
-  .panel-toolbar span {
-    font-size: 0.7rem;
-  }
-
-  .state-panel {
-    padding: 1.5rem 1rem;
-    min-height: 150px;
-  }
-
-  .state-panel h3 {
-    font-size: 0.95rem;
-  }
-
-  .state-panel p {
-    font-size: 0.8rem;
-  }
-
-  .documents-list li {
-    flex-wrap: wrap;
-    font-size: 0.7rem;
-    padding: 0.2rem 0.4rem;
-  }
-
-  .documents-list .document-name {
-    min-width: 60px;
-  }
-
-  .overview-filters .primary-button {
-    width: 100%;
-    justify-content: center;
+  .incomplete-docs-list {
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -1,4 +1,9 @@
-import { formatDateTime, formatUser } from '../../utils/format.js';
+import {
+  formatBusinessDepartment,
+  formatDateTime,
+  formatOrganizationRole,
+  formatUser
+} from '../../utils/format.js';
 
 export const operationActionText = {
   'project.created': '项目创建',
@@ -65,7 +70,13 @@ export function formatResponsibleUser(document) {
 }
 
 export function formatResponsibilityCandidate(user) {
-  const parts = [user.name, user.department, user.role, user.account ? `账号 ${user.account}` : ''].filter(Boolean);
+  const parts = [
+    user.name,
+    formatBusinessDepartment(user.department),
+    formatOrganizationRole(user.organizationRole),
+    user.role,
+    user.account ? `账号 ${user.account}` : ''
+  ].filter(Boolean);
   return parts.join(' / ') || `用户ID ${user.id}`;
 }
 

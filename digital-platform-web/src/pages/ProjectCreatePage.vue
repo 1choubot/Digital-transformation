@@ -1,94 +1,163 @@
 <template>
-  <section class="page-stack">
-    <!-- 精简标题行 -->
+  <section class="page-stack animate-fadeIn">
+    <!-- STREAMING_CHUNK: 渲染页面顶部说明与退回主台账操作... -->
     <div class="page-title-row">
       <div class="title-left">
         <span class="section-eyebrow">项目主数据</span>
         <h2>新建项目</h2>
-        <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
+        <div class="user-meta">
+          <svg class="meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+          <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
+        </div>
       </div>
       <button type="button" class="ghost-button" @click="navigate('/projects')">
-        <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M19 12H5" />
-          <path d="M12 19l-7-7 7-7" />
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <line x1="19" y1="12" x2="5" y2="12" />
+          <polyline points="12 19 5 12 12 5" />
         </svg>
-        返回列表
+        <span>返回列表</span>
       </button>
     </div>
 
+    <!-- STREAMING_CHUNK: 构建卡片化的高保真表单网格，移除内嵌警示栏... -->
     <form class="panel form-grid" @submit.prevent="submitProject">
-      <!-- 基本信息 -->
-      <label>
-        <span>项目编号 <span class="required">*</span></span>
-        <input v-model.trim="form.projectCode" type="text" placeholder="例如：PRJ-2024-001" autocomplete="off" />
-      </label>
-      <label>
-        <span>项目名称 <span class="required">*</span></span>
-        <input v-model.trim="form.projectName" type="text" placeholder="请输入项目名称" autocomplete="off" />
-      </label>
-      <label>
-        <span>客户 <span class="required">*</span></span>
-        <input v-model.trim="form.customerName" type="text" placeholder="请输入客户名称" autocomplete="off" />
-      </label>
-      <label>
-        <span>项目经理 <span class="required">*</span></span>
-        <input v-model.trim="form.projectManager" type="text" placeholder="请输入项目经理姓名" autocomplete="off" />
-      </label>
-      <label>
-        <span>参与部门</span>
-        <input v-model.trim="departmentsText" type="text" placeholder="研发中心、制造中心（用逗号分隔）" />
-      </label>
-      <label>
-        <span>计划开始时间</span>
-        <input v-model="form.plannedStartDate" type="date" />
-      </label>
-      <label>
-        <span>计划完成时间</span>
-        <input v-model="form.plannedEndDate" type="date" />
-      </label>
-      <label class="form-grid__wide">
-        <span>备注</span>
-        <textarea v-model.trim="form.remark" rows="4" placeholder="请输入项目备注信息..."></textarea>
+      
+      <!-- 项目编号 -->
+      <label class="form-group">
+        <span class="label-text">项目编号 <span class="required-star">*</span></span>
+        <div class="input-wrapper">
+          <input v-model.trim="form.projectCode" type="text" autocomplete="off" placeholder="例如: PROJ-2026-001" />
+        </div>
       </label>
 
-      <!-- 状态消息 -->
-      <div v-if="clientError || serverError" class="state-panel state-panel--error form-grid__wide">
-        <svg class="state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="12" y1="8" x2="12" y2="12" />
-          <line x1="12" y1="16" x2="12.01" y2="16" />
-        </svg>
-        <p>{{ clientError || serverError }}</p>
+      <!-- 项目名称 -->
+      <label class="form-group">
+        <span class="label-text">项目名称 <span class="required-star">*</span></span>
+        <div class="input-wrapper">
+          <input v-model.trim="form.projectName" type="text" autocomplete="off" placeholder="请输入项目全称" />
+        </div>
+      </label>
+
+      <!-- 客户 -->
+      <label class="form-group">
+        <span class="label-text">客户 <span class="required-star">*</span></span>
+        <div class="input-wrapper">
+          <input v-model.trim="form.customerName" type="text" autocomplete="off" placeholder="请输入客户或单位名称" />
+        </div>
+      </label>
+
+      <!-- 项目模式 -->
+      <label class="form-group">
+        <span class="label-text">项目模式</span>
+        <div class="select-wrapper">
+          <select v-model="form.projectMode">
+            <option value="self_developed">自研模式</option>
+            <option value="outsourced">供应链/外包模式</option>
+          </select>
+        </div>
+      </label>
+
+      <!-- 项目经理 -->
+      <label class="form-group">
+        <span class="label-text">项目经理 <span class="required-star">*</span></span>
+        <div class="select-wrapper">
+          <select v-model="form.projectManagerUserId" :disabled="managerCandidatesLoading">
+            <option value="">{{ managerCandidatesLoading ? '正在加载候选用户...' : '请选择项目经理' }}</option>
+            <option v-for="user in managerCandidates" :key="user.id" :value="String(user.id)">
+              {{ formatManagerCandidate(user) }}
+            </option>
+          </select>
+        </div>
+      </label>
+
+      <!-- 计划开始时间 -->
+      <label class="form-group">
+        <span class="label-text">计划开始时间</span>
+        <div class="input-wrapper">
+          <input v-model="form.plannedStartDate" type="date" />
+        </div>
+      </label>
+
+      <!-- 计划完成时间 -->
+      <label class="form-group">
+        <span class="label-text">计划完成时间</span>
+        <div class="input-wrapper">
+          <input v-model="form.plannedEndDate" type="date" />
+        </div>
+      </label>
+
+      <!-- 参与部门 (跨网格全宽) -->
+      <div class="form-group form-grid__wide">
+        <span class="label-text">参与部门</span>
+        <div class="department-checkbox-group">
+          <label
+            v-for="department in departmentOptions"
+            :key="department.value"
+            :class="['department-checkbox', { 'department-checkbox--active': form.participatingDepartments.includes(department.value) }]"
+          >
+            <input v-model="form.participatingDepartments" type="checkbox" :value="department.value" class="hidden-checkbox" />
+            <span class="checkbox-indicator"></span>
+            <span class="checkbox-label">{{ department.label }}</span>
+          </label>
+        </div>
       </div>
 
-      <div v-if="successMessage" class="state-panel state-panel--success form-grid__wide">
-        <svg class="state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-          <polyline points="22 4 12 14.01 9 11.01" />
-        </svg>
-        <p>{{ successMessage }}</p>
-      </div>
+      <!-- 备注 -->
+      <label class="form-group form-grid__wide">
+        <span class="label-text">备注</span>
+        <div class="textarea-wrapper">
+          <textarea v-model.trim="form.remark" rows="4" placeholder="请在此处填写项目其他补充备注说明..."></textarea>
+        </div>
+      </label>
 
-      <!-- 操作按钮 -->
+      <!-- 底部操作按钮 -->
       <div class="form-actions form-grid__wide">
         <button type="button" class="ghost-button" @click="navigate('/projects')">取消</button>
         <button type="submit" class="primary-button" :disabled="submitting">
-          <svg v-if="!submitting" class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 5v14" />
-            <path d="M5 12h14" />
-          </svg>
-          <span v-else class="spinner"></span>
-          {{ submitting ? '正在创建...' : '创建项目' }}
+          <span v-if="submitting" class="spinner"></span>
+          <span>{{ submitting ? '正在创建...' : '创建项目' }}</span>
         </button>
       </div>
     </form>
+
+    <!-- STREAMING_CHUNK: 统一样式的 Toast 消息弹出浮层... -->
+    <Transition name="toast">
+      <div v-if="toastVisible" class="toast" :class="{ 'toast--error': toastType === 'error', 'toast--success': toastType === 'success' }">
+        <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <template v-if="toastType === 'error'">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </template>
+          <template v-else>
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+            <polyline points="22 4 12 14.01 9 11.01" />
+          </template>
+        </svg>
+        <span>{{ toastMessage }}</span>
+        <button type="button" class="toast-close" @click="hideToast">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+    </Transition>
   </section>
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue';
+import { onMounted, reactive, ref, onUnmounted } from 'vue';
 import { createProject, toReadableApiError } from '../api/projects.js';
-import { formatUser } from '../utils/format.js';
+import { listResponsibilityCandidates } from '../api/users.js';
+import {
+  formatBusinessDepartment,
+  formatOrganizationRole,
+  formatUser
+} from '../utils/format.js';
 
 const props = defineProps({
   authToken: {
@@ -111,48 +180,98 @@ const form = reactive({
   projectCode: '',
   projectName: '',
   customerName: '',
-  projectManager: '',
+  projectMode: 'self_developed',
+  projectManagerUserId: '',
+  participatingDepartments: [],
   plannedStartDate: '',
   plannedEndDate: '',
   remark: ''
 });
 
-const departmentsText = ref('');
 const submitting = ref(false);
-const clientError = ref('');
-const serverError = ref('');
-const successMessage = ref('');
+const managerCandidates = ref([]);
+const managerCandidatesLoading = ref(false);
+const departmentOptions = [
+  { value: 'operations_center', label: '运营中心' },
+  { value: 'marketing_center', label: '营销中心' },
+  { value: 'manufacturing_center', label: '制造中心' },
+  { value: 'rd_center', label: '研发中心' }
+];
 
+// STREAMING_CHUNK: 统一定义 Toast 控制状态...
+const toastVisible = ref(false);
+const toastMessage = ref('');
+const toastType = ref('error');
+let toastTimer = null;
+
+function showToast(msg, type = 'error') {
+  if (toastTimer) clearTimeout(toastTimer);
+  toastMessage.value = msg;
+  toastType.value = type;
+  toastVisible.value = true;
+  toastTimer = setTimeout(() => {
+    toastVisible.value = false;
+  }, 3000);
+}
+
+function hideToast() {
+  if (toastTimer) clearTimeout(toastTimer);
+  toastVisible.value = false;
+}
+
+onUnmounted(() => {
+  if (toastTimer) clearTimeout(toastTimer);
+});
+
+function formatManagerCandidate(user) {
+  return [
+    user.name,
+    formatBusinessDepartment(user.department),
+    formatOrganizationRole(user.organizationRole),
+    user.role
+  ]
+    .filter(Boolean)
+    .join(' / ');
+}
+
+// STREAMING_CHUNK: 改造表单校核拦截提示为 Toast 输出...
 function validateForm() {
   const missing = [];
   if (!form.projectCode) missing.push('项目编号');
   if (!form.projectName) missing.push('项目名称');
   if (!form.customerName) missing.push('客户');
-  if (!form.projectManager) missing.push('项目经理');
+  if (!form.projectManagerUserId) missing.push('项目经理');
 
   if (missing.length > 0) {
-    clientError.value = `请补充：${missing.join('、')}`;
+    showToast(`请补充必填项：${missing.join('、')}`, 'error');
     return false;
   }
 
-  clientError.value = '';
   return true;
 }
 
-function parseDepartments() {
-  return departmentsText.value
-    .split(/[,\n，、]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+async function loadManagerCandidates() {
+  managerCandidatesLoading.value = true;
+
+  try {
+    managerCandidates.value = await listResponsibilityCandidates(props.authToken);
+  } catch (error) {
+    const errorMsg = toReadableApiError(error);
+    showToast(errorMsg, 'error');
+    if (error.code === 'UNAUTHENTICATED') {
+      emit('auth-expired', errorMsg);
+    }
+  } finally {
+    managerCandidatesLoading.value = false;
+  }
 }
 
+// STREAMING_CHUNK: 改造项目创建请求结果提示为 Toast 输出...
 async function submitProject() {
-  serverError.value = '';
-  successMessage.value = '';
-
   if (!props.authToken) {
-    serverError.value = '请先登录后再创建项目。';
-    emit('auth-expired', serverError.value);
+    const errorMsg = '请先登录后再创建项目。';
+    showToast(errorMsg, 'error');
+    emit('auth-expired', errorMsg);
     return;
   }
 
@@ -165,111 +284,119 @@ async function submitProject() {
   try {
     const created = await createProject({
       ...form,
-      participatingDepartments: parseDepartments()
+      participatingDepartments: [...form.participatingDepartments]
     }, props.authToken);
-    successMessage.value = '项目创建成功。';
+    showToast('项目创建成功。', 'success');
     props.navigate(`/projects/${created.project.id}`);
   } catch (error) {
-    serverError.value = toReadableApiError(error);
+    const errorMsg = toReadableApiError(error);
+    showToast(errorMsg, 'error');
     if (error.code === 'UNAUTHENTICATED') {
-      emit('auth-expired', serverError.value);
+      emit('auth-expired', errorMsg);
     }
   } finally {
     submitting.value = false;
   }
 }
+
+onMounted(loadManagerCandidates);
 </script>
 
 <style scoped>
-/* ===== 全局重置 & 基础 ===== */
+/* 全局页面容器 */
 .page-stack {
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 1.5rem 1.5rem 2rem;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  color: #1e293b;
-  background: #f8fafc;
-  min-height: 100vh;
-}
-
-/* ===== 标题行 ===== */
-.page-title-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 1rem;
-  margin-bottom: 0.75rem;
-  padding: 0 0.25rem;
-  flex-shrink: 0;
-}
-
-.title-left {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  max-width: 1000px;
+  margin: 0 auto;
+  min-height: 100vh;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #0f172a;
+  position: relative;
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.4s ease-out;
+}
+
+/* 顶部标题行 */
+.page-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding-bottom: 0.5rem;
 }
 
 .section-eyebrow {
-  font-size: 0.65rem;
+  display: inline-block;
+  font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #94a3b8;
+  color: #64748b;
+  background: #e2e8f0;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  margin-bottom: 0.5rem;
 }
 
 .page-title-row h2 {
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-size: 2rem;
+  font-weight: 700;
   color: #0f172a;
-  word-break: break-word;
-  line-height: 1.3;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.user-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+  color: #475569;
+}
+
+.meta-icon {
+  width: 16px;
+  height: 16px;
+  stroke: #64748b;
 }
 
 .page-user {
-  font-size: 0.8rem;
-  color: #94a3b8;
-  font-weight: 400;
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
-/* ===== 按钮 ===== */
+/* 按钮样式 */
 .ghost-button {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  padding: 0.625rem 1.125rem;
+  font-size: 0.875rem;
+  font-weight: 500;
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  padding: 0.4rem 1rem;
-  border-radius: 10px;
-  font-weight: 500;
-  font-size: 0.8rem;
+  border-radius: 8px;
   color: #334155;
   cursor: pointer;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-  flex-shrink: 0;
-  margin-top: 0.1rem;
+  transition: all 0.2s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
-.ghost-button:hover:not(:disabled) {
-  background: #f1f5f9;
-  border-color: #94a3b8;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.04);
+.ghost-button:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #0f172a;
 }
 
-.ghost-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.button-icon {
+.btn-icon {
   width: 16px;
   height: 16px;
-  flex-shrink: 0;
 }
 
 .primary-button {
@@ -278,300 +405,351 @@ async function submitProject() {
   justify-content: center;
   gap: 0.5rem;
   background: #0f172a;
+  color: #ffffff;
   border: none;
-  padding: 0.6rem 1.6rem;
-  border-radius: 10px;
-  font-weight: 500;
-  font-size: 0.875rem;
-  color: white;
+  font-weight: 600;
+  padding: 0.75rem 1.75rem;
+  border-radius: 8px;
+  font-size: 0.925rem;
   cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
-  font-family: inherit;
-  min-width: 120px;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+  height: 44px;
 }
 
 .primary-button:hover:not(:disabled) {
   background: #1e293b;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+}
+
+.primary-button:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 .primary-button:disabled {
   opacity: 0.6;
+  background: #475569;
   cursor: not-allowed;
-  transform: none;
+  box-shadow: none;
 }
 
-/* ===== 加载动画 ===== */
 .spinner {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #ffffff;
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid rgba(255, 255, 255, 0.25);
+  border-top: 2.5px solid white;
   border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-  flex-shrink: 0;
+  animation: spin 0.7s linear infinite;
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* ===== 面板 ===== */
+/* 表单面板 */
 .panel {
-  background: white;
-  border-radius: 1rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.03);
-  padding: 1.25rem 1.5rem;
-  margin-bottom: 0;
-  transition: box-shadow 0.2s ease;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 25px rgba(0, 20, 40, 0.03);
+  padding: 2.5rem;
 }
 
-.panel:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-}
-
-/* ===== 表单网格 ===== */
 .form-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem 1.5rem;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem 2rem;
 }
 
 .form-grid__wide {
-  grid-column: 1 / -1;
+  grid-column: span 2;
 }
 
-.form-grid label {
+.form-group {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  font-size: 0.75rem;
-  font-weight: 500;
+  gap: 0.5rem;
+}
+
+.label-text {
+  font-size: 0.85rem;
+  font-weight: 600;
   color: #475569;
   letter-spacing: 0.02em;
 }
 
-.form-grid label span {
-  display: block;
-}
-
-.required {
+.required-star {
   color: #ef4444;
-  font-weight: 600;
-  margin-left: 0.1rem;
 }
 
-.form-grid input,
-.form-grid textarea {
-  padding: 0.5rem 0.8rem;
+/* 输入组件容器包装 */
+.input-wrapper,
+.select-wrapper,
+.textarea-wrapper {
+  position: relative;
   border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  background: white;
-  font-size: 0.875rem;
-  color: #0f172a;
-  transition: border 0.2s ease, box-shadow 0.2s ease;
-  font-weight: 400;
-  font-family: inherit;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+
+.input-wrapper:focus-within,
+.select-wrapper:focus-within,
+.textarea-wrapper:focus-within {
+  border-color: #2563eb;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.input-wrapper input,
+.select-wrapper select,
+.textarea-wrapper textarea {
   width: 100%;
+  padding: 0.75rem 1rem;
+  border: none;
+  background: transparent;
+  font-size: 0.95rem;
+  color: #0f172a;
+  outline: none;
+  font-family: inherit;
   box-sizing: border-box;
 }
 
-.form-grid input::placeholder,
-.form-grid textarea::placeholder {
-  color: #94a3b8;
+/* 下拉菜单特有样式 */
+.select-wrapper select {
+  padding-right: 2.5rem;
+  appearance: none;
+  cursor: pointer;
 }
 
-.form-grid input:focus,
-.form-grid textarea:focus {
-  outline: none;
-  border-color: #0f172a;
-  box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
+.select-wrapper::after {
+  content: '';
+  position: absolute;
+  right: 1.2rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid #64748b;
+  pointer-events: none;
 }
 
-.form-grid textarea {
+/* 文本域单独处理 */
+.textarea-wrapper textarea {
   resize: vertical;
-  min-height: 80px;
 }
 
-/* ===== 状态面板 ===== */
-.state-panel {
+/* 参与部门复选控制 */
+.department-checkbox-group {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-top: 0.25rem;
+}
+
+.department-checkbox {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
+  padding: 0.85rem 1rem;
   background: #f8fafc;
-  text-align: left;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
 }
 
-.state-panel--error {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+.hidden-checkbox {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
 }
 
-.state-panel--error p {
-  color: #b91c1c;
-  margin: 0;
-  font-size: 0.85rem;
-}
-
-.state-panel--success {
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-}
-
-.state-panel--success p {
-  color: #166534;
-  margin: 0;
-  font-size: 0.85rem;
-}
-
-.state-icon {
-  width: 20px;
-  height: 20px;
+.checkbox-indicator {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #cbd5e1;
+  border-radius: 4px;
+  background: #ffffff;
+  transition: all 0.15s;
   flex-shrink: 0;
 }
 
-.state-panel--error .state-icon {
-  color: #dc2626;
+.department-checkbox:hover {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+}
+
+.department-checkbox--active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.department-checkbox--active .checkbox-indicator {
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
+.department-checkbox--active .checkbox-indicator::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 5px;
+  height: 8px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.checkbox-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #334155;
+  transition: color 0.15s;
+}
+
+.department-checkbox--active .checkbox-label {
+  color: #1e40af;
+  font-weight: 600;
+}
+
+/* STREAMING_CHUNK: 统一样式的 Toast 消息弹出浮层 CSS... */
+.toast {
+  position: fixed;
+  top: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 1rem 0.7rem 1.2rem;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #0f172a;
+  z-index: 9999;
+  border: 1px solid #f1f5f9;
+  max-width: 90%;
+}
+
+.toast--error {
+  border-left: 4px solid #ef4444;
+}
+
+.toast--error .toast-icon {
   stroke: #dc2626;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
 }
 
-.state-panel--success .state-icon {
-  color: #16a34a;
+.toast--success {
+  border-left: 4px solid #22c55e;
+}
+
+.toast--success .toast-icon {
   stroke: #16a34a;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
 }
 
-/* ===== 表单操作按钮 ===== */
+.toast-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 0.5rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  transition: background 0.2s;
+  color: #94a3b8;
+}
+
+.toast-close:hover {
+  background: #f1f5f9;
+}
+
+.toast-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toast-enter-from {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-20px) scale(0.95);
+}
+
+.toast-enter-to {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+
+.toast-leave-from {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-20px) scale(0.95);
+}
+
+/* 操作区域 */
 .form-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.75rem;
-  padding-top: 0.75rem;
+  gap: 1rem;
   border-top: 1px solid #f1f5f9;
+  padding-top: 1.5rem;
+  margin-top: 1rem;
 }
 
-/* ===== 响应式 ===== */
-@media (max-width: 992px) {
-  .page-stack {
-    padding: 1.25rem 1rem;
-  }
-
-  .page-title-row {
-    padding: 0;
-  }
-
-  .panel {
-    padding: 1rem 1.25rem;
-  }
-
-  .form-grid {
-    gap: 0.75rem 1.25rem;
-  }
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 响应式适配 */
 @media (max-width: 768px) {
-  .page-title-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.5rem;
-  }
-
-  .page-title-row .ghost-button {
-    align-self: flex-start;
-  }
-
   .form-grid {
     grid-template-columns: 1fr;
-    gap: 0.75rem;
   }
-
   .form-grid__wide {
-    grid-column: 1;
+    grid-column: span 1;
   }
-
-  .form-actions {
-    flex-direction: column-reverse;
+  .department-checkbox-group {
+    grid-template-columns: repeat(2, 1fr);
   }
-
-  .form-actions button {
-    width: 100%;
-    justify-content: center;
-  }
-
   .panel {
-    padding: 1rem 0.85rem;
-  }
-
-  .state-panel {
-    padding: 0.6rem 0.85rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .page-stack {
-    padding: 1rem 0.75rem;
-  }
-
-  .page-title-row h2 {
-    font-size: 1.1rem;
-  }
-
-  .section-eyebrow {
-    font-size: 0.55rem;
-  }
-
-  .page-user {
-    font-size: 0.7rem;
-  }
-
-  .ghost-button {
-    padding: 0.3rem 0.7rem;
-    font-size: 0.7rem;
-  }
-
-  .panel {
-    padding: 0.75rem 0.65rem;
-    border-radius: 0.75rem;
-  }
-
-  .form-grid {
-    gap: 0.6rem;
-  }
-
-  .form-grid label {
-    font-size: 0.7rem;
-  }
-
-  .form-grid input,
-  .form-grid textarea {
-    font-size: 0.8rem;
-    padding: 0.4rem 0.6rem;
-  }
-
-  .primary-button {
-    padding: 0.5rem 1rem;
-    font-size: 0.8rem;
-    min-width: 100px;
-  }
-
-  .button-icon {
-    width: 14px;
-    height: 14px;
-  }
-
-  .state-panel p {
-    font-size: 0.75rem;
-  }
-
-  .state-icon {
-    width: 16px;
-    height: 16px;
+    padding: 1.5rem;
   }
 }
 </style>

@@ -1,166 +1,315 @@
 <template>
-  <section class="page-stack">
-    <div class="page-title-row">
-      <div>
-        <span class="section-eyebrow">基础用户管理</span>
-        <h2>用户管理</h2>
-        <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
-      </div>
-      <button type="button" class="ghost-button" @click="navigate('/projects')">返回项目列表</button>
-    </div>
-
-    <section v-if="!currentUser.isPlatformAdmin" class="state-panel state-panel--error">
-      <h3>无权限访问</h3>
-      <p>用户管理仅平台管理员可进入。该入口只保护用户管理本身，不代表项目、资料或文件权限。</p>
+  <section class="page-stack animate-fadeIn">
+    <!-- 无权限警告 -->
+    <section v-if="!canAccessUserManagement" class="state-panel state-panel--error panel">
+      <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" />
+        <line x1="12" y1="8" x2="12" y2="12" />
+      </svg>
+      <h3>无权限访问此页面</h3>
+      <p>用户管理控制台仅具备平台管理员权限的用户方可进入。本机制保护管理入口本身，不代表底层文档权限。</p>
     </section>
 
     <template v-else>
-      <section class="panel">
-        <div class="panel-toolbar">
-          <div>
-            <strong>用户列表</strong>
-            <span>展示数字化平台用户，不读取或同步文件管理平台用户。</span>
+      <!-- 指标看板 -->
+      <section v-if="users.length > 0" class="dashboard-stats-grid">
+        <div class="stat-card stat-card--blue">
+          <div class="stat-info">
+            <span class="stat-label">注册用户总数</span>
+            <strong class="stat-value">{{ totalCount }} <small>人</small></strong>
           </div>
-          <div class="toolbar-actions">
-            <button type="button" class="primary-button" @click="openCreateModal">新增用户</button>
-            <button type="button" class="ghost-button" :disabled="loading" @click="loadUsers">
-              <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 2v6h-6" />
-                <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-                <path d="M3 22v-6h6" />
-                <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-              </svg>
-              {{ loading ? '加载中...' : '重新加载' }}
-            </button>
+          <div class="stat-icon-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+            </svg>
           </div>
         </div>
 
-        <div v-if="loading" class="state-panel state-panel--inline">
-          <p>正在加载用户列表...</p>
-        </div>
-
-        <div v-else-if="errorMessage" class="state-panel state-panel--error">
-          <h3>用户列表加载失败</h3>
-          <p>{{ errorMessage }}</p>
-          <button type="button" class="primary-button" @click="loadUsers">重试</button>
-        </div>
-
-        <div v-else-if="users.length === 0" class="state-panel state-panel--inline">
-          <h3>暂无用户</h3>
-          <p>请先新增数字化平台用户。</p>
-        </div>
-
-        <template v-else>
-          <div class="user-table">
-            <div class="user-table__head">
-              <span>账号</span>
-              <span>姓名</span>
-              <span>部门</span>
-              <span>角色</span>
-              <span>状态</span>
-              <span>平台管理员</span>
-              <span>文件平台用户ID</span>
-              <span>操作</span>
-            </div>
-
-            <article v-for="user in users" :key="user.id" class="user-table__row">
-              <span class="cell-mono">{{ user.account }}</span>
-              <strong class="cell-name">{{ user.name }}</strong>
-              <span class="cell-text">{{ user.department }}</span>
-              <span class="cell-text">{{ user.role }}</span>
-              <span class="badge" :class="user.isEnabled ? 'badge-success' : 'badge-danger'">
-                {{ user.isEnabled ? '启用' : '禁用' }}
-              </span>
-              <span class="badge" :class="user.isPlatformAdmin ? 'badge-primary' : 'badge-neutral'">
-                {{ user.isPlatformAdmin ? '是' : '否' }}
-              </span>
-              <span class="cell-mono">{{ user.filePlatformUserId || '-' }}</span>
-              <div class="user-row-actions">
-                <button type="button" class="ghost-button" @click="startEdit(user)">编辑</button>
-                <button
-                  type="button"
-                  class="ghost-button"
-                  :disabled="isActionPending(user.id, user.isEnabled ? 'disable' : 'enable')"
-                  @click="toggleEnabled(user)"
-                >
-                  {{ user.isEnabled ? '禁用' : '启用' }}
-                </button>
-                <button
-                  type="button"
-                  class="ghost-button"
-                  :disabled="isActionPending(user.id, 'reset-password')"
-                  @click="openResetModal(user)"
-                >
-                  重置密码
-                </button>
-              </div>
-            </article>
+        <div class="stat-card stat-card--emerald">
+          <div class="stat-info">
+            <span class="stat-label">正常启用状态</span>
+            <strong class="stat-value">{{ enabledCount }} <small>人</small></strong>
           </div>
-
-          <!-- 分页控件 -->
-          <div class="pagination-container">
-            <div class="pagination-info">
-              共 <strong>{{ totalUsers }}</strong> 条记录，
-              第 <strong>{{ currentPage }}</strong> / <strong>{{ totalPages }}</strong> 页
-            </div>
-            <div class="pagination-controls">
-              <button
-                type="button"
-                class="ghost-button"
-                :disabled="currentPage <= 1 || loading"
-                @click="changePage(currentPage - 1)"
-              >
-                上一页
-              </button>
-
-              <div class="page-numbers">
-                <button
-                  v-for="page in visiblePages"
-                  :key="page.value"
-                  type="button"
-                  class="page-number"
-                  :class="{
-                    'page-number--active': page.type === 'page' && page.value === currentPage,
-                    'page-number--ellipsis': page.type === 'ellipsis'
-                  }"
-                  :disabled="page.type === 'ellipsis' || loading"
-                  @click="page.type === 'page' && changePage(page.value)"
-                >
-                  {{ page.type === 'ellipsis' ? '…' : page.value }}
-                </button>
-              </div>
-
-              <button
-                type="button"
-                class="ghost-button"
-                :disabled="currentPage >= totalPages || loading"
-                @click="changePage(currentPage + 1)"
-              >
-                下一页
-              </button>
-
-              <div class="page-size-selector">
-                <label>
-                  <span>每页</span>
-                  <select v-model.number="pageSize" :disabled="loading" @change="changePageSize">
-                    <option v-for="size in [5, 10, 20, 50]" :key="size" :value="size">
-                      {{ size }}
-                    </option>
-                  </select>
-                  <span>条</span>
-                </label>
-              </div>
-            </div>
+          <div class="stat-icon-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+            </svg>
           </div>
-        </template>
+        </div>
+
+        <div class="stat-card stat-card--indigo">
+          <div class="stat-info">
+            <span class="stat-label">管理员</span>
+            <strong class="stat-value">{{ adminCount }} <small>人</small></strong>
+          </div>
+          <div class="stat-icon-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          </div>
+        </div>
+
+        <div class="stat-card stat-card--amber">
+          <div class="stat-info">
+            <span class="stat-label">禁用冻结账号</span>
+            <strong class="stat-value">{{ disabledCount }} <small>人</small></strong>
+          </div>
+          <div class="stat-icon-wrapper">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+            </svg>
+          </div>
+        </div>
       </section>
 
-      <!-- 新增/编辑用户弹窗 -->
-      <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h3>{{ editingUser ? '编辑用户' : '新增用户' }}</h3>
-            <button type="button" class="modal-close" @click="closeModal">
+      <!-- 用户列表卡片主体 -->
+      <section class="panel list-panel">
+        <div class="panel-toolbar">
+          <div class="toolbar-info">
+            <strong class="toolbar-title">数字化平台注册人员台账</strong>
+            <span class="toolbar-subtitle">本系统仅展示并维护平台注册人员，不读取或同步文件管理存储系统的外部目录。</span>
+          </div>
+          <div class="toolbar-actions">
+            <!-- 查找用户搜索框 -->
+            <div class="search-input-wrapper">
+              <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                v-model="searchQuery"
+                type="text"
+                placeholder="搜索姓名或账号..."
+                class="search-input"
+                @input="handleSearchInput"
+              />
+              <button
+                v-if="searchQuery"
+                type="button"
+                class="search-clear-btn"
+                @click="clearSearch"
+                aria-label="清除搜索"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <button type="button" class="ghost-button reload-btn" :disabled="loading" @click="loadUsers">
+              <svg v-if="loading" class="spinner btn-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                <circle cx="12" cy="12" r="10" stroke="rgba(0,0,0,0.1)" stroke-top="currentColor" />
+              </svg>
+              <span>{{ loading ? '同步中...' : '重新加载' }}</span>
+            </button>
+
+            <button type="button" class="ghost-button back-to-list-btn" @click="navigate('/projects')">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <line x1="19" y1="12" x2="5" y2="12" />
+                <polyline points="12 19 5 12 12 5" />
+              </svg>
+              <span>返回项目列表</span>
+            </button>
+
+            <button type="button" class="primary-button create-user-btn" @click="openCreateModal">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              <span>录入平台新成员</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 数据加载中 -->
+        <div v-if="loading" class="state-panel state-panel--inline">
+          <div class="loading-wave">
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+          </div>
+          <p>正在同步最新的平台用户列表...</p>
+        </div>
+
+        <!-- 数据加载失败 -->
+        <div v-else-if="errorMessage" class="state-panel state-panel--error">
+          <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+          </svg>
+          <h3>用户列表加载失败</h3>
+          <p>{{ errorMessage }}</p>
+          <button type="button" class="primary-button inline-btn" @click="loadUsers">重试加载</button>
+        </div>
+
+        <!-- 无注册用户状态 -->
+        <div v-else-if="users.length === 0" class="state-panel state-panel--empty">
+          <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+          </svg>
+          <h3>暂无注册用户</h3>
+          <p>系统目前未分配任何数字化平台用户，请在上方新增用户。</p>
+        </div>
+
+        <!-- 搜索无结果 -->
+        <div v-else-if="searchQuery && filteredUsers.length === 0" class="state-panel state-panel--empty">
+          <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <h3>未找到匹配用户</h3>
+          <p>没有姓名或账号包含“{{ searchQuery }}”的用户，请尝试其他关键词。</p>
+        </div>
+
+        <!-- 极致优化的 5列 强合并流式行表格（绝不换行，绝不横向溢出） -->
+        <div v-else class="table-container">
+          <div class="user-table">
+            <div class="user-table__head">
+              <span>账户信息</span>
+              <span>组织与部门</span>
+              <span>岗位职务</span>
+              <span>系统权限</span>
+              <span class="text-right">管理操作</span>
+            </div>
+
+            <div class="user-table__body">
+              <article v-for="user in paginatedUsers" :key="user.id" class="user-table__row">
+                
+                <!-- 列 1: 账号与身份集合 -->
+                <div class="card-column min-w-0 gap-0.5">
+                  <div class="flex items-center gap-2">
+                    <strong class="text-[13px] font-bold text-slate-900 truncate" :title="user.name">{{ user.name }}</strong>
+                    <span class="mono-badge">{{ user.account }}</span>
+                  </div>
+                  <span class="mono-code">平台ID: {{ user.filePlatformUserId || '未绑定' }}</span>
+                </div>
+                
+                <!-- 列 2: 组织与部门集合 -->
+                <div class="card-column min-w-0">
+                  <span class="role-tag">{{ formatOrganizationRole(user.organizationRole) }}</span>
+                  <span class="text-xs text-slate-500 font-medium truncate mt-0.5" :title="formatBusinessDepartment(user.department)">
+                    {{ formatBusinessDepartment(user.department) || '全局系统级' }}
+                  </span>
+                </div>
+                
+                <!-- 列 3: 岗位职务（强制不换行截断，并预留充足宽度） -->
+                <div class="card-column min-w-0">
+                  <span class="text-[13px] text-slate-800 font-semibold truncate" :title="user.role">
+                    {{ user.role || '-' }}
+                  </span>
+                </div>
+                
+                <!-- 列 4: 权限状态集合 -->
+                <div class="card-column min-w-0 gap-1 items-start">
+                  <span :class="['status-indicator', user.isEnabled ? 'status-indicator--active' : 'status-indicator--disabled']">
+                    {{ user.isEnabled ? '正常启用' : '禁用冻结' }}
+                  </span>
+                  <span v-if="user.isPlatformAdmin" class="admin-badge admin-badge--yes">管理员</span>
+                </div>
+                
+                <!-- 列 5: 交互动作组（强制一行） -->
+                <div class="user-row-actions whitespace-nowrap">
+                  <button type="button" class="row-btn edit-btn" @click="startEdit(user)">编辑</button>
+                  <button
+                    type="button"
+                    :class="['row-btn toggle-btn', user.isEnabled ? 'toggle-btn--disable' : 'toggle-btn--enable']"
+                    :disabled="isActionPending(user.id, user.isEnabled ? 'disable' : 'enable')"
+                    @click="toggleEnabled(user)"
+                  >
+                    {{ user.isEnabled ? '禁用' : '启用' }}
+                  </button>
+                  
+                  <!-- 重置密码组 -->
+                  <div class="user-password-reset">
+                    <input
+                      v-model="resetPasswords[user.id]"
+                      type="password"
+                      autocomplete="new-password"
+                      placeholder="新密码"
+                      :disabled="isActionPending(user.id, 'reset-password')"
+                    />
+                    <button
+                      type="button"
+                      class="reset-btn"
+                      :disabled="isActionPending(user.id, 'reset-password')"
+                      @click="resetPassword(user)"
+                    >
+                      重置
+                    </button>
+                  </div>
+                </div>
+
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 自适应分页控制面板 -->
+      <footer v-if="filteredUsers.length > 0" class="panel pagination-panel">
+        <div class="pagination-info">
+          <span>当前第</span>
+          <span class="page-current-highlight">{{ currentPage }}</span>
+          <span>/ {{ totalPages }} 页</span>
+          <span class="divider">|</span>
+          <span>共筛选出 {{ filteredUsers.length }} 人</span>
+          <span v-if="searchQuery" class="search-indicator">（搜索: {{ searchQuery }}）</span>
+        </div>
+
+        <div class="pagination-controls">
+          <button type="button" class="page-control-btn" :disabled="currentPage === 1" @click="changePage(1)">
+            首页
+          </button>
+          <button type="button" class="page-control-btn" :disabled="currentPage === 1" @click="changePage(currentPage - 1)">
+            上一页
+          </button>
+          <div class="page-numbers-group">
+            <button
+              v-for="page in visiblePages"
+              :key="page"
+              type="button"
+              :class="['page-number-btn', { 'page-number-btn--active': page === currentPage }]"
+              @click="changePage(page)"
+            >
+              {{ page }}
+            </button>
+          </div>
+          <button type="button" class="page-control-btn" :disabled="currentPage === totalPages" @click="changePage(currentPage + 1)">
+            下一页
+          </button>
+          <button type="button" class="page-control-btn" :disabled="currentPage === totalPages" @click="changePage(totalPages)">
+            尾页
+          </button>
+        </div>
+
+        <div class="pagination-sizes">
+          <span>每页显示</span>
+          <div class="select-wrapper select-size">
+            <select v-model="pageSize" @change="currentPage = 1">
+              <option :value="5">5 人/页</option>
+              <option :value="8">8 人/页</option>
+              <option :value="12">12 人/页</option>
+              <option :value="20">20 人/页</option>
+            </select>
+          </div>
+        </div>
+      </footer>
+
+      <!-- 磨砂滑入式配置弹窗（Modal Drawer） -->
+      <div v-if="isModalOpen" class="modal-backdrop-overlay animate-fadeIn" @click.self="closeModal">
+        <form class="panel form-grid modal-container animate-slideIn" @submit.prevent="saveUser">
+          <div class="form-grid__wide user-form-heading">
+            <div class="heading-left">
+              <span class="section-eyebrow">{{ editingUser ? '账号配置' : '组织录入' }}</span>
+              <h3 class="form-title-text">{{ editingUser ? `编辑用户账户: ${editingUser.account}` : '新增数字化平台用户' }}</h3>
+            </div>
+            <button type="button" class="close-modal-x-btn" @click="closeModal" aria-label="关闭弹窗">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
@@ -168,106 +317,129 @@
             </button>
           </div>
 
-          <form class="modal-form" @submit.prevent="saveUser">
-            <div class="form-grid">
-              <label>
-                <span>账号</span>
-                <input v-model.trim="form.account" type="text" autocomplete="off" :disabled="Boolean(editingUser)" />
-              </label>
-              <label>
-                <span>姓名</span>
-                <input v-model.trim="form.displayName" type="text" autocomplete="off" />
-              </label>
-              <label>
-                <span>部门</span>
-                <input v-model.trim="form.department" type="text" autocomplete="off" />
-              </label>
-              <label>
-                <span>角色</span>
-                <input v-model.trim="form.role" type="text" autocomplete="off" />
-              </label>
-              <label v-if="!editingUser">
-                <span>初始密码</span>
-                <input v-model="form.password" type="password" autocomplete="new-password" />
-              </label>
-              <label>
-                <span>文件平台用户ID</span>
-                <input v-model.trim="form.filePlatformUserId" type="text" autocomplete="off" />
-              </label>
-
-              <div class="form-grid__wide user-checkboxes">
-                <label class="user-checkbox">
-                  <input v-model="form.isEnabled" type="checkbox" />
-                  <span>启用用户</span>
-                </label>
-                <label class="user-checkbox">
-                  <input v-model="form.isPlatformAdmin" type="checkbox" />
-                  <span>平台管理员</span>
-                </label>
-              </div>
-
-              <div class="form-actions form-grid__wide">
-                <button type="button" class="ghost-button" @click="resetForm">清空</button>
-                <button type="submit" class="primary-button" :disabled="saving">
-                  {{ saving ? '保存中...' : editingUser ? '保存修改' : '新增用户' }}
-                </button>
-              </div>
+          <!-- 账号 (新建时可用) -->
+          <div class="form-group">
+            <span class="label-text">账号 <span class="required-star">*</span></span>
+            <div class="input-wrapper" :class="{ 'input-wrapper--disabled': Boolean(editingUser) }">
+              <input v-model.trim="form.account" type="text" autocomplete="off" :disabled="Boolean(editingUser)" placeholder="输入登录账号" />
             </div>
-          </form>
-        </div>
-      </div>
-
-      <!-- 重置密码弹窗 -->
-      <div v-if="showResetModal" class="modal-overlay" @click.self="closeResetModal">
-        <div class="modal-content modal-content--small">
-          <div class="modal-header">
-            <h3>重置密码</h3>
-            <button type="button" class="modal-close" @click="closeResetModal">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
           </div>
 
-          <form class="modal-form" @submit.prevent="confirmResetPassword">
-            <div class="form-grid form-grid--single">
-              <label>
-                <span>新密码</span>
-                <input
-                  v-model="resetPasswordInput"
-                  type="password"
-                  autocomplete="new-password"
-                  placeholder="请输入新密码"
-                  required
-                />
-              </label>
-              <div class="form-actions">
-                <button type="button" class="ghost-button" @click="closeResetModal">取消</button>
-                <button type="submit" class="primary-button" :disabled="resetSaving">
-                  {{ resetSaving ? '重置中...' : '确认重置' }}
-                </button>
-              </div>
+          <!-- 姓名 -->
+          <div class="form-group">
+            <span class="label-text">姓名 <span class="required-star">*</span></span>
+            <div class="input-wrapper">
+              <input v-model.trim="form.displayName" type="text" autocomplete="off" placeholder="输入真实姓名" />
             </div>
-          </form>
-        </div>
+          </div>
+
+          <!-- 组织角色 -->
+          <div class="form-group">
+            <span class="label-text">组织角色 <span class="required-star">*</span></span>
+            <div class="select-wrapper">
+              <select v-model="form.organizationRole" @change="handleOrganizationRoleChange">
+                <option value="">请选择组织角色</option>
+                <option v-for="option in organizationRoleOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 部门 -->
+          <div class="form-group">
+            <span class="label-text">部门 <span class="required-star" v-if="isDepartmentOrganizationRole(form.organizationRole)">*</span></span>
+            <div class="select-wrapper" :class="{ 'select-wrapper--disabled': isGlobalOrganizationRole(form.organizationRole) }">
+              <select
+                v-model="form.department"
+                :disabled="isGlobalOrganizationRole(form.organizationRole)"
+              >
+                <option value="">{{ isGlobalOrganizationRole(form.organizationRole) ? '系统级角色' : '请选择部门' }}</option>
+                <option v-for="option in departmentOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 岗位职务 -->
+          <div class="form-group">
+            <span class="label-text">岗位 / 职务 <span class="required-star">*</span></span>
+            <div class="input-wrapper">
+              <input v-model.trim="form.role" type="text" autocomplete="off" placeholder="输入职务, 例如: 高级研发工程师" />
+            </div>
+          </div>
+
+          <!-- 初始密码 (仅新建时展现) -->
+          <div v-if="!editingUser" class="form-group">
+            <span class="label-text">初始密码 <span class="required-star">*</span></span>
+            <div class="input-wrapper">
+              <input v-model="form.password" type="password" autocomplete="new-password" placeholder="输入密码" />
+            </div>
+          </div>
+
+          <!-- 文件平台用户ID -->
+          <div class="form-group">
+            <span class="label-text">文件平台用户ID</span>
+            <div class="input-wrapper">
+              <input v-model.trim="form.filePlatformUserId" type="text" autocomplete="off" placeholder="可选: 关联文件系统ID" />
+            </div>
+          </div>
+
+          <!-- 选择状态及管理员开关组 -->
+          <div class="checkbox-controls-row form-grid__wide">
+            <label class="user-checkbox-card">
+              <input v-model="form.isEnabled" type="checkbox" />
+              <span class="checkbox-indicator"></span>
+              <span class="checkbox-label-text">启用该用户 (允许登录)</span>
+            </label>
+            <label class="user-checkbox-card" :class="{ 'user-checkbox-card--disabled': form.organizationRole !== 'system_admin' }">
+              <input
+                v-model="form.isPlatformAdmin"
+                type="checkbox"
+                :disabled="form.organizationRole !== 'system_admin'"
+              />
+              <span class="checkbox-indicator"></span>
+              <span class="checkbox-label-text">设为平台管理员</span>
+            </label>
+          </div>
+
+          <!-- 保存提示信息区块 -->
+          <div v-if="clientError || operationError" class="state-panel state-panel--error form-grid__wide animate-slideIn">
+            <p>{{ clientError || operationError }}</p>
+          </div>
+          <div v-if="successMessage" class="state-panel state-panel--success form-grid__wide animate-slideIn">
+            <p>{{ successMessage }}</p>
+          </div>
+
+          <!-- 操作区 -->
+          <div class="form-actions form-grid__wide">
+            <button type="button" class="ghost-button" @click="closeModal">取消</button>
+            <button type="submit" class="primary-button submit-btn" :disabled="saving">
+              <span v-if="saving" class="spinner"></span>
+              <span>{{ saving ? '正在保存...' : editingUser ? '保存修改' : '确认新增用户' }}</span>
+            </button>
+          </div>
+        </form>
       </div>
     </template>
 
-    <!-- Toast 通知 -->
+    <!-- 统一 Toast 弹窗 -->
     <Transition name="toast">
-      <div
-        v-if="toastVisible"
-        class="toast"
-        :class="{ 'toast--error': toastType === 'error', 'toast--success': toastType === 'success' }"
-      >
+      <div v-if="toastVisible" class="toast" :class="{ 'toast--error': toastType === 'error', 'toast--success': toastType === 'success' }">
         <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="12" y1="8" x2="12" y2="12" />
-          <line x1="12" y1="16" x2="12.01" y2="16" />
+          <template v-if="toastType === 'error'">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </template>
+          <template v-else>
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+            <polyline points="22 4 12 14.01 9 11.01" />
+          </template>
         </svg>
         <span>{{ toastMessage }}</span>
-        <button class="toast-close" @click="hideToast">
+        <button type="button" class="toast-close" @click="hideToast">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <line x1="18" y1="6" x2="6" y2="18" />
             <line x1="6" y1="6" x2="18" y2="18" />
@@ -279,7 +451,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch, onUnmounted } from 'vue';
 import {
   createUser,
   disableUser,
@@ -289,7 +461,11 @@ import {
   updateUser
 } from '../api/users.js';
 import { toReadableApiError } from '../api/http.js';
-import { formatUser } from '../utils/format.js';
+import {
+  formatBusinessDepartment,
+  formatOrganizationRole,
+  formatUser
+} from '../utils/format.js';
 
 const props = defineProps({
   authToken: {
@@ -312,31 +488,54 @@ const users = ref([]);
 const loading = ref(false);
 const saving = ref(false);
 const errorMessage = ref('');
+const operationError = ref('');
+const clientError = ref('');
+const successMessage = ref('');
 const editingUser = ref(null);
 const pendingAction = ref('');
-const showModal = ref(false);
+const resetPasswords = reactive({});
 
-// 分页相关
+// 查找用户相关
+const searchQuery = ref('');
+
+// 高保真滑入式配置弹窗可见性变量
+const isModalOpen = ref(false);
+
+// 本地分页控制
 const currentPage = ref(1);
-const pageSize = ref(10);
-const totalUsers = ref(0);
+const pageSize = ref(8); // 默认每页展现 8 个用户账号
 
-// 重置密码相关
-const showResetModal = ref(false);
-const resetUserId = ref(null);
-const resetPasswordInput = ref('');
-const resetSaving = ref(false);
+const canAccessUserManagement = computed(
+  () => props.currentUser.isPlatformAdmin && props.currentUser.organizationRole === 'system_admin'
+);
 
-// Toast 相关
-const toastVisible = ref(false);
-const toastMessage = ref('');
-const toastType = ref('error');
-let toastTimer = null;
+const organizationRoleOptions = [
+  { value: 'general_manager', label: '总经理' },
+  { value: 'system_admin', label: '系统管理员' },
+  { value: 'general_manager_assistant', label: '总经理助理' },
+  { value: 'center_manager', label: '中心负责人' },
+  { value: 'employee', label: '员工' }
+];
+
+const departmentOptions = [
+  { value: 'operations_center', label: '运营中心' },
+  { value: 'marketing_center', label: '营销中心' },
+  { value: 'manufacturing_center', label: '制造中心' },
+  { value: 'rd_center', label: '研发中心' }
+];
+
+const globalOrganizationRoles = new Set([
+  'general_manager',
+  'system_admin',
+  'general_manager_assistant'
+]);
+const departmentOrganizationRoles = new Set(['center_manager', 'employee']);
 
 const form = reactive({
   account: '',
   displayName: '',
   department: '',
+  organizationRole: '',
   role: '',
   password: '',
   isEnabled: true,
@@ -344,39 +543,71 @@ const form = reactive({
   filePlatformUserId: ''
 });
 
-// 计算总页数
-const totalPages = computed(() => Math.ceil(totalUsers.value / pageSize.value) || 1);
-
-// 计算可见页码（带省略号）
-const visiblePages = computed(() => {
-  const total = totalPages.value;
-  const current = currentPage.value;
-  const delta = 2;
-  const range = [];
-  for (let i = 1; i <= total; i++) {
-    if (i === 1 || i === total || (i >= current - delta && i <= current + delta)) {
-      range.push(i);
-    }
-  }
-  const result = [];
-  let last = 0;
-  for (const page of range) {
-    if (page - last > 1) {
-      result.push({ type: 'ellipsis', value: 'ellipsis-' + last });
-    }
-    result.push({ type: 'page', value: page });
-    last = page;
-  }
-  return result;
+// 基于搜索过滤后的用户列表
+const filteredUsers = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase();
+  if (!q) return users.value;
+  return users.value.filter(user =>
+    user.name.toLowerCase().includes(q) ||
+    user.account.toLowerCase().includes(q)
+  );
 });
 
-function buildPendingKey(userId, action) {
-  return `${userId}:${action}`;
+// Vue 响应式自计算属性，保持原有指标的实时同步（基于全部用户）
+const totalCount = computed(() => users.value.length);
+const enabledCount = computed(() => users.value.filter(u => u.isEnabled).length);
+const adminCount = computed(() => users.value.filter(u => u.isPlatformAdmin).length);
+const disabledCount = computed(() => users.value.filter(u => !u.isEnabled).length);
+
+// 分页切片计算（基于过滤后的用户）
+const totalPages = computed(() => {
+  return Math.ceil(filteredUsers.value.length / pageSize.value) || 1;
+});
+
+const paginatedUsers = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  const end = start + pageSize.value;
+  return filteredUsers.value.slice(start, end);
+});
+
+// 搜索时重置到第一页
+function handleSearchInput() {
+  currentPage.value = 1;
 }
 
-function isActionPending(userId, action) {
-  return pendingAction.value === buildPendingKey(userId, action);
+function clearSearch() {
+  searchQuery.value = '';
+  currentPage.value = 1;
 }
+
+// 计算展现页码
+const visiblePages = computed(() => {
+  const range = [];
+  const maxButtons = 5;
+  let start = Math.max(1, currentPage.value - Math.floor(maxButtons / 2));
+  let end = Math.min(totalPages.value, start + maxButtons - 1);
+
+  if (end - start + 1 < maxButtons) {
+    start = Math.max(1, end - maxButtons + 1);
+  }
+
+  for (let i = start; i <= end; i++) {
+    range.push(i);
+  }
+  return range;
+});
+
+function changePage(page) {
+  if (page >= 1 && page <= totalPages.value) {
+    currentPage.value = page;
+  }
+}
+
+// Toast 管理
+const toastVisible = ref(false);
+const toastMessage = ref('');
+const toastType = ref('error');
+let toastTimer = null;
 
 function showToast(msg, type = 'error') {
   if (toastTimer) {
@@ -400,16 +631,81 @@ function hideToast() {
   toastVisible.value = false;
 }
 
+watch(errorMessage, (newVal) => {
+  if (newVal) showToast(newVal, 'error');
+});
+watch(operationError, (newVal) => {
+  if (newVal) showToast(newVal, 'error');
+});
+watch(clientError, (newVal) => {
+  if (newVal) showToast(newVal, 'error');
+});
+watch(successMessage, (newVal) => {
+  if (newVal) {
+    showToast(newVal, 'success');
+    setTimeout(() => {
+      closeModal();
+    }, 1200);
+  }
+});
+
+// 模态弹窗控制函数
+function openCreateModal() {
+  resetForm();
+  isModalOpen.value = true;
+}
+
+function closeModal() {
+  isModalOpen.value = false;
+  resetForm();
+}
+
+function isGlobalOrganizationRole(value) {
+  return globalOrganizationRoles.has(value);
+}
+
+function isDepartmentOrganizationRole(value) {
+  return departmentOrganizationRoles.has(value);
+}
+
+function handleOrganizationRoleChange() {
+  if (isGlobalOrganizationRole(form.organizationRole)) {
+    form.department = '';
+  }
+
+  if (form.organizationRole === 'system_admin') {
+    form.isPlatformAdmin = true;
+    return;
+  }
+
+  form.isPlatformAdmin = false;
+}
+
+function buildPendingKey(userId, action) {
+  return `${userId}:${action}`;
+}
+
+function isActionPending(userId, action) {
+  return pendingAction.value === buildPendingKey(userId, action);
+}
+
+function clearMessages() {
+  clientError.value = '';
+  operationError.value = '';
+  successMessage.value = '';
+}
+
 function handleRequestError(error) {
   const message = toReadableApiError(error);
-  showToast(message, 'error');
+  operationError.value = message;
+
   if (error.code === 'UNAUTHENTICATED') {
     emit('auth-expired', message);
   }
 }
 
 async function loadUsers() {
-  if (!props.currentUser.isPlatformAdmin) {
+  if (!canAccessUserManagement.value) {
     return;
   }
 
@@ -417,18 +713,10 @@ async function loadUsers() {
   errorMessage.value = '';
 
   try {
-    const response = await listUsers(props.authToken, {
-      page: currentPage.value,
-      size: pageSize.value
-    });
-    // 兼容后端返回格式：如果是数组，则转换为分页格式
-    if (Array.isArray(response)) {
-      users.value = response;
-      totalUsers.value = response.length;
-    } else {
-      users.value = response.items || response.data || [];
-      totalUsers.value = response.total || users.value.length;
-    }
+    users.value = await listUsers(props.authToken);
+    // 重新加载后重置搜索及分页
+    searchQuery.value = '';
+    currentPage.value = 1;
   } catch (error) {
     errorMessage.value = toReadableApiError(error);
     if (error.code === 'UNAUTHENTICATED') {
@@ -439,71 +727,71 @@ async function loadUsers() {
   }
 }
 
-function changePage(page) {
-  if (page < 1 || page > totalPages.value || page === currentPage.value) return;
-  currentPage.value = page;
-  loadUsers();
-}
-
-function changePageSize() {
-  currentPage.value = 1;
-  loadUsers();
-}
-
-function resetForm() {
+function resetForm({ keepMessage = false } = {}) {
   editingUser.value = null;
   form.account = '';
   form.displayName = '';
   form.department = '';
+  form.organizationRole = '';
   form.role = '';
   form.password = '';
   form.isEnabled = true;
   form.isPlatformAdmin = false;
   form.filePlatformUserId = '';
-}
-
-function openCreateModal() {
-  resetForm();
-  showModal.value = true;
+  if (!keepMessage) {
+    clearMessages();
+  }
 }
 
 function startEdit(user) {
   editingUser.value = user;
   form.account = user.account;
   form.displayName = user.name;
-  form.department = user.department;
+  form.department = user.department || '';
+  form.organizationRole = user.organizationRole || '';
   form.role = user.role;
   form.password = '';
   form.isEnabled = Boolean(user.isEnabled);
   form.isPlatformAdmin = Boolean(user.isPlatformAdmin);
   form.filePlatformUserId = user.filePlatformUserId || '';
-  showModal.value = true;
-}
-
-function closeModal() {
-  showModal.value = false;
-  resetForm();
+  clearMessages();
+  
+  isModalOpen.value = true;
 }
 
 function validateForm() {
   const missing = [];
   if (!editingUser.value && !form.account) missing.push('账号');
   if (!form.displayName) missing.push('姓名');
-  if (!form.department) missing.push('部门');
-  if (!form.role) missing.push('角色');
+  if (!form.organizationRole) missing.push('组织角色');
+  if (isDepartmentOrganizationRole(form.organizationRole) && !form.department) missing.push('部门');
+  if (!form.role) missing.push('岗位/职务');
   if (!editingUser.value && !form.password) missing.push('初始密码');
 
   if (missing.length > 0) {
-    showToast(`请补充：${missing.join('、')}`, 'error');
+    clientError.value = `请补充必填字段：${missing.join('、')}`;
     return false;
   }
+
+  if (isGlobalOrganizationRole(form.organizationRole) && form.department) {
+    clientError.value = '总经理、系统管理员、总经理助理不隶属于四个业务部门。';
+    return false;
+  }
+
+  if (form.organizationRole === 'system_admin' && !form.isPlatformAdmin) {
+    clientError.value = '系统管理员必须同时具备平台管理员权限。';
+    return false;
+  }
+
+  clientError.value = '';
   return true;
 }
 
 function buildBasePayload() {
   return {
     displayName: form.displayName,
-    department: form.department,
+    department: isGlobalOrganizationRole(form.organizationRole) ? null : form.department,
+    organizationRole: form.organizationRole,
     role: form.role,
     isEnabled: form.isEnabled,
     isPlatformAdmin: form.isPlatformAdmin,
@@ -512,6 +800,8 @@ function buildBasePayload() {
 }
 
 async function saveUser() {
+  clearMessages();
+
   if (!validateForm()) {
     return;
   }
@@ -521,7 +811,7 @@ async function saveUser() {
   try {
     if (editingUser.value) {
       await updateUser(editingUser.value.id, buildBasePayload(), props.authToken);
-      showToast('用户基础信息已保存。', 'success');
+      successMessage.value = '用户基础信息已保存。';
     } else {
       await createUser(
         {
@@ -531,12 +821,11 @@ async function saveUser() {
         },
         props.authToken
       );
-      resetForm();
-      showToast('用户已新增。', 'success');
+      resetForm({ keepMessage: true });
+      successMessage.value = '用户已新增。';
     }
 
     await loadUsers();
-    closeModal();
   } catch (error) {
     handleRequestError(error);
   } finally {
@@ -545,16 +834,17 @@ async function saveUser() {
 }
 
 async function toggleEnabled(user) {
+  clearMessages();
   const action = user.isEnabled ? 'disable' : 'enable';
   pendingAction.value = buildPendingKey(user.id, action);
 
   try {
     if (user.isEnabled) {
       await disableUser(user.id, props.authToken);
-      showToast('用户已禁用。', 'success');
+      successMessage.value = '用户已禁用。';
     } else {
       await enableUser(user.id, props.authToken);
-      showToast('用户已启用。', 'success');
+      successMessage.value = '用户已启用。';
     }
 
     await loadUsers();
@@ -565,696 +855,983 @@ async function toggleEnabled(user) {
   }
 }
 
-function openResetModal(user) {
-  resetUserId.value = user.id;
-  resetPasswordInput.value = '';
-  showResetModal.value = true;
-}
+async function resetPassword(user) {
+  clearMessages();
+  const password = String(resetPasswords[user.id] || '');
 
-function closeResetModal() {
-  showResetModal.value = false;
-  resetUserId.value = null;
-  resetPasswordInput.value = '';
-  resetSaving.value = false;
-}
-
-async function confirmResetPassword() {
-  const password = resetPasswordInput.value.trim();
   if (!password) {
-    showToast('请输入新密码。', 'error');
+    clientError.value = '请填写新密码。';
     return;
   }
 
-  const userId = resetUserId.value;
-  if (!userId) return;
-
-  resetSaving.value = true;
-  const actionKey = buildPendingKey(userId, 'reset-password');
-  pendingAction.value = actionKey;
+  pendingAction.value = buildPendingKey(user.id, 'reset-password');
 
   try {
-    await resetUserPassword(userId, password, props.authToken);
-    showToast(`密码已重置。`, 'success');
-    closeResetModal();
-    await loadUsers();
+    await resetUserPassword(user.id, password, props.authToken);
+    resetPasswords[user.id] = '';
+    successMessage.value = `已重置 ${user.account} 的密码。`;
   } catch (error) {
     handleRequestError(error);
   } finally {
-    resetSaving.value = false;
     pendingAction.value = '';
   }
 }
 
 onMounted(loadUsers);
+
+onUnmounted(() => {
+  if (toastTimer) clearTimeout(toastTimer);
+});
 </script>
 
 <style scoped>
-/* ===== 全局基础 ===== */
+/* 全局页面布局 */
 .page-stack {
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 1.5rem 1.5rem 2rem;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  color: #1e293b;
-  background: #f8fafc;
-  min-height: 100vh;
-}
-
-/* ===== 标题行 ===== */
-.page-title-row {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 1rem;
-  margin-bottom: 0.75rem;
-  padding: 0 0.25rem;
-  flex-shrink: 0;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.5rem 0;
+  max-width: 100%;
+  margin: 0 auto;
+  min-height: 100vh;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #0f172a;
 }
 
-.page-title-row > div:first-child {
+.animate-fadeIn {
+  animation: fadeIn 0.4s ease-out;
+}
+
+/* 优化后：高度极致压缩、完美的单排行自适应统计面板 */
+.dashboard-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.stat-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.06);
+}
+
+.stat-info {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
 }
 
-.section-eyebrow {
-  font-size: 0.65rem;
+.stat-label {
+  font-size: 0.7rem;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  color: #64748b;
   text-transform: uppercase;
-  color: #94a3b8;
+  letter-spacing: -0.01em;
 }
 
-.page-title-row h2 {
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+.stat-value {
+  font-size: 1.15rem;
+  font-weight: 800;
   color: #0f172a;
-  word-break: break-word;
-  line-height: 1.3;
+  line-height: 1.1;
 }
 
-.page-user {
-  font-size: 0.8rem;
-  color: #94a3b8;
-  font-weight: 400;
+.stat-value small {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #64748b;
 }
 
-/* ===== 按钮 ===== */
+.stat-icon-wrapper {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-icon-wrapper svg {
+  width: 16px;
+  height: 16px;
+}
+
+.stat-card--blue { border-left: 4px solid #3b82f6; }
+.stat-card--blue .stat-icon-wrapper { background: #eff6ff; color: #3b82f6; }
+
+.stat-card--emerald { border-left: 4px solid #10b981; }
+.stat-card--emerald .stat-icon-wrapper { background: #ecfdf5; color: #10b981; }
+
+.stat-card--indigo { border-left: 4px solid #6366f1; }
+.stat-card--indigo .stat-icon-wrapper { background: #eef2ff; color: #6366f1; }
+
+.stat-card--amber { border-left: 4px solid #f59e0b; }
+.stat-card--amber .stat-icon-wrapper { background: #fffbeb; color: #f59e0b; }
+
+/* 按钮基础风格 */
 .ghost-button {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  padding: 0.4rem 1rem;
-  border-radius: 10px;
-  font-weight: 500;
-  font-size: 0.8rem;
+  border-radius: 8px;
   color: #334155;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  height: 38px;
   white-space: nowrap;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-  flex-shrink: 0;
 }
 
 .ghost-button:hover:not(:disabled) {
-  background: #f1f5f9;
-  border-color: #94a3b8;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.04);
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #0f172a;
 }
 
-.ghost-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.btn-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .primary-button {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  justify-content: center;
+  gap: 0.5rem;
   background: #0f172a;
+  color: #ffffff;
   border: none;
-  padding: 0.6rem 1.6rem;
-  border-radius: 10px;
-  font-weight: 500;
+  font-weight: 600;
+  padding: 0.625rem 1.25rem;
+  border-radius: 8px;
   font-size: 0.875rem;
-  color: white;
   cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  height: 40px;
 }
 
-.primary-button:hover {
+.primary-button:hover:not(:disabled) {
   background: #1e293b;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.15);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
 }
 
 .primary-button:disabled {
-  opacity: 0.5;
+  opacity: 0.6;
+  background: #475569;
   cursor: not-allowed;
-  transform: none;
+  box-shadow: none;
 }
 
-/* ===== 面板 ===== */
+/* 独立滑入提示区 */
+.state-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4.5rem 2rem;
+  text-align: center;
+}
+
+.state-panel p {
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+.state-panel--inline {
+  padding: 3.5rem 1.5rem;
+}
+
+.state-panel--error {
+  background: #fef2f2;
+  border: 1px solid #fee2e2;
+  border-radius: 12px;
+  color: #b91c1c;
+}
+
+.state-panel--success {
+  background: #f0fdf4;
+  border: 1px solid #dcfce7;
+  border-radius: 12px;
+  color: #15803d;
+}
+
+.error-icon {
+  width: 32px;
+  height: 32px;
+  stroke: #ef4444;
+  margin-bottom: 0.75rem;
+}
+
+.inline-btn {
+  margin-top: 1rem;
+}
+
+/* 极简等待动画 */
+.loading-wave {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 1.25rem;
+}
+
+.wave-bar {
+  width: 4px;
+  height: 24px;
+  background: #0f172a;
+  border-radius: 4px;
+  animation: wave 1s ease-in-out infinite;
+}
+
+.wave-bar:nth-child(2) { animation-delay: 0.15s; }
+.wave-bar:nth-child(3) { animation-delay: 0.3s; }
+
+.empty-icon {
+  width: 48px;
+  height: 48px;
+  stroke: #94a3b8;
+  margin-bottom: 1rem;
+}
+
+/* 基础面板容器 */
 .panel {
-  background: white;
-  border-radius: 1rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.03);
-  padding: 1.25rem 1.5rem;
-  margin-bottom: 1.5rem;
-  transition: box-shadow 0.2s ease;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 20px rgba(0, 20, 40, 0.02);
 }
 
-.panel:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+.list-panel {
+  overflow: hidden;
 }
 
-/* ===== 工具栏 ===== */
+/* 工具栏重新设计：按钮与搜索整合 */
 .panel-toolbar {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-bottom: 1.25rem;
-  padding-bottom: 0.6rem;
+  align-items: flex-start;
+  padding: 1rem 1.5rem;
   border-bottom: 1px solid #f1f5f9;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
-.panel-toolbar strong {
+.toolbar-info {
+  display: flex;
+  flex-direction: column;
+  max-width: 50%;
+}
+
+.toolbar-title {
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 700;
   color: #0f172a;
-  margin-right: 0.6rem;
 }
 
-.panel-toolbar span {
-  color: #64748b;
+.toolbar-subtitle {
+  display: block;
   font-size: 0.8rem;
+  color: #64748b;
+  margin-top: 0.2rem;
 }
 
 .toolbar-actions {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-left: auto; /* 推至右侧 */
 }
 
-/* ===== 状态面板 ===== */
-.state-panel {
-  text-align: center;
-  padding: 2.5rem 1.5rem;
-  border-radius: 0.75rem;
+/* 搜索框样式 */
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 240px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  width: 16px;
+  height: 16px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.55rem 2rem 0.55rem 2.2rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   background: #f8fafc;
-  min-height: 180px;
+  font-size: 0.875rem;
+  color: #0f172a;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.search-input:focus {
+  border-color: #2563eb;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.search-input::placeholder {
+  color: #94a3b8;
+}
+
+.search-clear-btn {
+  position: absolute;
+  right: 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  padding: 2px;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  align-items: center;
+  border-radius: 50%;
+  transition: color 0.2s, background 0.2s;
 }
 
-.state-panel--inline {
-  padding: 2rem 1.5rem;
-  min-height: 180px;
+.search-clear-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
-.state-panel--error {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+.search-clear-btn:hover {
+  color: #0f172a;
+  background: #f1f5f9;
 }
 
-.state-panel h3 {
-  margin: 0 0 0.35rem 0;
-  font-weight: 600;
-  color: #1e293b;
-  font-size: 1.1rem;
+/* 核心优化：9 列高对齐度完美黄金比例流式栅格。解决全部换行错乱！ */
+.table-container {
+  overflow-x: auto;
+  width: 100%;
 }
 
-.state-panel--error h3 {
-  color: #b91c1c;
-}
-
-.state-panel p {
-  color: #64748b;
-  margin: 0 0 1rem 0;
-  font-size: 0.9rem;
-}
-
-.state-panel--error p {
-  color: #b91c1c;
-}
-
-.state-panel .primary-button {
-  margin-top: 0.25rem;
-}
-
-/* ===== 用户表格 ===== */
 .user-table {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.user-table__head,
-.user-table__row {
-  display: grid;
-  grid-template-columns: 1.2fr 0.9fr 0.9fr 0.9fr 0.5fr 0.7fr 1.1fr 1.2fr;
-  gap: 0.4rem 0.6rem;
-  align-items: center;
+  /* 调整限制，使其能够在单屏完整适配 */
+  min-width: 900px;
+  width: 100%;
+  border-collapse: collapse;
 }
 
 .user-table__head {
-  padding: 0.6rem 0.6rem;
-  font-size: 0.65rem;
-  font-weight: 600;
-  text-transform: uppercase;
+  display: grid;
+  /* 严格使用 minmax(0, Xfr) 防止撑爆 Grid，给予操作区充裕空间 */
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 0.85fr) minmax(0, 2.2fr);
+  padding: 0.85rem 1.5rem;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #475569;
   letter-spacing: 0.05em;
-  color: #64748b;
-  background: #f1f5f9;
-  border-radius: 8px;
+  text-transform: uppercase;
+  gap: 1rem;
+}
+
+.user-table__body {
+  display: flex;
+  flex-direction: column;
 }
 
 .user-table__row {
-  padding: 0.9rem 0.6rem;
-  background: white;
-  border-radius: 8px;
-  border: 1px solid transparent;
+  display: grid;
+  /* 保持与头部完美对齐一致的严格 5 列栅格比例 */
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 0.85fr) minmax(0, 2.2fr);
+  padding: 0.75rem 1.5rem;
+  align-items: center;
   border-bottom: 1px solid #f1f5f9;
-  transition: background 0.15s ease, box-shadow 0.2s ease;
-  min-height: 64px;
+  transition: background 0.15s ease;
+  font-size: 13px; /* 紧凑美观的13号字 */
+  gap: 1rem;
+}
+
+.user-table__row:hover {
+  background: #f8fafc;
 }
 
 .user-table__row:last-child {
   border-bottom: none;
 }
 
-.user-table__row:hover {
-  background: #f8fafc;
-  border-color: #e2e8f0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-}
-
-.user-table__row > * {
+/* 单元格信息集合（去除9列散装结构，改为5列复合展示） */
+.card-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
   min-width: 0;
-  word-break: break-word;
-  overflow-wrap: break-word;
-  line-height: 1.4;
 }
 
-.cell-text {
-  font-size: 0.85rem;
+.identity-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.mono-badge {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.725rem;
+  font-weight: 700;
   color: #1e293b;
-}
-
-.cell-name {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.cell-mono {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 0.7rem;
-  color: #475569;
   background: #f1f5f9;
-  padding: 0.05rem 0.35rem;
+  padding: 0.15rem 0.45rem;
   border-radius: 4px;
-  display: inline-block;
-  letter-spacing: 0.02em;
-  white-space: normal;
-  word-break: break-word;
-  max-width: 100%;
+  width: fit-content;
 }
 
-/* ===== 标签（Badge）样式 ===== */
-.badge {
-  display: inline-block;
+.admin-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
   padding: 0.1rem 0.4rem;
-  border-radius: 9999px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  line-height: 1.3;
-  width: fit-content;
-  min-width: 0;
-  text-align: center;
+  border-radius: 4px;
+}
+
+.admin-badge--yes {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.user-display-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 极小化平台ID */
+.mono-code {
+  font-family: monospace;
+  color: #94a3b8;
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.role-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
   background: #f1f5f9;
   color: #475569;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  width: fit-content;
+  border: 1px solid #e2e8f0;
 }
 
-.badge-success {
-  background: #ecfdf5;
-  color: #065f46;
+.department-text {
+  color: #475569;
+  font-size: 12px;
 }
 
-.badge-danger {
+/* 岗位职务强制不换行截断 */
+.title-text {
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  width: fit-content;
+}
+
+.status-indicator--active {
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.status-indicator--disabled {
   background: #fef2f2;
-  color: #991b1b;
+  color: #dc2626;
 }
 
-.badge-primary {
-  background: #eff6ff;
-  color: #1e3a8a;
-}
-
-.badge-neutral {
-  background: #f8fafc;
-  color: #64748b;
-}
-
-/* ===== 操作区域 ===== */
+/* 交互动作组 - 保持在一排！ */
 .user-row-actions {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: flex-end;
+  white-space: nowrap;
 }
 
-.user-row-actions > .ghost-button {
-  padding: 0.25rem 0.8rem;
-  font-size: 0.7rem;
-  border-radius: 24px;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  color: #334155;
-  box-shadow: none;
-  margin: 0;
+.row-btn {
+  padding: 0.35rem 0.65rem;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  white-space: nowrap;
 }
 
-.user-row-actions > .ghost-button:hover:not(:disabled) {
-  background: #2563eb;
-  color: white;
+.edit-btn:hover {
   border-color: #2563eb;
-  transform: none;
+  color: #2563eb;
+  background: #eff6ff;
 }
 
-/* ===== 分页控件 ===== */
-.pagination-container {
+.toggle-btn--disable {
+  border-color: #fca5a5;
+  color: #ef4444;
+  background: #fef2f2;
+}
+
+.toggle-btn--disable:hover {
+  background: #fecaca;
+  color: #b91c1c;
+}
+
+.toggle-btn--enable {
+  border-color: #bbf7d0;
+  color: #16a34a;
+  background: #f0fdf4;
+}
+
+.toggle-btn--enable:hover {
+  background: #86efac;
+  color: #15803d;
+}
+
+/* 密码重置组 */
+.user-password-reset {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  border-radius: 6px;
+  overflow: hidden;
+  height: 28px;
+}
+
+.user-password-reset:focus-within {
+  border-color: #2563eb;
+  background: #ffffff;
+}
+
+.user-password-reset input {
+  border: none;
+  background: transparent;
+  width: 70px;
+  padding: 0 0.4rem;
+  font-size: 11px;
+  color: #0f172a;
+  outline: none;
+}
+
+.reset-btn {
+  border: none;
+  background: #475569;
+  color: #ffffff;
+  height: 100%;
+  padding: 0 0.5rem;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.reset-btn:hover:not(:disabled) {
+  background: #0f172a;
+}
+
+/* 高保真分页控制面板 */
+.pagination-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.25rem;
   flex-wrap: wrap;
   gap: 1rem;
-  margin-top: 1.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid #f1f5f9;
+  margin-top: 1rem;
 }
 
 .pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   font-size: 0.85rem;
-  color: #64748b;
+  color: #475569;
+  flex-wrap: wrap;
 }
 
-.pagination-info strong {
-  color: #0f172a;
+.page-current-highlight {
+  font-weight: 700;
+  color: #2563eb;
+  background: #eff6ff;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+}
+
+.pagination-info .divider {
+  color: #cbd5e1;
+  margin: 0 0.25rem;
+}
+
+.search-indicator {
+  font-style: italic;
+  color: #2563eb;
+  font-size: 0.8rem;
+  margin-left: 0.25rem;
 }
 
 .pagination-controls {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  gap: 0.25rem;
 }
 
-.page-numbers {
+.page-control-btn {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.page-control-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+.page-control-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.page-numbers-group {
   display: flex;
   align-items: center;
   gap: 0.25rem;
 }
 
-.page-number {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 32px;
+.page-number-btn {
+  width: 32px;
   height: 32px;
-  padding: 0 0.5rem;
+  border-radius: 6px;
   border: 1px solid transparent;
-  border-radius: 6px;
   background: transparent;
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: #334155;
+  color: #475569;
+  font-size: 0.875rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
 }
 
-.page-number:hover:not(:disabled):not(.page-number--ellipsis) {
+.page-number-btn:hover {
   background: #f1f5f9;
-  border-color: #e2e8f0;
-}
-
-.page-number--active {
-  background: #0f172a;
-  color: white;
-  border-color: #0f172a;
-}
-
-.page-number--active:hover {
-  background: #1e293b;
-  border-color: #1e293b;
-}
-
-.page-number--ellipsis {
-  cursor: default;
-  color: #94a3b8;
-}
-
-.page-number:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.page-size-selector {
-  display: flex;
-  align-items: center;
-}
-
-.page-size-selector label {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.8rem;
-  color: #64748b;
-}
-
-.page-size-selector select {
-  padding: 0.2rem 0.5rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  background: white;
   color: #0f172a;
-  cursor: pointer;
-  outline: none;
-  transition: border-color 0.2s;
 }
 
-.page-size-selector select:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+.page-number-btn--active {
+  background: #0f172a !important;
+  color: #ffffff !important;
 }
 
-/* ===== 弹窗（Modal）通用 ===== */
-.modal-overlay {
+.pagination-sizes {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.select-size {
+  width: 100px;
+}
+
+.select-size select {
+  padding: 0.4rem 1.5rem 0.4rem 0.65rem;
+  font-size: 0.8rem;
+}
+
+/* 高保真滑入式弹窗（Modal Drawer） */
+.modal-backdrop-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(15, 23, 42, 0.4);
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.6);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
   padding: 1.5rem;
-  animation: modalFadeIn 0.2s ease;
 }
 
-.modal-content {
-  background: white;
-  border-radius: 1.25rem;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
-  max-width: 720px;
+.modal-container {
   width: 100%;
+  max-width: 760px; /* 放宽表单弹窗上限宽度，防止局促 */
   max-height: 90vh;
   overflow-y: auto;
-  padding: 1.5rem 1.75rem 1.75rem;
-  animation: modalSlideUp 0.25s ease;
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
 }
 
-.modal-content--small {
-  max-width: 480px;
-}
-
-.modal-header {
+.user-form-heading {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.25rem;
-  padding-bottom: 0.5rem;
   border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 1rem;
 }
 
-.modal-header h3 {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #0f172a;
+.form-title-text {
+  font-size: 1.15rem;
+  font-weight: 700;
 }
 
-.modal-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
+.close-modal-x-btn {
   background: transparent;
-  border-radius: 50%;
-  cursor: pointer;
-  transition: background 0.2s;
+  border: none;
   color: #94a3b8;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 50%;
+  transition: all 0.2s;
 }
 
-.modal-close:hover {
+.close-modal-x-btn:hover {
   background: #f1f5f9;
   color: #0f172a;
 }
 
-.modal-close svg {
-  width: 18px;
-  height: 18px;
-  stroke-width: 2;
+.close-modal-x-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
-/* 表单在弹窗内 */
-.modal-form {
-  width: 100%;
-}
-
-.modal-form .form-grid {
+/* 核心优化：高保真表单网格，使用 minmax(0, 1fr) 防爆宽保护 */
+.form-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem 1.5rem;
-  align-items: start;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem 1.75rem;
+  padding: 2.25rem;
 }
 
-.modal-form .form-grid--single {
-  grid-template-columns: 1fr;
+.form-grid__wide {
+  grid-column: span 2;
 }
 
-.modal-form .form-grid__wide {
-  grid-column: 1 / -1;
-}
-
-.modal-form label {
+.form-group {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.5rem;
 }
 
-.modal-form label > span:first-child {
-  font-size: 0.75rem;
+.label-text {
+  font-size: 0.85rem;
   font-weight: 600;
   color: #475569;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  white-space: nowrap; /* 表单标题不换行保护 */
 }
 
-.modal-form input[type="text"],
-.modal-form input[type="password"] {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #e2e8f0;
+.required-star {
+  color: #ef4444;
+}
+
+/* 包装层与光晕 */
+.input-wrapper,
+.select-wrapper {
+  position: relative;
   border-radius: 8px;
-  font-size: 0.85rem;
-  background: #ffffff;
-  color: #0f172a;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  transition: all 0.2s ease;
+  overflow: hidden;
 }
 
-.modal-form input[type="text"]:focus,
-.modal-form input[type="password"]:focus {
+.input-wrapper:focus-within,
+.select-wrapper:focus-within {
   border-color: #2563eb;
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
-.modal-form input:disabled {
-  background: #f1f5f9;
-  color: #94a3b8;
+.input-wrapper--disabled,
+.select-wrapper--disabled {
+  background: #e2e8f0 !important;
+  border-color: #cbd5e1 !important;
   cursor: not-allowed;
 }
 
-.user-checkboxes {
+.input-wrapper--disabled input {
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.input-wrapper input,
+.select-wrapper select {
+  width: 100%;
+  min-width: 0;
+  padding: 0.7rem 1rem;
+  border: none;
+  background: transparent;
+  font-size: 0.95rem;
+  color: #0f172a;
+  outline: none;
+}
+
+.select-wrapper select {
+  padding-right: 2.5rem;
+  appearance: none;
+  cursor: pointer;
+}
+
+.select-wrapper::after {
+  content: '';
+  position: absolute;
+  right: 1.2rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid #64748b;
+  pointer-events: none;
+}
+
+/* 部门与管理员复选卡片 */
+.checkbox-controls-row {
   display: flex;
-  flex-wrap: wrap;
   gap: 1.5rem;
-  align-items: center;
-  padding-top: 0.5rem;
+  flex-wrap: wrap;
 }
 
-.user-checkbox {
-  flex-direction: row !important;
+.user-checkbox-card {
+  position: relative;
+  display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding-top: 0 !important;
+  gap: 0.75rem;
+  padding: 0.8rem 1.1rem;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  flex: 1;
+  min-width: 240px;
 }
 
-.user-checkbox input[type="checkbox"] {
-  width: 1rem;
-  height: 1rem;
-  accent-color: #0f172a;
+.user-checkbox-card input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
+}
+
+.checkbox-indicator {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #cbd5e1;
+  border-radius: 4px;
+  background: #ffffff;
+  transition: all 0.15s;
   flex-shrink: 0;
 }
 
-.user-checkbox > span {
-  font-size: 0.85rem;
-  color: #334155;
+.user-checkbox-card:hover {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+}
+
+/* 复选选中状态 */
+.user-checkbox-card input:checked ~ .checkbox-indicator {
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
+.user-checkbox-card input:checked ~ .checkbox-indicator::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 5px;
+  height: 8px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.checkbox-label-text {
+  font-size: 0.9rem;
   font-weight: 500;
+  color: #334155;
+  transition: color 0.15s;
+  white-space: nowrap; /* 强制防换行 */
+}
+
+.user-checkbox-card input:checked ~ .checkbox-label-text {
+  color: #1e40af;
+  font-weight: 600;
+}
+
+.user-checkbox-card--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #e2e8f0 !important;
+}
+
+.user-checkbox-card--disabled:hover {
+  border-color: #cbd5e1;
 }
 
 .form-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.75rem;
-  margin-top: 0.5rem;
-  padding-top: 0.75rem;
+  gap: 1rem;
   border-top: 1px solid #f1f5f9;
+  padding-top: 1.5rem;
 }
 
-.form-actions .ghost-button,
-.form-actions .primary-button {
-  margin-top: 0;
-}
-
-@keyframes modalFadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes modalSlideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-/* ===== Toast ===== */
+/* 全局 Toast 提示 */
 .toast {
   position: fixed;
   top: 2rem;
@@ -1266,11 +1843,11 @@ onMounted(loadUsers);
   padding: 0.7rem 1rem 0.7rem 1.2rem;
   border-radius: 10px;
   background: #ffffff;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
   font-size: 0.875rem;
   font-weight: 500;
   color: #0f172a;
-  z-index: 1100;
+  z-index: 10000;
   border: 1px solid #f1f5f9;
   max-width: 90%;
 }
@@ -1348,243 +1925,65 @@ onMounted(loadUsers);
   transform: translateX(-50%) translateY(-20px) scale(0.95);
 }
 
-/* ===== 图标 ===== */
-.button-icon {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
+@keyframes wave {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
 }
 
-/* ===== 响应式 ===== */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 响应式调整 */
 @media (max-width: 1200px) {
-  .user-table__head,
-  .user-table__row {
-    grid-template-columns: 1.1fr 0.9fr 0.8fr 0.8fr 0.5fr 0.7fr 1fr 1.2fr;
-    gap: 0.3rem 0.5rem;
-  }
-}
-
-@media (max-width: 992px) {
-  .page-stack {
-    padding: 1.25rem 1rem;
-  }
-
-  .page-title-row {
-    padding: 0.75rem 1rem;
-    margin-bottom: 1rem;
-  }
-
-  .panel {
-    padding: 1rem 1.25rem;
-  }
-
-  .user-table__head,
-  .user-table__row {
-    grid-template-columns: 1fr 0.9fr 0.8fr 0.8fr 0.5fr 0.7fr 1fr 1.2fr;
-    font-size: 0.75rem;
-  }
-
-  .modal-content {
-    padding: 1.25rem 1.5rem;
-  }
-
-  .modal-form .form-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .pagination-container {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.75rem;
-  }
-
-  .pagination-info {
-    text-align: center;
-  }
-
-  .pagination-controls {
-    justify-content: center;
+  .dashboard-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (max-width: 768px) {
-  .page-title-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.5rem;
-    padding: 0;
+  .user-table__head {
+    display: none;
   }
-
-  .page-title-row .ghost-button {
-    align-self: flex-start;
-  }
-
-  .panel-toolbar {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.5rem;
-  }
-
-  .toolbar-actions {
-    width: 100%;
-    justify-content: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .user-table {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .user-table__head,
   .user-table__row {
-    min-width: 780px;
-    grid-template-columns: 1fr 0.9fr 0.8fr 0.8fr 0.5fr 0.7fr 1fr 1.2fr;
-    padding: 0.5rem 0.6rem;
-  }
-
-  .user-row-actions {
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
-
-  .modal-overlay {
-    padding: 1rem;
-  }
-
-  .modal-content {
-    padding: 1.25rem 1.25rem 1.5rem;
-    max-height: 95vh;
-  }
-
-  .modal-form .form-grid {
     grid-template-columns: 1fr;
     gap: 0.75rem;
+    padding: 1.1rem;
   }
-
-  .form-actions {
-    flex-wrap: wrap;
-    justify-content: stretch;
-  }
-
-  .form-actions .ghost-button,
-  .form-actions .primary-button {
-    flex: 1;
-    justify-content: center;
-    padding: 0.5rem 1rem;
-  }
-
-  .pagination-controls {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-
-  .page-numbers {
-    order: 3;
+  .user-row-actions {
     width: 100%;
-    justify-content: center;
+    justify-content: space-between;
   }
-
-  .page-size-selector {
-    order: 2;
+  .form-grid {
+    grid-template-columns: 1fr;
+    padding: 1.5rem;
   }
-
-  .toast {
-    top: 1rem;
-    padding: 0.6rem 0.8rem 0.6rem 1rem;
-    font-size: 0.8rem;
-    max-width: 92%;
+  .form-grid__wide {
+    grid-column: span 1;
   }
-
-  .toast-close {
-    width: 20px;
-    height: 20px;
+  .search-input-wrapper {
+    width: 100%;
   }
-
-  .toast-close svg {
-    width: 12px;
-    height: 12px;
+  .panel-toolbar {
+    flex-direction: column;
+    align-items: stretch;
   }
-}
-
-@media (max-width: 480px) {
-  .page-stack {
-    padding: 1rem 0.75rem;
-  }
-
-  .page-title-row h2 {
-    font-size: 1.1rem;
-  }
-
-  .section-eyebrow {
-    font-size: 0.55rem;
-  }
-
-  .page-user {
-    font-size: 0.7rem;
-  }
-
-  .ghost-button {
-    padding: 0.3rem 0.7rem;
-    font-size: 0.7rem;
-  }
-
-  .panel {
-    padding: 0.75rem 0.85rem;
-    border-radius: 0.75rem;
-  }
-
-  .user-table__head,
-  .user-table__row {
-    min-width: 680px;
-    font-size: 0.7rem;
-    gap: 0.25rem 0.35rem;
-    padding: 0.4rem 0.4rem;
-  }
-
-  .cell-name {
-    font-size: 0.75rem;
-  }
-
-  .state-panel {
-    padding: 1.5rem 1rem;
-    min-height: 150px;
-  }
-
-  .state-panel h3 {
-    font-size: 0.95rem;
-  }
-
-  .state-panel p {
-    font-size: 0.8rem;
-  }
-
-  .modal-content {
-    padding: 1rem 1rem 1.25rem;
-    border-radius: 1rem;
-  }
-
-  .modal-header h3 {
-    font-size: 1.1rem;
-  }
-
-  .modal-content--small {
+  .toolbar-info {
     max-width: 100%;
-    margin: 0 0.5rem;
   }
-
-  .pagination-info {
-    font-size: 0.75rem;
-  }
-
-  .page-number {
-    min-width: 28px;
-    height: 28px;
-    font-size: 0.7rem;
-  }
-
-  .page-size-selector label {
-    font-size: 0.7rem;
+  .toolbar-actions {
+    margin-left: 0;
+    justify-content: space-between;
   }
 }
 </style>

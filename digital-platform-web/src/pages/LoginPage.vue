@@ -43,15 +43,22 @@
       </div>
     </form>
 
+    <!-- 统一样式的 Toast 消息弹出层 -->
     <Transition name="toast">
       <div v-if="toastVisible" class="toast" :class="{ 'toast--error': toastType === 'error', 'toast--success': toastType === 'success' }">
         <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="12" y1="8" x2="12" y2="12" />
-          <line x1="12" y1="16" x2="12.01" y2="16" />
+          <template v-if="toastType === 'error'">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </template>
+          <template v-else>
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+            <polyline points="22 4 12 14.01 9 11.01" />
+          </template>
         </svg>
         <span>{{ toastMessage }}</span>
-        <button class="toast-close" @click="hideToast">
+        <button type="button" class="toast-close" @click="hideToast">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <line x1="18" y1="6" x2="6" y2="18" />
             <line x1="6" y1="6" x2="18" y2="18" />
@@ -63,7 +70,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, onUnmounted } from 'vue';
 import { login } from '../api/auth.js';
 import { toReadableApiError } from '../api/http.js';
 
@@ -138,6 +145,10 @@ async function submitLogin() {
     submitting.value = false;
   }
 }
+
+onUnmounted(() => {
+  if (toastTimer) clearTimeout(toastTimer);
+});
 </script>
 
 <style scoped>
@@ -311,6 +322,7 @@ async function submitLogin() {
   justify-content: center;
   gap: 0.6rem;
   letter-spacing: 0.3px;
+  height: 44px;
 }
 
 .primary-button:hover:not(:disabled) {
@@ -341,9 +353,7 @@ async function submitLogin() {
 }
 
 @keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  to { transform: rotate(360deg); }
 }
 
 .footer-note {
@@ -355,6 +365,7 @@ async function submitLogin() {
   font-weight: 400;
 }
 
+/* 统一 Toast 弹窗基础样式 */
 .toast {
   position: fixed;
   top: 2rem;
@@ -366,7 +377,7 @@ async function submitLogin() {
   padding: 0.7rem 1rem 0.7rem 1.2rem;
   border-radius: 10px;
   background: #ffffff;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
   font-size: 0.875rem;
   font-weight: 500;
   color: #0f172a;

@@ -317,10 +317,10 @@ p {
 .project-table__head,
 .project-table__row {
   display: grid;
-  grid-template-columns: 120px minmax(180px, 1.2fr) minmax(120px, 0.85fr) 110px 104px minmax(130px, 0.85fr) minmax(150px, 0.9fr) 190px 96px;
+  grid-template-columns: 120px minmax(180px, 1.2fr) minmax(120px, 0.85fr) 110px minmax(150px, 0.9fr) 104px minmax(130px, 0.85fr) minmax(150px, 0.9fr) 190px 96px;
   gap: 12px;
   align-items: center;
-  min-width: 1240px;
+  min-width: 1380px;
   padding: 0 18px;
 }
 
@@ -358,10 +358,10 @@ p {
 .user-table__head,
 .user-table__row {
   display: grid;
-  grid-template-columns: 110px minmax(120px, 0.9fr) minmax(120px, 0.9fr) 110px 70px 90px minmax(140px, 0.9fr) minmax(320px, 1.35fr);
+  grid-template-columns: 110px minmax(120px, 0.9fr) 110px minmax(120px, 0.9fr) 110px 70px 90px minmax(140px, 0.9fr) minmax(320px, 1.35fr);
   gap: 12px;
   align-items: center;
-  min-width: 1120px;
+  min-width: 1250px;
   padding: 0 18px;
 }
 
@@ -831,6 +831,7 @@ p {
 }
 
 .form-grid input,
+.form-grid select,
 .form-grid textarea {
   width: 100%;
   border: 1px solid #cfd9e4;
@@ -840,7 +841,8 @@ p {
   outline: none;
 }
 
-.form-grid input {
+.form-grid input,
+.form-grid select {
   min-height: 40px;
   padding: 0 11px;
 }
@@ -851,7 +853,38 @@ p {
   padding: 10px 11px;
 }
 
+.department-checkbox-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-height: 40px;
+}
+
+.department-checkbox {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  border: 1px solid #cfd9e4;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 0 10px;
+}
+
+.department-checkbox input {
+  width: 16px;
+  min-height: 16px;
+  margin: 0;
+}
+
+.department-checkbox span {
+  color: #263544 !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
 .form-grid input:focus,
+.form-grid select:focus,
 .form-grid textarea:focus {
   border-color: #2f807b;
   box-shadow: 0 0 0 3px rgba(47, 128, 123, 0.14);
@@ -1576,6 +1609,10 @@ p {
 
   .current-user div {
     text-align: left;
+  }
+
+  .department-checkbox-group {
+    grid-template-columns: 1fr;
   }
 
   .app-nav button,

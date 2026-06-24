@@ -116,6 +116,8 @@ export async function listMyStageDocumentTasks(userId, filters) {
       d.document_code,
       d.document_name,
       d.is_required,
+      d.owner_department,
+      d.review_department,
       d.status,
       d.is_applicable,
       d.return_reason,

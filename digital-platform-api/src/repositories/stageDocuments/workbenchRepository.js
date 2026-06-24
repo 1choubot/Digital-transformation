@@ -76,6 +76,8 @@ function buildDocumentTodo({ row, user, type, actionText }) {
     documentId: row.id,
     documentCode: row.document_code,
     documentName: row.document_name,
+    ownerDepartment: row.owner_department ?? null,
+    reviewDepartment: row.review_department ?? null,
     status: row.status,
     actionText,
     createdAt: row.responsibility_updated_at || row.submitted_at || row.updated_at,
@@ -191,7 +193,7 @@ async function selectDocumentReviewTodos(user) {
       u.file_platform_user_id AS responsible_file_platform_user_id,
       1 AS has_department_responsible
     FROM project_stage_documents d
-    INNER JOIN users u
+    LEFT JOIN users u
       ON u.id = d.responsible_user_id
     INNER JOIN projects p
       ON p.id = d.project_id
@@ -200,14 +202,20 @@ async function selectDocumentReviewTodos(user) {
       AND s.stage_order = d.stage_order
     WHERE d.is_applicable = 1
       AND d.status = ?
-      AND u.department = ?
+      AND (
+        d.review_department = ?
+        OR (
+          d.review_department IS NULL
+          AND u.department = ?
+        )
+      )
     ORDER BY
       COALESCE(d.submitted_at, d.updated_at) ASC,
       p.project_code ASC,
       d.stage_order ASC,
       d.document_order ASC,
       d.id ASC`,
-    [DOCUMENT_STATUS.SUBMITTED, user.department]
+    [DOCUMENT_STATUS.SUBMITTED, user.department, user.department]
   );
 
   return rows.map((row) =>
@@ -294,15 +302,23 @@ async function selectStageAdvanceTodos(user) {
       ? `EXISTS (
           SELECT 1
           FROM project_stage_documents related_documents
-          INNER JOIN users related_users
+          LEFT JOIN users related_users
             ON related_users.id = related_documents.responsible_user_id
           WHERE related_documents.project_id = p.id
-            AND related_users.department = ?
+            AND (
+              related_documents.owner_department = ?
+              OR related_documents.review_department = ?
+              OR (
+                related_documents.owner_department IS NULL
+                AND related_documents.review_department IS NULL
+                AND related_users.department = ?
+              )
+            )
         )`
       : '0';
   const params = [];
   if (isCenterManagerUser(user) && user.department) {
-    params.push(user.department);
+    params.push(user.department, user.department, user.department);
   }
 
   const [rows] = await pool.execute(

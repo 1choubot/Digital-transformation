@@ -137,6 +137,7 @@ import ProjectStageTimeline from '../components/project-detail/ProjectStageTimel
 import {
   actionKey,
   getSelectedResponsibleUserId,
+  isDocumentRelatedToDepartmentByOwnership,
   stageCompleteness
 } from '../components/project-detail/stageDocumentViewHelpers.js';
 import { formatUser } from '../utils/format.js';
@@ -269,7 +270,9 @@ const isProjectRelatedToCurrentCenter = computed(() => {
   }
 
   return (checklist.value?.stages || []).some((stage) =>
-    (stage.documents || []).some((document) => document.responsibleUser?.department === currentUserDepartment.value)
+    (stage.documents || []).some(
+      (document) => isDocumentRelatedToDepartmentByOwnership(document, currentUserDepartment.value)
+    )
   );
 });
 const visibleResponsibilityCandidates = computed(() => {
@@ -396,26 +399,6 @@ function canApproveStageApproval(stage) {
   return false;
 }
 
-function isDocumentRelatedToCurrentCenter(document) {
-  if (!isCurrentUserCenterManager.value || !currentUserDepartment.value) {
-    return false;
-  }
-
-  if (document?.responsibleUser?.department) {
-    return document.responsibleUser.department === currentUserDepartment.value;
-  }
-
-  return isProjectRelatedToCurrentCenter.value;
-}
-
-function isCurrentUserResponsibleForDocument(document) {
-  return (
-    document?.responsibleUserId !== null &&
-    document?.responsibleUserId !== undefined &&
-    String(document.responsibleUserId) === String(props.currentUser?.id)
-  );
-}
-
 function getDocumentPermissions(document) {
   return document?.permissions || {};
 }
@@ -426,40 +409,19 @@ function documentPermission(document, key, fallback) {
 }
 
 function canConfirmReturnDocument(document) {
-  const fallback =
-    !isCurrentUserGeneralManagerAssistant.value &&
-    !isCurrentUserSystemAdmin.value &&
-    isDocumentRelatedToCurrentCenter(document);
-  return documentPermission(document, 'canReviewDocument', fallback);
+  return documentPermission(document, 'canReviewDocument', false);
 }
 
 function canManageResponsibility(document) {
-  const fallback =
-    !isCurrentUserGeneralManagerAssistant.value &&
-    !isCurrentUserSystemAdmin.value &&
-    (isCurrentUserGeneralManager.value ||
-      isCurrentUserProjectManager.value ||
-      isDocumentRelatedToCurrentCenter(document));
-  return documentPermission(document, 'canManageResponsibility', fallback);
+  return documentPermission(document, 'canManageResponsibility', false);
 }
 
 function canSubmitDocument(document) {
-  const fallback =
-    !isCurrentUserGeneralManagerAssistant.value &&
-    !isCurrentUserSystemAdmin.value &&
-    (isCurrentUserGeneralManager.value ||
-      isCurrentUserProjectManager.value ||
-      isDocumentRelatedToCurrentCenter(document) ||
-      isCurrentUserResponsibleForDocument(document));
-  return documentPermission(document, 'canSubmitDocument', fallback);
+  return documentPermission(document, 'canSubmitDocument', false);
 }
 
 function canChangeApplicability(document) {
-  const fallback =
-    !isCurrentUserGeneralManagerAssistant.value &&
-    !isCurrentUserSystemAdmin.value &&
-    (isCurrentUserGeneralManager.value || isDocumentRelatedToCurrentCenter(document));
-  return documentPermission(document, 'canChangeApplicability', fallback);
+  return documentPermission(document, 'canChangeApplicability', false);
 }
 
 function canViewDocumentAttachments(document) {
@@ -467,7 +429,7 @@ function canViewDocumentAttachments(document) {
 }
 
 function canUploadDocumentAttachment(document) {
-  return documentPermission(document, 'canUploadAttachment', isCurrentUserResponsibleForDocument(document));
+  return documentPermission(document, 'canUploadAttachment', false);
 }
 
 function canDownloadDocumentAttachment(document, attachment) {

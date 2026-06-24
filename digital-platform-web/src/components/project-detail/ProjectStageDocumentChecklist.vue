@@ -109,6 +109,14 @@
 
             <dl class="stage-document-meta">
               <div>
+                <dt>默认责任中心</dt>
+                <dd>{{ formatDepartment(document.ownerDepartment) }}</dd>
+              </div>
+              <div>
+                <dt>默认审核中心</dt>
+                <dd>{{ formatDepartment(document.reviewDepartment) }}</dd>
+              </div>
+              <div>
                 <dt>责任角色</dt>
                 <dd>{{ document.defaultResponsibilityRole || '-' }}</dd>
               </div>
@@ -178,6 +186,7 @@ import ProjectStageDocumentAttachments from './ProjectStageDocumentAttachments.v
 import ProjectStageDocumentTrace from './ProjectStageDocumentTrace.vue';
 import {
   formatApplicability,
+  formatDepartment,
   formatResponsibleUser,
   isApplicable,
   isResponsibleUserDisabled,

@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { isValidBusinessDepartment } from './organization.js';
 import { STANDARD_PROJECT_STAGES } from './stages.js';
 import { STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260610 } from './stageDocumentTemplateItemsV20260610.js';
 
@@ -20,6 +21,15 @@ export const DOCUMENT_STATUS = {
 };
 
 const stageByOrder = new Map(STANDARD_PROJECT_STAGES.map((stage) => [stage.stageOrder, stage]));
+const templateOwnershipByCode = new Map(
+  STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260610.map((item) => [
+    item.documentCode,
+    {
+      ownerDepartment: item.ownerDepartment,
+      reviewDepartment: item.reviewDepartment
+    }
+  ])
+);
 
 function normalizeCell(value) {
   return value.trim().replace(/^`|`$/g, '').trim();
@@ -144,6 +154,18 @@ function assertParsedItems(items) {
     if (item.targetFolderId !== null) {
       throw new Error(`targetFolderId must be null in 20260610 stage document checklist: ${item.documentCode}`);
     }
+
+    for (const fieldName of ['ownerDepartment', 'reviewDepartment']) {
+      if (!Object.prototype.hasOwnProperty.call(item, fieldName)) {
+        throw new Error(`Missing ${fieldName} in 20260610 stage document checklist: ${item.documentCode}`);
+      }
+
+      if (item[fieldName] !== null && !isValidBusinessDepartment(item[fieldName])) {
+        throw new Error(
+          `Invalid ${fieldName} in 20260610 stage document checklist for ${item.documentCode}: ${item[fieldName]}`
+        );
+      }
+    }
   }
 }
 
@@ -190,6 +212,11 @@ export function parseStageDocumentTemplateMarkdown(markdown) {
       throw new Error(`Document code does not match current stage in 20260610 stage document checklist: ${documentCode}`);
     }
 
+    const ownership = templateOwnershipByCode.get(documentCode);
+    if (!ownership) {
+      throw new Error(`Missing ownership mapping in 20260610 stage document checklist: ${documentCode}`);
+    }
+
     items.push({
       templateVersion: STAGE_DOCUMENT_TEMPLATE_VERSION,
       stageOrder: currentStage.stageOrder,
@@ -201,6 +228,8 @@ export function parseStageDocumentTemplateMarkdown(markdown) {
       isRequired: mapRequiredFlag(requiredLabel),
       defaultResponsibilityRole,
       confirmRole,
+      ownerDepartment: ownership.ownerDepartment,
+      reviewDepartment: ownership.reviewDepartment,
       submitMode: mapSubmitMode(submitModeLabel),
       targetFolderPath,
       targetFolderId: null

@@ -1,5 +1,6 @@
 import {
   formatDateTime,
+  formatBusinessDepartment,
   formatBusinessUser,
   formatUser
 } from '../../utils/format.js';
@@ -72,6 +73,26 @@ export function formatResponsibleUser(document) {
   }
 
   return formatUser(document.responsibleUser);
+}
+
+export function formatDepartment(value) {
+  return value ? formatBusinessDepartment(value) : '-';
+}
+
+export function isDocumentRelatedToDepartmentByOwnership(document, department) {
+  if (!document || !department) {
+    return false;
+  }
+
+  const ownerDepartment = document.ownerDepartment ?? document.owner_department ?? null;
+  const reviewDepartment = document.reviewDepartment ?? document.review_department ?? null;
+  if (ownerDepartment || reviewDepartment) {
+    return ownerDepartment === department || reviewDepartment === department;
+  }
+
+  const responsibleDepartment =
+    document.responsibleUser?.department ?? document.responsible_department ?? null;
+  return responsibleDepartment === department;
 }
 
 export function formatResponsibilityCandidate(user) {

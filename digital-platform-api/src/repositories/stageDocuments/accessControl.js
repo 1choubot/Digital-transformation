@@ -2,6 +2,8 @@ import {
   canManageProjectResponsibility,
   canManageStageDocumentApplicability,
   canSubmitStageDocument,
+  getDocumentOwnerDepartment,
+  getDocumentReviewDepartment,
   isCenterManagerUser,
   isGeneralManagerAssistantUser,
   isGeneralManagerUser,
@@ -49,12 +51,28 @@ function isDocumentRelatedToCenterManager(user, document) {
     return false;
   }
 
+  const ownerDepartment = getDocumentOwnerDepartment(document);
+  const reviewDepartment = getDocumentReviewDepartment(document);
+  if (ownerDepartment || reviewDepartment) {
+    return ownerDepartment === user.department || reviewDepartment === user.department;
+  }
+
   const responsibleDepartment = getResponsibleDepartment(document);
   return Boolean(responsibleDepartment) && responsibleDepartment === user.department;
 }
 
 export function isStageDocumentReviewAuthority(user, document) {
-  return isDocumentRelatedToCenterManager(user, document);
+  if (!isCenterManagerUser(user) || !isValidBusinessDepartment(user.department)) {
+    return false;
+  }
+
+  const reviewDepartment = getDocumentReviewDepartment(document);
+  if (reviewDepartment) {
+    return reviewDepartment === user.department;
+  }
+
+  const responsibleDepartment = getResponsibleDepartment(document);
+  return Boolean(responsibleDepartment) && responsibleDepartment === user.department;
 }
 
 export function canReviewStageDocument(user, document) {

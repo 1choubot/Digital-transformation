@@ -138,7 +138,21 @@ migrations/011_project_stage_approval_workflow.sql
 
 该迁移会为 `project_stages` 增加 `approval_status`，默认 `not_submitted`；并创建 `project_stage_approval_history` 表保存阶段级审批历史。第一版审批历史的 `stage_id` 必须非空，审批历史按 `created_at ASC, id ASC` 查询。迁移不修改 8 阶段定义或 20260610 版 54 项资料模板。
 
-14. 启动服务：
+14. 现有环境如已执行过 `011_project_stage_approval_workflow.sql`，需要继续在 MySQL 中执行阶段资料归属中心迁移：
+
+```bash
+migrations/012_stage_document_ownership_departments.sql
+```
+
+该迁移只为阶段资料模板和项目级阶段资料快照新增 `owner_department`、`review_department` 列，不切换 20260610 版 54 项资料模板。执行后需要重新运行：
+
+```bash
+npm run init-stage-documents
+```
+
+原因是旧项目资料的 `owner_department` / `review_department` 回填依赖 `npm run init-stage-documents` 中的模板 upsert/backfill 逻辑；仅执行 012 只会新增空列，不会自动补齐既有项目资料归属中心。
+
+15. 启动服务：
 
 ```bash
 npm run dev

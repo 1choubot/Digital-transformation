@@ -114,7 +114,7 @@
           </template>
         </div>
 
-        <details class="approval-history">
+        <details v-if="showApprovalHistory" class="approval-history">
           <summary>阶段关口审批历史</summary>
           <p v-if="approvalHistoriesLoading" class="approval-history__empty">正在加载阶段关口审批历史...</p>
           <p v-else-if="approvalHistoryErrors[stage.id]" class="approval-history__error">
@@ -176,6 +176,10 @@ const props = defineProps({
   approvalHistoriesLoading: {
     type: Boolean,
     default: false
+  },
+  showApprovalHistory: {
+    type: Boolean,
+    default: true
   },
   returnComments: {
     type: Object,

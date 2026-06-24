@@ -17,6 +17,7 @@ import {
   OPERATION_ACTION_TYPE,
   OPERATION_TARGET_TYPE
 } from '../operationLogRepository.js';
+import { canViewCompleteProjectAudit } from '../stageDocuments/accessControl.js';
 import { canViewProject } from './visibility.js';
 import {
   ProjectApprovalError,
@@ -555,9 +556,12 @@ export async function listStageApprovalHistory({ projectId, stageId, user }) {
     const project = await selectProjectForApproval(connection, projectId, false);
     await selectStageForApproval(connection, projectId, stageId, false);
 
-    if (!(await canViewProject(connection, user, project.id))) {
+    if (
+      !(await canViewProject(connection, user, project.id)) ||
+      !canViewCompleteProjectAudit(user, project)
+    ) {
       throw new ProjectAuthorizationError(
-        PROJECT_APPROVAL_ERROR.PROJECT_APPROVAL_FORBIDDEN,
+        'FORBIDDEN_OPERATION',
         'Current user cannot view this stage approval history',
         ['projectId']
       );

@@ -1,6 +1,5 @@
 import { pool } from '../../db/pool.js';
 import {
-  canApproveStageDocument,
   canSubmitStageDocument,
   isGeneralManagerAssistantUser,
   isSystemAdminUser
@@ -21,6 +20,7 @@ import {
   selectProjectStageDocument,
   selectProjectStageDocumentForUpdate
 } from './shared.js';
+import { isStageDocumentReviewAuthority } from './accessControl.js';
 import { selectProjectPermissionContext } from './permissionContext.js';
 
 function assertUserCanUpdateDocumentStatus({ user, action, currentDocument, project }) {
@@ -34,7 +34,7 @@ function assertUserCanUpdateDocumentStatus({ user, action, currentDocument, proj
   }
 
   if (action === DOCUMENT_STATUS_ACTION.CONFIRM || action === DOCUMENT_STATUS_ACTION.RETURN) {
-    if (!canApproveStageDocument(user, { project, document: currentDocument })) {
+    if (!isStageDocumentReviewAuthority(user, currentDocument)) {
       throw new StageDocumentStatusError(
         'FORBIDDEN_OPERATION',
         'Current user cannot approve stage document',

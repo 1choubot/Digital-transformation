@@ -22,6 +22,10 @@
     <template v-else-if="detail">
       <ProjectDetailHeader :detail="detail" :current-stage-title="currentStageTitle" />
 
+      <section v-if="isTaskMode" class="state-panel state-panel--inline">
+        <p>当前为工作台任务视图，仅展示后端返回的有权项目资料和操作入口。</p>
+      </section>
+
       <ProjectStageTimeline :stages="detail.stages" />
 
       <ProjectStageApprovalPanel
@@ -30,6 +34,7 @@
         :approval-histories="approvalHistories"
         :approval-history-errors="approvalHistoryErrors"
         :approval-histories-loading="approvalHistoriesLoading"
+        :show-approval-history="canViewProjectAudit"
         :return-comments="approvalReturnComments"
         :pending-action="approvalPendingAction"
         :message="approvalMessage"
@@ -45,6 +50,7 @@
       />
 
       <ProjectOperationLogPanel
+        v-if="canViewProjectAudit"
         :loading="operationLogsLoading"
         :error-message="operationLogsErrorMessage"
         :logs="operationLogs"
@@ -147,6 +153,18 @@ const props = defineProps({
   projectId: {
     type: String,
     required: true
+  },
+  taskMode: {
+    type: String,
+    default: ''
+  },
+  focusDocumentId: {
+    type: String,
+    default: ''
+  },
+  focusStageId: {
+    type: String,
+    default: ''
   },
   navigate: {
     type: Function,
@@ -268,6 +286,7 @@ const canCurrentUserAdvanceProject = computed(() => {
 
   return isCurrentUserGeneralManager.value || isCurrentUserProjectManager.value || isProjectRelatedToCurrentCenter.value;
 });
+const canViewProjectAudit = computed(() => isCurrentUserGeneralManager.value || isCurrentUserProjectManager.value);
 const currentStageAdvanceMissingDocuments = computed(() => {
   if (stageAdvanceErrorMessage.value && stageAdvanceMissingDocuments.value.length > 0) {
     return stageAdvanceMissingDocuments.value;
@@ -284,6 +303,7 @@ const canAdvanceCurrentStage = computed(
     Boolean(currentStageCompleteness.value) &&
     currentStageCompleteness.value.incompleteRequiredCount === 0
 );
+const isTaskMode = computed(() => Boolean(props.taskMode || props.focusDocumentId || props.focusStageId));
 
 function isActionPending(documentId, action) {
   return pendingAction.value === actionKey(documentId, action);
@@ -396,45 +416,68 @@ function isCurrentUserResponsibleForDocument(document) {
   );
 }
 
-function canConfirmReturnDocument(document) {
-  if (isCurrentUserGeneralManagerAssistant.value || isCurrentUserSystemAdmin.value) {
-    return false;
-  }
+function getDocumentPermissions(document) {
+  return document?.permissions || {};
+}
 
-  return isCurrentUserGeneralManager.value || isDocumentRelatedToCurrentCenter(document);
+function documentPermission(document, key, fallback) {
+  const value = getDocumentPermissions(document)[key] ?? document?.[key];
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function canConfirmReturnDocument(document) {
+  const fallback =
+    !isCurrentUserGeneralManagerAssistant.value &&
+    !isCurrentUserSystemAdmin.value &&
+    isDocumentRelatedToCurrentCenter(document);
+  return documentPermission(document, 'canReviewDocument', fallback);
 }
 
 function canManageResponsibility(document) {
-  if (isCurrentUserGeneralManagerAssistant.value || isCurrentUserSystemAdmin.value) {
-    return false;
-  }
-
-  return (
-    isCurrentUserGeneralManager.value ||
-    isCurrentUserProjectManager.value ||
-    isDocumentRelatedToCurrentCenter(document)
-  );
+  const fallback =
+    !isCurrentUserGeneralManagerAssistant.value &&
+    !isCurrentUserSystemAdmin.value &&
+    (isCurrentUserGeneralManager.value ||
+      isCurrentUserProjectManager.value ||
+      isDocumentRelatedToCurrentCenter(document));
+  return documentPermission(document, 'canManageResponsibility', fallback);
 }
 
 function canSubmitDocument(document) {
-  if (isCurrentUserGeneralManagerAssistant.value || isCurrentUserSystemAdmin.value) {
-    return false;
-  }
-
-  return (
-    isCurrentUserGeneralManager.value ||
-    isCurrentUserProjectManager.value ||
-    isDocumentRelatedToCurrentCenter(document) ||
-    isCurrentUserResponsibleForDocument(document)
-  );
+  const fallback =
+    !isCurrentUserGeneralManagerAssistant.value &&
+    !isCurrentUserSystemAdmin.value &&
+    (isCurrentUserGeneralManager.value ||
+      isCurrentUserProjectManager.value ||
+      isDocumentRelatedToCurrentCenter(document) ||
+      isCurrentUserResponsibleForDocument(document));
+  return documentPermission(document, 'canSubmitDocument', fallback);
 }
 
 function canChangeApplicability(document) {
-  if (isCurrentUserGeneralManagerAssistant.value || isCurrentUserSystemAdmin.value) {
-    return false;
-  }
+  const fallback =
+    !isCurrentUserGeneralManagerAssistant.value &&
+    !isCurrentUserSystemAdmin.value &&
+    (isCurrentUserGeneralManager.value || isDocumentRelatedToCurrentCenter(document));
+  return documentPermission(document, 'canChangeApplicability', fallback);
+}
 
-  return isCurrentUserGeneralManager.value || isDocumentRelatedToCurrentCenter(document);
+function canViewDocumentAttachments(document) {
+  return documentPermission(document, 'canViewAttachments', false);
+}
+
+function canUploadDocumentAttachment(document) {
+  return documentPermission(document, 'canUploadAttachment', isCurrentUserResponsibleForDocument(document));
+}
+
+function canDownloadDocumentAttachment(document, attachment) {
+  const value = attachment?.permissions?.canDownload ?? attachment?.canDownload;
+  return typeof value === 'boolean' ? value : documentPermission(document, 'canDownloadAttachment', false);
+}
+
+function canDeleteDocumentAttachment(document, attachment) {
+  const value = attachment?.permissions?.canDelete ?? attachment?.canDelete;
+  return typeof value === 'boolean' ? value : documentPermission(document, 'canDeleteAttachment', false);
 }
 
 function clearAttachmentStates() {
@@ -610,13 +653,18 @@ async function clearResponsibleUser(document) {
   );
 }
 
-async function loadDocumentAttachments(documentId) {
-  const state = getAttachmentState(documentId);
+async function loadDocumentAttachments(document) {
+  const state = getAttachmentState(document.id);
   state.loading = true;
   state.errorMessage = '';
 
   try {
-    state.attachments = await listStageDocumentAttachments(props.projectId, documentId, props.authToken);
+    if (!canViewDocumentAttachments(document)) {
+      state.attachments = [];
+      return;
+    }
+
+    state.attachments = await listStageDocumentAttachments(props.projectId, document.id, props.authToken);
   } catch (error) {
     state.errorMessage = toReadableApiError(error);
     state.attachments = [];
@@ -627,12 +675,18 @@ async function loadDocumentAttachments(documentId) {
 
 async function loadAttachmentsForChecklist() {
   const documents = (checklist.value?.stages || []).flatMap((stage) => stage.documents || []);
-  await Promise.all(documents.map((document) => loadDocumentAttachments(document.id)));
+  await Promise.all(documents.map((document) => loadDocumentAttachments(document)));
 }
 
 async function uploadAttachment({ document, file }) {
   clearActionState();
   const state = getAttachmentState(document.id);
+
+  if (!canUploadDocumentAttachment(document)) {
+    state.errorMessage = '当前账号无权上传该资料项附件。';
+    actionErrorMessage.value = state.errorMessage;
+    return;
+  }
 
   if (!file || file.size <= 0 || file.size > MAX_ATTACHMENT_FILE_SIZE) {
     state.errorMessage = '附件文件无效，请选择 1 字节到 50MB 以内的文件。';
@@ -645,7 +699,7 @@ async function uploadAttachment({ document, file }) {
   try {
     await uploadStageDocumentAttachment(props.projectId, document.id, file, props.authToken);
     actionMessage.value = '资料附件已上传。';
-    await Promise.all([loadDocumentAttachments(document.id), loadOperationLogs()]);
+    await Promise.all([loadDocumentAttachments(document), loadOperationLogs()]);
   } catch (error) {
     state.errorMessage = toReadableApiError(error);
     actionErrorMessage.value = state.errorMessage;
@@ -657,6 +711,13 @@ async function uploadAttachment({ document, file }) {
 async function downloadAttachment({ document, attachment }) {
   clearActionState();
   const state = getAttachmentState(document.id);
+
+  if (!canDownloadDocumentAttachment(document, attachment)) {
+    state.errorMessage = '当前账号无权下载该资料项附件。';
+    actionErrorMessage.value = state.errorMessage;
+    return;
+  }
+
   state.downloadPendingId = attachment.id;
   state.errorMessage = '';
 
@@ -686,13 +747,20 @@ async function downloadAttachment({ document, attachment }) {
 async function deleteAttachment({ document, attachment }) {
   clearActionState();
   const state = getAttachmentState(document.id);
+
+  if (!canDeleteDocumentAttachment(document, attachment)) {
+    state.errorMessage = '当前账号无权删除该资料项附件。';
+    actionErrorMessage.value = state.errorMessage;
+    return;
+  }
+
   state.deletePendingId = attachment.id;
   state.errorMessage = '';
 
   try {
     await deleteStageDocumentAttachment(props.projectId, document.id, attachment.id, props.authToken);
     actionMessage.value = '资料附件已删除。';
-    await Promise.all([loadDocumentAttachments(document.id), loadOperationLogs()]);
+    await Promise.all([loadDocumentAttachments(document), loadOperationLogs()]);
   } catch (error) {
     state.errorMessage = toReadableApiError(error);
     actionErrorMessage.value = state.errorMessage;
@@ -757,6 +825,13 @@ async function loadResponsibilityCandidates() {
 }
 
 async function loadOperationLogs() {
+  if (!canViewProjectAudit.value) {
+    operationLogsLoading.value = false;
+    operationLogsErrorMessage.value = '';
+    operationLogs.value = [];
+    return;
+  }
+
   operationLogsLoading.value = true;
   operationLogsErrorMessage.value = '';
   operationLogs.value = [];
@@ -771,6 +846,12 @@ async function loadOperationLogs() {
 }
 
 async function loadApprovalHistories() {
+  if (!canViewProjectAudit.value) {
+    approvalHistoriesLoading.value = false;
+    clearApprovalHistories();
+    return;
+  }
+
   approvalHistoriesLoading.value = true;
   clearApprovalHistories();
 

@@ -5,8 +5,8 @@
       <span>上传附件只表示资料文件准备，不等于提交资料审核或资料审核通过，不自动推进阶段，也不代表文件管理平台归档。</span>
     </div>
 
-    <div class="stage-document-attachment-upload">
-      <template v-if="isApplicable(document)">
+    <div v-if="canViewAttachments" class="stage-document-attachment-upload">
+      <template v-if="isApplicable(document) && canUploadAttachment">
         <label class="ghost-button stage-document-attachment-upload__button">
           <span>{{ state.uploadPending ? '上传中...' : '上传附件' }}</span>
           <input
@@ -17,6 +17,9 @@
         </label>
         <span class="inline-muted">单文件 50MB 以内，0 字节文件会被拒绝。</span>
       </template>
+      <template v-else-if="isApplicable(document)">
+        <span class="inline-muted">当前账号无权上传该资料项附件。</span>
+      </template>
       <template v-else>
         <span class="inline-muted">不适用资料项不能新增附件，已有附件仍可下载或删除。</span>
       </template>
@@ -26,7 +29,11 @@
       <p>{{ state.errorMessage }}</p>
     </section>
 
-    <section v-if="state.loading" class="state-panel state-panel--inline">
+    <section v-if="!canViewAttachments" class="stage-document-attachments__empty">
+      当前账号无权查看该资料项附件。
+    </section>
+
+    <section v-else-if="state.loading" class="state-panel state-panel--inline">
       <p>正在加载附件...</p>
     </section>
 
@@ -50,6 +57,7 @@
         </div>
         <div class="stage-document-attachment-item__actions">
           <button
+            v-if="canDownloadAttachment(attachment)"
             type="button"
             class="ghost-button"
             :disabled="state.downloadPendingId === attachment.id"
@@ -58,6 +66,7 @@
             {{ state.downloadPendingId === attachment.id ? '下载中...' : '下载' }}
           </button>
           <button
+            v-if="canDeleteAttachment(attachment)"
             type="button"
             class="ghost-button"
             :disabled="state.deletePendingId === attachment.id"
@@ -72,6 +81,7 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import { formatDateTime, formatFileSize } from '../../utils/format.js';
 import { formatAttachmentUploader, isApplicable } from './stageDocumentViewHelpers.js';
 
@@ -100,5 +110,33 @@ function handleFileSelected(event) {
     document: props.document,
     file
   });
+}
+
+const permissions = computed(() => props.document.permissions || {});
+const canViewAttachments = computed(
+  () => permissions.value.canViewAttachments ?? props.document.canViewAttachments ?? false
+);
+const canUploadAttachment = computed(
+  () => permissions.value.canUploadAttachment ?? props.document.canUploadAttachment ?? false
+);
+
+function canDownloadAttachment(attachment) {
+  return (
+    attachment?.permissions?.canDownload ??
+    attachment?.canDownload ??
+    permissions.value.canDownloadAttachment ??
+    props.document.canDownloadAttachment ??
+    false
+  );
+}
+
+function canDeleteAttachment(attachment) {
+  return (
+    attachment?.permissions?.canDelete ??
+    attachment?.canDelete ??
+    permissions.value.canDeleteAttachment ??
+    props.document.canDeleteAttachment ??
+    false
+  );
 }
 </script>

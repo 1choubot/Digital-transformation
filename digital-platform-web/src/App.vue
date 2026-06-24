@@ -36,10 +36,10 @@
         </button>
         <button
           type="button"
-          :class="{ active: route.name === 'my-stage-document-tasks' }"
-          @click="navigate('/my-stage-document-tasks')"
+          :class="{ active: route.name === 'my-workbench' }"
+          @click="navigate('/my-workbench')"
         >
-          我的资料任务
+          我的工作台
         </button>
         <button
           v-if="canAccessUserManagement"
@@ -87,10 +87,13 @@
         :auth-token="authToken"
         :current-user="currentUser"
         :project-id="route.params.projectId"
+        :task-mode="route.query?.taskMode || ''"
+        :focus-document-id="route.query?.documentId || ''"
+        :focus-stage-id="route.query?.stageId || ''"
         :navigate="navigate"
       />
       <MyStageDocumentTasksPage
-        v-else-if="route.name === 'my-stage-document-tasks'"
+        v-else-if="route.name === 'my-workbench'"
         :auth-token="authToken"
         :current-user="currentUser"
         :navigate="navigate"

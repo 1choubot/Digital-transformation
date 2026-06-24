@@ -6,6 +6,10 @@ import {
 } from '../../domain/stageDocumentTemplates.js';
 import { STANDARD_PROJECT_STAGES } from '../../domain/stages.js';
 import { buildStageCompletenessSummary, mapDocument } from './shared.js';
+import {
+  attachStageDocumentPermissions,
+  filterStageDocumentsForUser
+} from './accessControl.js';
 
 function assertTemplateRowsReady(rows) {
   if (rows.length !== EXPECTED_STAGE_DOCUMENT_ITEM_COUNT) {
@@ -171,8 +175,24 @@ export async function listProjectsForStageDocumentBackfill(executor = pool) {
   }));
 }
 
-export async function getProjectStageDocumentChecklist(projectId) {
+async function selectChecklistProject(projectId) {
   const [rows] = await pool.execute(
+    `SELECT
+      id,
+      project_manager_user_id,
+      participating_departments
+    FROM projects
+    WHERE id = ?
+    LIMIT 1`,
+    [projectId]
+  );
+
+  return rows[0] || null;
+}
+
+export async function getProjectStageDocumentChecklist(projectId, user = null) {
+  const [[rows], project] = await Promise.all([
+    pool.execute(
     `SELECT
       d.*,
       u.account AS responsible_account,
@@ -188,13 +208,23 @@ export async function getProjectStageDocumentChecklist(projectId) {
     WHERE d.project_id = ?
     ORDER BY d.stage_order ASC, d.document_order ASC`,
     [projectId]
-  );
+    ),
+    selectChecklistProject(projectId)
+  ]);
 
   const documentsByStage = new Map(STANDARD_PROJECT_STAGES.map((stage) => [stage.stageKey, []]));
-  for (const row of rows) {
-    const documents = documentsByStage.get(row.stage_key);
+  const mappedDocuments = rows.map(mapDocument);
+  const visibleDocuments =
+    user && project
+      ? filterStageDocumentsForUser({ user, project, documents: mappedDocuments }).map((document) =>
+          attachStageDocumentPermissions({ user, project, document })
+        )
+      : mappedDocuments;
+
+  for (const document of visibleDocuments) {
+    const documents = documentsByStage.get(document.stageKey);
     if (documents) {
-      documents.push(mapDocument(row));
+      documents.push(document);
     }
   }
 

@@ -2,24 +2,36 @@
   <section class="page-stack">
     <div class="page-title-row">
       <div>
-        <span class="section-eyebrow">我的责任资料</span>
-        <h2>我的资料任务</h2>
+        <span class="section-eyebrow">我的待办</span>
+        <h2>我的工作台</h2>
         <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
         <p class="manual-status-note">
-          这里展示的是分配给我的资料项。资料状态表示资料级审核进度，不代表文件已上传，也不代表在线表单已填写。
+          工作台汇总需要当前账号处理的资料责任、资料审核、阶段关口审批和阶段推进事项。
         </p>
       </div>
-      <button type="button" class="ghost-button" :disabled="loading" @click="loadTasks">
+      <button type="button" class="ghost-button" :disabled="loading" @click="loadWorkbench">
         {{ loading ? '加载中...' : '重新加载' }}
       </button>
     </div>
 
     <section class="panel task-filter-panel">
+      <div class="stage-advance-summary">
+        <div>
+          <span>总待办</span>
+          <strong>{{ summary.total }}</strong>
+        </div>
+        <div v-for="option in typeOptions" :key="option.value">
+          <span>{{ option.label }}</span>
+          <strong>{{ summary.byType?.[option.value] || 0 }}</strong>
+        </div>
+      </div>
+
       <div class="task-filters">
         <label>
-          <span>状态筛选</span>
-          <select v-model="selectedStatus" :disabled="loading" @change="loadTasks">
-            <option v-for="option in statusOptions" :key="option.value" :value="option.value">
+          <span>待办类型</span>
+          <select v-model="selectedType" :disabled="loading">
+            <option value="all">全部待办</option>
+            <option v-for="option in typeOptions" :key="option.value" :value="option.value">
               {{ option.label }}
             </option>
           </select>
@@ -39,24 +51,24 @@
     <section class="panel task-list-panel">
       <div class="panel-toolbar">
         <div>
-          <strong>任务列表</strong>
-          <span>共 {{ filteredTasks.length }} 项，按后端任务优先级排序。</span>
+          <strong>待办列表</strong>
+          <span>共 {{ filteredItems.length }} 项，按待办类型和更新时间排序。</span>
         </div>
       </div>
 
       <div v-if="loading" class="state-panel state-panel--inline">
-        <p>正在加载我的资料任务...</p>
+        <p>正在加载我的工作台...</p>
       </div>
 
       <div v-else-if="errorMessage" class="state-panel state-panel--error">
-        <h3>我的资料任务加载失败</h3>
+        <h3>我的工作台加载失败</h3>
         <p>{{ errorMessage }}</p>
-        <button type="button" class="primary-button" @click="loadTasks">重试</button>
+        <button type="button" class="primary-button" @click="loadWorkbench">重试</button>
       </div>
 
-      <div v-else-if="filteredTasks.length === 0" class="state-panel state-panel--inline">
-        <h3>暂无匹配资料任务</h3>
-        <p>当前筛选下没有分配给我的适用资料项。</p>
+      <div v-else-if="filteredItems.length === 0" class="state-panel state-panel--inline">
+        <h3>暂无匹配待办</h3>
+        <p>当前筛选下没有需要你处理的事项。</p>
       </div>
 
       <div v-else class="task-table">
@@ -66,30 +78,30 @@
           <span>资料项</span>
           <span>类型</span>
           <span>状态</span>
-          <span>审核退回原因</span>
-          <span>责任更新时间</span>
+          <span>动作</span>
+          <span>更新时间</span>
           <span>操作</span>
         </div>
 
-        <article v-for="task in filteredTasks" :key="task.documentId" class="task-table__row">
+        <article v-for="item in filteredItems" :key="itemKey(item)" class="task-table__row">
           <div class="task-cell task-cell--project">
-            <span class="mono">{{ task.projectCode }}</span>
-            <strong>{{ task.projectName }}</strong>
+            <span class="mono">{{ item.projectCode }}</span>
+            <strong>{{ item.projectName }}</strong>
           </div>
           <div class="task-cell">
-            <span>{{ task.stageName || `第 ${task.stageOrder} 阶段` }}</span>
-            <small>第 {{ task.stageOrder }} 阶段</small>
+            <span>{{ item.stageName || `第 ${item.stageOrder} 阶段` }}</span>
+            <small>第 {{ item.stageOrder }} 阶段</small>
           </div>
           <div class="task-cell task-cell--document">
-            <span class="mono">{{ task.documentCode }}</span>
-            <strong>{{ task.documentName }}</strong>
+            <span class="mono">{{ item.documentCode || '-' }}</span>
+            <strong>{{ item.documentName || '-' }}</strong>
           </div>
-          <span>{{ formatTaskRequired(task.isRequired) }}</span>
-          <StatusBadge :status="task.status" />
-          <span>{{ task.returnReason || '-' }}</span>
-          <time>{{ formatDateTime(task.responsibilityUpdatedAt) }}</time>
-          <button type="button" class="ghost-button" @click="navigate(`/projects/${task.projectId}`)">
-            查看项目
+          <span>{{ formatTodoType(item.type) }}</span>
+          <StatusBadge :status="item.status" />
+          <span>{{ item.actionText || '-' }}</span>
+          <time>{{ formatDateTime(item.updatedAt || item.createdAt) }}</time>
+          <button type="button" class="ghost-button" @click="openTodo(item)">
+            处理
           </button>
         </article>
       </div>
@@ -99,7 +111,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import { listMyStageDocumentTasks } from '../api/me.js';
+import { getMyWorkbench } from '../api/me.js';
 import { toReadableApiError } from '../api/http.js';
 import StatusBadge from '../components/StatusBadge.vue';
 import { formatDateTime, formatUser } from '../utils/format.js';
@@ -121,43 +133,59 @@ const props = defineProps({
 
 const emit = defineEmits(['auth-expired']);
 
-const statusOptions = [
-  { value: 'pending', label: '待办' },
-  { value: 'returned', label: '已退回' },
-  { value: 'not_submitted', label: '待提交' },
-  { value: 'submitted', label: '已提交审核' },
-  { value: 'confirmed', label: '审核通过' },
-  { value: 'all', label: '全部状态' }
+const typeOptions = [
+  { value: 'document_responsibility', label: '我负责的资料' },
+  { value: 'document_review', label: '待我审核的资料' },
+  { value: 'stage_gate_approval', label: '待我阶段关口审批' },
+  { value: 'stage_advance', label: '待我推进阶段' }
 ];
 
-const selectedStatus = ref('pending');
+const selectedType = ref('all');
 const projectKeyword = ref('');
 const loading = ref(false);
 const errorMessage = ref('');
-const tasks = ref([]);
+const items = ref([]);
+const summary = ref({
+  total: 0,
+  byType: {}
+});
 
-const filteredTasks = computed(() => {
+const filteredItems = computed(() => {
   const keyword = projectKeyword.value.trim().toLowerCase();
-  if (!keyword) {
-    return tasks.value;
-  }
+  return items.value.filter((item) => {
+    if (selectedType.value !== 'all' && item.type !== selectedType.value) {
+      return false;
+    }
 
-  return tasks.value.filter((task) => {
-    const haystack = `${task.projectCode || ''} ${task.projectName || ''}`.toLowerCase();
+    if (!keyword) {
+      return true;
+    }
+
+    const haystack = `${item.projectCode || ''} ${item.projectName || ''}`.toLowerCase();
     return haystack.includes(keyword);
   });
 });
 
-function formatTaskRequired(value) {
-  return value ? '必填' : '建议';
+function itemKey(item) {
+  return [item.type, item.projectId, item.stageId || '', item.documentId || ''].join(':');
 }
 
-async function loadTasks() {
+function formatTodoType(type) {
+  return typeOptions.find((option) => option.value === type)?.label || type || '-';
+}
+
+function openTodo(item) {
+  props.navigate(item.targetRoute || `/projects/${item.projectId}`);
+}
+
+async function loadWorkbench() {
   loading.value = true;
   errorMessage.value = '';
 
   try {
-    tasks.value = await listMyStageDocumentTasks({ status: selectedStatus.value }, props.authToken);
+    const result = await getMyWorkbench(props.authToken);
+    items.value = Array.isArray(result?.items) ? result.items : [];
+    summary.value = result?.summary || { total: items.value.length, byType: {} };
   } catch (error) {
     const message = toReadableApiError(error);
     errorMessage.value = message;
@@ -170,5 +198,5 @@ async function loadTasks() {
   }
 }
 
-onMounted(loadTasks);
+onMounted(loadWorkbench);
 </script>

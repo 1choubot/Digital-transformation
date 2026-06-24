@@ -31,14 +31,14 @@
         <span>风险/延期</span>
         <strong>{{ summary.riskProjects }}</strong>
       </div>
-      <button type="button" class="overview-metric overview-metric--button" @click="navigate('/my-stage-document-tasks')">
+      <button type="button" class="overview-metric overview-metric--button" @click="navigate('/my-workbench')">
         <span>我的待办资料</span>
         <strong>{{ summary.myPendingStageDocumentTasks }}</strong>
       </button>
     </section>
 
     <p class="manual-status-note">
-      “我的待办资料”为当前登录用户全局待办资料数量，不随项目状态、当前阶段或关键字筛选变化。
+      “我的待办资料”为当前登录用户全局待处理资料数量，不随项目状态、当前阶段或关键字筛选变化。
     </p>
 
     <section class="panel overview-filter-panel">

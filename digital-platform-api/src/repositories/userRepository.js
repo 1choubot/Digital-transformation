@@ -5,12 +5,15 @@ export function mapSafeUser(row) {
     return null;
   }
 
+  // The safe user model includes report permission fields but never password data.
   return {
     id: row.id,
     account: row.account,
     name: row.display_name,
     department: row.department,
+    organizationRole: row.organization_role,
     role: row.role,
+    jobTitle: row.job_title,
     isEnabled: Boolean(row.is_enabled),
     isPlatformAdmin: Boolean(row.is_platform_admin),
     filePlatformUserId: row.file_platform_user_id,
@@ -35,12 +38,15 @@ export function mapCreator(row) {
     return null;
   }
 
+  // Creator data mirrors the safe user shape used by project responses.
   return {
     id: row.created_by_user_id,
     account: row.creator_account,
     name: row.creator_display_name,
     department: row.creator_department,
+    organizationRole: row.creator_organization_role,
     role: row.creator_role,
+    jobTitle: row.creator_job_title,
     isEnabled: row.creator_is_enabled === null ? null : Boolean(row.creator_is_enabled),
     filePlatformUserId: row.creator_file_platform_user_id
   };
@@ -51,12 +57,15 @@ function mapResponsibilityCandidate(row) {
     return null;
   }
 
+  // Candidate users expose report-facing metadata without admin or password fields.
   return {
     id: row.id,
     account: row.account,
     name: row.display_name,
     department: row.department,
+    organizationRole: row.organization_role,
     role: row.role,
+    jobTitle: row.job_title,
     filePlatformUserId: row.file_platform_user_id
   };
 }
@@ -78,7 +87,9 @@ export async function listResponsibilityCandidateUsers() {
       account,
       display_name,
       department,
+      organization_role,
       role,
+      job_title,
       file_platform_user_id
     FROM users
     WHERE is_enabled = 1
@@ -94,17 +105,21 @@ export async function upsertInitialUser(user) {
       account,
       display_name,
       department,
+      organization_role,
       role,
+      job_title,
       is_enabled,
       is_platform_admin,
       file_platform_user_id,
       password_hash,
       password_updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     ON DUPLICATE KEY UPDATE
       display_name = VALUES(display_name),
       department = VALUES(department),
+      organization_role = VALUES(organization_role),
       role = VALUES(role),
+      job_title = VALUES(job_title),
       is_enabled = VALUES(is_enabled),
       is_platform_admin = VALUES(is_platform_admin),
       file_platform_user_id = VALUES(file_platform_user_id),
@@ -114,7 +129,9 @@ export async function upsertInitialUser(user) {
       user.account,
       user.displayName,
       user.department,
+      user.organizationRole,
       user.role,
+      user.jobTitle || null,
       user.isEnabled ? 1 : 0,
       user.isPlatformAdmin ? 1 : 0,
       user.filePlatformUserId || null,
@@ -147,7 +164,9 @@ const SAFE_USER_COLUMNS = `
   account,
   display_name,
   department,
+  organization_role,
   role,
+  job_title,
   is_enabled,
   is_platform_admin,
   file_platform_user_id,
@@ -235,18 +254,22 @@ export async function createManagedUser(user) {
         account,
         display_name,
         department,
+        organization_role,
         role,
+        job_title,
         is_enabled,
         is_platform_admin,
         file_platform_user_id,
         password_hash,
         password_updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         user.account,
         user.displayName,
         user.department,
+        user.organizationRole,
         user.role,
+        user.jobTitle || null,
         user.isEnabled ? 1 : 0,
         user.isPlatformAdmin ? 1 : 0,
         user.filePlatformUserId || null,
@@ -289,7 +312,9 @@ export async function updateManagedUser(userId, patch) {
       `UPDATE users
       SET display_name = ?,
         department = ?,
+        organization_role = ?,
         role = ?,
+        job_title = ?,
         is_enabled = ?,
         is_platform_admin = ?,
         file_platform_user_id = ?
@@ -297,7 +322,9 @@ export async function updateManagedUser(userId, patch) {
       [
         patch.displayName === undefined ? existing.display_name : patch.displayName,
         patch.department === undefined ? existing.department : patch.department,
+        patch.organizationRole === undefined ? existing.organization_role : patch.organizationRole,
         patch.role === undefined ? existing.role : patch.role,
+        patch.jobTitle === undefined ? existing.job_title : patch.jobTitle || null,
         nextState.isEnabled ? 1 : 0,
         nextState.isPlatformAdmin ? 1 : 0,
         patch.filePlatformUserId === undefined ? existing.file_platform_user_id : patch.filePlatformUserId || null,

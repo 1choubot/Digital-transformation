@@ -116,7 +116,9 @@ export async function listProjects() {
       u.account AS creator_account,
       u.display_name AS creator_display_name,
       u.department AS creator_department,
+      u.organization_role AS creator_organization_role,
       u.role AS creator_role,
+      u.job_title AS creator_job_title,
       u.is_enabled AS creator_is_enabled,
       u.file_platform_user_id AS creator_file_platform_user_id,
       s.stage_order AS current_stage_order,
@@ -142,7 +144,9 @@ export async function getProjectDetail(projectId) {
       u.account AS creator_account,
       u.display_name AS creator_display_name,
       u.department AS creator_department,
+      u.organization_role AS creator_organization_role,
       u.role AS creator_role,
+      u.job_title AS creator_job_title,
       u.is_enabled AS creator_is_enabled,
       u.file_platform_user_id AS creator_file_platform_user_id
     FROM projects p

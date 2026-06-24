@@ -88,7 +88,11 @@ function normalizeCreateUserInput(payload) {
     account: normalizeText(payload.account),
     displayName: normalizeText(payload.displayName),
     department: normalizeText(payload.department),
+    // Report permissions use organizationRole; role remains the legacy job/role text.
+    organizationRole: normalizeText(payload.organizationRole || payload.role || 'employee'),
     role: normalizeText(payload.role),
+    // Weekly report exports read jobTitle when filling the template header.
+    jobTitle: normalizeNullableText(payload.jobTitle),
     password: String(payload.password),
     isEnabled: normalizeBoolean(payload.isEnabled, true),
     isPlatformAdmin: normalizeBoolean(payload.isPlatformAdmin, false),
@@ -132,6 +136,24 @@ function normalizeUpdateUserInput(payload) {
         'role'
       ]);
     }
+  }
+
+  // Keep organizationRole editable for report permission assignments.
+  if (Object.prototype.hasOwnProperty.call(payload, 'organizationRole')) {
+    patch.organizationRole = normalizeText(payload.organizationRole);
+    if (!patch.organizationRole) {
+      throw new UserManagementError(
+        USER_MANAGEMENT_ERROR.REQUIRED_FIELDS,
+        'Missing required user fields',
+        400,
+        ['organizationRole']
+      );
+    }
+  }
+
+  // Keep jobTitle optional because legacy users may not have one yet.
+  if (Object.prototype.hasOwnProperty.call(payload, 'jobTitle')) {
+    patch.jobTitle = normalizeNullableText(payload.jobTitle);
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, 'isEnabled')) {

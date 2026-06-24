@@ -49,7 +49,9 @@ async function ensureSchema() {
       account VARCHAR(64) NOT NULL,
       display_name VARCHAR(128) NOT NULL,
       department VARCHAR(128) NOT NULL,
+      organization_role VARCHAR(64) NOT NULL DEFAULT 'employee',
       role VARCHAR(64) NOT NULL,
+      job_title VARCHAR(100) NULL,
       is_enabled TINYINT(1) NOT NULL DEFAULT 1,
       is_platform_admin TINYINT(1) NOT NULL DEFAULT 0,
       file_platform_user_id VARCHAR(128) NULL,
@@ -64,6 +66,18 @@ async function ensureSchema() {
 
   if (!(await hasColumn('users', 'is_platform_admin'))) {
     await pool.execute('ALTER TABLE users ADD COLUMN is_platform_admin TINYINT(1) NOT NULL DEFAULT 0 AFTER is_enabled');
+  }
+
+  // Keep the report permission column available for environments created before M1.
+  if (!(await hasColumn('users', 'organization_role'))) {
+    await pool.execute(
+      "ALTER TABLE users ADD COLUMN organization_role VARCHAR(64) NOT NULL DEFAULT 'employee' AFTER department"
+    );
+  }
+
+  // Keep the weekly export job-title column available for environments created before M1.
+  if (!(await hasColumn('users', 'job_title'))) {
+    await pool.execute("ALTER TABLE users ADD COLUMN job_title VARCHAR(100) NULL DEFAULT NULL COMMENT '岗位名称' AFTER role");
   }
 
   await pool.execute(

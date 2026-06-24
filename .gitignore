@@ -46,6 +46,11 @@ Thumbs.db
 .idea/
 .vscode/
 
-#workbuddy files
+#agents files
 .workbuddy/
+.agents/
+.codex/
     
+
+#report export files
+daily_and_weekly_files/    

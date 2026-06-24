@@ -38,6 +38,26 @@ export class ProjectStageAdvanceError extends Error {
   }
 }
 
+export class ProjectStageNotFoundError extends Error {
+  constructor(projectId, stageId) {
+    super(`Project stage not found: ${stageId} in project ${projectId}`);
+    this.name = 'ProjectStageNotFoundError';
+    this.statusCode = 404;
+    this.projectId = projectId;
+    this.stageId = stageId;
+  }
+}
+
+export class ProjectApprovalError extends Error {
+  constructor(code, message, statusCode = 409, details = []) {
+    super(message);
+    this.name = 'ProjectApprovalError';
+    this.statusCode = statusCode;
+    this.code = code;
+    this.details = details;
+  }
+}
+
 export class ProjectOverviewDashboardQueryError extends Error {
   constructor(code, message, statusCode = 400, details = []) {
     super(message);
@@ -178,6 +198,7 @@ export function mapStage(row) {
     stageKey: row.stage_key,
     stageName: row.stage_name,
     stageStatus: row.stage_status,
+    approvalStatus: row.approval_status ?? 'not_submitted',
     isCurrent: Boolean(row.is_current),
     startedAt: row.started_at,
     completedAt: row.completed_at

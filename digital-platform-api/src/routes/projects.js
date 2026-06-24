@@ -3,20 +3,25 @@ import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import {
   advanceProjectStageHandler,
+  approveStageApprovalHandler,
   confirmStageDocumentHandler,
   createProjectHandler,
   deleteStageDocumentAttachmentHandler,
   downloadStageDocumentAttachmentHandler,
   getProjectDetailHandler,
   getProjectOverviewDashboardHandler,
+  listStageApprovalHistoryHandler,
   getStageDocumentChecklistHandler,
   listProjectOperationLogsHandler,
   listProjectsHandler,
   listStageDocumentAttachmentsHandler,
   markStageDocumentNotApplicableHandler,
   restoreStageDocumentApplicableHandler,
+  returnStageApprovalHandler,
   returnStageDocumentHandler,
+  resubmitStageApprovalHandler,
   submitStageDocumentHandler,
+  submitStageApprovalHandler,
   updateStageDocumentResponsibleUserHandler,
   uploadStageDocumentAttachmentHandler
 } from './projectRouteHandlers.js';
@@ -48,6 +53,36 @@ projectsRouter.post(
   '/:projectId/stages/advance',
   requireAuth,
   asyncHandler(advanceProjectStageHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/stages/:stageId/approval/submit',
+  requireAuth,
+  asyncHandler(submitStageApprovalHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/stages/:stageId/approval/approve',
+  requireAuth,
+  asyncHandler(approveStageApprovalHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/stages/:stageId/approval/return',
+  requireAuth,
+  asyncHandler(returnStageApprovalHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/stages/:stageId/approval/resubmit',
+  requireAuth,
+  asyncHandler(resubmitStageApprovalHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/stages/:stageId/approval/history',
+  requireAuth,
+  asyncHandler(listStageApprovalHistoryHandler)
 );
 
 projectsRouter.post(

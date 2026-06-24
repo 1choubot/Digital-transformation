@@ -15,6 +15,12 @@ export const operationActionText = {
   'document.responsible_changed': '资料责任人变更',
   'document.attachment_uploaded': '资料附件上传',
   'document.attachment_deleted': '资料附件删除',
+  'approval.submitted': '提交阶段审批',
+  'approval.center_approved': '中心负责人审批通过',
+  'approval.center_returned': '中心负责人审批退回',
+  'approval.general_approved': '总经理审批通过',
+  'approval.general_returned': '总经理审批退回',
+  'approval.resubmitted': '重新提交阶段审批',
   'stage.advanced': '阶段推进',
   'project.completed': '项目完成'
 };

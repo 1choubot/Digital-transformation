@@ -9,7 +9,10 @@
       <span class="stage-stepper__order">{{ String(stage.stageOrder).padStart(2, '0') }}</span>
       <div>
         <strong>{{ stage.stageName }}</strong>
-        <StatusBadge :status="stage.stageStatus" />
+        <span class="stage-stepper__badges">
+          <StatusBadge :status="stage.stageStatus" />
+          <StatusBadge :status="stage.approvalStatus || 'not_submitted'" />
+        </span>
       </div>
     </li>
   </ol>

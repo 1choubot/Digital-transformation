@@ -13,6 +13,12 @@ export const OPERATION_ACTION_TYPE = {
   DOCUMENT_RESPONSIBLE_CHANGED: 'document.responsible_changed',
   DOCUMENT_ATTACHMENT_UPLOADED: 'document.attachment_uploaded',
   DOCUMENT_ATTACHMENT_DELETED: 'document.attachment_deleted',
+  APPROVAL_SUBMITTED: 'approval.submitted',
+  APPROVAL_CENTER_APPROVED: 'approval.center_approved',
+  APPROVAL_CENTER_RETURNED: 'approval.center_returned',
+  APPROVAL_GENERAL_APPROVED: 'approval.general_approved',
+  APPROVAL_GENERAL_RETURNED: 'approval.general_returned',
+  APPROVAL_RESUBMITTED: 'approval.resubmitted',
   STAGE_ADVANCED: 'stage.advanced',
   PROJECT_COMPLETED: 'project.completed'
 };
@@ -20,6 +26,7 @@ export const OPERATION_ACTION_TYPE = {
 export const OPERATION_TARGET_TYPE = {
   PROJECT: 'project',
   STAGE: 'stage',
+  APPROVAL: 'approval',
   STAGE_DOCUMENT: 'stage_document'
 };
 

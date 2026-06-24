@@ -24,6 +24,26 @@
 
       <ProjectStageTimeline :stages="detail.stages" />
 
+      <ProjectStageApprovalPanel
+        :stages="detail.stages"
+        :project="detail.project"
+        :approval-histories="approvalHistories"
+        :approval-history-errors="approvalHistoryErrors"
+        :approval-histories-loading="approvalHistoriesLoading"
+        :return-comments="approvalReturnComments"
+        :pending-action="approvalPendingAction"
+        :message="approvalMessage"
+        :error-message="approvalErrorMessage"
+        :get-stage-completeness="getStageCompletenessForApproval"
+        :can-submit-stage-approval="canSubmitStageApproval"
+        :can-resubmit-stage-approval="canResubmitStageApproval"
+        :can-approve-stage-approval="canApproveStageApproval"
+        @submit="submitApproval"
+        @resubmit="resubmitApproval"
+        @approve="approveApproval"
+        @return="returnApproval"
+      />
+
       <ProjectOperationLogPanel
         :loading="operationLogsLoading"
         :error-message="operationLogsErrorMessage"
@@ -81,17 +101,22 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
   advanceProjectStage,
+  approveStageApproval,
   confirmStageDocument,
   deleteStageDocumentAttachment,
   downloadStageDocumentAttachment,
   getProjectDetail,
   getProjectOperationLogs,
   getProjectStageDocumentChecklist,
+  listStageApprovalHistory,
   listStageDocumentAttachments,
   markStageDocumentNotApplicable,
   markStageDocumentSubmitted,
+  resubmitStageApproval,
   restoreStageDocumentApplicable,
+  returnStageApproval,
   returnStageDocument,
+  submitStageApproval,
   toReadableApiError,
   updateStageDocumentResponsibleUser,
   uploadStageDocumentAttachment
@@ -99,6 +124,7 @@ import {
 import { listResponsibilityCandidates } from '../api/users.js';
 import ProjectDetailHeader from '../components/project-detail/ProjectDetailHeader.vue';
 import ProjectOperationLogPanel from '../components/project-detail/ProjectOperationLogPanel.vue';
+import ProjectStageApprovalPanel from '../components/project-detail/ProjectStageApprovalPanel.vue';
 import ProjectStageAdvancePanel from '../components/project-detail/ProjectStageAdvancePanel.vue';
 import ProjectStageDocumentChecklist from '../components/project-detail/ProjectStageDocumentChecklist.vue';
 import ProjectStageTimeline from '../components/project-detail/ProjectStageTimeline.vue';
@@ -138,6 +164,13 @@ const checklist = ref(null);
 const operationLogsLoading = ref(false);
 const operationLogsErrorMessage = ref('');
 const operationLogs = ref([]);
+const approvalHistoriesLoading = ref(false);
+const approvalHistories = reactive({});
+const approvalHistoryErrors = reactive({});
+const approvalReturnComments = reactive({});
+const approvalPendingAction = ref('');
+const approvalMessage = ref('');
+const approvalErrorMessage = ref('');
 const responsibilityCandidatesLoading = ref(false);
 const responsibilityCandidatesErrorMessage = ref('');
 const responsibilityCandidates = ref([]);
@@ -154,6 +187,16 @@ const responsibilitySelections = reactive({});
 const attachmentStates = reactive({});
 
 const MAX_ATTACHMENT_FILE_SIZE = 50 * 1024 * 1024;
+const GENERAL_MANAGER_APPROVAL_STAGE_KEYS = new Set(['initiation', 'contract', 'closeout']);
+const STATIC_STAGE_APPROVAL_CENTERS = {
+  initiation: 'marketing_center',
+  solution: 'rd_center',
+  contract: 'marketing_center',
+  detailedDesign: 'rd_center',
+  manufacturing: 'manufacturing_center',
+  preAcceptance: 'manufacturing_center',
+  finalAcceptance: 'manufacturing_center'
+};
 
 const notFound = computed(() => errorCode.value === 'PROJECT_NOT_FOUND');
 const isChecklistEmpty = computed(
@@ -237,6 +280,7 @@ const canAdvanceCurrentStage = computed(
     Boolean(detail.value?.currentStage) &&
     !isProjectCompleted.value &&
     canCurrentUserAdvanceProject.value &&
+    detail.value.currentStage.approvalStatus === 'approved' &&
     Boolean(currentStageCompleteness.value) &&
     currentStageCompleteness.value.incompleteRequiredCount === 0
 );
@@ -258,6 +302,78 @@ function getAttachmentState(documentId) {
   }
 
   return attachmentStates[documentId];
+}
+
+function getStageApprovalCenter(stage) {
+  if (stage?.stageKey === 'closeout') {
+    return detail.value?.project?.projectManagerUser?.department || '';
+  }
+
+  return STATIC_STAGE_APPROVAL_CENTERS[stage?.stageKey] || '';
+}
+
+function requiresGeneralManagerApproval(stage) {
+  return GENERAL_MANAGER_APPROVAL_STAGE_KEYS.has(stage?.stageKey);
+}
+
+function getStageCompletenessForApproval(stage) {
+  if (!stage || !checklist.value) {
+    return null;
+  }
+
+  const checklistStage = checklist.value.stages.find((item) => item.stageKey === stage.stageKey);
+  return checklistStage ? stageCompleteness(checklistStage) : null;
+}
+
+function isStageCompleteForApproval(stage) {
+  const completeness = getStageCompletenessForApproval(stage);
+  return Boolean(completeness) && completeness.incompleteRequiredCount === 0;
+}
+
+function canSubmitStageApproval(stage) {
+  if (isCurrentUserGeneralManagerAssistant.value || isCurrentUserSystemAdmin.value) {
+    return false;
+  }
+
+  return (
+    Boolean(stage?.isCurrent) &&
+    isCurrentUserProjectManager.value &&
+    (stage.approvalStatus || 'not_submitted') === 'not_submitted' &&
+    isStageCompleteForApproval(stage)
+  );
+}
+
+function canResubmitStageApproval(stage) {
+  if (isCurrentUserGeneralManagerAssistant.value || isCurrentUserSystemAdmin.value) {
+    return false;
+  }
+
+  return (
+    Boolean(stage?.isCurrent) &&
+    isCurrentUserProjectManager.value &&
+    ['returned_by_center_manager', 'returned_by_general_manager'].includes(stage.approvalStatus) &&
+    isStageCompleteForApproval(stage)
+  );
+}
+
+function canApproveStageApproval(stage) {
+  if (isCurrentUserGeneralManagerAssistant.value || isCurrentUserSystemAdmin.value) {
+    return false;
+  }
+
+  if (stage?.approvalStatus === 'pending_center_manager') {
+    return (
+      isCurrentUserCenterManager.value &&
+      Boolean(currentUserDepartment.value) &&
+      currentUserDepartment.value === getStageApprovalCenter(stage)
+    );
+  }
+
+  if (stage?.approvalStatus === 'pending_general_manager') {
+    return isCurrentUserGeneralManager.value && requiresGeneralManagerApproval(stage);
+  }
+
+  return false;
 }
 
 function isDocumentRelatedToCurrentCenter(document) {
@@ -327,9 +443,23 @@ function clearAttachmentStates() {
   });
 }
 
+function clearApprovalHistories() {
+  Object.keys(approvalHistories).forEach((key) => {
+    delete approvalHistories[key];
+  });
+  Object.keys(approvalHistoryErrors).forEach((key) => {
+    delete approvalHistoryErrors[key];
+  });
+}
+
 function clearActionState() {
   actionMessage.value = '';
   actionErrorMessage.value = '';
+}
+
+function clearApprovalActionState() {
+  approvalMessage.value = '';
+  approvalErrorMessage.value = '';
 }
 
 function clearStageAdvanceState() {
@@ -640,6 +770,96 @@ async function loadOperationLogs() {
   }
 }
 
+async function loadApprovalHistories() {
+  approvalHistoriesLoading.value = true;
+  clearApprovalHistories();
+
+  try {
+    await Promise.all(
+      (detail.value?.stages || []).map(async (stage) => {
+        try {
+          approvalHistories[stage.id] = await listStageApprovalHistory(
+            props.projectId,
+            stage.id,
+            props.authToken
+          );
+        } catch (error) {
+          approvalHistories[stage.id] = [];
+          approvalHistoryErrors[stage.id] = toReadableApiError(error);
+        }
+      })
+    );
+  } finally {
+    approvalHistoriesLoading.value = false;
+  }
+}
+
+async function runApprovalAction(stage, action, runner, successText, options = {}) {
+  clearActionState();
+  clearStageAdvanceState();
+  clearApprovalActionState();
+  approvalPendingAction.value = `${stage.id}:${action}`;
+
+  try {
+    await runner();
+    if (options.clearReturnComment) {
+      delete approvalReturnComments[stage.id];
+    }
+    approvalMessage.value = successText;
+    await loadDetail({
+      preserveStageAdvanceState: true,
+      preserveApprovalState: true
+    });
+  } catch (error) {
+    approvalErrorMessage.value = toReadableApiError(error);
+  } finally {
+    approvalPendingAction.value = '';
+  }
+}
+
+async function submitApproval(stage) {
+  await runApprovalAction(
+    stage,
+    'submit',
+    () => submitStageApproval(props.projectId, stage.id, props.authToken),
+    '阶段审批已提交。'
+  );
+}
+
+async function resubmitApproval(stage) {
+  await runApprovalAction(
+    stage,
+    'resubmit',
+    () => resubmitStageApproval(props.projectId, stage.id, props.authToken),
+    '阶段审批已重新提交。'
+  );
+}
+
+async function approveApproval(stage) {
+  await runApprovalAction(
+    stage,
+    'approve',
+    () => approveStageApproval(props.projectId, stage.id, props.authToken),
+    '阶段审批已通过。'
+  );
+}
+
+async function returnApproval(stage) {
+  const comment = String(approvalReturnComments[stage.id] || '').trim();
+  if (!comment) {
+    approvalErrorMessage.value = '请填写退回原因。';
+    return;
+  }
+
+  await runApprovalAction(
+    stage,
+    'return',
+    () => returnStageApproval(props.projectId, stage.id, comment, props.authToken),
+    '阶段审批已退回。',
+    { clearReturnComment: true }
+  );
+}
+
 async function loadDetail(options = {}) {
   loading.value = true;
   errorMessage.value = '';
@@ -652,9 +872,13 @@ async function loadDetail(options = {}) {
   responsibilityCandidates.value = [];
   responsibilityCandidatesErrorMessage.value = '';
   clearAttachmentStates();
+  clearApprovalHistories();
   clearActionState();
   if (!options.preserveStageAdvanceState) {
     clearStageAdvanceState();
+  }
+  if (!options.preserveApprovalState) {
+    clearApprovalActionState();
   }
 
   try {
@@ -667,7 +891,12 @@ async function loadDetail(options = {}) {
   }
 
   if (detail.value) {
-    await Promise.all([loadChecklist(), loadOperationLogs(), loadResponsibilityCandidates()]);
+    await Promise.all([
+      loadChecklist(),
+      loadOperationLogs(),
+      loadResponsibilityCandidates(),
+      loadApprovalHistories()
+    ]);
   }
 }
 

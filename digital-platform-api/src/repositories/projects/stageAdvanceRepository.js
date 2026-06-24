@@ -5,6 +5,7 @@ import {
   isValidBusinessDepartment
 } from '../../domain/organization.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
+import { PROJECT_APPROVAL_ERROR, PROJECT_APPROVAL_STATUS } from '../../domain/projectApproval.js';
 import { STANDARD_PROJECT_STAGES, STAGE_STATUS } from '../../domain/stages.js';
 import { buildStageCompletenessSummary, mapGateDocument } from '../stageDocuments/shared.js';
 import {
@@ -169,11 +170,18 @@ export async function advanceProjectStage(projectId, user) {
 
     const stageRows = await selectProjectStagesForUpdate(connection, projectId);
     const currentStage = assertSingleCurrentStage(stageRows);
+    if (currentStage.approval_status !== PROJECT_APPROVAL_STATUS.APPROVED) {
+      throw new ProjectStageAdvanceError(
+        PROJECT_APPROVAL_ERROR.PROJECT_APPROVAL_NOT_APPROVED,
+        'Current stage approval is not approved'
+      );
+    }
+
     const gateSummary = await buildCurrentStageGateSummary(connection, projectId, currentStage.stage_order);
 
     if (gateSummary.incompleteRequiredCount > 0) {
       throw new ProjectStageAdvanceError(
-        'STAGE_ADVANCE_INCOMPLETE_REQUIRED_DOCUMENTS',
+        PROJECT_APPROVAL_ERROR.PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE,
         'Current stage has incomplete applicable required documents',
         {
           completenessSummary: gateSummary,

@@ -1017,6 +1017,12 @@ p {
   min-width: 0;
 }
 
+.stage-stepper__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .stage-stepper strong {
   overflow-wrap: anywhere;
 }
@@ -1093,6 +1099,13 @@ p {
   gap: 5px;
 }
 
+.stage-advance-current__badges {
+  display: flex !important;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .stage-advance-current span,
 .stage-advance-summary span {
   color: #6c7b8c;
@@ -1107,7 +1120,7 @@ p {
 
 .stage-advance-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1163,6 +1176,205 @@ p {
 .stage-advance-blocked {
   color: #92520f;
   font-size: 13px;
+}
+
+.approval-panel {
+  overflow: hidden;
+}
+
+.approval-stage-list {
+  display: grid;
+}
+
+.approval-stage {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border-top: 1px solid #eef2f6;
+}
+
+.approval-stage:first-child {
+  border-top: 0;
+}
+
+.approval-stage--current {
+  background: #fbfefd;
+}
+
+.approval-stage__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.approval-stage__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.approval-stage__title strong {
+  color: #17212f;
+  overflow-wrap: anywhere;
+}
+
+.approval-stage__badges,
+.approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.approval-node-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.approval-node {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid #dde6ee;
+  border-radius: 6px;
+  background: #f8fafc;
+  padding: 10px 12px;
+}
+
+.approval-node span,
+.approval-stage__summary span,
+.approval-return span {
+  color: #667789;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.approval-node strong,
+.approval-stage__summary strong {
+  color: #17212f;
+  font-size: 14px;
+}
+
+.approval-node--active {
+  border-color: #b7d8d5;
+  background: #edf8f6;
+}
+
+.approval-node--warn {
+  border-color: #f3cf9f;
+  background: #fff7e8;
+}
+
+.approval-node--done {
+  border-color: #b8dbc9;
+  background: #edf8f2;
+}
+
+.approval-stage__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.approval-stage__summary div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid #dde6ee;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 10px 12px;
+}
+
+.approval-actions {
+  justify-content: flex-start;
+}
+
+.approval-return {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 280px);
+  align-items: center;
+  gap: 8px;
+}
+
+.approval-return input {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  border: 1px solid #cfd9e4;
+  border-radius: 6px;
+  padding: 0 10px;
+  outline: none;
+}
+
+.approval-return input:focus {
+  border-color: #2f807b;
+  box-shadow: 0 0 0 3px rgba(47, 128, 123, 0.14);
+}
+
+.approval-history {
+  display: grid;
+  gap: 8px;
+}
+
+.approval-history summary {
+  width: fit-content;
+  color: #1d6663;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.approval-history__empty,
+.approval-history__error {
+  margin-top: 8px;
+  color: #667789;
+  font-size: 13px;
+}
+
+.approval-history__error {
+  color: #8d3324;
+}
+
+.approval-history__list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.approval-history__list li {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #e3ebf2;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.approval-history__list li div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  color: #667789;
+  font-size: 12px;
+}
+
+.approval-history__list strong {
+  color: #17212f;
+  font-size: 13px;
+}
+
+.approval-history__list span,
+.approval-history__list p {
+  color: #566679;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .stage-document-groups {
@@ -1659,6 +1871,20 @@ p {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .approval-node-list,
+  .approval-stage__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .approval-stage__heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .approval-stage__badges {
+    justify-content: flex-start;
+  }
+
   .stage-document-card__main,
   .stage-document-card__body {
     grid-template-columns: 1fr;
@@ -1738,6 +1964,7 @@ p {
   .overview-filters,
   .overview-project__documents li,
   .task-table__row,
+  .approval-return,
   .stage-document-missing li,
   .stage-document-meta,
   .stage-document-return,

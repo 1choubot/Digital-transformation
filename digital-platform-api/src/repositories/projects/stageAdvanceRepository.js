@@ -1,5 +1,11 @@
 import { pool } from '../../db/pool.js';
+import {
+  canAdvanceProjectStage,
+  isCenterManagerUser,
+  isValidBusinessDepartment
+} from '../../domain/organization.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
+import { PROJECT_APPROVAL_ERROR, PROJECT_APPROVAL_STATUS } from '../../domain/projectApproval.js';
 import { STANDARD_PROJECT_STAGES, STAGE_STATUS } from '../../domain/stages.js';
 import { buildStageCompletenessSummary, mapGateDocument } from '../stageDocuments/shared.js';
 import {
@@ -20,6 +26,17 @@ function assertCanAdvanceProject(projectRow) {
     throw new ProjectStageAdvanceError(
       'PROJECT_ALREADY_COMPLETED',
       'Project is already completed and cannot be advanced'
+    );
+  }
+}
+
+function assertUserCanAdvanceProject(user, projectRow) {
+  if (!canAdvanceProjectStage(user, projectRow)) {
+    throw new ProjectStageAdvanceError(
+      'FORBIDDEN_OPERATION',
+      'Current user cannot advance this project stage',
+      ['projectId'],
+      403
     );
   }
 }
@@ -82,8 +99,37 @@ function assertNextStageCanReceiveAdvance(stageRows, currentStage) {
   return nextStage;
 }
 
-async function selectProjectForUpdate(connection, projectId) {
-  const [rows] = await connection.execute('SELECT * FROM projects WHERE id = ? LIMIT 1 FOR UPDATE', [projectId]);
+async function selectProjectForUpdate(connection, projectId, user) {
+  if (isCenterManagerUser(user) && isValidBusinessDepartment(user.department)) {
+    const [rows] = await connection.execute(
+      `SELECT
+        p.*,
+        EXISTS (
+          SELECT 1
+          FROM project_stage_documents d
+          INNER JOIN users u
+            ON u.id = d.responsible_user_id
+          WHERE d.project_id = p.id
+            AND u.department = ?
+        ) AS has_department_responsible
+      FROM projects p
+      WHERE p.id = ?
+      LIMIT 1
+      FOR UPDATE`,
+      [user.department, projectId]
+    );
+
+    if (rows.length === 0) {
+      throw new ProjectNotFoundError(projectId);
+    }
+
+    return rows[0];
+  }
+
+  const [rows] = await connection.execute(
+    'SELECT *, 0 AS has_department_responsible FROM projects WHERE id = ? LIMIT 1 FOR UPDATE',
+    [projectId]
+  );
 
   if (rows.length === 0) {
     throw new ProjectNotFoundError(projectId);
@@ -113,21 +159,29 @@ async function buildCurrentStageGateSummary(connection, projectId, stageOrder) {
   return buildStageCompletenessSummary(rows.map(mapGateDocument));
 }
 
-export async function advanceProjectStage(projectId, userId) {
+export async function advanceProjectStage(projectId, user) {
   const connection = await pool.getConnection();
 
   try {
     await connection.beginTransaction();
-    const projectRow = await selectProjectForUpdate(connection, projectId);
+    const projectRow = await selectProjectForUpdate(connection, projectId, user);
     assertCanAdvanceProject(projectRow);
+    assertUserCanAdvanceProject(user, projectRow);
 
     const stageRows = await selectProjectStagesForUpdate(connection, projectId);
     const currentStage = assertSingleCurrentStage(stageRows);
+    if (currentStage.approval_status !== PROJECT_APPROVAL_STATUS.APPROVED) {
+      throw new ProjectStageAdvanceError(
+        PROJECT_APPROVAL_ERROR.PROJECT_APPROVAL_NOT_APPROVED,
+        'Current stage approval is not approved'
+      );
+    }
+
     const gateSummary = await buildCurrentStageGateSummary(connection, projectId, currentStage.stage_order);
 
     if (gateSummary.incompleteRequiredCount > 0) {
       throw new ProjectStageAdvanceError(
-        'STAGE_ADVANCE_INCOMPLETE_REQUIRED_DOCUMENTS',
+        PROJECT_APPROVAL_ERROR.PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE,
         'Current stage has incomplete applicable required documents',
         {
           completenessSummary: gateSummary,
@@ -162,7 +216,7 @@ export async function advanceProjectStage(projectId, userId) {
 
     await insertOperationLog(connection, {
       projectId,
-      actorUserId: userId,
+      actorUserId: user.id,
       actionType: OPERATION_ACTION_TYPE.STAGE_ADVANCED,
       targetType: OPERATION_TARGET_TYPE.STAGE,
       targetId: currentStage.id,
@@ -181,7 +235,7 @@ export async function advanceProjectStage(projectId, userId) {
     if (!nextStage) {
       await insertOperationLog(connection, {
         projectId,
-        actorUserId: userId,
+        actorUserId: user.id,
         actionType: OPERATION_ACTION_TYPE.PROJECT_COMPLETED,
         targetType: OPERATION_TARGET_TYPE.PROJECT,
         targetId: projectId,

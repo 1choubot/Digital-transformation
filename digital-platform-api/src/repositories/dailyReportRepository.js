@@ -1,12 +1,30 @@
 import { pool } from '../db/pool.js';
 import { DAILY_REPORT_ERROR, DailyReportError } from '../domain/dailyReports.js';
 import { ReportStatus } from '../domain/reports.js';
+import { buildProjectVisibilityCondition } from './projects/visibility.js';
 import {
   assertDailyReportAttachmentFileReadable,
   cleanupDailyReportAttachmentFile,
   createDailyReportAttachmentStorageKey,
   writeDailyReportAttachmentFile
 } from '../storage/dailyReportAttachmentStorage.js';
+
+// Format MySQL DATE values through Asia/Shanghai so API dates stay date-only.
+function formatDateOnly(value) {
+  if (!(value instanceof Date)) {
+    return String(value).slice(0, 10);
+  }
+
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(value);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+
+  return `${byType.year}-${byType.month}-${byType.day}`;
+}
 
 // Map a project row into the compact shape used by daily report project search.
 function mapDailyReportProject(row) {
@@ -25,7 +43,7 @@ function mapDailyReportHeader(row) {
   return {
     id: row.id,
     userId: row.user_id,
-    reportDate: row.report_date,
+    reportDate: formatDateOnly(row.report_date),
     projectId: row.project_id,
     status: row.status,
     createdAt: row.created_at,
@@ -89,30 +107,32 @@ function mapDailyReportAttachment(row) {
   };
 }
 
-// Search all non-completed projects by code or name, matching the real database fields.
-export async function searchActiveProjectsForDailyReports({ q = '', limit = 20 } = {}, executor = pool) {
+// Search visible non-completed projects by code or name, matching the real database fields.
+export async function searchActiveProjectsForDailyReports({ q = '', limit = 20, user } = {}, executor = pool) {
   const keyword = String(q || '').trim();
-  const params = [];
+  const visibility = buildProjectVisibilityCondition(user, 'p');
+  const params = [...visibility.params];
   const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 50);
   let keywordClause = '';
 
   if (keyword) {
-    keywordClause = 'AND (project_code LIKE ? OR project_name LIKE ?)';
+    keywordClause = 'AND (p.project_code LIKE ? OR p.project_name LIKE ?)';
     params.push(`%${keyword}%`, `%${keyword}%`);
   }
 
   const [rows] = await executor.execute(
     `SELECT
-      id,
-      project_code,
-      project_name,
-      project_manager,
-      project_manager_user_id,
-      status
-    FROM projects
-    WHERE status <> 'completed'
+      p.id,
+      p.project_code,
+      p.project_name,
+      p.project_manager,
+      p.project_manager_user_id,
+      p.status
+    FROM projects p
+    WHERE p.status <> 'completed'
+      AND ${visibility.sql}
       ${keywordClause}
-    ORDER BY project_code ASC, id ASC
+    ORDER BY p.project_code ASC, p.id ASC
     LIMIT ${safeLimit}`,
     params
   );
@@ -121,14 +141,16 @@ export async function searchActiveProjectsForDailyReports({ q = '', limit = 20 }
 }
 
 // Lock and validate the project used by a report write.
-async function assertProjectAvailable(executor, projectId) {
+async function assertProjectAvailable(executor, { projectId, user }) {
+  const visibility = buildProjectVisibilityCondition(user, 'p');
   const [rows] = await executor.execute(
-    `SELECT id, status
-    FROM projects
-    WHERE id = ?
+    `SELECT p.id, p.status
+    FROM projects p
+    WHERE p.id = ?
+      AND ${visibility.sql}
     LIMIT 1
     FOR UPDATE`,
-    [projectId]
+    [projectId, ...visibility.params]
   );
 
   if (rows.length === 0 || rows[0].status === 'completed') {
@@ -282,12 +304,13 @@ export async function listDailyReports({ userId, filters = {} }, executor = pool
 }
 
 // Create a draft or submitted report for the authenticated employee.
-export async function createDailyReport({ userId, report }) {
+export async function createDailyReport({ user, report }) {
+  const userId = user.id;
   const connection = await pool.getConnection();
 
   try {
     await connection.beginTransaction();
-    await assertProjectAvailable(connection, report.projectId);
+    await assertProjectAvailable(connection, { projectId: report.projectId, user });
 
     const [result] = await connection.execute(
       `INSERT INTO daily_reports (
@@ -320,13 +343,14 @@ export async function createDailyReport({ userId, report }) {
 }
 
 // Update a report owned by the authenticated employee.
-export async function updateDailyReport({ reportId, userId, report }) {
+export async function updateDailyReport({ reportId, user, report }) {
+  const userId = user.id;
   const connection = await pool.getConnection();
 
   try {
     await connection.beginTransaction();
     await selectDailyReportHeader(connection, { reportId, userId, forUpdate: true });
-    await assertProjectAvailable(connection, report.projectId);
+    await assertProjectAvailable(connection, { projectId: report.projectId, user });
 
     await connection.execute(
       `UPDATE daily_reports
@@ -387,6 +411,8 @@ export async function deleteDailyReport({ reportId, userId }) {
 // Build the DTO consumed by the M3 Excel exporter.
 export async function getDailyReportExportDto({ reportId, userId }, executor = pool) {
   const report = await getDailyReportById({ reportId, userId }, executor);
+  report.attachments = await listDailyReportAttachmentsForExport({ reportId, userId }, executor);
+
   const [userRows] = await executor.execute(
     `SELECT id, account, display_name, department, organization_role, role, job_title
     FROM users
@@ -454,6 +480,26 @@ export async function listDailyReportAttachments({ reportId, userId }, executor 
   );
 
   return rows.map(mapDailyReportAttachment);
+}
+
+async function listDailyReportAttachmentsForExport({ reportId, userId }, executor = pool) {
+  await selectDailyReportHeader(executor, { reportId, userId });
+  const [rows] = await executor.execute(
+    `SELECT
+      a.*,
+      u.account AS uploader_account,
+      u.display_name AS uploader_display_name
+    FROM daily_report_attachments a
+    LEFT JOIN users u ON u.id = a.uploaded_by_user_id
+    WHERE a.daily_report_id = ?
+    ORDER BY a.created_at DESC, a.id DESC`,
+    [reportId]
+  );
+
+  return rows.map((row) => ({
+    ...mapDailyReportAttachment(row),
+    storageKey: row.storage_key
+  }));
 }
 
 // Save image attachment metadata and the file in one business operation.

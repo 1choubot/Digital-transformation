@@ -9,7 +9,7 @@
       <button type="button" class="ghost-button" @click="navigate('/projects')">返回项目列表</button>
     </div>
 
-    <section v-if="!currentUser.isPlatformAdmin" class="state-panel state-panel--error">
+    <section v-if="!canAccessUserManagement" class="state-panel state-panel--error">
       <h3>无权限访问</h3>
       <p>用户管理仅平台管理员可进入。该入口只保护用户管理本身，不代表项目、资料或文件权限。</p>
     </section>
@@ -45,8 +45,9 @@
           <div class="user-table__head">
             <span>账号</span>
             <span>姓名</span>
+            <span>组织角色</span>
             <span>部门</span>
-            <span>角色</span>
+            <span>岗位/职务</span>
             <span>状态</span>
             <span>平台管理员</span>
             <span>文件平台用户ID</span>
@@ -56,7 +57,8 @@
           <article v-for="user in users" :key="user.id" class="user-table__row">
             <span class="mono">{{ user.account }}</span>
             <strong>{{ user.name }}</strong>
-            <span>{{ user.department }}</span>
+            <span>{{ formatOrganizationRole(user.organizationRole) }}</span>
+            <span>{{ formatBusinessDepartment(user.department) }}</span>
             <span>{{ user.role }}</span>
             <span>{{ user.isEnabled ? '启用' : '禁用' }}</span>
             <span>{{ user.isPlatformAdmin ? '是' : '否' }}</span>
@@ -111,11 +113,28 @@
           <input v-model.trim="form.displayName" type="text" autocomplete="off" />
         </label>
         <label>
-          <span>部门</span>
-          <input v-model.trim="form.department" type="text" autocomplete="off" />
+          <span>组织角色</span>
+          <select v-model="form.organizationRole" @change="handleOrganizationRoleChange">
+            <option value="">请选择组织角色</option>
+            <option v-for="option in organizationRoleOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
         </label>
         <label>
-          <span>角色</span>
+          <span>部门</span>
+          <select
+            v-model="form.department"
+            :disabled="isGlobalOrganizationRole(form.organizationRole)"
+          >
+            <option value="">{{ isGlobalOrganizationRole(form.organizationRole) ? '全局角色无部门' : '请选择部门' }}</option>
+            <option v-for="option in departmentOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+        <label>
+          <span>岗位/职务</span>
           <input v-model.trim="form.role" type="text" autocomplete="off" />
         </label>
         <label v-if="!editingUser">
@@ -131,7 +150,11 @@
           <span>启用用户</span>
         </label>
         <label class="user-checkbox">
-          <input v-model="form.isPlatformAdmin" type="checkbox" />
+          <input
+            v-model="form.isPlatformAdmin"
+            type="checkbox"
+            :disabled="form.organizationRole !== 'system_admin'"
+          />
           <span>平台管理员</span>
         </label>
 
@@ -155,7 +178,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import {
   createUser,
   disableUser,
@@ -165,7 +188,11 @@ import {
   updateUser
 } from '../api/users.js';
 import { toReadableApiError } from '../api/http.js';
-import { formatUser } from '../utils/format.js';
+import {
+  formatBusinessDepartment,
+  formatOrganizationRole,
+  formatUser
+} from '../utils/format.js';
 
 const props = defineProps({
   authToken: {
@@ -194,17 +221,64 @@ const successMessage = ref('');
 const editingUser = ref(null);
 const pendingAction = ref('');
 const resetPasswords = reactive({});
+const canAccessUserManagement = computed(
+  () => props.currentUser.isPlatformAdmin && props.currentUser.organizationRole === 'system_admin'
+);
+
+const organizationRoleOptions = [
+  { value: 'general_manager', label: '总经理' },
+  { value: 'system_admin', label: '系统管理员' },
+  { value: 'general_manager_assistant', label: '总经理助理' },
+  { value: 'center_manager', label: '中心负责人' },
+  { value: 'employee', label: '员工' }
+];
+
+const departmentOptions = [
+  { value: 'operations_center', label: '运营中心' },
+  { value: 'marketing_center', label: '营销中心' },
+  { value: 'manufacturing_center', label: '制造中心' },
+  { value: 'rd_center', label: '研发中心' }
+];
+
+const globalOrganizationRoles = new Set([
+  'general_manager',
+  'system_admin',
+  'general_manager_assistant'
+]);
+const departmentOrganizationRoles = new Set(['center_manager', 'employee']);
 
 const form = reactive({
   account: '',
   displayName: '',
   department: '',
+  organizationRole: '',
   role: '',
   password: '',
   isEnabled: true,
   isPlatformAdmin: false,
   filePlatformUserId: ''
 });
+
+function isGlobalOrganizationRole(value) {
+  return globalOrganizationRoles.has(value);
+}
+
+function isDepartmentOrganizationRole(value) {
+  return departmentOrganizationRoles.has(value);
+}
+
+function handleOrganizationRoleChange() {
+  if (isGlobalOrganizationRole(form.organizationRole)) {
+    form.department = '';
+  }
+
+  if (form.organizationRole === 'system_admin') {
+    form.isPlatformAdmin = true;
+    return;
+  }
+
+  form.isPlatformAdmin = false;
+}
 
 function buildPendingKey(userId, action) {
   return `${userId}:${action}`;
@@ -230,7 +304,7 @@ function handleRequestError(error) {
 }
 
 async function loadUsers() {
-  if (!props.currentUser.isPlatformAdmin) {
+  if (!canAccessUserManagement.value) {
     return;
   }
 
@@ -254,6 +328,7 @@ function resetForm({ keepMessage = false } = {}) {
   form.account = '';
   form.displayName = '';
   form.department = '';
+  form.organizationRole = '';
   form.role = '';
   form.password = '';
   form.isEnabled = true;
@@ -268,7 +343,8 @@ function startEdit(user) {
   editingUser.value = user;
   form.account = user.account;
   form.displayName = user.name;
-  form.department = user.department;
+  form.department = user.department || '';
+  form.organizationRole = user.organizationRole || '';
   form.role = user.role;
   form.password = '';
   form.isEnabled = Boolean(user.isEnabled);
@@ -281,12 +357,23 @@ function validateForm() {
   const missing = [];
   if (!editingUser.value && !form.account) missing.push('账号');
   if (!form.displayName) missing.push('姓名');
-  if (!form.department) missing.push('部门');
-  if (!form.role) missing.push('角色');
+  if (!form.organizationRole) missing.push('组织角色');
+  if (isDepartmentOrganizationRole(form.organizationRole) && !form.department) missing.push('部门');
+  if (!form.role) missing.push('岗位/职务');
   if (!editingUser.value && !form.password) missing.push('初始密码');
 
   if (missing.length > 0) {
     clientError.value = `请补充：${missing.join('、')}`;
+    return false;
+  }
+
+  if (isGlobalOrganizationRole(form.organizationRole) && form.department) {
+    clientError.value = '总经理、系统管理员、总经理助理不隶属于四个业务部门。';
+    return false;
+  }
+
+  if (form.organizationRole === 'system_admin' && !form.isPlatformAdmin) {
+    clientError.value = '系统管理员必须同时具备平台管理员权限。';
     return false;
   }
 
@@ -297,7 +384,8 @@ function validateForm() {
 function buildBasePayload() {
   return {
     displayName: form.displayName,
-    department: form.department,
+    department: isGlobalOrganizationRole(form.organizationRole) ? null : form.department,
+    organizationRole: form.organizationRole,
     role: form.role,
     isEnabled: form.isEnabled,
     isPlatformAdmin: form.isPlatformAdmin,

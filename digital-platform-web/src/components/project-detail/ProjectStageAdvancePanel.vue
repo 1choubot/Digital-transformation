@@ -9,7 +9,7 @@
         </p>
       </div>
       <button
-        v-if="currentStage"
+        v-if="currentStage && showAdvanceAction"
         type="button"
         class="primary-button"
         :disabled="!canAdvanceCurrentStage || pending"
@@ -38,7 +38,10 @@
             <span>当前阶段</span>
             <strong>{{ currentStage.stageName }}</strong>
           </div>
-          <StatusBadge :status="currentStage.stageStatus" />
+          <div class="stage-advance-current__badges">
+            <StatusBadge :status="currentStage.stageStatus" />
+            <StatusBadge :status="currentStage.approvalStatus || 'not_submitted'" />
+          </div>
         </div>
 
         <div class="stage-advance-summary">
@@ -58,6 +61,10 @@
             <span>完成百分比</span>
             <strong>{{ currentStageCompleteness ? `${currentStageCompleteness.completionPercent}%` : '-' }}</strong>
           </div>
+          <div>
+            <span>审批状态</span>
+            <strong>{{ formatStatus(currentStage.approvalStatus || 'not_submitted') }}</strong>
+          </div>
         </div>
 
         <div class="stage-advance-missing">
@@ -72,7 +79,10 @@
           <p v-else>当前阶段暂无缺失适用必填资料。</p>
         </div>
 
-        <p v-if="currentStageCompleteness && !canAdvanceCurrentStage" class="stage-advance-blocked">
+        <p v-if="currentStage && currentStage.approvalStatus !== 'approved'" class="stage-advance-blocked">
+          当前阶段审批未通过，不能推进。请先完成阶段审批。
+        </p>
+        <p v-else-if="currentStageCompleteness && !canAdvanceCurrentStage" class="stage-advance-blocked">
           当前阶段未齐套，不能推进。请先完成或标记不适用缺失的适用必填资料。
         </p>
         <p v-else-if="!currentStageCompleteness" class="stage-advance-blocked">
@@ -89,6 +99,7 @@
 
 <script setup>
 import StatusBadge from '../StatusBadge.vue';
+import { formatStatus } from '../../utils/format.js';
 
 defineEmits(['advance']);
 
@@ -112,6 +123,10 @@ defineProps({
   canAdvanceCurrentStage: {
     type: Boolean,
     default: false
+  },
+  showAdvanceAction: {
+    type: Boolean,
+    default: true
   },
   pending: {
     type: Boolean,

@@ -317,10 +317,10 @@ p {
 .project-table__head,
 .project-table__row {
   display: grid;
-  grid-template-columns: 120px minmax(180px, 1.2fr) minmax(120px, 0.85fr) 110px 104px minmax(130px, 0.85fr) minmax(150px, 0.9fr) 190px 96px;
+  grid-template-columns: 120px minmax(180px, 1.2fr) minmax(120px, 0.85fr) 110px minmax(150px, 0.9fr) 104px minmax(130px, 0.85fr) minmax(150px, 0.9fr) 190px 96px;
   gap: 12px;
   align-items: center;
-  min-width: 1240px;
+  min-width: 1380px;
   padding: 0 18px;
 }
 
@@ -358,10 +358,10 @@ p {
 .user-table__head,
 .user-table__row {
   display: grid;
-  grid-template-columns: 110px minmax(120px, 0.9fr) minmax(120px, 0.9fr) 110px 70px 90px minmax(140px, 0.9fr) minmax(320px, 1.35fr);
+  grid-template-columns: 110px minmax(120px, 0.9fr) 110px minmax(120px, 0.9fr) 110px 70px 90px minmax(140px, 0.9fr) minmax(320px, 1.35fr);
   gap: 12px;
   align-items: center;
-  min-width: 1120px;
+  min-width: 1250px;
   padding: 0 18px;
 }
 
@@ -812,6 +812,269 @@ p {
   color: #647487;
 }
 
+/* Daily report pages use compact tables so repeated employee workflows stay scan-friendly. */
+.daily-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.daily-form-panel {
+  overflow: hidden;
+}
+
+.daily-form {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.daily-form-grid,
+.daily-filters {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(260px, 1fr) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.daily-form-grid label,
+.daily-filters label {
+  display: grid;
+  gap: 7px;
+}
+
+.daily-form-grid label span,
+.daily-filters label span {
+  color: #3c4b5b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.daily-form-grid input,
+.daily-filters input,
+.daily-filters select,
+.daily-edit-table input,
+.daily-edit-table textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #cfd9e4;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #17212f;
+  outline: none;
+}
+
+.daily-form-grid input,
+.daily-filters input,
+.daily-filters select,
+.daily-edit-table input {
+  min-height: 40px;
+  padding: 0 11px;
+}
+
+.daily-edit-table textarea {
+  min-height: 72px;
+  resize: vertical;
+  padding: 10px 11px;
+}
+
+.daily-form-grid input:focus,
+.daily-filters input:focus,
+.daily-filters select:focus,
+.daily-edit-table input:focus,
+.daily-edit-table textarea:focus {
+  border-color: #2f807b;
+  box-shadow: 0 0 0 3px rgba(47, 128, 123, 0.14);
+}
+
+.daily-project-search {
+  grid-column: span 2;
+}
+
+.daily-project-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.daily-project-options .ghost-button.active {
+  border-color: #2f807b;
+  background: #edf8f6;
+  color: #17635d;
+}
+
+.daily-project-options span,
+.daily-attachments p {
+  color: #667789;
+  font-size: 13px;
+}
+
+.daily-section {
+  display: grid;
+  gap: 12px;
+}
+
+.daily-section__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.daily-section__heading h3 {
+  color: #17212f;
+  font-size: 16px;
+}
+
+.daily-edit-table {
+  display: grid;
+  overflow-x: auto;
+  border: 1px solid #e1e8ef;
+  border-radius: 8px;
+}
+
+.daily-edit-table__head,
+.daily-edit-table__row {
+  display: grid;
+  gap: 10px;
+  align-items: start;
+  min-width: 1180px;
+  padding: 10px;
+}
+
+.daily-edit-table--items .daily-edit-table__head,
+.daily-edit-table--items .daily-edit-table__row,
+.daily-edit-table--plans .daily-edit-table__head,
+.daily-edit-table--plans .daily-edit-table__row {
+  grid-template-columns: minmax(240px, 1.2fr) 140px 120px 130px minmax(220px, 1fr) 88px;
+}
+
+.daily-edit-table__head {
+  border-bottom: 1px solid #e4eaf0;
+  background: #f8fafc;
+  color: #667789;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.daily-edit-table__row {
+  border-bottom: 1px solid #eef2f6;
+}
+
+.daily-edit-table__row:last-child {
+  border-bottom: 0;
+}
+
+.daily-upload-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.daily-upload-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+
+.daily-attachment-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.daily-attachment-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #e3ebf2;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.daily-attachment-list span {
+  min-width: 0;
+  color: #243447;
+  overflow-wrap: anywhere;
+}
+
+.daily-attachment-list div,
+.daily-report-table__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.state-panel--compact {
+  padding: 14px 16px;
+}
+
+.daily-filter-panel {
+  padding: 16px 18px;
+}
+
+.daily-list-panel {
+  overflow: hidden;
+}
+
+.daily-report-table {
+  display: grid;
+  overflow-x: auto;
+}
+
+.daily-report-table__head,
+.daily-report-table__row {
+  display: grid;
+  grid-template-columns: 120px minmax(240px, 1fr) 90px 150px minmax(260px, 0.9fr);
+  gap: 12px;
+  align-items: center;
+  min-width: 900px;
+  padding: 0 18px;
+}
+
+.daily-report-table__head {
+  min-height: 44px;
+  border-bottom: 1px solid #e4eaf0;
+  color: #667789;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.daily-report-table__row {
+  min-height: 72px;
+  border-bottom: 1px solid #eef2f6;
+}
+
+.daily-report-table__row:last-child {
+  border-bottom: 0;
+}
+
+.daily-report-table__project {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.daily-report-table__project strong,
+.daily-report-table__project span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.daily-report-table__project strong {
+  color: #17212f;
+}
+
+.daily-report-table__project span {
+  color: #667789;
+  font-size: 12px;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -831,6 +1094,7 @@ p {
 }
 
 .form-grid input,
+.form-grid select,
 .form-grid textarea {
   width: 100%;
   border: 1px solid #cfd9e4;
@@ -840,7 +1104,8 @@ p {
   outline: none;
 }
 
-.form-grid input {
+.form-grid input,
+.form-grid select {
   min-height: 40px;
   padding: 0 11px;
 }
@@ -851,7 +1116,38 @@ p {
   padding: 10px 11px;
 }
 
+.department-checkbox-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-height: 40px;
+}
+
+.department-checkbox {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  border: 1px solid #cfd9e4;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 0 10px;
+}
+
+.department-checkbox input {
+  width: 16px;
+  min-height: 16px;
+  margin: 0;
+}
+
+.department-checkbox span {
+  color: #263544 !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
 .form-grid input:focus,
+.form-grid select:focus,
 .form-grid textarea:focus {
   border-color: #2f807b;
   box-shadow: 0 0 0 3px rgba(47, 128, 123, 0.14);
@@ -984,6 +1280,12 @@ p {
   min-width: 0;
 }
 
+.stage-stepper__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .stage-stepper strong {
   overflow-wrap: anywhere;
 }
@@ -1060,6 +1362,13 @@ p {
   gap: 5px;
 }
 
+.stage-advance-current__badges {
+  display: flex !important;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .stage-advance-current span,
 .stage-advance-summary span {
   color: #6c7b8c;
@@ -1074,7 +1383,7 @@ p {
 
 .stage-advance-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1130,6 +1439,205 @@ p {
 .stage-advance-blocked {
   color: #92520f;
   font-size: 13px;
+}
+
+.approval-panel {
+  overflow: hidden;
+}
+
+.approval-stage-list {
+  display: grid;
+}
+
+.approval-stage {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border-top: 1px solid #eef2f6;
+}
+
+.approval-stage:first-child {
+  border-top: 0;
+}
+
+.approval-stage--current {
+  background: #fbfefd;
+}
+
+.approval-stage__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.approval-stage__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.approval-stage__title strong {
+  color: #17212f;
+  overflow-wrap: anywhere;
+}
+
+.approval-stage__badges,
+.approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.approval-node-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.approval-node {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid #dde6ee;
+  border-radius: 6px;
+  background: #f8fafc;
+  padding: 10px 12px;
+}
+
+.approval-node span,
+.approval-stage__summary span,
+.approval-return span {
+  color: #667789;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.approval-node strong,
+.approval-stage__summary strong {
+  color: #17212f;
+  font-size: 14px;
+}
+
+.approval-node--active {
+  border-color: #b7d8d5;
+  background: #edf8f6;
+}
+
+.approval-node--warn {
+  border-color: #f3cf9f;
+  background: #fff7e8;
+}
+
+.approval-node--done {
+  border-color: #b8dbc9;
+  background: #edf8f2;
+}
+
+.approval-stage__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.approval-stage__summary div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid #dde6ee;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 10px 12px;
+}
+
+.approval-actions {
+  justify-content: flex-start;
+}
+
+.approval-return {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 280px);
+  align-items: center;
+  gap: 8px;
+}
+
+.approval-return input {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  border: 1px solid #cfd9e4;
+  border-radius: 6px;
+  padding: 0 10px;
+  outline: none;
+}
+
+.approval-return input:focus {
+  border-color: #2f807b;
+  box-shadow: 0 0 0 3px rgba(47, 128, 123, 0.14);
+}
+
+.approval-history {
+  display: grid;
+  gap: 8px;
+}
+
+.approval-history summary {
+  width: fit-content;
+  color: #1d6663;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.approval-history__empty,
+.approval-history__error {
+  margin-top: 8px;
+  color: #667789;
+  font-size: 13px;
+}
+
+.approval-history__error {
+  color: #8d3324;
+}
+
+.approval-history__list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.approval-history__list li {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #e3ebf2;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.approval-history__list li div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  color: #667789;
+  font-size: 12px;
+}
+
+.approval-history__list strong {
+  color: #17212f;
+  font-size: 13px;
+}
+
+.approval-history__list span,
+.approval-history__list p {
+  color: #566679;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .stage-document-groups {
@@ -1578,6 +2086,10 @@ p {
     text-align: left;
   }
 
+  .department-checkbox-group {
+    grid-template-columns: 1fr;
+  }
+
   .app-nav button,
   .form-actions button {
     flex: 1;
@@ -1588,6 +2100,8 @@ p {
   .info-list,
   .overview-project__main,
   .task-filters,
+  .daily-form-grid,
+  .daily-filters,
   .stage-document-completeness,
   .stage-stepper {
     grid-template-columns: 1fr;
@@ -1600,6 +2114,16 @@ p {
 
   .overview-filters .primary-button {
     width: fit-content;
+  }
+
+  /* Daily report actions stack on tablet widths to keep buttons readable. */
+  .daily-project-search {
+    grid-column: auto;
+  }
+
+  .daily-page-actions,
+  .daily-section__heading {
+    justify-content: flex-start;
   }
 
   .task-table__head {
@@ -1620,6 +2144,20 @@ p {
 
   .stage-document-completeness__summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .approval-node-list,
+  .approval-stage__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .approval-stage__heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .approval-stage__badges {
+    justify-content: flex-start;
   }
 
   .stage-document-card__main,
@@ -1701,6 +2239,8 @@ p {
   .overview-filters,
   .overview-project__documents li,
   .task-table__row,
+  .approval-return,
+  .daily-attachment-list li,
   .stage-document-missing li,
   .stage-document-meta,
   .stage-document-return,
@@ -1742,6 +2282,15 @@ p {
 
   .user-row-actions,
   .user-row-actions .ghost-button,
+  .daily-page-actions,
+  .daily-page-actions .ghost-button,
+  .daily-page-actions .primary-button,
+  .daily-section__heading,
+  .daily-section__heading .ghost-button,
+  .daily-report-table__actions,
+  .daily-report-table__actions .ghost-button,
+  .daily-attachment-list div,
+  .daily-attachment-list .ghost-button,
   .user-password-reset .ghost-button {
     width: 100%;
   }

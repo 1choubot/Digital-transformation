@@ -1,11 +1,19 @@
 import { pool } from '../db/pool.js';
+import {
+  BUSINESS_DEPARTMENT,
+  ORGANIZATION_ROLE,
+  canBeResponsibleUser,
+  isDepartmentOrganizationRole,
+  isGlobalOrganizationRole,
+  isValidBusinessDepartment,
+  isValidOrganizationRole
+} from '../domain/organization.js';
 
 export function mapSafeUser(row) {
   if (!row) {
     return null;
   }
 
-  // The safe user model includes report permission fields but never password data.
   return {
     id: row.id,
     account: row.account,
@@ -38,7 +46,6 @@ export function mapCreator(row) {
     return null;
   }
 
-  // Creator data mirrors the safe user shape used by project responses.
   return {
     id: row.created_by_user_id,
     account: row.creator_account,
@@ -57,7 +64,6 @@ function mapResponsibilityCandidate(row) {
     return null;
   }
 
-  // Candidate users expose report-facing metadata without admin or password fields.
   return {
     id: row.id,
     account: row.account,
@@ -66,6 +72,7 @@ function mapResponsibilityCandidate(row) {
     organizationRole: row.organization_role,
     role: row.role,
     jobTitle: row.job_title,
+    isEnabled: Boolean(row.is_enabled),
     filePlatformUserId: row.file_platform_user_id
   };
 }
@@ -90,16 +97,28 @@ export async function listResponsibilityCandidateUsers() {
       organization_role,
       role,
       job_title,
+      is_enabled,
       file_platform_user_id
     FROM users
     WHERE is_enabled = 1
-    ORDER BY display_name ASC, account ASC, id ASC`
+      AND organization_role IN (?, ?)
+      AND department IN (?, ?, ?, ?)
+    ORDER BY display_name ASC, account ASC, id ASC`,
+    [
+      ORGANIZATION_ROLE.CENTER_MANAGER,
+      ORGANIZATION_ROLE.EMPLOYEE,
+      BUSINESS_DEPARTMENT.OPERATIONS_CENTER,
+      BUSINESS_DEPARTMENT.MARKETING_CENTER,
+      BUSINESS_DEPARTMENT.MANUFACTURING_CENTER,
+      BUSINESS_DEPARTMENT.RD_CENTER
+    ]
   );
 
-  return rows.map(mapResponsibilityCandidate);
+  return rows.map(mapResponsibilityCandidate).filter(canBeResponsibleUser);
 }
 
 export async function upsertInitialUser(user) {
+  assertValidUserOrganizationState(user);
   await pool.execute(
     `INSERT INTO users (
       account,
@@ -156,7 +175,11 @@ export const USER_MANAGEMENT_ERROR = {
   REQUIRED_FIELDS: 'USER_REQUIRED_FIELDS',
   FORBIDDEN_FIELD: 'USER_FORBIDDEN_FIELD',
   PASSWORD_REQUIRED: 'USER_PASSWORD_REQUIRED',
-  LAST_ENABLED_PLATFORM_ADMIN_REQUIRED: 'LAST_ENABLED_PLATFORM_ADMIN_REQUIRED'
+  INVALID_ORGANIZATION_ROLE: 'INVALID_ORGANIZATION_ROLE',
+  INVALID_DEPARTMENT: 'INVALID_DEPARTMENT',
+  SYSTEM_ADMIN_PLATFORM_ADMIN_REQUIRED: 'SYSTEM_ADMIN_PLATFORM_ADMIN_REQUIRED',
+  PLATFORM_ADMIN_ROLE_REQUIRED: 'PLATFORM_ADMIN_ROLE_REQUIRED',
+  LAST_ENABLED_SYSTEM_ADMIN_REQUIRED: 'LAST_ENABLED_SYSTEM_ADMIN_REQUIRED'
 };
 
 const SAFE_USER_COLUMNS = `
@@ -200,20 +223,69 @@ function isSameUserId(left, right) {
   return String(left) === String(right);
 }
 
-async function lockPlatformAdminInvariantRows(connection, userId) {
+function assertValidUserOrganizationState(user) {
+  if (!isValidOrganizationRole(user.organizationRole)) {
+    throw new UserManagementError(
+      USER_MANAGEMENT_ERROR.INVALID_ORGANIZATION_ROLE,
+      'Invalid organization role',
+      400,
+      ['organizationRole']
+    );
+  }
+
+  if (isGlobalOrganizationRole(user.organizationRole) && user.department !== null) {
+    throw new UserManagementError(
+      USER_MANAGEMENT_ERROR.INVALID_DEPARTMENT,
+      'Invalid department',
+      400,
+      ['department']
+    );
+  }
+
+  if (isDepartmentOrganizationRole(user.organizationRole) && !isValidBusinessDepartment(user.department)) {
+    throw new UserManagementError(
+      USER_MANAGEMENT_ERROR.INVALID_DEPARTMENT,
+      'Invalid department',
+      400,
+      ['department']
+    );
+  }
+
+  if (user.organizationRole === ORGANIZATION_ROLE.SYSTEM_ADMIN && !user.isPlatformAdmin) {
+    throw new UserManagementError(
+      USER_MANAGEMENT_ERROR.SYSTEM_ADMIN_PLATFORM_ADMIN_REQUIRED,
+      'System admin must be platform admin',
+      400,
+      ['organizationRole', 'isPlatformAdmin']
+    );
+  }
+
+  if (user.isPlatformAdmin && user.organizationRole !== ORGANIZATION_ROLE.SYSTEM_ADMIN) {
+    throw new UserManagementError(
+      USER_MANAGEMENT_ERROR.PLATFORM_ADMIN_ROLE_REQUIRED,
+      'Platform admin must use system admin organization role',
+      400,
+      ['organizationRole', 'isPlatformAdmin']
+    );
+  }
+}
+
+async function lockSystemAdminInvariantRows(connection, userId) {
   const [rows] = await connection.execute(
     `SELECT *
     FROM users
-    WHERE is_platform_admin = 1 OR id = ?
+    WHERE is_platform_admin = 1
+      OR organization_role = ?
+      OR id = ?
     ORDER BY id
     FOR UPDATE`,
-    [userId]
+    [ORGANIZATION_ROLE.SYSTEM_ADMIN, userId]
   );
 
   return rows;
 }
 
-function assertKeepsEnabledPlatformAdmin(lockedRows, nextUserState) {
+function assertKeepsEnabledSystemAdmin(lockedRows, nextUserState) {
   const existing = lockedRows.find((row) => isSameUserId(row.id, nextUserState.id));
 
   if (!existing) {
@@ -224,13 +296,14 @@ function assertKeepsEnabledPlatformAdmin(lockedRows, nextUserState) {
     const isTarget = isSameUserId(row.id, nextUserState.id);
     const isEnabled = isTarget ? nextUserState.isEnabled : Boolean(row.is_enabled);
     const isPlatformAdmin = isTarget ? nextUserState.isPlatformAdmin : Boolean(row.is_platform_admin);
-    return count + (isEnabled && isPlatformAdmin ? 1 : 0);
+    const organizationRole = isTarget ? nextUserState.organizationRole : row.organization_role;
+    return count + (isEnabled && isPlatformAdmin && organizationRole === ORGANIZATION_ROLE.SYSTEM_ADMIN ? 1 : 0);
   }, 0);
 
   if (nextCount <= 0) {
     throw new UserManagementError(
-      USER_MANAGEMENT_ERROR.LAST_ENABLED_PLATFORM_ADMIN_REQUIRED,
-      'At least one enabled platform admin is required',
+      USER_MANAGEMENT_ERROR.LAST_ENABLED_SYSTEM_ADMIN_REQUIRED,
+      'At least one enabled system admin with platform admin permission is required',
       409
     );
   }
@@ -239,6 +312,7 @@ function assertKeepsEnabledPlatformAdmin(lockedRows, nextUserState) {
 }
 
 export async function createManagedUser(user) {
+  assertValidUserOrganizationState(user);
   const connection = await pool.getConnection();
 
   try {
@@ -297,16 +371,23 @@ export async function updateManagedUser(userId, patch) {
   try {
     await connection.beginTransaction();
 
-    const lockedRows = await lockPlatformAdminInvariantRows(connection, userId);
+    const lockedRows = await lockSystemAdminInvariantRows(connection, userId);
     const targetRow = lockedRows.find((row) => isSameUserId(row.id, userId));
+    if (!targetRow) {
+      throw new UserManagementError(USER_MANAGEMENT_ERROR.NOT_FOUND, 'User not found', 404);
+    }
     const nextState = {
       id: userId,
+      organizationRole:
+        patch.organizationRole === undefined ? targetRow?.organization_role : patch.organizationRole,
+      department: patch.department === undefined ? targetRow?.department ?? null : patch.department,
       isEnabled: patch.isEnabled === undefined ? Boolean(targetRow?.is_enabled) : Boolean(patch.isEnabled),
       isPlatformAdmin:
         patch.isPlatformAdmin === undefined ? Boolean(targetRow?.is_platform_admin) : Boolean(patch.isPlatformAdmin)
     };
 
-    const existing = assertKeepsEnabledPlatformAdmin(lockedRows, nextState);
+    assertValidUserOrganizationState(nextState);
+    const existing = assertKeepsEnabledSystemAdmin(lockedRows, nextState);
 
     await connection.execute(
       `UPDATE users
@@ -321,8 +402,8 @@ export async function updateManagedUser(userId, patch) {
       WHERE id = ?`,
       [
         patch.displayName === undefined ? existing.display_name : patch.displayName,
-        patch.department === undefined ? existing.department : patch.department,
-        patch.organizationRole === undefined ? existing.organization_role : patch.organizationRole,
+        nextState.department,
+        nextState.organizationRole,
         patch.role === undefined ? existing.role : patch.role,
         patch.jobTitle === undefined ? existing.job_title : patch.jobTitle || null,
         nextState.isEnabled ? 1 : 0,

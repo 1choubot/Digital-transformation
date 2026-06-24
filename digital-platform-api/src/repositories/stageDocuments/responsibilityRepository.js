@@ -1,5 +1,9 @@
 import { pool } from '../../db/pool.js';
 import {
+  canBeResponsibleUser,
+  canManageProjectResponsibility
+} from '../../domain/organization.js';
+import {
   insertOperationLog,
   OPERATION_ACTION_TYPE,
   OPERATION_TARGET_TYPE
@@ -11,6 +15,10 @@ import {
   STAGE_DOCUMENT_RESPONSIBILITY_ERROR,
   StageDocumentResponsibilityError
 } from './shared.js';
+import {
+  selectProjectPermissionContext,
+  selectResponsibleUserPermissionContext
+} from './permissionContext.js';
 
 function normalizeResponsibleUserId(value) {
   if (value === null) {
@@ -29,21 +37,28 @@ function normalizeResponsibleUserId(value) {
   return value;
 }
 
+function assertUserCanManageResponsibility({ user, project, currentDocument, targetResponsibleUser }) {
+  if (!canManageProjectResponsibility(user, project, {
+    document: currentDocument,
+    targetResponsibleUser
+  })) {
+    throw new StageDocumentResponsibilityError(
+      'FORBIDDEN_OPERATION',
+      'Current user cannot manage stage document responsibility',
+      403,
+      ['organizationRole']
+    );
+  }
+}
+
 async function assertEnabledResponsibleUser(connection, responsibleUserId) {
   if (responsibleUserId === null) {
-    return;
+    return null;
   }
 
-  const [rows] = await connection.execute(
-    `SELECT id
-    FROM users
-    WHERE id = ?
-      AND is_enabled = 1
-    LIMIT 1`,
-    [responsibleUserId]
-  );
+  const user = await selectResponsibleUserPermissionContext(connection, responsibleUserId);
 
-  if (rows.length === 0) {
+  if (!canBeResponsibleUser(user)) {
     throw new StageDocumentResponsibilityError(
       STAGE_DOCUMENT_RESPONSIBILITY_ERROR.RESPONSIBLE_USER_NOT_FOUND_OR_DISABLED,
       'Responsible user not found or disabled',
@@ -51,6 +66,8 @@ async function assertEnabledResponsibleUser(connection, responsibleUserId) {
       ['responsibleUserId']
     );
   }
+
+  return user;
 }
 
 function buildResponsibleChangedOperationLogPayload({
@@ -84,7 +101,7 @@ export async function updateProjectStageDocumentResponsibleUser({
   projectId,
   documentId,
   responsibleUserId,
-  userId
+  user
 }) {
   const normalizedResponsibleUserId = normalizeResponsibleUserId(responsibleUserId);
   const connection = await pool.getConnection();
@@ -92,7 +109,9 @@ export async function updateProjectStageDocumentResponsibleUser({
   try {
     await connection.beginTransaction();
     const currentDocument = await selectProjectStageDocumentForUpdate(connection, projectId, documentId);
-    await assertEnabledResponsibleUser(connection, normalizedResponsibleUserId);
+    const project = await selectProjectPermissionContext(connection, projectId, user);
+    const targetResponsibleUser = await assertEnabledResponsibleUser(connection, normalizedResponsibleUserId);
+    assertUserCanManageResponsibility({ user, project, currentDocument, targetResponsibleUser });
 
     await connection.execute(
       `UPDATE project_stage_documents
@@ -101,7 +120,7 @@ export async function updateProjectStageDocumentResponsibleUser({
         responsibility_updated_at = CURRENT_TIMESTAMP
       WHERE project_id = ?
         AND id = ?`,
-      [normalizedResponsibleUserId, userId, projectId, documentId]
+      [normalizedResponsibleUserId, user.id, projectId, documentId]
     );
 
     const updatedDocument = await selectProjectStageDocumentWithResponsibleUser(connection, projectId, documentId);
@@ -110,7 +129,7 @@ export async function updateProjectStageDocumentResponsibleUser({
       buildResponsibleChangedOperationLogPayload({
         projectId,
         documentId,
-        userId,
+        userId: user.id,
         currentDocument,
         responsibleUserId: normalizedResponsibleUserId
       })

@@ -1,6 +1,8 @@
 import { AuthError, getBearerToken } from '../domain/auth.js';
+import { ORGANIZATION_ROLE } from '../domain/organization.js';
 import {
   canManageWeeklyRestMode,
+  canReadAllCenters,
   canReadCenterDailyReport,
   canWriteDailyReport,
   canWriteWeeklyReport,
@@ -30,14 +32,17 @@ export const requireAuth = asyncHandler(async (req, res, next) => {
 });
 
 export const requirePlatformAdmin = asyncHandler(async (req, res, next) => {
-  if (!req.auth?.user?.isPlatformAdmin) {
+  if (
+    !req.auth?.user?.isPlatformAdmin ||
+    req.auth.user.organizationRole !== ORGANIZATION_ROLE.SYSTEM_ADMIN
+  ) {
     throw new AuthError('PLATFORM_ADMIN_REQUIRED', 'Platform admin required', 403);
   }
 
   next();
 });
 
-// Build a small synchronous guard for report permissions.
+// Build a small synchronous guard for report permissions after requireAuth.
 function requireReportPermission(predicate, code, message) {
   return (req, res, next) => {
     const user = req.auth?.user;
@@ -63,14 +68,14 @@ export const requireWeeklyReportWriter = requireReportPermission(
   'Weekly report writer role required'
 );
 
-// Center daily report reads are restricted to management roles and platform admins.
+// Center daily report reads are restricted to management roles.
 export const requireCenterDailyReportReader = requireReportPermission(
   canReadCenterDailyReport,
   'CENTER_DAILY_REPORT_READER_REQUIRED',
   'Center daily report reader role required'
 );
 
-// Weekly rest-mode anchors can be managed by general managers and platform admins.
+// Weekly rest-mode anchors can be managed by general managers and system admins.
 export const requireWeeklyRestModeManager = requireReportPermission(
   canManageWeeklyRestMode,
   'WEEKLY_REST_MODE_MANAGER_REQUIRED',
@@ -79,9 +84,9 @@ export const requireWeeklyRestModeManager = requireReportPermission(
 
 // Center managers may only read their own center unless they have a broader role.
 export function assertSameDepartmentOrAllCenters(user, department) {
-  const role = getUserOrganizationRole(user);
-  const canReadAll = user?.isPlatformAdmin || ['general_manager', 'general_manager_assistant', 'system_admin'].includes(role);
-  if (!canReadAll && user?.department !== department) {
-    throw new AuthError('CENTER_SCOPE_FORBIDDEN', 'Center scope forbidden', 403);
+  if (!canReadAllCenters(user) && getUserOrganizationRole(user) !== ORGANIZATION_ROLE.SYSTEM_ADMIN) {
+    if (user?.department !== department) {
+      throw new AuthError('CENTER_SCOPE_FORBIDDEN', 'Center scope forbidden', 403);
+    }
   }
 }

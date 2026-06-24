@@ -9,7 +9,13 @@ export const statusText = {
   not_submitted: '待提交',
   submitted: '已提交',
   confirmed: '已确认',
-  returned: '已退回'
+  returned: '已退回',
+  pending_center_manager: '待中心负责人审批',
+  returned_by_center_manager: '中心负责人已退回',
+  pending_general_manager: '待总经理审批',
+  returned_by_general_manager: '总经理已退回',
+  approved: '审批通过',
+  cancelled: '已取消'
 };
 
 export const submitModeText = {
@@ -19,12 +25,67 @@ export const submitModeText = {
   tbd: '暂未确定'
 };
 
+export const organizationRoleText = {
+  general_manager: '总经理',
+  system_admin: '系统管理员',
+  general_manager_assistant: '总经理助理',
+  center_manager: '中心负责人',
+  employee: '员工'
+};
+
+export const businessDepartmentText = {
+  operations_center: '运营中心',
+  marketing_center: '营销中心',
+  manufacturing_center: '制造中心',
+  rd_center: '研发中心'
+};
+
+export const projectModeText = {
+  self_developed: '自研模式',
+  outsourced: '供应链/外包模式'
+};
+
+export const approvalActionText = {
+  submit: '提交审批',
+  center_manager_approve: '中心负责人通过',
+  center_manager_return: '中心负责人退回',
+  general_manager_approve: '总经理通过',
+  general_manager_return: '总经理退回',
+  resubmit: '重新提交'
+};
+
+export const approvalRoleText = {
+  project_manager: '项目经理',
+  center_manager: '中心负责人',
+  general_manager: '总经理'
+};
+
 export function formatStatus(value) {
   return statusText[value] || value || '-';
 }
 
 export function formatSubmitMode(value) {
   return submitModeText[value] || value || '-';
+}
+
+export function formatOrganizationRole(value) {
+  return organizationRoleText[value] || value || '-';
+}
+
+export function formatBusinessDepartment(value) {
+  return businessDepartmentText[value] || value || '-';
+}
+
+export function formatProjectMode(value) {
+  return projectModeText[value] || value || '-';
+}
+
+export function formatApprovalAction(value) {
+  return approvalActionText[value] || value || '-';
+}
+
+export function formatApprovalRole(value) {
+  return approvalRoleText[value] || formatOrganizationRole(value);
 }
 
 export function formatRequired(value) {
@@ -73,10 +134,10 @@ export function formatDepartments(value) {
   }
 
   if (Array.isArray(value)) {
-    return value.length > 0 ? value.join('、') : '-';
+    return value.length > 0 ? value.map(formatBusinessDepartment).join('、') : '-';
   }
 
-  return String(value);
+  return formatBusinessDepartment(value);
 }
 
 export function formatUser(user) {
@@ -84,7 +145,12 @@ export function formatUser(user) {
     return '-';
   }
 
-  const parts = [user.name, user.department, user.role].filter(Boolean);
+  const parts = [
+    user.name,
+    user.department ? formatBusinessDepartment(user.department) : '',
+    user.organizationRole ? formatOrganizationRole(user.organizationRole) : '',
+    user.role
+  ].filter(Boolean);
   return parts.length > 0 ? parts.join(' / ') : '-';
 }
 

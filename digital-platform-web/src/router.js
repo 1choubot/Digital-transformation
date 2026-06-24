@@ -23,6 +23,20 @@ function parseHash() {
     return { name: 'my-stage-document-tasks', path };
   }
 
+  // Daily report routes are employee-only at page/API level.
+  if (path === '/daily-report') {
+    return { name: 'daily-report', path };
+  }
+
+  if (path === '/daily-reports') {
+    return { name: 'daily-reports', path };
+  }
+
+  const dailyReportMatch = path.match(/^\/daily-report\/(\d+)$/);
+  if (dailyReportMatch) {
+    return { name: 'daily-report', path, params: { reportId: dailyReportMatch[1] } };
+  }
+
   const detailMatch = path.match(/^\/projects\/(\d+)$/);
   if (detailMatch) {
     return { name: 'project-detail', path, params: { projectId: detailMatch[1] } };

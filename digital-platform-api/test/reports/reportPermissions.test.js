@@ -45,7 +45,7 @@ test('center daily report reader permission follows management matrix', () => {
 test('all-center read permission excludes ordinary center managers', () => {
   assert.equal(canReadAllCenters(user(OrganizationRole.CENTER_MANAGER)), false);
   assert.equal(canReadAllCenters(user(OrganizationRole.GENERAL_MANAGER)), true);
-  assert.equal(canReadAllCenters(user(OrganizationRole.EMPLOYEE, { isPlatformAdmin: true })), true);
+  assert.equal(canReadAllCenters(user(OrganizationRole.SYSTEM_ADMIN, { isPlatformAdmin: true })), true);
 });
 
 // Weekly rest anchors can be configured by general managers and platform admins.

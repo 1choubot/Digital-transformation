@@ -1,3 +1,10 @@
+import {
+  isValidBusinessDepartment,
+  PROJECT_MODE,
+  isValidProjectMode,
+  normalizeEnumText
+} from './organization.js';
+
 export const PROJECT_STATUS = {
   NORMAL: 'normal',
   RISK: 'risk',
@@ -9,11 +16,12 @@ export const PROJECT_STATUS = {
 const ALLOWED_STATUSES = new Set(Object.values(PROJECT_STATUS));
 
 export class ValidationError extends Error {
-  constructor(message, details = []) {
+  constructor(message, details = [], code = 'VALIDATION_ERROR') {
     super(message);
     this.name = 'ValidationError';
     this.statusCode = 400;
     this.details = details;
+    this.code = code;
   }
 }
 
@@ -39,15 +47,73 @@ function normalizeDate(value) {
 }
 
 function normalizeDepartments(value) {
-  if (value === undefined || value === null || value === '') {
+  if (value === undefined || value === null) {
     return null;
   }
 
-  if (Array.isArray(value)) {
-    return value.map((item) => normalizeText(item)).filter(Boolean);
+  if (!Array.isArray(value)) {
+    if (normalizeText(value) === '') {
+      return null;
+    }
+
+    throw new ValidationError(
+      'Invalid participating department',
+      ['participatingDepartments'],
+      'INVALID_PARTICIPATING_DEPARTMENT'
+    );
   }
 
-  return [normalizeText(value)].filter(Boolean);
+  const normalized = [];
+  const seen = new Set();
+
+  for (const item of value) {
+    const department = normalizeEnumText(item);
+    if (!isValidBusinessDepartment(department)) {
+      throw new ValidationError(
+        'Invalid participating department',
+        ['participatingDepartments'],
+        'INVALID_PARTICIPATING_DEPARTMENT'
+      );
+    }
+
+    if (!seen.has(department)) {
+      seen.add(department);
+      normalized.push(department);
+    }
+  }
+
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeProjectMode(value) {
+  const projectMode = normalizeEnumText(value) || PROJECT_MODE.SELF_DEVELOPED;
+  if (!isValidProjectMode(projectMode)) {
+    throw new ValidationError('Invalid project mode', ['projectMode'], 'INVALID_PROJECT_MODE');
+  }
+
+  return projectMode;
+}
+
+function normalizeProjectManagerUserId(value) {
+  const text = normalizeEnumText(value);
+  if (!/^[1-9]\d*$/.test(text)) {
+    throw new ValidationError(
+      'Invalid project manager user id',
+      ['projectManagerUserId'],
+      'INVALID_PROJECT_MANAGER_USER_ID'
+    );
+  }
+
+  const id = Number(text);
+  if (!Number.isSafeInteger(id)) {
+    throw new ValidationError(
+      'Invalid project manager user id',
+      ['projectManagerUserId'],
+      'INVALID_PROJECT_MANAGER_USER_ID'
+    );
+  }
+
+  return id;
 }
 
 export function normalizeCreateProjectInput(payload) {
@@ -55,7 +121,10 @@ export function normalizeCreateProjectInput(payload) {
     projectCode: normalizeText(firstValue(payload, 'projectCode', 'project_code')),
     projectName: normalizeText(firstValue(payload, 'projectName', 'project_name')),
     customerName: normalizeText(firstValue(payload, 'customerName', 'customer_name')),
-    projectManager: normalizeText(firstValue(payload, 'projectManager', 'project_manager')),
+    projectMode: normalizeProjectMode(firstValue(payload, 'projectMode', 'project_mode')),
+    projectManagerUserId: normalizeProjectManagerUserId(
+      firstValue(payload, 'projectManagerUserId', 'project_manager_user_id')
+    ),
     participatingDepartments: normalizeDepartments(
       firstValue(payload, 'participatingDepartments', 'participating_departments')
     ),
@@ -69,7 +138,6 @@ export function normalizeCreateProjectInput(payload) {
   if (!project.projectCode) missing.push('projectCode');
   if (!project.projectName) missing.push('projectName');
   if (!project.customerName) missing.push('customerName');
-  if (!project.projectManager) missing.push('projectManager');
 
   if (missing.length > 0) {
     throw new ValidationError('Missing required project fields', missing);

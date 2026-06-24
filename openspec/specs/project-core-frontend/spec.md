@@ -798,3 +798,360 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **WHEN** 用户查看或操作资料项附件区域
 - **THEN** 页面不得提供文件管理平台同步、在线表单、附件预览、断点续传、多版本管理、病毒扫描、复杂权限、项目成员权限、资料责任人权限或跨项目附件统计入口
 
+### Requirement: 项目详情页 20260610 新版资料展示
+前端 MUST 在项目详情页按后端返回的 20260610 版阶段资料项动态展示阶段资料清单、齐套摘要和缺失适用必填资料，并 MUST 不写死旧版资料名称或旧版资料数量。
+
+#### Scenario: 展示新版资料项
+- **WHEN** 阶段资料清单接口返回 20260610 版资料项
+- **THEN** 项目详情页必须按接口返回的阶段分组、资料项名称、是否必填、提交方式、责任角色、状态、适用性、责任人和附件信息展示资料项
+
+#### Scenario: 齐套摘要展示新版资料项
+- **WHEN** 阶段资料清单接口返回基于 20260610 版资料项计算的 `completenessSummary`
+- **THEN** 项目详情页必须展示该摘要中的适用必填资料总数、已确认数量、未完成数量和完成百分比
+
+#### Scenario: 缺失必填资料展示新版资料项
+- **WHEN** `incompleteRequiredDocuments` 返回 20260610 版缺失适用必填资料
+- **THEN** 项目详情页必须展示这些资料项的名称和状态，不得使用旧资料名映射替代接口返回内容
+
+#### Scenario: 前端不写死旧资料名或旧数量
+- **WHEN** 20260610 版资料项数量、资料项名称或必填口径与旧 48 项模板不同
+- **THEN** 前端必须以接口返回数据为准动态渲染，不得依赖旧 48 项数量、旧资料编号范围或旧资料名称常量
+
+#### Scenario: 不兼容旧模拟项目资料展示
+- **WHEN** 旧模拟项目仍包含旧版资料项或旧版资料清单
+- **THEN** 前端不需要提供旧新版资料项兼容展示、旧资料名映射或旧 48 项模板回退展示
+
+#### Scenario: 不新增排除能力
+- **WHEN** 项目详情页展示 20260610 版资料项
+- **THEN** 页面不得因此新增日报周报、文件管理平台联动、消息提醒、复杂审批流、跳阶段、阶段回退或模板版本切换入口
+
+### Requirement: 用户管理组织角色前端
+前端 MUST 在用户管理页面展示和维护组织角色、部门和岗位/职务文本，并 MUST 按组织角色约束部门输入。
+
+#### Scenario: 展示组织角色和部门
+- **WHEN** 用户管理列表或详情接口返回用户数据
+- **THEN** 页面必须展示 `organizationRole`、`department`、`role`、`isEnabled` 和 `isPlatformAdmin`
+
+#### Scenario: 维护组织角色
+- **WHEN** 有权用户新增或编辑用户
+- **THEN** 页面必须提供 `organizationRole` 选择，并使用总经理、系统管理员、总经理助理、中心负责人、员工的可读文案
+
+#### Scenario: 全局角色部门为空
+- **WHEN** 页面选择总经理、系统管理员或总经理助理
+- **THEN** 页面必须禁用或清空部门选择，并提示这些角色不隶属于四个业务部门
+
+#### Scenario: 部门内角色必须选择部门
+- **WHEN** 页面选择中心负责人或员工
+- **THEN** 页面必须要求选择运营中心、营销中心、制造中心或研发中心之一
+
+#### Scenario: 岗位文本单独展示
+- **WHEN** 页面展示或编辑用户岗位/职务
+- **THEN** 页面必须将现有 `role` 作为岗位/职务文本处理，不得用它替代组织角色
+
+### Requirement: 项目模式和项目经理前端
+前端 MUST 在项目创建、编辑、详情、列表和总览中展示项目模式和项目经理用户信息。
+
+#### Scenario: 项目创建选择项目模式
+- **WHEN** 用户创建项目
+- **THEN** 页面必须提供自研模式和供应链/外包模式选择，并提交 `projectMode`
+
+#### Scenario: 项目创建选择项目经理用户
+- **WHEN** 用户创建项目
+- **THEN** 页面必须提供项目经理用户选择，并提交 `projectManagerUserId`
+
+#### Scenario: 项目创建选择参与部门
+- **WHEN** 用户创建项目
+- **THEN** 页面必须使用四个业务部门复选框或多选控件维护参与部门，展示中文部门名，但提交 `operations_center`、`marketing_center`、`manufacturing_center`、`rd_center` 枚举数组
+
+#### Scenario: 项目创建不得提交参与部门自由文本
+- **WHEN** 用户创建项目
+- **THEN** 页面不得使用自由文本输入“研发中心、制造中心”等中文参与部门文本作为请求体
+
+#### Scenario: 项目编辑以项目经理用户 ID 为准
+- **WHEN** 用户编辑项目经理
+- **THEN** 页面必须提交 `projectManagerUserId`，不得提交旧 `projectManager` 文本作为权限或保存依据
+
+#### Scenario: 项目经理候选边界提示
+- **WHEN** 页面展示项目经理候选用户
+- **THEN** 页面必须只展示或提示可选择启用的中心负责人或员工，不得允许选择总经理、系统管理员或总经理助理
+
+#### Scenario: 项目经理非法错误展示
+- **WHEN** 后端返回 `INVALID_PROJECT_MANAGER_USER_ID`、`PROJECT_MANAGER_USER_NOT_FOUND_OR_DISABLED` 或 `PROJECT_MANAGER_USER_ROLE_NOT_ALLOWED`
+- **THEN** 页面必须展示可理解的项目经理选择错误，不得把旧 `projectManager` 文本作为回退保存字段
+
+#### Scenario: 参与部门非法错误展示
+- **WHEN** 后端返回 `INVALID_PARTICIPATING_DEPARTMENT`
+- **THEN** 页面必须展示可理解的参与部门选择错误，并提示只能选择四个业务部门之一
+
+#### Scenario: 项目详情展示项目治理字段
+- **WHEN** 项目详情接口返回项目模式和项目经理用户
+- **THEN** 页面必须展示项目模式、项目经理、项目经理所属部门和岗位/职务文本
+
+#### Scenario: 旧项目经理文本仅展示兼容
+- **WHEN** 项目响应仍包含 `projectManager` 文本
+- **THEN** 页面只能将其作为展示兼容字段使用，且应优先展示 `projectManagerUser`；页面不得基于旧文本判断项目经理权限
+
+#### Scenario: 项目总览展示项目治理字段
+- **WHEN** 项目总览接口返回项目模式和项目经理用户
+- **THEN** 页面必须在项目卡片或列表中展示项目模式和项目经理用户信息
+
+### Requirement: 前端项目可见范围
+前端 MUST 以登录态调用项目列表、项目详情和项目总览接口，并 MUST 以接口返回的可见项目作为展示依据。
+
+#### Scenario: 项目列表只展示后端可见项目
+- **WHEN** 当前用户打开项目列表页
+- **THEN** 页面必须携带登录态调用 `GET /api/projects`，并只展示后端返回的项目，不得在前端拼接或展示无权项目
+
+#### Scenario: 项目详情无权错误展示
+- **WHEN** 后端对项目详情返回 `FORBIDDEN_OPERATION`
+- **THEN** 页面必须展示无权访问提示，不得继续把该项目当作可操作项目
+
+#### Scenario: 项目总览只展示后端可见项目
+- **WHEN** 当前用户打开项目总览页
+- **THEN** 页面必须携带登录态调用 `GET /api/projects/overview-dashboard`，并只展示后端返回的项目卡片和汇总指标
+
+### Requirement: 项目详情组织权限入口边界
+前端 MUST 根据第一版组织角色和项目身份规划展示项目详情页操作入口，并 MUST 防止总经理助理看到审批、退回、阶段推进和责任人分配入口。
+
+#### Scenario: 总经理助理全局查看
+- **WHEN** 当前用户 `organizationRole = general_manager_assistant`
+- **THEN** 页面可以展示所有项目、所有流程和所有资料进度的查看入口
+
+#### Scenario: 总经理助理不显示审批入口
+- **WHEN** 当前用户 `organizationRole = general_manager_assistant`
+- **THEN** 页面不得显示资料确认、资料退回、阶段推进、资料责任人分配、标记不适用或恢复适用入口
+
+#### Scenario: 系统管理员不显示业务操作入口
+- **WHEN** 当前用户 `organizationRole = system_admin`
+- **THEN** 页面不得显示资料确认、资料退回、阶段推进、资料责任人分配、标记不适用或恢复适用入口
+
+#### Scenario: 前端隐藏不是权限边界
+- **WHEN** 总经理助理或其他无权用户绕过页面直接调用资料确认、退回、阶段推进、资料责任人分配或清空接口
+- **THEN** 后端仍必须拒绝；页面应正确展示 `FORBIDDEN_OPERATION` 或既有统一权限错误码对应的错误信息
+
+#### Scenario: 项目经理查看全量进度
+- **WHEN** 当前用户是某项目的项目经理
+- **THEN** 项目详情页必须允许其查看该项目全量阶段、资料、齐套摘要、责任人和附件进度
+
+#### Scenario: 项目经理推进入口仍受齐套门禁
+- **WHEN** 当前用户是某项目的项目经理且页面显示阶段推进入口
+- **THEN** 页面必须继续基于当前阶段适用必填资料齐套摘要提示是否可推进
+
+#### Scenario: 非项目经理不显示阶段推进入口
+- **WHEN** 当前用户不是该项目项目经理，也不具备后续允许推进项目的其他身份
+- **THEN** 页面不得仅因其是普通员工而显示该项目阶段推进入口
+
+#### Scenario: 普通员工只显示自己负责资料提交入口
+- **WHEN** 当前用户 `organizationRole = employee`
+- **THEN** 页面只能对 `responsibleUserId = 当前用户 id` 的资料显示提交入口，不得显示确认、退回、责任人分配、标记不适用、恢复适用或阶段推进入口
+
+#### Scenario: 中心负责人只显示本中心相关操作入口
+- **WHEN** 当前用户 `organizationRole = center_manager`
+- **THEN** 页面只能在本中心相关项目或资料范围内显示确认、退回、责任人分配、标记不适用、恢复适用或阶段推进入口；跨中心项目或资料不得显示这些入口
+
+#### Scenario: 项目经理不自动显示审批入口
+- **WHEN** 当前用户仅因项目经理身份打开项目详情页
+- **THEN** 页面不得因此自动显示资料确认或退回入口；审批入口应由中心负责人、总经理等审批身份决定
+
+#### Scenario: 项目经理责任人分配入口仅限负责项目
+- **WHEN** 当前用户是某项目的项目经理
+- **THEN** 页面只能在其负责项目中显示资料责任人分配或调整入口，且候选用户必须符合责任人候选用户规则
+
+### Requirement: 前端资料责任人和项目参与人展示
+前端 MUST 继续以资料项责任人展示资料职责，并 MUST 将项目参与人作为资料责任人的派生结果展示或统计。
+
+#### Scenario: 展示资料责任人
+- **WHEN** 阶段资料清单返回资料项责任人
+- **THEN** 页面必须继续展示资料责任人，不得新增技术负责人维护入口替代资料责任人
+
+#### Scenario: 责任人候选用户排除全局角色
+- **WHEN** 页面展示资料责任人候选用户
+- **THEN** 页面必须只展示启用的中心负责人或员工，且不得展示总经理、系统管理员、总经理助理、禁用用户、密码字段或非展示必需的平台管理员内部字段
+
+#### Scenario: 展示项目参与人派生说明
+- **WHEN** 页面展示项目参与人或项目协作人员
+- **THEN** 页面必须说明项目参与人来自该项目中至少负责一项资料的用户
+
+#### Scenario: 不新增项目成员维护入口
+- **WHEN** 用户查看项目详情或项目总览
+- **THEN** 页面不得在本 change 中新增项目成员表维护入口、技术负责人表维护入口或项目参与人表维护入口
+
+### Requirement: 前端排除能力边界
+前端 MUST 在组织角色和项目治理规划中保持现有业务能力边界，不得新增日报周报、文件平台联动或自动通知能力。
+
+#### Scenario: 不新增日报周报入口
+- **WHEN** 页面实现组织角色或项目治理字段
+- **THEN** 页面不得新增日报、周报、自动生成日报或自动汇总日报入口
+
+#### Scenario: 不新增文件平台联动入口
+- **WHEN** 页面实现组织角色或项目治理字段
+- **THEN** 页面不得新增文件管理平台同步、文件平台账号管理、文件平台权限判断或文件平台归档入口
+
+#### Scenario: 不新增自动通知入口
+- **WHEN** 页面实现项目经理催办或职责边界展示
+- **THEN** 页面不得在本 change 中新增自动通知、消息提醒或超期提醒入口
+
+#### Scenario: 不新增复杂权限配置入口
+- **WHEN** 页面实现组织角色和项目治理能力
+- **THEN** 页面不得新增复杂 RBAC、按钮权限矩阵、部门继承权限或阶段审批流配置入口
+
+### Requirement: 阶段审批流前端展示
+前端 MUST 在项目详情页展示阶段审批状态，并 MUST 以接口返回数据为准展示审批节点、审批状态和审批历史入口。
+
+#### Scenario: 展示阶段审批状态
+- **WHEN** 阶段数据返回阶段审批状态
+- **THEN** 页面必须在对应阶段区域展示 `not_submitted`、`pending_center_manager`、`returned_by_center_manager`、`pending_general_manager`、`returned_by_general_manager`、`approved` 或 `cancelled` 的可读文案
+
+#### Scenario: 阶段 1 展示二级审批进度
+- **WHEN** 阶段 key 为 `initiation`
+- **THEN** 页面必须展示营销中心负责人审批和总经理审批的二级审批进度
+
+#### Scenario: 阶段 3 展示二级审批进度
+- **WHEN** 阶段 key 为 `contract`
+- **THEN** 页面必须展示营销中心负责人审批和总经理审批的二级审批进度
+
+#### Scenario: 阶段 8 展示二级审批进度
+- **WHEN** 阶段 key 为 `closeout`
+- **THEN** 页面必须展示项目经理所属中心负责人审批和总经理审批的二级审批进度
+
+#### Scenario: 不需要总经理审批阶段不展示总经理审批入口
+- **WHEN** 阶段 key 为 `solution`、`detailedDesign`、`manufacturing`、`preAcceptance` 或 `finalAcceptance`
+- **THEN** 页面不得展示总经理审批入口
+
+#### Scenario: 展示退回原因
+- **WHEN** 审批状态为 `returned_by_center_manager` 或 `returned_by_general_manager`
+- **THEN** 页面必须展示最近一次退回原因或审批意见
+
+#### Scenario: 展示审批历史入口
+- **WHEN** 用户有权查看项目详情
+- **THEN** 页面必须提供只读审批历史查看入口，并展示审批时间、审批人、审批角色、审批动作、审批意见和审批前后状态
+
+#### Scenario: 审批历史加载失败
+- **WHEN** 审批历史接口请求失败
+- **THEN** 页面必须展示可读错误提示，并保留项目详情上下文
+
+### Requirement: 阶段审批流前端操作入口
+前端 MUST 根据当前用户组织角色、项目身份、阶段审批中心和接口返回状态展示审批操作入口，但 MUST NOT 将前端隐藏作为权限边界。
+
+#### Scenario: 项目经理看到提交审批入口
+- **WHEN** 当前用户是该项目项目经理、当前阶段适用必填资料齐套且审批状态为 `not_submitted`
+- **THEN** 页面可以展示提交审批入口
+
+#### Scenario: 项目经理看到重新提交入口
+- **WHEN** 当前用户是该项目项目经理且审批状态为 `returned_by_center_manager` 或 `returned_by_general_manager`
+- **THEN** 页面可以展示重新提交审批入口
+
+#### Scenario: 当前阶段未齐套提示不能提交审批
+- **WHEN** 当前阶段存在缺失适用必填资料
+- **THEN** 页面必须提示不能提交审批，并展示接口返回或齐套摘要中的缺失资料
+
+#### Scenario: 中心负责人审批入口要求中心匹配
+- **WHEN** 当前用户是中心负责人、审批状态为 `pending_center_manager` 且其部门匹配当前阶段审批中心
+- **THEN** 页面可以展示审批通过和退回入口
+
+#### Scenario: 中心负责人中心不匹配不展示审批入口
+- **WHEN** 当前用户是中心负责人但其部门不匹配当前阶段审批中心
+- **THEN** 页面不得展示中心负责人审批通过或退回入口
+
+#### Scenario: 总经理只在待总经理审批时看到入口
+- **WHEN** 当前用户是总经理且审批状态为 `pending_general_manager`
+- **THEN** 页面可以展示审批通过和退回入口
+
+#### Scenario: 总经理不处理非总经理节点
+- **WHEN** 阶段不需要总经理审批或审批状态不是 `pending_general_manager`
+- **THEN** 页面不得展示总经理审批通过或退回入口
+
+#### Scenario: 总经理助理只读查看
+- **WHEN** 当前用户 `organizationRole = general_manager_assistant`
+- **THEN** 页面不得展示提交审批、审批通过、审批退回、阶段推进或代替总经理审批入口
+
+#### Scenario: 系统管理员不显示业务审批入口
+- **WHEN** 当前用户 `organizationRole = system_admin`
+- **THEN** 页面不得展示审批通过、审批退回、阶段推进或业务审批入口
+
+#### Scenario: 项目经理不显示审批通过入口
+- **WHEN** 当前用户仅因项目经理身份打开项目详情
+- **THEN** 页面不得展示中心负责人审批通过、中心负责人退回、总经理审批通过或总经理退回入口
+
+#### Scenario: 退回必须填写原因
+- **WHEN** 用户在前端执行审批退回但未填写非空原因
+- **THEN** 页面必须展示校验提示，且不得调用退回接口
+
+#### Scenario: 审批历史入口只读
+- **WHEN** 用户查看审批历史
+- **THEN** 页面不得因查看历史而触发审批记录写入、业务日志写入、审批状态变更或阶段状态变更
+
+#### Scenario: 前端隐藏不是权限边界
+- **WHEN** 用户绕过页面直接调用审批接口
+- **THEN** 后端仍必须按 OpenSpec 权限规则拒绝越权操作；前端必须能展示 `PROJECT_APPROVAL_FORBIDDEN`
+
+### Requirement: 审批状态下的阶段推进前端
+前端 MUST 将阶段推进入口同时绑定齐套摘要、审批状态和当前用户可推进身份，并 MUST 不提供跳阶段、回退或自动流转入口。
+
+#### Scenario: 审批未通过不显示推进入口
+- **WHEN** 当前阶段审批状态不是 `approved`
+- **THEN** 页面不得展示可点击的阶段推进入口，并应提示需先完成审批
+
+#### Scenario: 审批通过后仍展示齐套门禁
+- **WHEN** 当前阶段审批状态为 `approved`
+- **THEN** 页面仍必须展示当前阶段适用必填资料齐套情况，并在未齐套时禁止推进
+
+#### Scenario: 项目经理审批通过后可推进自己负责项目
+- **WHEN** 当前用户是该项目项目经理、当前阶段审批状态为 `approved` 且齐套门禁满足
+- **THEN** 页面可以展示阶段推进入口
+
+#### Scenario: 非项目经理不显示推进入口
+- **WHEN** 当前用户不是该项目项目经理且不具备规格允许的其他推进身份
+- **THEN** 页面不得显示阶段推进入口
+
+#### Scenario: 不新增自动流转入口
+- **WHEN** 页面实现审批流展示和操作
+- **THEN** 页面不得新增自动阶段流转、跳阶段、阶段回退、批量审批、消息通知、日报周报或文件管理平台联动入口
+
+### Requirement: 审批错误提示前端
+前端 MUST 为项目审批相关稳定错误码提供可理解的中文提示。
+
+#### Scenario: 非法审批动作提示
+- **WHEN** 后端返回 `INVALID_APPROVAL_ACTION`
+- **THEN** 页面必须提示当前审批动作无效或当前状态不允许该动作
+
+#### Scenario: 退回原因错误提示
+- **WHEN** 后端返回 `INVALID_APPROVAL_COMMENT`
+- **THEN** 页面必须提示审批意见或退回原因不能为空
+
+#### Scenario: 审批不可提交提示
+- **WHEN** 后端返回 `PROJECT_APPROVAL_NOT_SUBMITTABLE`
+- **THEN** 页面必须提示当前项目或阶段暂不能提交审批
+
+#### Scenario: 审批非待处理提示
+- **WHEN** 后端返回 `PROJECT_APPROVAL_NOT_PENDING`
+- **THEN** 页面必须提示当前审批不是待处理状态
+
+#### Scenario: 审批未通过提示
+- **WHEN** 后端返回 `PROJECT_APPROVAL_NOT_APPROVED`
+- **THEN** 页面必须提示当前阶段审批未通过，暂不能推进阶段
+
+#### Scenario: 审批无权限提示
+- **WHEN** 后端返回 `PROJECT_APPROVAL_FORBIDDEN`
+- **THEN** 页面必须提示当前用户无权执行该审批操作
+
+#### Scenario: 缺失必填资料提示
+- **WHEN** 后端返回 `PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE`
+- **THEN** 页面必须提示当前阶段存在未完成适用必填资料，并在有缺失列表时展示缺失资料
+
+#### Scenario: 非法项目 ID 提示
+- **WHEN** 后端返回 `INVALID_PROJECT_ID`
+- **THEN** 页面必须提示项目参数无效
+
+#### Scenario: 非法阶段 ID 提示
+- **WHEN** 后端返回 `INVALID_PROJECT_STAGE_ID`
+- **THEN** 页面必须提示阶段参数无效
+
+#### Scenario: 项目不存在提示
+- **WHEN** 后端返回 `PROJECT_NOT_FOUND`
+- **THEN** 页面必须提示项目不存在
+
+#### Scenario: 阶段不存在提示
+- **WHEN** 后端返回 `PROJECT_STAGE_NOT_FOUND`
+- **THEN** 页面必须提示阶段不存在或不属于当前项目
+

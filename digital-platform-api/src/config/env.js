@@ -26,7 +26,7 @@ function readString(name, fallback = '') {
   return raw === undefined ? fallback : raw;
 }
 
-// Keep absolute report roots configurable and reject relative paths at startup.
+// Keep report roots absolute so generated files are never written under cwd by accident.
 function readAbsolutePath(name, fallback) {
   const value = readString(name, fallback);
   if (!path.isAbsolute(value)) {
@@ -36,7 +36,7 @@ function readAbsolutePath(name, fallback) {
   return value;
 }
 
-// Validate the only IANA timezone accepted by the current report plan.
+// The report plan fixes all date calculations to Asia/Shanghai.
 function readAppTimezone() {
   const timezone = readString('APP_TIMEZONE', 'Asia/Shanghai');
   if (timezone !== 'Asia/Shanghai') {
@@ -46,7 +46,7 @@ function readAppTimezone() {
   return timezone;
 }
 
-// Validate the default weekly rest mode used when no anchor exists.
+// Validate the default weekly rest mode used before any anchor exists.
 function readDefaultWeeklyRestMode() {
   const restMode = readString('REPORT_DEFAULT_WEEKLY_REST_MODE', WeeklyRestMode.DOUBLE_REST);
   if (![WeeklyRestMode.SINGLE_REST, WeeklyRestMode.DOUBLE_REST].includes(restMode)) {
@@ -83,9 +83,9 @@ export const env = {
       account: process.env.INITIAL_USER_ACCOUNT || 'admin',
       password: process.env.INITIAL_USER_PASSWORD || 'Admin@123456',
       displayName: process.env.INITIAL_USER_DISPLAY_NAME || '系统管理员',
-      department: process.env.INITIAL_USER_DEPARTMENT || 'digital_management',
+      department: process.env.INITIAL_USER_DEPARTMENT || '',
       organizationRole: process.env.INITIAL_USER_ORGANIZATION_ROLE || 'system_admin',
-      role: process.env.INITIAL_USER_ROLE || 'system_admin',
+      role: process.env.INITIAL_USER_ROLE || '系统管理员',
       jobTitle: process.env.INITIAL_USER_JOB_TITLE || '',
       filePlatformUserId: process.env.INITIAL_USER_FILE_PLATFORM_USER_ID || ''
     }

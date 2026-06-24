@@ -1,4 +1,9 @@
-import { formatDateTime, formatUser } from '../../utils/format.js';
+import {
+  formatBusinessDepartment,
+  formatDateTime,
+  formatOrganizationRole,
+  formatUser
+} from '../../utils/format.js';
 
 export const operationActionText = {
   'project.created': '项目创建',
@@ -10,6 +15,12 @@ export const operationActionText = {
   'document.responsible_changed': '资料责任人变更',
   'document.attachment_uploaded': '资料附件上传',
   'document.attachment_deleted': '资料附件删除',
+  'approval.submitted': '提交阶段审批',
+  'approval.center_approved': '中心负责人审批通过',
+  'approval.center_returned': '中心负责人审批退回',
+  'approval.general_approved': '总经理审批通过',
+  'approval.general_returned': '总经理审批退回',
+  'approval.resubmitted': '重新提交阶段审批',
   'stage.advanced': '阶段推进',
   'project.completed': '项目完成'
 };
@@ -65,7 +76,13 @@ export function formatResponsibleUser(document) {
 }
 
 export function formatResponsibilityCandidate(user) {
-  const parts = [user.name, user.department, user.role, user.account ? `账号 ${user.account}` : ''].filter(Boolean);
+  const parts = [
+    user.name,
+    formatBusinessDepartment(user.department),
+    formatOrganizationRole(user.organizationRole),
+    user.role,
+    user.account ? `账号 ${user.account}` : ''
+  ].filter(Boolean);
   return parts.join(' / ') || `用户ID ${user.id}`;
 }
 

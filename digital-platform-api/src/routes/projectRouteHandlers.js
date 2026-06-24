@@ -2,14 +2,20 @@ import { normalizeCreateProjectInput, ValidationError } from '../domain/projects
 import { DOCUMENT_APPLICABILITY_ACTION } from '../domain/stageDocumentApplicability.js';
 import { DOCUMENT_STATUS_ACTION } from '../domain/stageDocumentStatus.js';
 import {
+  assertProjectViewable,
   advanceProjectStage,
+  approveStageApproval,
   createProject,
   getProjectDetail,
   getProjectOverviewDashboard,
+  listStageApprovalHistory,
   listProjects,
   normalizeProjectOverviewDashboardFilters,
   ProjectNotFoundError,
-  projectExists
+  projectExists,
+  resubmitStageApproval,
+  returnStageApproval,
+  submitStageApproval
 } from '../repositories/projectRepository.js';
 import { searchActiveProjectsForDailyReports } from '../repositories/dailyReportRepository.js';
 import {
@@ -45,6 +51,26 @@ function parsePositiveId(rawValue, fieldName) {
 
 function parseProjectId(rawValue) {
   return parsePositiveId(rawValue, 'projectId');
+}
+
+function parseApprovalProjectId(rawValue) {
+  const id = Number.parseInt(rawValue, 10);
+
+  if (!Number.isSafeInteger(id) || id <= 0 || String(id) !== String(rawValue)) {
+    throw new ValidationError('Invalid projectId', ['projectId'], 'INVALID_PROJECT_ID');
+  }
+
+  return id;
+}
+
+function parseApprovalStageId(rawValue) {
+  const id = Number.parseInt(rawValue, 10);
+
+  if (!Number.isSafeInteger(id) || id <= 0 || String(id) !== String(rawValue)) {
+    throw new ValidationError('Invalid stageId', ['stageId'], 'INVALID_PROJECT_STAGE_ID');
+  }
+
+  return id;
 }
 
 function parseDocumentId(rawValue) {
@@ -97,7 +123,7 @@ async function handleStageDocumentStatusAction(req, res, action) {
     projectId,
     documentId,
     action,
-    userId: req.auth.user.id,
+    user: req.auth.user,
     returnReason: req.body?.returnReason
   });
 
@@ -116,7 +142,7 @@ async function handleStageDocumentApplicabilityAction(req, res, action) {
     projectId,
     documentId,
     action,
-    userId: req.auth.user.id,
+    user: req.auth.user,
     notApplicableReason: req.body?.notApplicableReason
   });
 
@@ -128,7 +154,7 @@ async function handleStageDocumentApplicabilityAction(req, res, action) {
 }
 
 export async function listProjectsHandler(req, res) {
-  const projects = await listProjects();
+  const projects = await listProjects(req.auth.user);
 
   res.json({
     data: projects
@@ -136,7 +162,11 @@ export async function listProjectsHandler(req, res) {
 }
 
 export async function listMyActiveProjectsHandler(req, res) {
-  const projects = await searchActiveProjectsForDailyReports({ q: req.query.q, limit: req.query.limit });
+  const projects = await searchActiveProjectsForDailyReports({
+    q: req.query.q,
+    limit: req.query.limit,
+    user: req.auth.user
+  });
 
   res.json({
     data: {
@@ -156,7 +186,7 @@ export async function createProjectHandler(req, res) {
 
 export async function getProjectOverviewDashboardHandler(req, res) {
   const filters = normalizeProjectOverviewDashboardFilters(req.query);
-  const dashboard = await getProjectOverviewDashboard(req.auth.user.id, filters);
+  const dashboard = await getProjectOverviewDashboard(req.auth.user, filters);
 
   res.json({
     data: dashboard
@@ -166,10 +196,7 @@ export async function getProjectOverviewDashboardHandler(req, res) {
 export async function listProjectOperationLogsHandler(req, res) {
   const projectId = parseProjectId(req.params.projectId);
 
-  if (!(await projectExists(projectId))) {
-    throw new ProjectNotFoundError(projectId);
-  }
-
+  await assertProjectViewable(projectId, req.auth.user);
   const limit = normalizeOperationLogLimit(req.query.limit);
   const logs = await listProjectOperationLogs(projectId, limit);
 
@@ -181,10 +208,7 @@ export async function listProjectOperationLogsHandler(req, res) {
 export async function getStageDocumentChecklistHandler(req, res) {
   const projectId = parseProjectId(req.params.projectId);
 
-  if (!(await projectExists(projectId))) {
-    throw new ProjectNotFoundError(projectId);
-  }
-
+  await assertProjectViewable(projectId, req.auth.user);
   const checklist = await getProjectStageDocumentChecklist(projectId);
 
   res.json({
@@ -194,10 +218,67 @@ export async function getStageDocumentChecklistHandler(req, res) {
 
 export async function advanceProjectStageHandler(req, res) {
   const projectId = parseProjectId(req.params.projectId);
-  const detail = await advanceProjectStage(projectId, req.auth.user.id);
+  const detail = await advanceProjectStage(projectId, req.auth.user);
 
   res.json({
     data: detail
+  });
+}
+
+function parseApprovalRouteIds(req) {
+  return {
+    projectId: parseApprovalProjectId(req.params.projectId),
+    stageId: parseApprovalStageId(req.params.stageId)
+  };
+}
+
+export async function submitStageApprovalHandler(req, res) {
+  const { projectId, stageId } = parseApprovalRouteIds(req);
+  const result = await submitStageApproval({ projectId, stageId, user: req.auth.user });
+
+  res.json({
+    data: result
+  });
+}
+
+export async function approveStageApprovalHandler(req, res) {
+  const { projectId, stageId } = parseApprovalRouteIds(req);
+  const result = await approveStageApproval({ projectId, stageId, user: req.auth.user });
+
+  res.json({
+    data: result
+  });
+}
+
+export async function returnStageApprovalHandler(req, res) {
+  const { projectId, stageId } = parseApprovalRouteIds(req);
+  const result = await returnStageApproval({
+    projectId,
+    stageId,
+    user: req.auth.user,
+    comment: req.body?.comment ?? req.body?.returnReason
+  });
+
+  res.json({
+    data: result
+  });
+}
+
+export async function resubmitStageApprovalHandler(req, res) {
+  const { projectId, stageId } = parseApprovalRouteIds(req);
+  const result = await resubmitStageApproval({ projectId, stageId, user: req.auth.user });
+
+  res.json({
+    data: result
+  });
+}
+
+export async function listStageApprovalHistoryHandler(req, res) {
+  const { projectId, stageId } = parseApprovalRouteIds(req);
+  const history = await listStageApprovalHistory({ projectId, stageId, user: req.auth.user });
+
+  res.json({
+    data: history
   });
 }
 
@@ -233,7 +314,7 @@ export async function updateStageDocumentResponsibleUserHandler(req, res) {
     projectId,
     documentId,
     responsibleUserId: req.body?.responsibleUserId,
-    userId: req.auth.user.id
+    user: req.auth.user
   });
 
   res.json({
@@ -247,6 +328,7 @@ export async function uploadStageDocumentAttachmentHandler(req, res) {
   const projectId = parseAttachmentProjectId(req.params.projectId);
   const documentId = parseAttachmentDocumentId(req.params.documentId);
 
+  await assertProjectViewable(projectId, req.auth.user);
   await assertStageDocumentAttachmentUploadTarget({ projectId, documentId });
   const file = await readMultipartFile(req);
   const attachment = await uploadStageDocumentAttachment({
@@ -264,6 +346,8 @@ export async function uploadStageDocumentAttachmentHandler(req, res) {
 export async function listStageDocumentAttachmentsHandler(req, res) {
   const projectId = parseAttachmentProjectId(req.params.projectId);
   const documentId = parseAttachmentDocumentId(req.params.documentId);
+
+  await assertProjectViewable(projectId, req.auth.user);
   const attachments = await listStageDocumentAttachments({ projectId, documentId });
 
   res.json({
@@ -275,6 +359,8 @@ export async function downloadStageDocumentAttachmentHandler(req, res) {
   const projectId = parseAttachmentProjectId(req.params.projectId);
   const documentId = parseAttachmentDocumentId(req.params.documentId);
   const attachmentId = parseAttachmentId(req.params.attachmentId);
+
+  await assertProjectViewable(projectId, req.auth.user);
   const download = await getStageDocumentAttachmentDownload({ projectId, documentId, attachmentId });
 
   await new Promise((resolve, reject) => {
@@ -304,6 +390,7 @@ export async function deleteStageDocumentAttachmentHandler(req, res) {
   const documentId = parseAttachmentDocumentId(req.params.documentId);
   const attachmentId = parseAttachmentId(req.params.attachmentId);
 
+  await assertProjectViewable(projectId, req.auth.user);
   await deleteStageDocumentAttachment({
     projectId,
     documentId,
@@ -316,7 +403,7 @@ export async function deleteStageDocumentAttachmentHandler(req, res) {
 
 export async function getProjectDetailHandler(req, res) {
   const projectId = parseProjectId(req.params.projectId);
-  const detail = await getProjectDetail(projectId);
+  const detail = await getProjectDetail(projectId, req.auth.user);
 
   res.json({
     data: detail

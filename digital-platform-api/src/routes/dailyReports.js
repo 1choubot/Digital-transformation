@@ -25,6 +25,7 @@ import {
   updateDailyReport,
   uploadDailyReportAttachment
 } from '../repositories/dailyReportRepository.js';
+import { generateDailyReportWorkbook } from '../services/dailyReportExportService.js';
 
 export const dailyReportsRouter = Router();
 
@@ -57,7 +58,7 @@ dailyReportsRouter.post(
   '/',
   asyncHandler(async (req, res) => {
     const report = normalizeDailyReportPayload(req.body || {});
-    const created = await createDailyReport({ userId: req.auth.user.id, report });
+    const created = await createDailyReport({ user: req.auth.user, report });
 
     res.status(201).json({
       data: {
@@ -86,7 +87,7 @@ dailyReportsRouter.put(
   asyncHandler(async (req, res) => {
     const reportId = parseReportId(req.params.reportId);
     const report = normalizeDailyReportPayload(req.body || {});
-    const updated = await updateDailyReport({ reportId, userId: req.auth.user.id, report });
+    const updated = await updateDailyReport({ reportId, user: req.auth.user, report });
 
     res.json({
       data: {
@@ -114,6 +115,36 @@ dailyReportsRouter.get(
 
     res.json({
       data: exportDto
+    });
+  })
+);
+
+dailyReportsRouter.get(
+  '/:reportId/export',
+  asyncHandler(async (req, res) => {
+    const reportId = parseReportId(req.params.reportId);
+    const exportDto = await getDailyReportExportDto({ reportId, userId: req.auth.user.id });
+    const download = await generateDailyReportWorkbook(exportDto);
+
+    // Excel files are generated on demand and then streamed through Express download.
+    await new Promise((resolve, reject) => {
+      res.download(
+        download.filePath,
+        download.fileName,
+        {
+          headers: {
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          }
+        },
+        (error) => {
+          if (error && !res.headersSent) {
+            reject(error);
+            return;
+          }
+
+          resolve();
+        }
+      );
     });
   })
 );

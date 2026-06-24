@@ -5,8 +5,12 @@ import { StageDocumentApplicabilityError } from '../domain/stageDocumentApplicab
 import { StageDocumentStatusError } from '../domain/stageDocumentStatus.js';
 import {
   DuplicateProjectCodeError,
+  ProjectAuthorizationError,
+  ProjectApprovalError,
+  ProjectManagerUserError,
   ProjectNotFoundError,
   ProjectOverviewDashboardQueryError,
+  ProjectStageNotFoundError,
   ProjectStageAdvanceError
 } from '../repositories/projectRepository.js';
 import { OperationLogLimitError } from '../repositories/operationLogRepository.js';
@@ -36,7 +40,7 @@ export function errorHandler(error, req, res, next) {
   if (error instanceof ValidationError) {
     res.status(error.statusCode).json({
       error: {
-        code: 'VALIDATION_ERROR',
+        code: error.code || 'VALIDATION_ERROR',
         message: error.message,
         details: error.details
       }
@@ -82,6 +86,51 @@ export function errorHandler(error, req, res, next) {
         code: 'PROJECT_NOT_FOUND',
         message: 'Project not found',
         projectId: error.projectId
+      }
+    });
+    return;
+  }
+
+  if (error instanceof ProjectStageNotFoundError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: 'PROJECT_STAGE_NOT_FOUND',
+        message: 'Project stage not found',
+        projectId: error.projectId,
+        stageId: error.stageId
+      }
+    });
+    return;
+  }
+
+  if (error instanceof ProjectAuthorizationError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      }
+    });
+    return;
+  }
+
+  if (error instanceof ProjectApprovalError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      }
+    });
+    return;
+  }
+
+  if (error instanceof ProjectManagerUserError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details
       }
     });
     return;

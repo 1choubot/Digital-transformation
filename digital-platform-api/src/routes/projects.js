@@ -3,12 +3,14 @@ import { requireAuth, requireDailyReportWriter } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import {
   advanceProjectStageHandler,
+  approveStageApprovalHandler,
   confirmStageDocumentHandler,
   createProjectHandler,
   deleteStageDocumentAttachmentHandler,
   downloadStageDocumentAttachmentHandler,
   getProjectDetailHandler,
   getProjectOverviewDashboardHandler,
+  listStageApprovalHistoryHandler,
   getStageDocumentChecklistHandler,
   listMyActiveProjectsHandler,
   listProjectOperationLogsHandler,
@@ -16,15 +18,18 @@ import {
   listStageDocumentAttachmentsHandler,
   markStageDocumentNotApplicableHandler,
   restoreStageDocumentApplicableHandler,
+  returnStageApprovalHandler,
   returnStageDocumentHandler,
+  resubmitStageApprovalHandler,
   submitStageDocumentHandler,
+  submitStageApprovalHandler,
   updateStageDocumentResponsibleUserHandler,
   uploadStageDocumentAttachmentHandler
 } from './projectRouteHandlers.js';
 
 export const projectsRouter = Router();
 
-projectsRouter.get('/', asyncHandler(listProjectsHandler));
+projectsRouter.get('/', requireAuth, asyncHandler(listProjectsHandler));
 projectsRouter.get('/my-active', requireAuth, requireDailyReportWriter, asyncHandler(listMyActiveProjectsHandler));
 projectsRouter.post('/', requireAuth, asyncHandler(createProjectHandler));
 
@@ -50,6 +55,36 @@ projectsRouter.post(
   '/:projectId/stages/advance',
   requireAuth,
   asyncHandler(advanceProjectStageHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/stages/:stageId/approval/submit',
+  requireAuth,
+  asyncHandler(submitStageApprovalHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/stages/:stageId/approval/approve',
+  requireAuth,
+  asyncHandler(approveStageApprovalHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/stages/:stageId/approval/return',
+  requireAuth,
+  asyncHandler(returnStageApprovalHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/stages/:stageId/approval/resubmit',
+  requireAuth,
+  asyncHandler(resubmitStageApprovalHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/stages/:stageId/approval/history',
+  requireAuth,
+  asyncHandler(listStageApprovalHistoryHandler)
 );
 
 projectsRouter.post(
@@ -112,4 +147,4 @@ projectsRouter.delete(
   asyncHandler(deleteStageDocumentAttachmentHandler)
 );
 
-projectsRouter.get('/:projectId', asyncHandler(getProjectDetailHandler));
+projectsRouter.get('/:projectId', requireAuth, asyncHandler(getProjectDetailHandler));

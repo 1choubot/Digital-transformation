@@ -69,7 +69,7 @@ async function insertUser({ account, organizationRole }) {
 }
 
 // Create a project row with the real schema fields used by daily report search.
-async function insertProject({ projectCode, status = 'normal' }) {
+async function insertProject({ projectCode, status = 'normal', projectManagerUserId = null }) {
   const [result] = await pool.execute(
     `INSERT INTO projects (
       project_code,
@@ -79,8 +79,8 @@ async function insertProject({ projectCode, status = 'normal' }) {
       project_manager_user_id,
       participating_departments,
       status
-    ) VALUES (?, ?, ?, ?, NULL, JSON_ARRAY('rd_center'), ?)`,
-    [projectCode, `${projectCode} name`, 'M2 customer', 'M2 manager', status]
+    ) VALUES (?, ?, ?, ?, ?, JSON_ARRAY('rd_center'), ?)`,
+    [projectCode, `${projectCode} name`, 'M2 customer', 'M2 manager', projectManagerUserId, status]
   );
 
   return result.insertId;
@@ -146,9 +146,13 @@ test('M2 daily report backend flow enforces validation and ownership', async () 
       account: `${testPrefix}_manager`,
       organizationRole: OrganizationRole.CENTER_MANAGER
     });
-    const projectA = await insertProject({ projectCode: `${testPrefix}_A` });
-    const projectB = await insertProject({ projectCode: `${testPrefix}_B` });
-    const completedProject = await insertProject({ projectCode: `${testPrefix}_DONE`, status: 'completed' });
+    const projectA = await insertProject({ projectCode: `${testPrefix}_A`, projectManagerUserId: employee.id });
+    const projectB = await insertProject({ projectCode: `${testPrefix}_B`, projectManagerUserId: employee.id });
+    const completedProject = await insertProject({
+      projectCode: `${testPrefix}_DONE`,
+      status: 'completed',
+      projectManagerUserId: employee.id
+    });
 
     const search = await requestJson(server.baseUrl, `/api/projects/my-active?q=${testPrefix}`, {
       token: employee.token

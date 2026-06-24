@@ -1,10 +1,9 @@
 import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { STANDARD_PROJECT_STAGES } from './stages.js';
+import { STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260610 } from './stageDocumentTemplateItemsV20260610.js';
 
-export const STAGE_DOCUMENT_TEMPLATE_VERSION = 'v1';
-export const EXPECTED_STAGE_DOCUMENT_ITEM_COUNT = 48;
+export const STAGE_DOCUMENT_TEMPLATE_VERSION = 'v20260610';
+export const EXPECTED_STAGE_DOCUMENT_ITEM_COUNT = 54;
 
 export const SUBMIT_MODE = {
   ONLINE_FORM: 'online_form',
@@ -19,11 +18,6 @@ export const DOCUMENT_STATUS = {
   CONFIRMED: 'confirmed',
   RETURNED: 'returned'
 };
-
-const DOCS_9_2_PATH = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../../../docs/9.2_阶段资料清单与责任角色表.md'
-);
 
 const stageByOrder = new Map(STANDARD_PROJECT_STAGES.map((stage) => [stage.stageOrder, stage]));
 
@@ -48,7 +42,7 @@ function mapRequiredFlag(value) {
     return false;
   }
 
-  throw new Error(`Unsupported required flag in docs/9.2: ${value}`);
+  throw new Error(`Unsupported required flag in 20260610 stage document checklist: ${value}`);
 }
 
 function mapSubmitMode(value) {
@@ -68,7 +62,7 @@ function mapSubmitMode(value) {
     return SUBMIT_MODE.TBD;
   }
 
-  throw new Error(`Unsupported submit mode in docs/9.2: ${value}`);
+  throw new Error(`Unsupported submit mode in 20260610 stage document checklist: ${value}`);
 }
 
 function parseStageHeading(line) {
@@ -82,30 +76,79 @@ function parseStageHeading(line) {
   const stage = stageByOrder.get(stageOrder);
 
   if (!stage) {
-    throw new Error(`Unsupported stage order in docs/9.2: ${stageOrder}`);
+    throw new Error(`Unsupported stage order in 20260610 stage document checklist: ${stageOrder}`);
   }
 
   if (stage.stageName !== stageName) {
-    throw new Error(`Stage name mismatch in docs/9.2: expected ${stage.stageName}, got ${stageName}`);
+    throw new Error(
+      `Stage name mismatch in 20260610 stage document checklist: expected ${stage.stageName}, got ${stageName}`
+    );
   }
 
   return stage;
 }
 
+function buildExpectedTargetFolderPath(stage, documentCode, documentName) {
+  const shortStageName = stage.stageName.replace(/阶段$/, '');
+  return `${stage.stageOrder}-${shortStageName}/${documentCode} ${documentName}`;
+}
+
 function assertParsedItems(items) {
   if (items.length !== EXPECTED_STAGE_DOCUMENT_ITEM_COUNT) {
     throw new Error(
-      `Expected ${EXPECTED_STAGE_DOCUMENT_ITEM_COUNT} stage document items from docs/9.2, got ${items.length}`
+      `Expected ${EXPECTED_STAGE_DOCUMENT_ITEM_COUNT} stage document items from 20260610 checklist, got ${items.length}`
     );
   }
 
   const seen = new Set();
   for (const item of items) {
+    if (item.templateVersion !== STAGE_DOCUMENT_TEMPLATE_VERSION) {
+      throw new Error(
+        `Invalid template version in 20260610 stage document checklist for ${item.documentCode}: ${item.templateVersion}`
+      );
+    }
+
     if (seen.has(item.documentCode)) {
-      throw new Error(`Duplicate document code in docs/9.2: ${item.documentCode}`);
+      throw new Error(`Duplicate document code in 20260610 stage document checklist: ${item.documentCode}`);
     }
     seen.add(item.documentCode);
+
+    const expectedStage = stageByOrder.get(item.stageOrder);
+    if (!expectedStage || expectedStage.stageKey !== item.stageKey || expectedStage.stageName !== item.stageName) {
+      throw new Error(`Invalid stage fields in 20260610 stage document checklist: ${item.documentCode}`);
+    }
+
+    const [stageNumber, documentOrder] = item.documentCode.split('.').map((part) => Number.parseInt(part, 10));
+    if (stageNumber !== item.stageOrder || documentOrder !== item.documentOrder) {
+      throw new Error(`Document code/order mismatch in 20260610 stage document checklist: ${item.documentCode}`);
+    }
+
+    if (!item.targetFolderPath) {
+      throw new Error(`Missing target folder path in 20260610 stage document checklist: ${item.documentCode}`);
+    }
+
+    const expectedTargetFolderPath = buildExpectedTargetFolderPath(
+      {
+        stageOrder: item.stageOrder,
+        stageName: item.stageName
+      },
+      item.documentCode,
+      item.documentName
+    );
+    if (item.targetFolderPath !== expectedTargetFolderPath) {
+      throw new Error(
+        `Invalid target folder path in 20260610 stage document checklist for ${item.documentCode}: expected ${expectedTargetFolderPath}, got ${item.targetFolderPath}`
+      );
+    }
+
+    if (item.targetFolderId !== null) {
+      throw new Error(`targetFolderId must be null in 20260610 stage document checklist: ${item.documentCode}`);
+    }
   }
+}
+
+function cloneTemplateItems(items) {
+  return items.map((item) => ({ ...item }));
 }
 
 export function parseStageDocumentTemplateMarkdown(markdown) {
@@ -124,20 +167,27 @@ export function parseStageDocumentTemplateMarkdown(markdown) {
     }
 
     if (!currentStage) {
-      throw new Error('Found document row before stage heading in docs/9.2');
+      throw new Error('Found document row before stage heading in 20260610 stage document checklist');
     }
 
     const cells = splitMarkdownRow(line);
-    if (cells.length !== 7) {
-      throw new Error(`Unexpected column count in docs/9.2 row: ${line}`);
+    if (cells.length !== 8) {
+      throw new Error(`Unexpected column count in 20260610 stage document checklist row: ${line}`);
     }
 
-    const [documentCode, documentName, requiredLabel, submitModeLabel, defaultResponsibilityRole, confirmRole, targetFolderPath] =
-      cells;
+    const [
+      documentCode,
+      documentName,
+      requiredLabel,
+      submitModeLabel,
+      defaultResponsibilityRole,
+      confirmRole,
+      targetFolderPath
+    ] = cells;
     const [stageNumber, documentOrder] = documentCode.split('.').map((part) => Number.parseInt(part, 10));
 
     if (stageNumber !== currentStage.stageOrder || !Number.isSafeInteger(documentOrder)) {
-      throw new Error(`Document code does not match current stage in docs/9.2: ${documentCode}`);
+      throw new Error(`Document code does not match current stage in 20260610 stage document checklist: ${documentCode}`);
     }
 
     items.push({
@@ -161,7 +211,13 @@ export function parseStageDocumentTemplateMarkdown(markdown) {
   return items;
 }
 
-export async function loadStageDocumentTemplateItems(markdownPath = DOCS_9_2_PATH) {
+export async function loadStageDocumentTemplateItems(markdownPath) {
+  if (!markdownPath) {
+    const items = cloneTemplateItems(STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260610);
+    assertParsedItems(items);
+    return items;
+  }
+
   const markdown = await readFile(markdownPath, 'utf8');
   return parseStageDocumentTemplateMarkdown(markdown);
 }

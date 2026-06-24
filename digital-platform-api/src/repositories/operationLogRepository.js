@@ -13,6 +13,12 @@ export const OPERATION_ACTION_TYPE = {
   DOCUMENT_RESPONSIBLE_CHANGED: 'document.responsible_changed',
   DOCUMENT_ATTACHMENT_UPLOADED: 'document.attachment_uploaded',
   DOCUMENT_ATTACHMENT_DELETED: 'document.attachment_deleted',
+  APPROVAL_SUBMITTED: 'approval.submitted',
+  APPROVAL_CENTER_APPROVED: 'approval.center_approved',
+  APPROVAL_CENTER_RETURNED: 'approval.center_returned',
+  APPROVAL_GENERAL_APPROVED: 'approval.general_approved',
+  APPROVAL_GENERAL_RETURNED: 'approval.general_returned',
+  APPROVAL_RESUBMITTED: 'approval.resubmitted',
   STAGE_ADVANCED: 'stage.advanced',
   PROJECT_COMPLETED: 'project.completed'
 };
@@ -20,6 +26,7 @@ export const OPERATION_ACTION_TYPE = {
 export const OPERATION_TARGET_TYPE = {
   PROJECT: 'project',
   STAGE: 'stage',
+  APPROVAL: 'approval',
   STAGE_DOCUMENT: 'stage_document'
 };
 
@@ -60,6 +67,7 @@ function mapActor(row) {
     account: row.actor_account,
     name: row.actor_display_name,
     department: row.actor_department,
+    organizationRole: row.actor_organization_role,
     role: row.actor_role,
     isEnabled: row.actor_is_enabled === null ? null : Boolean(row.actor_is_enabled),
     filePlatformUserId: row.actor_file_platform_user_id
@@ -133,6 +141,7 @@ export async function listProjectOperationLogs(projectId, limit = DEFAULT_OPERAT
       u.account AS actor_account,
       u.display_name AS actor_display_name,
       u.department AS actor_department,
+      u.organization_role AS actor_organization_role,
       u.role AS actor_role,
       u.is_enabled AS actor_is_enabled,
       u.file_platform_user_id AS actor_file_platform_user_id

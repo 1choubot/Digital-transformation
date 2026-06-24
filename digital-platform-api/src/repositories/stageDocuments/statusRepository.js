@@ -1,8 +1,15 @@
 import { pool } from '../../db/pool.js';
+import {
+  canApproveStageDocument,
+  canSubmitStageDocument,
+  isGeneralManagerAssistantUser,
+  isSystemAdminUser
+} from '../../domain/organization.js';
 import { assertDocumentIsApplicable } from '../../domain/stageDocumentApplicability.js';
 import {
   buildDocumentStatusTransition,
-  DOCUMENT_STATUS_ACTION
+  DOCUMENT_STATUS_ACTION,
+  StageDocumentStatusError
 } from '../../domain/stageDocumentStatus.js';
 import {
   insertOperationLog,
@@ -14,6 +21,41 @@ import {
   selectProjectStageDocument,
   selectProjectStageDocumentForUpdate
 } from './shared.js';
+import { selectProjectPermissionContext } from './permissionContext.js';
+
+function assertUserCanUpdateDocumentStatus({ user, action, currentDocument, project }) {
+  if (isGeneralManagerAssistantUser(user) || isSystemAdminUser(user)) {
+    throw new StageDocumentStatusError(
+      'FORBIDDEN_OPERATION',
+      'Current user cannot update stage document status',
+      403,
+      ['organizationRole']
+    );
+  }
+
+  if (action === DOCUMENT_STATUS_ACTION.CONFIRM || action === DOCUMENT_STATUS_ACTION.RETURN) {
+    if (!canApproveStageDocument(user, { project, document: currentDocument })) {
+      throw new StageDocumentStatusError(
+        'FORBIDDEN_OPERATION',
+        'Current user cannot approve stage document',
+        403,
+        ['organizationRole']
+      );
+    }
+    return;
+  }
+
+  if (action === DOCUMENT_STATUS_ACTION.SUBMIT) {
+    if (!canSubmitStageDocument(user, { project, document: currentDocument })) {
+      throw new StageDocumentStatusError(
+        'FORBIDDEN_OPERATION',
+        'Current user cannot submit this stage document',
+        403,
+        ['responsibleUserId']
+      );
+    }
+  }
+}
 
 async function applyDocumentStatusUpdate(connection, projectId, documentId, action, userId, transition) {
   if (action === DOCUMENT_STATUS_ACTION.SUBMIT) {
@@ -104,12 +146,14 @@ function buildStatusOperationLogPayload({ projectId, documentId, action, userId,
   };
 }
 
-export async function updateProjectStageDocumentStatus({ projectId, documentId, action, userId, returnReason = '' }) {
+export async function updateProjectStageDocumentStatus({ projectId, documentId, action, user, returnReason = '' }) {
   const connection = await pool.getConnection();
 
   try {
     await connection.beginTransaction();
     const currentDocument = await selectProjectStageDocumentForUpdate(connection, projectId, documentId);
+    const project = await selectProjectPermissionContext(connection, projectId, user);
+    assertUserCanUpdateDocumentStatus({ user, action, currentDocument, project });
     assertDocumentIsApplicable(
       currentDocument.is_applicable === undefined ? true : Boolean(currentDocument.is_applicable)
     );
@@ -119,11 +163,11 @@ export async function updateProjectStageDocumentStatus({ projectId, documentId, 
       returnReason
     });
 
-    await applyDocumentStatusUpdate(connection, projectId, documentId, action, userId, transition);
+    await applyDocumentStatusUpdate(connection, projectId, documentId, action, user.id, transition);
     const updatedDocument = await selectProjectStageDocument(connection, projectId, documentId);
     await insertOperationLog(
       connection,
-      buildStatusOperationLogPayload({ projectId, documentId, action, userId, currentDocument, transition })
+      buildStatusOperationLogPayload({ projectId, documentId, action, userId: user.id, currentDocument, transition })
     );
     await connection.commit();
 

@@ -23,12 +23,33 @@
         <input v-model.trim="form.customerName" type="text" autocomplete="off" />
       </label>
       <label>
+        <span>项目模式</span>
+        <select v-model="form.projectMode">
+          <option value="self_developed">自研模式</option>
+          <option value="outsourced">供应链/外包模式</option>
+        </select>
+      </label>
+      <label>
         <span>项目经理</span>
-        <input v-model.trim="form.projectManager" type="text" autocomplete="off" />
+        <select v-model="form.projectManagerUserId" :disabled="managerCandidatesLoading">
+          <option value="">{{ managerCandidatesLoading ? '正在加载候选用户' : '请选择项目经理' }}</option>
+          <option v-for="user in managerCandidates" :key="user.id" :value="String(user.id)">
+            {{ formatManagerCandidate(user) }}
+          </option>
+        </select>
       </label>
       <label>
         <span>参与部门</span>
-        <input v-model.trim="departmentsText" type="text" placeholder="研发中心、制造中心" />
+        <div class="department-checkbox-group">
+          <label
+            v-for="department in departmentOptions"
+            :key="department.value"
+            class="department-checkbox"
+          >
+            <input v-model="form.participatingDepartments" type="checkbox" :value="department.value" />
+            <span>{{ department.label }}</span>
+          </label>
+        </div>
       </label>
       <label>
         <span>计划开始时间</span>
@@ -47,6 +68,10 @@
         <p>{{ clientError || serverError }}</p>
       </div>
 
+      <div v-if="managerCandidatesError" class="state-panel state-panel--error form-grid__wide">
+        <p>{{ managerCandidatesError }}</p>
+      </div>
+
       <div v-if="successMessage" class="state-panel state-panel--success form-grid__wide">
         <p>{{ successMessage }}</p>
       </div>
@@ -62,9 +87,14 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import { createProject, toReadableApiError } from '../api/projects.js';
-import { formatUser } from '../utils/format.js';
+import { listResponsibilityCandidates } from '../api/users.js';
+import {
+  formatBusinessDepartment,
+  formatOrganizationRole,
+  formatUser
+} from '../utils/format.js';
 
 const props = defineProps({
   authToken: {
@@ -87,24 +117,45 @@ const form = reactive({
   projectCode: '',
   projectName: '',
   customerName: '',
-  projectManager: '',
-  plannedStartDate: '',
-  plannedEndDate: '',
-  remark: ''
-});
+    projectMode: 'self_developed',
+    projectManagerUserId: '',
+    participatingDepartments: [],
+    plannedStartDate: '',
+    plannedEndDate: '',
+    remark: ''
+  });
 
-const departmentsText = ref('');
 const submitting = ref(false);
 const clientError = ref('');
 const serverError = ref('');
 const successMessage = ref('');
+const managerCandidates = ref([]);
+const managerCandidatesLoading = ref(false);
+const managerCandidatesError = ref('');
+const departmentOptions = [
+  { value: 'operations_center', label: '运营中心' },
+  { value: 'marketing_center', label: '营销中心' },
+  { value: 'manufacturing_center', label: '制造中心' },
+  { value: 'rd_center', label: '研发中心' }
+];
+
+function formatManagerCandidate(user) {
+  return [
+    user.name,
+    formatBusinessDepartment(user.department),
+    formatOrganizationRole(user.organizationRole),
+    user.role
+  ]
+    .filter(Boolean)
+    .join(' / ');
+}
 
 function validateForm() {
   const missing = [];
   if (!form.projectCode) missing.push('项目编号');
   if (!form.projectName) missing.push('项目名称');
   if (!form.customerName) missing.push('客户');
-  if (!form.projectManager) missing.push('项目经理');
+  if (!form.projectManagerUserId) missing.push('项目经理');
 
   if (missing.length > 0) {
     clientError.value = `请补充：${missing.join('、')}`;
@@ -115,11 +166,20 @@ function validateForm() {
   return true;
 }
 
-function parseDepartments() {
-  return departmentsText.value
-    .split(/[,\n，、]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+async function loadManagerCandidates() {
+  managerCandidatesLoading.value = true;
+  managerCandidatesError.value = '';
+
+  try {
+    managerCandidates.value = await listResponsibilityCandidates(props.authToken);
+  } catch (error) {
+    managerCandidatesError.value = toReadableApiError(error);
+    if (error.code === 'UNAUTHENTICATED') {
+      emit('auth-expired', managerCandidatesError.value);
+    }
+  } finally {
+    managerCandidatesLoading.value = false;
+  }
 }
 
 async function submitProject() {
@@ -141,7 +201,7 @@ async function submitProject() {
   try {
     const created = await createProject({
       ...form,
-      participatingDepartments: parseDepartments()
+      participatingDepartments: [...form.participatingDepartments]
     }, props.authToken);
     successMessage.value = '项目创建成功。';
     props.navigate(`/projects/${created.project.id}`);
@@ -154,4 +214,6 @@ async function submitProject() {
     submitting.value = false;
   }
 }
+
+onMounted(loadManagerCandidates);
 </script>

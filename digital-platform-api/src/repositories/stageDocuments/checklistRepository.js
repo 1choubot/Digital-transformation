@@ -16,7 +16,7 @@ function assertTemplateRowsReady(rows) {
 
   const nonEmptyFolderIds = rows.filter((row) => row.target_folder_id !== null);
   if (nonEmptyFolderIds.length > 0) {
-    throw new Error('Stage document templates must keep targetFolderId empty in v1');
+    throw new Error('Stage document templates must keep targetFolderId empty in v20260610');
   }
 }
 
@@ -178,6 +178,7 @@ export async function getProjectStageDocumentChecklist(projectId) {
       u.account AS responsible_account,
       u.display_name AS responsible_display_name,
       u.department AS responsible_department,
+      u.organization_role AS responsible_organization_role,
       u.role AS responsible_role,
       u.is_enabled AS responsible_is_enabled,
       u.file_platform_user_id AS responsible_file_platform_user_id

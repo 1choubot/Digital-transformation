@@ -150,6 +150,58 @@ export function toReadableApiError(error) {
     return '请补充项目编号、项目名称、客户和项目经理。';
   }
 
+  if (error.code === 'INVALID_PROJECT_MODE') {
+    return '项目模式无效，请选择自研模式或供应链/外包模式。';
+  }
+
+  if (error.code === 'INVALID_PARTICIPATING_DEPARTMENT') {
+    return '参与部门无效，请从运营中心、营销中心、制造中心、研发中心中选择。';
+  }
+
+  if (error.code === 'INVALID_PROJECT_MANAGER_USER_ID') {
+    return '项目经理参数无效，请重新选择项目经理。';
+  }
+
+  if (error.code === 'PROJECT_MANAGER_USER_NOT_FOUND_OR_DISABLED') {
+    return '项目经理不存在或已禁用，请重新选择。';
+  }
+
+  if (error.code === 'PROJECT_MANAGER_USER_ROLE_NOT_ALLOWED') {
+    return '项目经理必须是启用的中心负责人或员工。';
+  }
+
+  if (error.code === 'FORBIDDEN_OPERATION') {
+    return '当前账号无权执行该操作。';
+  }
+
+  if (error.code === 'INVALID_APPROVAL_ACTION') {
+    return '当前审批动作无效或当前状态不允许该动作。';
+  }
+
+  if (error.code === 'INVALID_APPROVAL_COMMENT') {
+    return '审批意见或退回原因不能为空。';
+  }
+
+  if (error.code === 'PROJECT_APPROVAL_NOT_SUBMITTABLE') {
+    return '当前项目或阶段暂不能提交审批。';
+  }
+
+  if (error.code === 'PROJECT_APPROVAL_NOT_PENDING') {
+    return '当前审批不是待处理状态。';
+  }
+
+  if (error.code === 'PROJECT_APPROVAL_NOT_APPROVED') {
+    return '当前阶段审批未通过，暂不能推进阶段。';
+  }
+
+  if (error.code === 'PROJECT_APPROVAL_FORBIDDEN') {
+    return '当前用户无权执行该审批操作。';
+  }
+
+  if (error.code === 'PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE') {
+    return '当前阶段存在未完成的适用必填资料，不能提交或通过审批。';
+  }
+
   if (error.code === 'PROJECT_CODE_EXISTS') {
     return `项目编号 ${error.projectCode || ''} 已存在，请更换后再提交。`.trim();
   }
@@ -226,6 +278,14 @@ export function toReadableApiError(error) {
     return '项目筛选参数无效，请刷新后重试。';
   }
 
+  if (error.code === 'INVALID_PROJECT_STAGE_ID') {
+    return '阶段参数无效，请刷新后重试。';
+  }
+
+  if (error.code === 'PROJECT_STAGE_NOT_FOUND') {
+    return '阶段不存在或不属于当前项目。';
+  }
+
   if (error.code === 'INVALID_PROJECT_STATUS_FILTER') {
     return '项目状态筛选无效，请刷新后重试。';
   }
@@ -283,7 +343,23 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'USER_REQUIRED_FIELDS') {
-    return '请补充用户账号、姓名、部门、角色和必要密码字段。';
+    return '请补充用户账号、姓名、组织角色、岗位和必要密码字段。';
+  }
+
+  if (error.code === 'INVALID_ORGANIZATION_ROLE') {
+    return '组织角色无效，请重新选择。';
+  }
+
+  if (error.code === 'INVALID_DEPARTMENT') {
+    return '部门无效：总经理、系统管理员、总经理助理部门必须为空，中心负责人和员工必须选择四个业务部门之一。';
+  }
+
+  if (error.code === 'SYSTEM_ADMIN_PLATFORM_ADMIN_REQUIRED') {
+    return '系统管理员必须同时具备平台管理员权限。';
+  }
+
+  if (error.code === 'PLATFORM_ADMIN_ROLE_REQUIRED') {
+    return '平台管理员权限只能授予系统管理员组织角色。';
   }
 
   if (error.code === 'USER_PASSWORD_REQUIRED') {
@@ -298,8 +374,8 @@ export function toReadableApiError(error) {
     return '用户字段格式不正确，请刷新后重试。';
   }
 
-  if (error.code === 'LAST_ENABLED_PLATFORM_ADMIN_REQUIRED') {
-    return '系统必须至少保留一个启用的平台管理员，不能执行该操作。';
+  if (error.code === 'LAST_ENABLED_SYSTEM_ADMIN_REQUIRED') {
+    return '系统必须至少保留一个启用的系统管理员且具备平台管理员权限，不能执行该操作。';
   }
 
   if (error.code === 'UNAUTHENTICATED') {

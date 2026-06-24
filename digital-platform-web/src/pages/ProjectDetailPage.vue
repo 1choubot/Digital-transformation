@@ -507,7 +507,7 @@ async function submitDocument(document) {
     document,
     'submit',
     () => markStageDocumentSubmitted(props.projectId, document.id, props.authToken),
-    '资料项已手工标记为已提交。',
+    '资料项已提交资料审核。',
     () => {
       delete returnReasons[document.id];
     }
@@ -519,7 +519,7 @@ async function confirmDocument(document) {
     document,
     'confirm',
     () => confirmStageDocument(props.projectId, document.id, props.authToken),
-    '资料项已手工确认。'
+    '资料项已通过资料审核。'
   );
 }
 
@@ -528,7 +528,7 @@ async function returnDocument(document) {
   const reason = String(returnReasons[document.id] || '').trim();
 
   if (!reason) {
-    actionErrorMessage.value = '请填写退回原因。';
+    actionErrorMessage.value = '请填写资料审核退回原因。';
     return;
   }
 
@@ -536,7 +536,7 @@ async function returnDocument(document) {
     document,
     'return',
     () => returnStageDocument(props.projectId, document.id, reason, props.authToken),
-    '资料项已手工退回。',
+    '资料项已退回资料审核。',
     () => {
       delete returnReasons[document.id];
     }
@@ -822,7 +822,7 @@ async function submitApproval(stage) {
     stage,
     'submit',
     () => submitStageApproval(props.projectId, stage.id, props.authToken),
-    '阶段审批已提交。'
+    '阶段关口审批已提交。'
   );
 }
 
@@ -831,7 +831,7 @@ async function resubmitApproval(stage) {
     stage,
     'resubmit',
     () => resubmitStageApproval(props.projectId, stage.id, props.authToken),
-    '阶段审批已重新提交。'
+    '阶段关口审批已重新提交。'
   );
 }
 
@@ -840,14 +840,14 @@ async function approveApproval(stage) {
     stage,
     'approve',
     () => approveStageApproval(props.projectId, stage.id, props.authToken),
-    '阶段审批已通过。'
+    '阶段关口审批已通过。'
   );
 }
 
 async function returnApproval(stage) {
   const comment = String(approvalReturnComments[stage.id] || '').trim();
   if (!comment) {
-    approvalErrorMessage.value = '请填写退回原因。';
+    approvalErrorMessage.value = '请填写阶段关口审批退回原因。';
     return;
   }
 
@@ -855,7 +855,7 @@ async function returnApproval(stage) {
     stage,
     'return',
     () => returnStageApproval(props.projectId, stage.id, comment, props.authToken),
-    '阶段审批已退回。',
+    '阶段关口审批已退回。',
     { clearReturnComment: true }
   );
 }

@@ -3,11 +3,12 @@
     <div class="panel-heading">
       <div>
         <span class="section-eyebrow">阶段资料清单</span>
-        <h3>资料基础状态</h3>
+        <h3>资料级审核状态</h3>
         <p class="manual-status-note">
-          当前操作仅为手工标记状态，不代表文件已上传，也不代表在线表单已提交。
-          阶段资料齐套情况基于当前手工状态统计，不代表文件已上传或已归档。
-          不适用是人工业务判断，用于说明该项目不需要该资料，不代表资料已提交、已确认或已归档。
+          单个资料项先完成资料级审核，审核通过后才计入阶段齐套。
+          上传附件只表示资料文件准备，不等于提交资料审核、资料审核通过或阶段关口审批通过。
+          阶段资料齐套情况基于资料审核状态和人工适用性统计，不代表文件已归档。
+          不适用是人工业务判断，用于说明该项目不需要该资料，不代表资料已提交审核、审核通过或已归档。
           资料责任人为手工分配，不代表权限控制、个人待办或文件权限。
         </p>
       </div>
@@ -57,7 +58,7 @@
               <strong>{{ stageCompleteness(stage).requiredTotal }}</strong>
             </div>
             <div>
-              <span>已确认适用</span>
+              <span>已审核通过适用</span>
               <strong>{{ stageCompleteness(stage).confirmedRequiredCount }}</strong>
             </div>
             <div>
@@ -71,7 +72,7 @@
           </div>
 
           <div class="stage-document-missing">
-            <strong>缺失必填资料</strong>
+            <strong>未完成资料级审核的必填资料</strong>
             <ul v-if="stageCompleteness(stage).incompleteRequiredDocuments.length > 0">
               <li
                 v-for="document in stageCompleteness(stage).incompleteRequiredDocuments"
@@ -82,7 +83,7 @@
                 <StatusBadge :status="document.status" />
               </li>
             </ul>
-            <p v-else>暂无缺失必填资料。</p>
+            <p v-else>当前阶段适用必填资料均已通过资料级审核。</p>
           </div>
         </div>
 

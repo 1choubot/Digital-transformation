@@ -6,7 +6,7 @@
         <h2>项目总览</h2>
         <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
         <p class="manual-status-note">
-          齐套率基于当前手工状态和人工适用性判断，不代表文件已上传，也不代表在线表单已填写。
+          齐套率基于资料级审核通过状态和人工适用性判断，不代表文件已上传，也不代表在线表单已填写。
         </p>
       </div>
       <button type="button" class="ghost-button" :disabled="loading" @click="loadDashboard">
@@ -130,7 +130,7 @@
 
           <div class="overview-project__documents">
             <div>
-              <span>未完成适用必填资料</span>
+              <span>未完成资料级审核的适用必填资料</span>
               <strong>{{ project.currentStageIncompleteRequiredDocuments.length }}</strong>
             </div>
             <details v-if="project.currentStageIncompleteRequiredDocuments.length > 0">
@@ -144,7 +144,7 @@
               </ul>
             </details>
             <p v-else-if="project.currentStageCompletenessSummary">
-              当前阶段暂无未完成适用必填资料。
+              当前阶段适用必填资料均已通过资料级审核。
             </p>
             <p v-else>
               {{ formatStageIssue(project.currentStageIssue) || '当前阶段齐套摘要为空。' }}
@@ -252,7 +252,7 @@ function formatCompletionSummary(summaryValue) {
     return '暂无齐套摘要';
   }
 
-  return `适用必填 ${summaryValue.requiredTotal} 项，已确认 ${summaryValue.confirmedRequiredCount} 项，未完成 ${summaryValue.incompleteRequiredCount} 项`;
+  return `适用必填 ${summaryValue.requiredTotal} 项，审核通过 ${summaryValue.confirmedRequiredCount} 项，未完成 ${summaryValue.incompleteRequiredCount} 项`;
 }
 
 async function loadDashboard() {

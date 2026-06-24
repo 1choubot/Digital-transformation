@@ -1,26 +1,25 @@
 import {
-  formatBusinessDepartment,
   formatDateTime,
-  formatOrganizationRole,
+  formatBusinessUser,
   formatUser
 } from '../../utils/format.js';
 
 export const operationActionText = {
   'project.created': '项目创建',
-  'document.submitted': '资料提交',
-  'document.confirmed': '资料确认',
-  'document.returned': '资料退回',
+  'document.submitted': '提交资料审核',
+  'document.confirmed': '资料审核通过',
+  'document.returned': '退回资料审核',
   'document.marked_not_applicable': '资料标记不适用',
   'document.restored_applicable': '资料恢复适用',
   'document.responsible_changed': '资料责任人变更',
   'document.attachment_uploaded': '资料附件上传',
   'document.attachment_deleted': '资料附件删除',
-  'approval.submitted': '提交阶段审批',
-  'approval.center_approved': '中心负责人审批通过',
-  'approval.center_returned': '中心负责人审批退回',
-  'approval.general_approved': '总经理审批通过',
-  'approval.general_returned': '总经理审批退回',
-  'approval.resubmitted': '重新提交阶段审批',
+  'approval.submitted': '提交阶段关口审批',
+  'approval.center_approved': '中心负责人关口审批通过',
+  'approval.center_returned': '中心负责人关口审批退回',
+  'approval.general_approved': '总经理关口审批通过',
+  'approval.general_returned': '总经理关口审批退回',
+  'approval.resubmitted': '重新提交阶段关口审批',
   'stage.advanced': '阶段推进',
   'project.completed': '项目完成'
 };
@@ -77,10 +76,7 @@ export function formatResponsibleUser(document) {
 
 export function formatResponsibilityCandidate(user) {
   const parts = [
-    user.name,
-    formatBusinessDepartment(user.department),
-    formatOrganizationRole(user.organizationRole),
-    user.role,
+    formatBusinessUser(user),
     user.account ? `账号 ${user.account}` : ''
   ].filter(Boolean);
   return parts.join(' / ') || `用户ID ${user.id}`;

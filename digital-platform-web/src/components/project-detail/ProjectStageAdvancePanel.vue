@@ -5,7 +5,8 @@
         <span class="section-eyebrow">阶段推进</span>
         <h3>手工推进阶段</h3>
         <p class="manual-status-note">
-          阶段推进基于当前手工状态和人工适用性判断，只推进当前阶段，不代表文件已上传或已归档。
+          阶段推进要求当前阶段适用必填资料全部通过资料级审核，并且阶段关口审批已通过。
+          推进只改变当前阶段，不代表文件已上传或已归档。
         </p>
       </div>
       <button
@@ -50,7 +51,7 @@
             <strong>{{ currentStageCompleteness?.requiredTotal ?? '-' }}</strong>
           </div>
           <div>
-            <span>已确认适用</span>
+            <span>已审核通过适用</span>
             <strong>{{ currentStageCompleteness?.confirmedRequiredCount ?? '-' }}</strong>
           </div>
           <div>
@@ -62,13 +63,13 @@
             <strong>{{ currentStageCompleteness ? `${currentStageCompleteness.completionPercent}%` : '-' }}</strong>
           </div>
           <div>
-            <span>审批状态</span>
+            <span>关口审批状态</span>
             <strong>{{ formatStatus(currentStage.approvalStatus || 'not_submitted') }}</strong>
           </div>
         </div>
 
         <div class="stage-advance-missing">
-          <strong>当前阶段缺失适用必填资料</strong>
+          <strong>当前阶段未完成资料级审核的适用必填资料</strong>
           <ul v-if="missingDocuments.length > 0">
             <li v-for="document in missingDocuments" :key="document.id || document.documentCode">
               <span class="mono">{{ document.documentCode }}</span>
@@ -76,14 +77,14 @@
               <StatusBadge :status="document.status" />
             </li>
           </ul>
-          <p v-else>当前阶段暂无缺失适用必填资料。</p>
+          <p v-else>当前阶段适用必填资料均已通过资料级审核。</p>
         </div>
 
         <p v-if="currentStage && currentStage.approvalStatus !== 'approved'" class="stage-advance-blocked">
-          当前阶段审批未通过，不能推进。请先完成阶段审批。
+          当前阶段关口审批未通过，不能推进。请先完成阶段关口审批。
         </p>
         <p v-else-if="currentStageCompleteness && !canAdvanceCurrentStage" class="stage-advance-blocked">
-          当前阶段未齐套，不能推进。请先完成或标记不适用缺失的适用必填资料。
+          当前阶段资料级审核未齐套，不能推进。请先完成或标记不适用缺失的适用必填资料。
         </p>
         <p v-else-if="!currentStageCompleteness" class="stage-advance-blocked">
           正在读取当前阶段齐套情况，暂不能推进。

@@ -6,7 +6,7 @@
         <h2>我的资料任务</h2>
         <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
         <p class="manual-status-note">
-          这里展示的是分配给我的资料项。资料状态为手工标记状态，不代表文件已上传，也不代表在线表单已填写。
+          这里展示的是分配给我的资料项。资料状态表示资料级审核进度，不代表文件已上传，也不代表在线表单已填写。
         </p>
       </div>
       <button type="button" class="ghost-button" :disabled="loading" @click="loadTasks">
@@ -66,7 +66,7 @@
           <span>资料项</span>
           <span>类型</span>
           <span>状态</span>
-          <span>退回原因</span>
+          <span>审核退回原因</span>
           <span>责任更新时间</span>
           <span>操作</span>
         </div>
@@ -125,8 +125,8 @@ const statusOptions = [
   { value: 'pending', label: '待办' },
   { value: 'returned', label: '已退回' },
   { value: 'not_submitted', label: '待提交' },
-  { value: 'submitted', label: '已提交' },
-  { value: 'confirmed', label: '已确认' },
+  { value: 'submitted', label: '已提交审核' },
+  { value: 'confirmed', label: '审核通过' },
   { value: 'all', label: '全部状态' }
 ];
 

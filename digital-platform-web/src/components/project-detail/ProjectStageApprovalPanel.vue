@@ -2,8 +2,12 @@
   <section class="panel approval-panel">
     <div class="panel-heading">
       <div>
-        <span class="section-eyebrow">阶段审批</span>
-        <h3>审批状态与历史</h3>
+        <span class="section-eyebrow">阶段关口审批</span>
+        <h3>阶段关口审批状态与历史</h3>
+        <p class="manual-status-note">
+          适用必填资料需先全部通过资料级审核，项目经理才能提交当前阶段关口审批。
+          总经理审批属于阶段关口审批，不审核单个资料项。
+        </p>
       </div>
     </div>
 
@@ -51,7 +55,7 @@
             <strong>{{ getStageCompleteness(stage)?.requiredTotal ?? '-' }}</strong>
           </div>
           <div>
-            <span>已确认适用</span>
+            <span>已审核通过适用</span>
             <strong>{{ getStageCompleteness(stage)?.confirmedRequiredCount ?? '-' }}</strong>
           </div>
           <div>
@@ -68,7 +72,7 @@
             :disabled="isPending(stage, 'submit')"
             @click="$emit('submit', stage)"
           >
-            {{ isPending(stage, 'submit') ? '提交中...' : '提交审批' }}
+            {{ isPending(stage, 'submit') ? '提交中...' : '提交阶段关口审批' }}
           </button>
 
           <button
@@ -78,7 +82,7 @@
             :disabled="isPending(stage, 'resubmit')"
             @click="$emit('resubmit', stage)"
           >
-            {{ isPending(stage, 'resubmit') ? '提交中...' : '重新提交' }}
+            {{ isPending(stage, 'resubmit') ? '提交中...' : '重新提交阶段关口审批' }}
           </button>
 
           <template v-if="canApproveStageApproval(stage)">
@@ -88,15 +92,15 @@
               :disabled="isPending(stage, 'approve')"
               @click="$emit('approve', stage)"
             >
-              {{ isPending(stage, 'approve') ? '处理中...' : '审批通过' }}
+              {{ isPending(stage, 'approve') ? '处理中...' : '阶段关口审批通过' }}
             </button>
             <label class="approval-return">
-              <span>退回原因</span>
+              <span>阶段关口审批退回原因</span>
               <input
                 v-model="returnComments[stage.id]"
                 type="text"
                 maxlength="1000"
-                placeholder="填写退回原因"
+                placeholder="填写阶段关口审批退回原因"
               />
             </label>
             <button
@@ -105,19 +109,19 @@
               :disabled="isPending(stage, 'return')"
               @click="$emit('return', stage)"
             >
-              {{ isPending(stage, 'return') ? '退回中...' : '退回' }}
+              {{ isPending(stage, 'return') ? '退回中...' : '退回阶段关口审批' }}
             </button>
           </template>
         </div>
 
         <details class="approval-history">
-          <summary>审批历史</summary>
-          <p v-if="approvalHistoriesLoading" class="approval-history__empty">正在加载审批历史...</p>
+          <summary>阶段关口审批历史</summary>
+          <p v-if="approvalHistoriesLoading" class="approval-history__empty">正在加载阶段关口审批历史...</p>
           <p v-else-if="approvalHistoryErrors[stage.id]" class="approval-history__error">
             {{ approvalHistoryErrors[stage.id] }}
           </p>
           <p v-else-if="getApprovalHistory(stage).length === 0" class="approval-history__empty">
-            暂无审批历史。
+            暂无阶段关口审批历史。
           </p>
           <ol v-else class="approval-history__list">
             <li v-for="record in getApprovalHistory(stage)" :key="record.id">
@@ -237,7 +241,7 @@ function requiresGeneralManagerApproval(stage) {
 }
 
 function buildApprovalNodes(stage) {
-  const centerLabel = `${formatApprovalCenter(stage)}负责人审批`;
+  const centerLabel = `${formatApprovalCenter(stage)}负责人关口审批`;
   const approvalStatus = stage.approvalStatus || 'not_submitted';
   const centerNode = {
     key: 'center',
@@ -247,7 +251,7 @@ function buildApprovalNodes(stage) {
   };
   const generalNode = {
     key: 'general',
-    label: '总经理审批',
+    label: '总经理关口审批',
     statusText: '未提交',
     tone: 'muted'
   };

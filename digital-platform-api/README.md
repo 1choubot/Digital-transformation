@@ -15,7 +15,7 @@
 - 用户组织角色和部门枚举：`organizationRole` 区分总经理、系统管理员、总经理助理、中心负责人、员工；`role` 保留为岗位/职务文本
 - `system_admin` 必须对应 `isPlatformAdmin = true`；初始化账号默认保存/恢复为启用系统管理员和平台管理员
 - 用户管理操作至少保留一个同时满足 `isEnabled = true`、`organizationRole = system_admin`、`isPlatformAdmin = true` 的账号
-- 项目创建要求登录，并记录 `createdByUserId`
+- 项目创建要求登录，并记录 `createdByUserId`；第一版仅允许总经理和中心负责人创建项目，员工、总经理助理和系统管理员创建会返回 `FORBIDDEN_OPERATION`
 - 项目模式：`self_developed` 自研模式、`outsourced` 供应链/外包模式，两者共用同一 8 阶段和 54 项资料
 - 项目经理用户关联：项目创建以 `projectManagerUserId` 为准，响应返回 `projectManagerUser`；旧 `projectManager` 文本仅为展示兼容
 - 项目列表和详情返回创建人追溯字段、项目模式和项目经理用户字段，兼容历史项目创建人或项目经理用户为空
@@ -23,16 +23,16 @@
 - 项目创建后自动初始化标准 8 阶段和 20260610 版 54 项阶段资料清单
 - 当前开发库项目可通过后端命令按 20260610 版资料清单补齐资料项；旧 48 项模板已废弃，不做旧模拟数据兼容或历史迁移
 - `GET /api/projects/:projectId/stage-document-checklist` 按 8 阶段分组查询资料清单
-- 资料项手工状态流转：标记提交、确认、退回，并记录提交/确认/退回追溯字段
+- 资料项手工状态流转：提交资料审核、资料审核通过、退回资料审核，并记录提交/审核通过/退回追溯字段；资料级审核对象是单个资料项，不等同于阶段关口审批
 - 资料项手工适用性标记：标记不适用、恢复适用，并记录不适用/恢复适用追溯字段
 - 阶段资料清单查询返回基于当前手工状态和人工适用性判断的阶段必填资料齐套摘要
 - 阶段资料项责任人手工分配：候选用户仅包含启用的中心负责人或员工；项目经理、总经理以及本中心相关资料的中心负责人可按第一版权限边界分配/清空责任人
-- 阶段资料附件：资料项附件上传、列表、下载和软删除，上传/删除写入业务日志
+- 阶段资料附件：资料项附件上传、列表、下载和软删除，上传/删除写入业务日志；上传附件只表示资料文件准备，不等于提交资料审核、资料审核通过或阶段关口审批通过
 - 我的资料任务查询：登录用户可集中查看分配给自己的适用阶段资料项
 - 项目总览看板：登录用户可只读查看跨项目汇总指标、当前阶段齐套摘要和未完成适用必填资料
-- 阶段级项目审批流：每个项目阶段保存唯一当前审批状态，项目经理提交/重新提交，匹配中心负责人审批，阶段 1、3、8 还需总经理审批
+- 阶段级项目关口审批流：每个项目阶段保存唯一当前审批状态，项目经理提交/重新提交，匹配中心负责人审批，阶段 1、3、8 还需总经理审批；阶段关口审批对象是整个阶段，不替代资料级审核
 - 项目阶段手工推进接口：项目经理可在自己负责项目齐套后推进；本中心相关项目的中心负责人或总经理也可推进；总经理助理、系统管理员和普通非项目经理员工会被拒绝
-- 项目维度业务操作日志：记录项目创建、资料状态流转、资料适用性变更、资料责任人变更、阶段审批、阶段推进和项目完成等成功业务动作
+- 项目维度业务操作日志：记录项目创建、资料级审核状态流转、资料适用性变更、资料责任人变更、阶段关口审批、阶段推进和项目完成等成功业务动作
 
 不包含日报周报、文件管理平台联动、自动通知、复杂 RBAC、项目成员表、技术负责人表、项目参与人表、完整审批流引擎、项目级审批单、审批节点配置器、项目类型模板、自动批量标记不适用、阶段回退、跳阶段、批量推进、在线表单填写、表单草稿、表单生成归档文件、文件管理平台上传/下载、附件预览、断点续传、多版本管理、病毒扫描、对象存储、全局审计日志、系统配置日志、登录日志、用户管理操作日志、文件平台日志、文件下载日志、管理层大屏图表、日志筛选导出、复杂分页、日志权限矩阵、基于文件上传/归档状态的齐套率、阶段推进操作人完整日志、复杂菜单权限、文件平台用户同步、权限同步、下载权限判断、部门权限继承、SSO 或细粒度按钮权限，也不读取、共用或迁移文件管理平台数据库。
 
@@ -200,7 +200,7 @@ Authorization: Bearer <token>
 
 所有用户管理维护接口必须携带登录态，并要求当前用户同时满足 `organizationRole = system_admin` 和 `isPlatformAdmin = true`。系统管理员只默认管理账号、组织和基础配置，不扩展为项目审批、资料审批、阶段推进、文件权限或复杂 RBAC。中心负责人管理本中心员工的用户维护能力本 change 暂不实现，仍作为后续单独能力处理。
 
-用户管理响应使用安全用户模型，包含 `id`、`account`、`name`、`department`、`organizationRole`、`role`、`isEnabled`、`isPlatformAdmin`、`filePlatformUserId`，不返回 `password_hash`、`passwordHash` 或其他密码内部字段。新增和编辑请求使用 `displayName`，数据库字段仍为 `display_name`，响应字段为 `name`。`role` 是岗位/职务展示文本，不是组织角色。
+用户管理响应使用安全用户模型，包含 `id`、`account`、`name`、`department`、`organizationRole`、`role`、`isEnabled`、`isPlatformAdmin`、`filePlatformUserId`，不返回 `password_hash`、`passwordHash` 或其他密码内部字段。新增和编辑请求使用 `displayName`，数据库字段仍为 `display_name`，响应字段为 `name`。`role` 是岗位/职务展示文本，不是组织角色。`organizationRole` 是系统权限角色；普通业务页面应以姓名作为主文本、部门和岗位作为辅助文本，组织角色只用于用户管理、权限说明或必要的审批角色上下文。
 
 组织角色枚举为 `general_manager`、`system_admin`、`general_manager_assistant`、`center_manager`、`employee`。业务部门枚举为 `operations_center`、`marketing_center`、`manufacturing_center`、`rd_center`。总经理、系统管理员、总经理助理的 `department` 必须为空；中心负责人和员工必须隶属于四个业务部门之一。`system_admin` 必须同时 `isPlatformAdmin = true`，且 `isPlatformAdmin = true` 只能用于系统管理员组织角色。
 
@@ -317,6 +317,8 @@ Content-Type: application/json
 ```
 
 成功后返回项目主数据和初始化后的 8 个阶段。创建人由后端根据登录态写入 `createdByUserId`，不会信任前端提交的创建人字段。创建成功后会在同一事务中写入 `project.created` 项目业务操作日志；如果业务日志写入失败，项目创建会整体回滚。
+
+创建项目是业务权限操作，第一版仅允许 `organizationRole = general_manager` 或 `center_manager`。`employee`、`general_manager_assistant` 和 `system_admin` 直接调用会返回 `FORBIDDEN_OPERATION`，HTTP 403；失败时不得插入项目、阶段、阶段资料或成功业务日志。
 
 `projectMode` 只允许 `self_developed` 或 `outsourced`，非法值返回 `INVALID_PROJECT_MODE`。两种模式共用同一 8 阶段和 20260610 版 54 项资料，不改变资料状态机、适用性、附件规则或阶段推进门禁。
 

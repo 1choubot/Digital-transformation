@@ -2,7 +2,7 @@
   <section class="stage-document-attachments" aria-label="资料项附件">
     <div class="stage-document-attachments__heading">
       <h4>资料附件</h4>
-      <span>上传仅用于资料项附件管理，不等于资料已确认，不自动推进阶段，也不代表文件管理平台归档。</span>
+      <span>上传附件只表示资料文件准备，不等于提交资料审核或资料审核通过，不自动推进阶段，也不代表文件管理平台归档。</span>
     </div>
 
     <div class="stage-document-attachment-upload">

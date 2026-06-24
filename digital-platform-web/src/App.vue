@@ -19,7 +19,12 @@
         <button type="button" :class="{ active: route.name === 'projects' }" @click="navigate('/projects')">
           项目列表
         </button>
-        <button type="button" :class="{ active: route.name === 'project-create' }" @click="navigate('/projects/new')">
+        <button
+          v-if="canCurrentUserCreateProject"
+          type="button"
+          :class="{ active: route.name === 'project-create' }"
+          @click="navigate('/projects/new')"
+        >
           新建项目
         </button>
         <button
@@ -47,12 +52,8 @@
       </nav>
       <div class="current-user">
         <div>
-          <strong>{{ currentUser.name }}</strong>
-          <span>
-            {{ formatOrganizationRole(currentUser.organizationRole) }} /
-            {{ currentUser.department ? formatBusinessDepartment(currentUser.department) : '全局角色' }} /
-            {{ currentUser.role }}
-          </span>
+          <strong>{{ formatUserName(currentUser) }}</strong>
+          <span>{{ formatUserMeta(currentUser) || '未记录部门岗位' }}</span>
         </div>
         <button type="button" class="ghost-button" :disabled="loggingOut" @click="handleLogout">
           {{ loggingOut ? '正在退出...' : '退出登录' }}
@@ -129,10 +130,7 @@ import ProjectListPage from './pages/ProjectListPage.vue';
 import ProjectOverviewDashboardPage from './pages/ProjectOverviewDashboardPage.vue';
 import UserManagementPage from './pages/UserManagementPage.vue';
 import { useHashRouter } from './router.js';
-import {
-  formatBusinessDepartment,
-  formatOrganizationRole
-} from './utils/format.js';
+import { formatUserMeta, formatUserName } from './utils/format.js';
 
 const { route, navigate } = useHashRouter();
 const authLoading = ref(true);
@@ -142,6 +140,9 @@ const currentUser = ref(null);
 const authMessage = ref('');
 const canAccessUserManagement = computed(
   () => currentUser.value?.isPlatformAdmin && currentUser.value?.organizationRole === 'system_admin'
+);
+const canCurrentUserCreateProject = computed(() =>
+  ['general_manager', 'center_manager'].includes(currentUser.value?.organizationRole)
 );
 
 function setAuth(token, user) {

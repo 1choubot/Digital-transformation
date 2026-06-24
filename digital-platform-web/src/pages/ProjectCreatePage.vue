@@ -9,7 +9,13 @@
       <button type="button" class="ghost-button" @click="navigate('/projects')">返回列表</button>
     </div>
 
-    <form class="panel form-grid" @submit.prevent="submitProject">
+    <section v-if="!canCreateProject" class="state-panel state-panel--error">
+      <h3>无权创建项目</h3>
+      <p>当前账号无权创建项目。项目创建仅开放给总经理和中心负责人。</p>
+      <button type="button" class="primary-button" @click="navigate('/projects')">返回项目列表</button>
+    </section>
+
+    <form v-else class="panel form-grid" @submit.prevent="submitProject">
       <label>
         <span>项目编号</span>
         <input v-model.trim="form.projectCode" type="text" autocomplete="off" />
@@ -78,7 +84,7 @@
 
       <div class="form-actions form-grid__wide">
         <button type="button" class="ghost-button" @click="navigate('/projects')">取消</button>
-        <button type="submit" class="primary-button" :disabled="submitting">
+        <button type="submit" class="primary-button" :disabled="submitting || !canCreateProject">
           {{ submitting ? '正在创建...' : '创建项目' }}
         </button>
       </div>
@@ -87,12 +93,11 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { createProject, toReadableApiError } from '../api/projects.js';
 import { listResponsibilityCandidates } from '../api/users.js';
 import {
-  formatBusinessDepartment,
-  formatOrganizationRole,
+  formatBusinessUser,
   formatUser
 } from '../utils/format.js';
 
@@ -117,13 +122,13 @@ const form = reactive({
   projectCode: '',
   projectName: '',
   customerName: '',
-    projectMode: 'self_developed',
-    projectManagerUserId: '',
-    participatingDepartments: [],
-    plannedStartDate: '',
-    plannedEndDate: '',
-    remark: ''
-  });
+  projectMode: 'self_developed',
+  projectManagerUserId: '',
+  participatingDepartments: [],
+  plannedStartDate: '',
+  plannedEndDate: '',
+  remark: ''
+});
 
 const submitting = ref(false);
 const clientError = ref('');
@@ -138,14 +143,12 @@ const departmentOptions = [
   { value: 'manufacturing_center', label: '制造中心' },
   { value: 'rd_center', label: '研发中心' }
 ];
+const canCreateProject = computed(() =>
+  ['general_manager', 'center_manager'].includes(props.currentUser?.organizationRole)
+);
 
 function formatManagerCandidate(user) {
-  return [
-    user.name,
-    formatBusinessDepartment(user.department),
-    formatOrganizationRole(user.organizationRole),
-    user.role
-  ]
+  return [formatBusinessUser(user), user.account ? `账号 ${user.account}` : '']
     .filter(Boolean)
     .join(' / ');
 }
@@ -167,6 +170,11 @@ function validateForm() {
 }
 
 async function loadManagerCandidates() {
+  if (!canCreateProject.value) {
+    managerCandidates.value = [];
+    return;
+  }
+
   managerCandidatesLoading.value = true;
   managerCandidatesError.value = '';
 
@@ -185,6 +193,11 @@ async function loadManagerCandidates() {
 async function submitProject() {
   serverError.value = '';
   successMessage.value = '';
+
+  if (!canCreateProject.value) {
+    serverError.value = '当前账号无权创建项目。';
+    return;
+  }
 
   if (!props.authToken) {
     serverError.value = '请先登录后再创建项目。';
@@ -206,7 +219,8 @@ async function submitProject() {
     successMessage.value = '项目创建成功。';
     props.navigate(`/projects/${created.project.id}`);
   } catch (error) {
-    serverError.value = toReadableApiError(error);
+    serverError.value =
+      error.code === 'FORBIDDEN_OPERATION' ? '当前账号无权创建项目。' : toReadableApiError(error);
     if (error.code === 'UNAUTHENTICATED') {
       emit('auth-expired', serverError.value);
     }

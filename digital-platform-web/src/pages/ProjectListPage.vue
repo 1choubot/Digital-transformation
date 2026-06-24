@@ -6,7 +6,14 @@
         <h2>项目列表</h2>
         <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
       </div>
-      <button type="button" class="primary-button" @click="navigate('/projects/new')">新建项目</button>
+      <button
+        v-if="canCreateProject"
+        type="button"
+        class="primary-button"
+        @click="navigate('/projects/new')"
+      >
+        新建项目
+      </button>
     </div>
 
     <section class="panel">
@@ -32,7 +39,15 @@
 
       <div v-else-if="projects.length === 0" class="state-panel state-panel--inline">
         <h3>暂无项目</h3>
-        <button type="button" class="primary-button" @click="navigate('/projects/new')">新建项目</button>
+        <p v-if="!canCreateProject">当前账号暂无可见项目。</p>
+        <button
+          v-else
+          type="button"
+          class="primary-button"
+          @click="navigate('/projects/new')"
+        >
+          新建项目
+        </button>
       </div>
 
       <div v-else class="project-table">
@@ -67,7 +82,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { getApiBaseUrlLabel, listProjects, toReadableApiError } from '../api/projects.js';
 import StatusBadge from '../components/StatusBadge.vue';
 import { formatDate, formatProjectMode, formatUser } from '../utils/format.js';
@@ -91,6 +106,9 @@ const apiBaseUrl = getApiBaseUrlLabel();
 const loading = ref(false);
 const errorMessage = ref('');
 const projects = ref([]);
+const canCreateProject = computed(() =>
+  ['general_manager', 'center_manager'].includes(props.currentUser?.organizationRole)
+);
 
 async function loadProjects() {
   loading.value = true;

@@ -3,7 +3,6 @@
     <h4>手工操作</h4>
     <div class="stage-document-actions">
       <ProjectStageDocumentResponsibility
-        v-if="canManageResponsibility"
         :document="document"
         :candidates="responsibilityCandidates"
         :candidates-loading="responsibilityCandidatesLoading"
@@ -15,7 +14,6 @@
 
       <template v-if="!isApplicable(document)">
         <button
-          v-if="canChangeApplicability"
           type="button"
           class="ghost-button"
           :disabled="isActionPending(document.id, 'restore-applicable')"
@@ -27,7 +25,7 @@
 
       <template v-else>
         <button
-          v-if="canSubmitDocument && canSubmit(document)"
+          v-if="canSubmit(document)"
           type="button"
           class="ghost-button"
           :disabled="isActionPending(document.id, 'submit')"
@@ -36,7 +34,7 @@
           {{ isActionPending(document.id, 'submit') ? '标记中...' : '标记提交' }}
         </button>
 
-        <template v-else-if="document.status === 'submitted' && canConfirmReturnDocument">
+        <template v-else-if="document.status === 'submitted'">
           <button
             type="button"
             class="ghost-button"
@@ -67,7 +65,7 @@
           {{ document.status === 'confirmed' ? '已确认' : '暂无状态操作' }}
         </span>
 
-        <div v-if="canChangeApplicability" class="stage-document-applicability-action">
+        <div class="stage-document-applicability-action">
           <input
             v-model.trim="notApplicableReasons[document.id]"
             type="text"
@@ -118,22 +116,6 @@ defineProps({
   responsibilitySelections: {
     type: Object,
     required: true
-  },
-  canSubmitDocument: {
-    type: Boolean,
-    default: true
-  },
-  canConfirmReturnDocument: {
-    type: Boolean,
-    default: true
-  },
-  canManageResponsibility: {
-    type: Boolean,
-    default: true
-  },
-  canChangeApplicability: {
-    type: Boolean,
-    default: true
   },
   returnReasons: {
     type: Object,

@@ -146,10 +146,6 @@
                 :responsibility-candidates="responsibilityCandidates"
                 :responsibility-candidates-loading="responsibilityCandidatesLoading"
                 :responsibility-selections="responsibilitySelections"
-                :can-submit-document="canSubmitDocument(document)"
-                :can-confirm-return-document="canConfirmReturnDocument(document)"
-                :can-manage-responsibility="canManageResponsibility(document)"
-                :can-change-applicability="canChangeApplicability(document)"
                 :return-reasons="returnReasons"
                 :not-applicable-reasons="notApplicableReasons"
                 :is-action-pending="isActionPending"
@@ -236,22 +232,6 @@ defineProps({
   responsibilitySelections: {
     type: Object,
     required: true
-  },
-  canSubmitDocument: {
-    type: Function,
-    default: () => true
-  },
-  canConfirmReturnDocument: {
-    type: Function,
-    default: () => true
-  },
-  canManageResponsibility: {
-    type: Function,
-    default: () => true
-  },
-  canChangeApplicability: {
-    type: Function,
-    default: () => true
   },
   returnReasons: {
     type: Object,

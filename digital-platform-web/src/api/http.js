@@ -150,30 +150,6 @@ export function toReadableApiError(error) {
     return '请补充项目编号、项目名称、客户和项目经理。';
   }
 
-  if (error.code === 'INVALID_PROJECT_MODE') {
-    return '项目模式无效，请选择自研模式或供应链/外包模式。';
-  }
-
-  if (error.code === 'INVALID_PARTICIPATING_DEPARTMENT') {
-    return '参与部门无效，请从运营中心、营销中心、制造中心、研发中心中选择。';
-  }
-
-  if (error.code === 'INVALID_PROJECT_MANAGER_USER_ID') {
-    return '项目经理参数无效，请重新选择项目经理。';
-  }
-
-  if (error.code === 'PROJECT_MANAGER_USER_NOT_FOUND_OR_DISABLED') {
-    return '项目经理不存在或已禁用，请重新选择。';
-  }
-
-  if (error.code === 'PROJECT_MANAGER_USER_ROLE_NOT_ALLOWED') {
-    return '项目经理必须是启用的中心负责人或员工。';
-  }
-
-  if (error.code === 'FORBIDDEN_OPERATION') {
-    return '当前账号无权执行该操作。';
-  }
-
   if (error.code === 'PROJECT_CODE_EXISTS') {
     return `项目编号 ${error.projectCode || ''} 已存在，请更换后再提交。`.trim();
   }
@@ -307,23 +283,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'USER_REQUIRED_FIELDS') {
-    return '请补充用户账号、姓名、组织角色、岗位和必要密码字段。';
-  }
-
-  if (error.code === 'INVALID_ORGANIZATION_ROLE') {
-    return '组织角色无效，请重新选择。';
-  }
-
-  if (error.code === 'INVALID_DEPARTMENT') {
-    return '部门无效：总经理、系统管理员、总经理助理部门必须为空，中心负责人和员工必须选择四个业务部门之一。';
-  }
-
-  if (error.code === 'SYSTEM_ADMIN_PLATFORM_ADMIN_REQUIRED') {
-    return '系统管理员必须同时具备平台管理员权限。';
-  }
-
-  if (error.code === 'PLATFORM_ADMIN_ROLE_REQUIRED') {
-    return '平台管理员权限只能授予系统管理员组织角色。';
+    return '请补充用户账号、姓名、部门、角色和必要密码字段。';
   }
 
   if (error.code === 'USER_PASSWORD_REQUIRED') {
@@ -338,8 +298,8 @@ export function toReadableApiError(error) {
     return '用户字段格式不正确，请刷新后重试。';
   }
 
-  if (error.code === 'LAST_ENABLED_SYSTEM_ADMIN_REQUIRED') {
-    return '系统必须至少保留一个启用的系统管理员且具备平台管理员权限，不能执行该操作。';
+  if (error.code === 'LAST_ENABLED_PLATFORM_ADMIN_REQUIRED') {
+    return '系统必须至少保留一个启用的平台管理员，不能执行该操作。';
   }
 
   if (error.code === 'UNAUTHENTICATED') {

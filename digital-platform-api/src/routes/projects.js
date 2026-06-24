@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requireDailyReportWriter } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import {
   advanceProjectStageHandler,
@@ -10,6 +10,7 @@ import {
   getProjectDetailHandler,
   getProjectOverviewDashboardHandler,
   getStageDocumentChecklistHandler,
+  listMyActiveProjectsHandler,
   listProjectOperationLogsHandler,
   listProjectsHandler,
   listStageDocumentAttachmentsHandler,
@@ -24,6 +25,7 @@ import {
 export const projectsRouter = Router();
 
 projectsRouter.get('/', asyncHandler(listProjectsHandler));
+projectsRouter.get('/my-active', requireAuth, requireDailyReportWriter, asyncHandler(listMyActiveProjectsHandler));
 projectsRouter.post('/', requireAuth, asyncHandler(createProjectHandler));
 
 projectsRouter.get(

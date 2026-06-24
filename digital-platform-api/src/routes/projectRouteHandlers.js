@@ -11,6 +11,7 @@ import {
   ProjectNotFoundError,
   projectExists
 } from '../repositories/projectRepository.js';
+import { searchActiveProjectsForDailyReports } from '../repositories/dailyReportRepository.js';
 import {
   listProjectOperationLogs,
   normalizeOperationLogLimit
@@ -131,6 +132,16 @@ export async function listProjectsHandler(req, res) {
 
   res.json({
     data: projects
+  });
+}
+
+export async function listMyActiveProjectsHandler(req, res) {
+  const projects = await searchActiveProjectsForDailyReports({ q: req.query.q, limit: req.query.limit });
+
+  res.json({
+    data: {
+      projects
+    }
   });
 }
 

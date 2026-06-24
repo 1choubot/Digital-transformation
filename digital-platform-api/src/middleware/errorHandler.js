@@ -1,5 +1,6 @@
 import { ValidationError } from '../domain/projects.js';
 import { AuthError } from '../domain/auth.js';
+import { DailyReportError } from '../domain/dailyReports.js';
 import { StageDocumentApplicabilityError } from '../domain/stageDocumentApplicability.js';
 import { StageDocumentStatusError } from '../domain/stageDocumentStatus.js';
 import {
@@ -59,6 +60,17 @@ export function errorHandler(error, req, res, next) {
       error: {
         code: error.code,
         message: error.message
+      }
+    });
+    return;
+  }
+
+  if (error instanceof DailyReportError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details
       }
     });
     return;

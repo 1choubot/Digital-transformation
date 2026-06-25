@@ -72,70 +72,108 @@
         <p>正在加载中心日报...</p>
       </section>
 
-      <section v-else-if="report" class="report-preview">
-        <div class="summary-grid">
-          <div>
-            <span>中心</span>
-            <strong>{{ formatBusinessDepartment(report.department) }}</strong>
-          </div>
-          <div>
-            <span>日期</span>
-            <strong>{{ report.reportDate }}</strong>
-          </div>
-          <div>
-            <span>员工数</span>
-            <strong>{{ report.totals.employeeCount }}</strong>
-          </div>
-          <div>
-            <span>今日完成</span>
-            <strong>{{ report.totals.completedItemCount }}</strong>
-          </div>
+      <section v-else-if="report" class="center-report-layout">
+        <!-- Header info row matching template row 2 -->
+        <div class="report-header-info">
+          <span>部门：{{ formatBusinessDepartment(report.department) }}</span>
+          <span>报告时间：{{ dottedDate(report.reportDate) }}</span>
         </div>
 
-        <section v-if="report.employees.length === 0" class="state-panel">
-          <p>暂无已提交日报</p>
-        </section>
+        <!-- Section 1: 昨日工作计划 -->
+        <div class="section-block section-yesterday">
+          <div class="section-banner section-banner--yellow">一、昨日工作计划</div>
+          <table class="center-report-table" v-if="yesterdayGroups.length">
+            <thead>
+              <tr>
+                <th class="col-seq">序号</th>
+                <th class="col-project">项目</th>
+                <th class="col-content">工作内容</th>
+                <th class="col-person">责任人</th>
+                <th class="col-collab-dept">协同部门</th>
+                <th class="col-collab-item">协同事项</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="(project, pIdx) in yesterdayGroups" :key="`y-p-${project.projectId}-${pIdx}`">
+                <template v-for="(item, iIdx) in project.items" :key="`y-${pIdx}-${iIdx}`">
+                  <tr>
+                    <td v-if="iIdx === 0" class="col-seq" :rowspan="project.items.length">{{ pIdx + 1 }}</td>
+                    <td v-if="iIdx === 0" class="col-project" :rowspan="project.items.length">{{ project.projectLabel }}</td>
+                    <td class="col-content">{{ item.workContent || '' }}</td>
+                    <td class="col-person">{{ item.responsiblePerson || item.personName || '' }}</td>
+                    <td class="col-collab-dept">{{ item.collaboratingCenter || '' }}</td>
+                    <td class="col-collab-item">{{ item.collaborationItem || '' }}</td>
+                  </tr>
+                </template>
+              </template>
+            </tbody>
+          </table>
+          <p v-else class="empty-section-note">暂无昨日工作计划数据</p>
+        </div>
 
-        <article v-for="employee in report.employees" v-else :key="employee.userId" class="employee-report-card">
-          <header>
-            <h3>{{ employee.name }}</h3>
-            <span>{{ employee.account }}</span>
-          </header>
+        <!-- Section 2: 今日工作完成情况 -->
+        <div class="section-block section-today">
+          <div class="section-banner section-banner--green">二、今日工作完成情况</div>
+          <table class="center-report-table" v-if="todayGroups.length">
+            <thead>
+              <tr>
+                <th class="col-seq">序号</th>
+                <th class="col-project">项目</th>
+                <th class="col-content">工作内容</th>
+                <th class="col-progress">完成进度</th>
+                <th class="col-person">责任人</th>
+                <th class="col-deviation">偏差分析及纠偏措施</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="(project, pIdx) in todayGroups" :key="`t-p-${project.projectId}-${pIdx}`">
+                <template v-for="(item, iIdx) in project.items" :key="`t-${pIdx}-${iIdx}`">
+                  <tr>
+                    <td v-if="iIdx === 0" class="col-seq" :rowspan="project.items.length">{{ pIdx + 1 }}</td>
+                    <td v-if="iIdx === 0" class="col-project" :rowspan="project.items.length">{{ project.projectLabel }}</td>
+                    <td class="col-content">{{ item.workContent || '' }}</td>
+                    <td class="col-progress">{{ formatProgress(item.completionProgress) }}</td>
+                    <td class="col-person">{{ item.responsiblePerson || item.personName || '' }}</td>
+                    <td class="col-deviation">{{ item.deviationAndCorrectiveAction || '' }}</td>
+                  </tr>
+                </template>
+              </template>
+            </tbody>
+          </table>
+          <p v-else class="empty-section-note">暂无今日工作完成数据</p>
+        </div>
 
-          <div class="three-column-report">
-            <section>
-              <h4>昨日工作计划</h4>
-              <ul v-if="employee.previousPlans.length">
-                <li v-for="(item, index) in employee.previousPlans" :key="`previous-${index}`">
-                  <strong>{{ item.projectLabel }}</strong>
-                  <span>{{ item.workContent }}</span>
-                </li>
-              </ul>
-              <p v-else>暂无昨日工作计划</p>
-            </section>
-            <section>
-              <h4>今日工作完成情况</h4>
-              <ul v-if="employee.completedItems.length">
-                <li v-for="(item, index) in employee.completedItems" :key="`completed-${index}`">
-                  <strong>{{ item.projectLabel }}</strong>
-                  <span>{{ item.workContent }}</span>
-                  <em>{{ item.completionProgress }}</em>
-                </li>
-              </ul>
-              <p v-else>暂无已提交日报</p>
-            </section>
-            <section>
-              <h4>明日工作计划</h4>
-              <ul v-if="employee.tomorrowPlans.length">
-                <li v-for="(item, index) in employee.tomorrowPlans" :key="`tomorrow-${index}`">
-                  <strong>{{ item.projectLabel }}</strong>
-                  <span>{{ item.workContent }}</span>
-                </li>
-              </ul>
-              <p v-else>暂无明日工作计划</p>
-            </section>
-          </div>
-        </article>
+        <!-- Section 3: 明日工作计划 -->
+        <div class="section-block section-tomorrow">
+          <div class="section-banner section-banner--red">三、明日工作计划</div>
+          <table class="center-report-table" v-if="tomorrowGroups.length">
+            <thead>
+              <tr>
+                <th class="col-seq">序号</th>
+                <th class="col-project">项目</th>
+                <th class="col-content">工作内容</th>
+                <th class="col-person">责任人</th>
+                <th class="col-collab-dept">协同部门</th>
+                <th class="col-collab-item">协同事项</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="(project, pIdx) in tomorrowGroups" :key="`m-p-${project.projectId}-${pIdx}`">
+                <template v-for="(item, iIdx) in project.items" :key="`m-${pIdx}-${iIdx}`">
+                  <tr>
+                    <td v-if="iIdx === 0" class="col-seq" :rowspan="project.items.length">{{ pIdx + 1 }}</td>
+                    <td v-if="iIdx === 0" class="col-project" :rowspan="project.items.length">{{ project.projectLabel }}</td>
+                    <td class="col-content">{{ item.workContent || '' }}</td>
+                    <td class="col-person">{{ item.responsiblePerson || item.personName || '' }}</td>
+                    <td class="col-collab-dept">{{ item.collaboratingCenter || '' }}</td>
+                    <td class="col-collab-item">{{ item.collaborationItem || '' }}</td>
+                  </tr>
+                </template>
+              </template>
+            </tbody>
+          </table>
+          <p v-else class="empty-section-note">暂无明日工作计划数据</p>
+        </div>
       </section>
     </template>
   </section>
@@ -200,7 +238,40 @@ const canManageSchedule = computed(
     (props.currentUser.organizationRole === OrganizationRole.SYSTEM_ADMIN && props.currentUser.isPlatformAdmin)
 );
 
-// Keep date inputs deterministic for the browser's local date picker.
+// ── Data transformation: person-first → project-first grouping ──
+
+// Flatten all items from all employees, attaching personName for fallback display.
+function flattenWithPerson(employees, sectionKey) {
+  return employees.flatMap(emp =>
+    emp[sectionKey].map(item => ({ ...item, personName: emp.name }))
+  );
+}
+
+// Group flat items by project, preserving order of first appearance.
+function groupByProject(items) {
+  const map = new Map();
+  for (const item of items) {
+    const key = item.projectId ?? `unknown-${item.projectLabel}`;
+    if (!map.has(key)) {
+      map.set(key, { projectId: item.projectId, projectLabel: item.projectLabel, items: [] });
+    }
+    map.get(key).items.push(item);
+  }
+  return [...map.values()];
+}
+
+const yesterdayGroups = computed(() =>
+  report.value ? groupByProject(flattenWithPerson(report.value.employees, 'previousPlans')) : []
+);
+const todayGroups = computed(() =>
+  report.value ? groupByProject(flattenWithPerson(report.value.employees, 'completedItems')) : []
+);
+const tomorrowGroups = computed(() =>
+  report.value ? groupByProject(flattenWithPerson(report.value.employees, 'tomorrowPlans')) : []
+);
+
+// ── Helpers ──
+
 function todayIsoDate() {
   const now = new Date();
   const year = now.getFullYear();
@@ -209,7 +280,18 @@ function todayIsoDate() {
   return `${year}-${month}-${day}`;
 }
 
-// Trigger a browser download for the exported Excel blob.
+function dottedDate(iso) {
+  return String(iso || '').replaceAll('-', '.') || '';
+}
+
+function formatProgress(value) {
+  if (value === null || value === undefined) return '';
+  const num = Number(value);
+  if (!Number.isFinite(num)) return String(value);
+  // 1 = 100%, 0.5 = 50%, etc.
+  return num >= 1 ? '100%' : `${Math.round(num * 100)}%`;
+}
+
 function saveBlobDownload({ blob, fileName }) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -221,17 +303,14 @@ function saveBlobDownload({ blob, fileName }) {
   URL.revokeObjectURL(url);
 }
 
-// API errors are mapped into a compact page-level message.
 function handleApiError(error) {
   if (error?.code === 'UNAUTHENTICATED') {
     emit('auth-expired');
     return;
   }
-
   errorMessage.value = toReadableApiError(error);
 }
 
-// Load available centers, then initialize the selected center for scoped users.
 async function loadDepartments() {
   const result = await listCenterDailyReportDepartments(props.authToken);
   departments.value = result.departments || [];
@@ -240,23 +319,15 @@ async function loadDepartments() {
   }
 }
 
-// Load one center's current automatic export schedule.
 async function loadSchedule() {
-  if (!filters.department) {
-    return;
-  }
-
+  if (!filters.department) return;
   const result = await getCenterDailyReportSchedule(filters.department, props.authToken);
   schedule.isEnabled = result.schedule.isEnabled;
   schedule.generateTime = result.schedule.generateTime || '18:00';
 }
 
-// Load the center daily report preview for the selected date and department.
 async function loadReport() {
-  if (!canUseCenterDailyReport.value || !filters.department) {
-    return;
-  }
-
+  if (!canUseCenterDailyReport.value || !filters.department) return;
   loading.value = true;
   errorMessage.value = '';
   try {
@@ -270,17 +341,12 @@ async function loadReport() {
   }
 }
 
-// Save the schedule only when the current role is permitted by the backend matrix.
 async function handleSaveSchedule() {
   savingSchedule.value = true;
   errorMessage.value = '';
   try {
     const result = await saveCenterDailyReportSchedule(
-      {
-        department: filters.department,
-        isEnabled: schedule.isEnabled,
-        generateTime: schedule.generateTime
-      },
+      { department: filters.department, isEnabled: schedule.isEnabled, generateTime: schedule.generateTime },
       props.authToken
     );
     schedule.isEnabled = result.schedule.isEnabled;
@@ -292,16 +358,12 @@ async function handleSaveSchedule() {
   }
 }
 
-// Export uses the same selected center/date as the preview.
 async function handleExport() {
   exporting.value = true;
   errorMessage.value = '';
   try {
     const download = await exportCenterDailyReport(
-      {
-        date: filters.date,
-        department: filters.department
-      },
+      { date: filters.date, department: filters.department },
       props.authToken
     );
     saveBlobDownload(download);
@@ -315,17 +377,12 @@ async function handleExport() {
 watch(
   () => filters.department,
   () => {
-    if (canUseCenterDailyReport.value) {
-      void loadReport();
-    }
+    if (canUseCenterDailyReport.value) void loadReport();
   }
 );
 
 onMounted(async () => {
-  if (!canUseCenterDailyReport.value) {
-    return;
-  }
-
+  if (!canUseCenterDailyReport.value) return;
   try {
     await loadDepartments();
     await loadReport();

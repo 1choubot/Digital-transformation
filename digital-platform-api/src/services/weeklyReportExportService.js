@@ -24,7 +24,7 @@ const BUSINESS_DEPARTMENT_LABELS = {
 const WEEKLY_REPORT_CELLS = {
   employeeName: 'B2',
   department: 'D2',
-  jobTitle: 'F2',
+  role: 'F2',
   period: 'H2'
 };
 
@@ -167,7 +167,7 @@ export async function generateWeeklyReportWorkbook(exportDto) {
 
   worksheet.getCell(WEEKLY_REPORT_CELLS.employeeName).value = user.name || user.account || '';
   worksheet.getCell(WEEKLY_REPORT_CELLS.department).value = formatDepartment(user.department);
-  worksheet.getCell(WEEKLY_REPORT_CELLS.jobTitle).value = user.jobTitle || '';
+  worksheet.getCell(WEEKLY_REPORT_CELLS.role).value = user.role || '';
   worksheet.getCell(WEEKLY_REPORT_CELLS.period).value = `${formatDottedDate(report.weekStart)}-${formatDottedDate(
     report.weekEnd
   )}`;

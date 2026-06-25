@@ -421,6 +421,20 @@ export async function getDailyReportExportDto({ reportId, userId }, executor = p
     [userId]
   );
 
+  // Query the current stage name for the project so B3 can display it in the export.
+  let currentStageName = '';
+  if (report.projectId) {
+    const [stageRows] = await executor.execute(
+      `SELECT stage_name
+      FROM project_stages
+      WHERE project_id = ?
+        AND stage_status = 'current'
+      LIMIT 1`,
+      [report.projectId]
+    );
+    currentStageName = stageRows[0]?.stage_name || '';
+  }
+
   return {
     report,
     user: {
@@ -431,7 +445,8 @@ export async function getDailyReportExportDto({ reportId, userId }, executor = p
       organizationRole: userRows[0].organization_role,
       role: userRows[0].role,
       jobTitle: userRows[0].job_title
-    }
+    },
+    currentStageName
   };
 }
 

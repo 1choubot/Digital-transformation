@@ -2672,9 +2672,26 @@ p {
 }
 
 /* Center daily report preview cards keep grouped employee summaries scannable. */
+/* ── Center daily report: project-first table layout ── */
+
 .report-preview {
   display: grid;
   gap: 16px;
+}
+
+/* Header info row mimics template row 2: 部门 + 报告时间 */
+.report-header-info {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 8px 0;
+  font-size: 15px;
+  color: #253041;
+}
+
+.report-header-info span {
+  font-weight: 500;
 }
 
 /* KPI cells summarize the current center/day before the grouped details. */
@@ -2703,74 +2720,138 @@ p {
   font-size: 20px;
 }
 
-/* Employee cards contain the three center daily report sections side by side. */
-.employee-report-card {
-  border: 1px solid #d8e0e8;
-  border-radius: 8px;
+/* Section blocks: yesterday / today / tomorrow */
+.center-report-layout {
+  display: grid;
+  gap: 20px;
+}
+
+.section-block {
   background: #ffffff;
-  padding: 16px;
-}
-
-.employee-report-card header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.employee-report-card h3,
-.employee-report-card h4 {
-  margin: 0;
-}
-
-.employee-report-card header span {
-  color: #64748b;
-  font-size: 13px;
-}
-
-.three-column-report {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.three-column-report section {
   border: 1px solid #d8e0e8;
   border-radius: 8px;
-  padding: 12px;
-}
-
-.three-column-report ul {
-  display: grid;
-  gap: 10px;
-  list-style: none;
-  margin: 10px 0 0;
   padding: 0;
+  overflow: hidden;
 }
 
-.three-column-report li {
-  display: grid;
-  gap: 4px;
+/* Colored section banners matching template fill colors */
+.section-banner {
+  padding: 10px 16px;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 1px;
 }
 
-.three-column-report li span,
-.three-column-report p {
-  color: #253041;
+.section-banner--yellow {
+  background: #fffde7;
+  color: #5d4037;
+}
+
+.section-banner--green {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.section-banner--red {
+  background: #fce4ec;
+  color: #c62828;
+}
+
+/* The main data table inside each section block */
+.center-report-table {
+  width: 100%;
+  border-collapse: collapse;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.6;
+  table-layout: fixed;
 }
 
-.three-column-report em {
-  color: #64748b;
-  font-style: normal;
+.center-report-table th,
+.center-report-table td {
+  border: 1px solid #d8e0e8;
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+  word-break: break-word;
+}
+
+.center-report-table th {
+  background: #f1f5f9;
+  font-weight: 600;
   font-size: 13px;
+  color: #475569;
+  text-align: center;
+}
+
+/* Column widths match template proportions: A=6.5 B≈36 C≈93 D≈11 E≈10 F≈48 */
+.col-seq {
+  width: 5%;
+  text-align: center;
+}
+
+.col-project {
+  width: 22%;
+  font-weight: 600;
+}
+
+.col-content {
+  width: 38%;
+}
+
+.col-progress {
+  width: 8%;
+  text-align: center;
+}
+
+.col-person {
+  width: 8%;
+}
+
+.col-collab-dept {
+  width: 8%;
+  text-align: center;
+}
+
+.col-collab-item {
+  width: 18%;
+}
+
+.col-deviation {
+  width: 18%;
+  color: #c62828;
+}
+
+/* Merged project cells get a subtle left-border accent */
+.col-project[rowspan] {
+  background: #f8fafc;
+  border-left: 3px solid #94a3b8;
+}
+
+.empty-section-note {
+  padding: 20px 16px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 14px;
 }
 
 @media (max-width: 900px) {
-  /* Center daily report sections collapse to one column on narrow screens. */
-  .summary-grid,
-  .three-column-report {
+  /* Center daily report: stack section blocks vertically, make tables scrollable */
+  .summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .report-header-info {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .section-block {
+    overflow-x: auto;
+  }
+
+  .center-report-table {
+    table-layout: auto;
+    min-width: 640px;
   }
 }

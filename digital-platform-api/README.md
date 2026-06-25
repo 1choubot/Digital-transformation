@@ -16,12 +16,12 @@
 - `system_admin` 必须对应 `isPlatformAdmin = true`；初始化账号默认保存/恢复为启用系统管理员和平台管理员
 - 用户管理操作至少保留一个同时满足 `isEnabled = true`、`organizationRole = system_admin`、`isPlatformAdmin = true` 的账号
 - 项目创建要求登录，并记录 `createdByUserId`；第一版仅允许总经理和中心负责人创建项目，员工、总经理助理和系统管理员创建会返回 `FORBIDDEN_OPERATION`
-- 项目模式：`self_developed` 自研模式、`outsourced` 供应链/外包模式，两者共用同一 8 阶段和 54 项资料
+- 项目模式：`self_developed` 自研模式、`outsourced` 供应链/外包模式，两者共用同一 8 阶段和 64 项资料
 - 项目经理用户关联：项目创建以 `projectManagerUserId` 为准，响应返回 `projectManagerUser`；旧 `projectManager` 文本仅为展示兼容
 - 项目列表和详情返回创建人追溯字段、项目模式和项目经理用户字段，兼容历史项目创建人或项目经理用户为空
-- 阶段资料项模板和项目级阶段资料清单；20260610 正式资料清单文档是业务依据，后端运行使用内置 `v20260610` 模板快照
-- 项目创建后自动初始化标准 8 阶段和 20260610 版 54 项阶段资料清单
-- 当前开发库项目可通过后端命令按 20260610 版资料清单补齐资料项；旧 48 项模板已废弃，不做旧模拟数据兼容或历史迁移
+- 阶段资料项模板和项目级阶段资料清单；20260624 阶段资料模板规划文档是当前业务依据，后端运行使用内置 `v20260624` 模板快照
+- 项目创建后自动初始化标准 8 阶段和 20260624 版 64 项阶段资料清单
+- 当前开发库项目可通过后端命令按 20260624 版资料清单重置并补齐资料项；旧 48 项和 `v20260610` 54 项模板已废弃，当前模拟数据不做旧资料兼容迁移
 - `GET /api/projects/:projectId/stage-document-checklist` 按 8 阶段分组查询资料清单
 - 资料项手工状态流转：提交资料审核、资料审核通过、退回资料审核，并记录提交/审核通过/退回追溯字段；资料级审核对象是单个资料项，不等同于阶段关口审批
 - 资料项手工适用性标记：标记不适用、恢复适用，并记录不适用/恢复适用追溯字段
@@ -64,15 +64,15 @@ migrations/001_project_core.sql
 npm run init-auth
 ```
 
-5. 初始化 20260610 版阶段资料清单模板，并按新版资料项补齐当前开发库项目：
+5. 初始化 20260624 版阶段资料清单模板，并按新版资料项补齐当前开发库项目：
 
 ```bash
 npm run init-stage-documents
 ```
 
-该命令会创建阶段资料模板表和项目级资料清单表。`docs/9.2_阶段资料清单与责任角色表_20260610.md` 是正式业务依据文档；后端运行和 `npm run init-stage-documents` 使用内置 `v20260610` 模板快照，不依赖部署包包含 `docs` 目录或固定 md 路径。该快照共 54 项。旧 48 项模板已废弃，当前开发阶段不做旧模拟项目数据兼容、历史项目迁移或新旧模板共存。重复执行不会为已有项目重复生成同一资料项。
+该命令会创建阶段资料模板表和项目级资料清单表。`docs/9.10_v20260624阶段资料模板规划_20260624.md` 是当前模板规划依据；后端运行和 `npm run init-stage-documents` 使用内置 `v20260624` 模板快照，不依赖部署包包含 `docs` 目录或固定 md 路径。该快照共 64 项。旧 48 项模板和 `v20260610` 54 项模板已废弃，当前模拟数据不做旧项目资料兼容迁移。重复执行不会为已有项目重复生成同一资料项。
 
-如果正式资料清单发生变更，必须同步更新内置模板快照、`EXPECTED_STAGE_DOCUMENT_ITEM_COUNT` 和模板解析/初始化验证用例。
+如果正式资料清单发生变更，必须同步更新内置模板快照、`EXPECTED_STAGE_DOCUMENT_ITEM_COUNT` 和模板初始化验证用例。
 
 6. 现有环境如已执行过 `003_stage_document_checklist.sql`，需要继续在 MySQL 中执行资料状态流转迁移：
 
@@ -136,7 +136,7 @@ migrations/010_organization_roles_project_governance.sql
 migrations/011_project_stage_approval_workflow.sql
 ```
 
-该迁移会为 `project_stages` 增加 `approval_status`，默认 `not_submitted`；并创建 `project_stage_approval_history` 表保存阶段级审批历史。第一版审批历史的 `stage_id` 必须非空，审批历史按 `created_at ASC, id ASC` 查询。迁移不修改 8 阶段定义或 20260610 版 54 项资料模板。
+该迁移会为 `project_stages` 增加 `approval_status`，默认 `not_submitted`；并创建 `project_stage_approval_history` 表保存阶段级审批历史。第一版审批历史的 `stage_id` 必须非空，审批历史按 `created_at ASC, id ASC` 查询。迁移不修改 8 阶段定义或阶段资料模板版本。
 
 14. 现有环境如已执行过 `011_project_stage_approval_workflow.sql`，需要继续在 MySQL 中执行阶段资料归属中心迁移：
 
@@ -144,15 +144,25 @@ migrations/011_project_stage_approval_workflow.sql
 migrations/012_stage_document_ownership_departments.sql
 ```
 
-该迁移只为阶段资料模板和项目级阶段资料快照新增 `owner_department`、`review_department` 列，不切换 20260610 版 54 项资料模板。执行后需要重新运行：
+该迁移只为阶段资料模板和项目级阶段资料快照新增 `owner_department`、`review_department` 列。执行后需要重新运行：
 
 ```bash
 npm run init-stage-documents
 ```
 
-原因是旧项目资料的 `owner_department` / `review_department` 回填依赖 `npm run init-stage-documents` 中的模板 upsert/backfill 逻辑；仅执行 012 只会新增空列，不会自动补齐既有项目资料归属中心。
+原因是项目资料的 `owner_department` / `review_department` 写入依赖 `npm run init-stage-documents` 中的模板 upsert/backfill 逻辑；仅执行 012 只会新增空列，不会自动补齐既有项目资料归属中心。
 
-15. 启动服务：
+15. 当前模拟库从 `v20260610` 切换到 `v20260624` 64 项模板时，先清理旧阶段资料和旧模板，再重新初始化：
+
+```bash
+npm run reset-stage-documents-v20260624
+npm run init-stage-documents
+npm run check
+```
+
+`reset-stage-documents-v20260624` 会确认当前连接库是 `digital_platform`，然后清理旧项目阶段资料快照、阶段资料附件记录、附件物理文件、阶段资料/阶段审批/阶段推进相关业务日志、阶段审批历史和旧模板，并将项目状态重置为 `normal`、第 1 阶段重置为 current、其他阶段重置为 not_started、所有阶段审批重置为 not_submitted。附件物理文件清理使用 `STAGE_DOCUMENT_ATTACHMENT_STORAGE_DIR` 指定的目录；未配置时清理默认的 `storage/stage-document-attachments`。reset 会清空该目录，且仅面向当前模拟数据；正式或非模拟环境不得执行。该步骤不做 `v20260610` 到 `v20260624` 的兼容迁移，也不保留旧项目资料。
+
+16. 启动服务：
 
 ```bash
 npm run dev
@@ -334,7 +344,7 @@ Content-Type: application/json
 
 创建项目是业务权限操作，第一版仅允许 `organizationRole = general_manager` 或 `center_manager`。`employee`、`general_manager_assistant` 和 `system_admin` 直接调用会返回 `FORBIDDEN_OPERATION`，HTTP 403；失败时不得插入项目、阶段、阶段资料或成功业务日志。
 
-`projectMode` 只允许 `self_developed` 或 `outsourced`，非法值返回 `INVALID_PROJECT_MODE`。两种模式共用同一 8 阶段和 20260610 版 54 项资料，不改变资料状态机、适用性、附件规则或阶段推进门禁。
+`projectMode` 只允许 `self_developed` 或 `outsourced`，非法值返回 `INVALID_PROJECT_MODE`。两种模式共用同一 8 阶段和 20260624 版 64 项资料，不改变资料状态机、适用性、附件规则或阶段推进门禁。
 
 `participatingDepartments` 是四个业务部门稳定枚举数组，只允许 `operations_center`、`marketing_center`、`manufacturing_center`、`rd_center`。空值或空数组表示未配置参与部门，重复值会去重；中文部门名、未知值、非数组非空值返回 `INVALID_PARTICIPATING_DEPARTMENT`，HTTP 状态为 400。该字段不是中文展示文本，中心负责人项目可见范围会使用该枚举数组或本中心责任人资料判断本中心相关项目。
 
@@ -438,11 +448,11 @@ Content-Type: application/json
 GET /api/projects/{projectId}/stage-document-checklist
 ```
 
-按 8 阶段顺序分组返回项目阶段资料清单，并按当前用户资料项权限过滤。项目流程以 `智能制造项目管理流程图20260610.pdf` 和 `docs/9.7_智能制造项目整体推进流程_20260610.md` 为依据；`docs/9.2_阶段资料清单与责任角色表_20260610.md` 是 20260610 版资料清单正式业务依据文档。后端运行使用内置 `v20260610` 模板快照，新建项目初始化 54 项资料项，不在运行时依赖 docs 目录或 md 路径。旧 48 项模板已废弃，当前开发阶段不做旧模拟项目数据兼容、历史项目迁移或新旧模板共存。
+按 8 阶段顺序分组返回项目阶段资料清单，并按当前用户资料项权限过滤。项目流程以 20260624 版流程和 `docs/9.10_v20260624阶段资料模板规划_20260624.md` 为当前模板依据。后端运行使用内置 `v20260624` 模板快照，新建项目初始化 64 项资料项，不在运行时依赖 docs 目录或 md 路径。`7.P1 随机资料移交` 和 `8.P1 资料服务器核查` 不纳入普通阶段资料模板；旧 48 项模板和 `v20260610` 54 项模板已废弃，当前模拟数据不做旧项目资料兼容迁移。
 
 该接口必须携带登录态，只做 `requireAuth`，不使用 `requirePlatformAdmin`，并按当前用户校验项目可见性；无权访问具体项目时返回 `FORBIDDEN_OPERATION`。该限制用于保护清单中返回的资料责任人信息，避免未登录用户或无关用户绕过项目详情接口读取 `responsibleUser`。
 
-每个资料项包含资料编号、资料项名称、是否必填、默认责任角色、确认角色、提交方式、`targetFolderPath`、`targetFolderId`、基础状态和适用性。`targetFolderPath` 来自 20260610 正式资料清单的“文件平台目标目录”字段，`targetFolderId` 保持为空；本 change 不做文件管理平台真实联动，后续联动时再回填目录 ID。响应同时返回 `permissions`，包含 `canViewAttachments`、`canUploadAttachment`、`canDownloadAttachment`、`canDeleteAttachment`、`canSubmitDocument`、`canReviewDocument` 等后端计算的资料项权限字段。
+每个资料项包含资料编号、资料项名称、是否必填、默认责任角色、确认角色、`ownerDepartment`、`reviewDepartment`、提交方式、`targetFolderPath`、`targetFolderId`、基础状态和适用性。`targetFolderPath` 来自内置 `v20260624` 模板快照，`targetFolderId` 保持为空；本 change 不做文件管理平台真实联动，后续联动时再回填目录 ID。响应同时返回 `permissions`，包含 `canViewAttachments`、`canUploadAttachment`、`canDownloadAttachment`、`canDeleteAttachment`、`canSubmitDocument`、`canReviewDocument` 等后端计算的资料项权限字段。
 
 查询结果同时返回资料项状态追溯字段：`submittedByUserId`、`submittedAt`、`confirmedByUserId`、`confirmedAt`、`returnedByUserId`、`returnedAt` 和 `returnReason`。
 

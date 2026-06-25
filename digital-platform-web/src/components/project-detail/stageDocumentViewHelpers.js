@@ -59,6 +59,32 @@ export function stageCompleteness(stage) {
   return stage.completenessSummary || buildFallbackCompletenessSummary(stage);
 }
 
+export function buildStageDocumentSummary(stage) {
+  const documents = stage.documents || [];
+  const applicableDocuments = documents.filter(isApplicable);
+  const optionalConditionalDocuments = documents
+    .filter((document) => !document.isRequired)
+    .map((document) => ({
+      id: document.id,
+      documentCode: document.documentCode,
+      documentName: document.documentName,
+      status: document.status,
+      isApplicable: isApplicable(document)
+    }));
+
+  return {
+    documentTotal: documents.length,
+    applicableTotal: applicableDocuments.length,
+    optionalConditionalTotal: optionalConditionalDocuments.length,
+    applicableOptionalConditionalTotal: optionalConditionalDocuments.filter((document) => document.isApplicable).length,
+    optionalConditionalDocuments
+  };
+}
+
+export function stageDocumentSummary(stage) {
+  return stage.documentSummary || buildStageDocumentSummary(stage);
+}
+
 export function formatApplicability(document) {
   return isApplicable(document) ? '适用' : '不适用';
 }

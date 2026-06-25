@@ -1413,7 +1413,7 @@ p {
 
 .stage-document-completeness {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.62fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   padding: 14px 18px;
   border-bottom: 1px solid #eef2f6;
@@ -1422,7 +1422,8 @@ p {
 
 .stage-document-completeness__summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   gap: 10px;
 }
 
@@ -1470,7 +1471,7 @@ p {
 
 .stage-document-missing li {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) max-content;
+  grid-template-columns: 72px minmax(0, 1fr) max-content max-content;
   gap: 8px;
   align-items: center;
   color: #334252;

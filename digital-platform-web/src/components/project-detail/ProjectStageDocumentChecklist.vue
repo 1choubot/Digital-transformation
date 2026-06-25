@@ -54,25 +54,41 @@
         <div class="stage-document-completeness">
           <div class="stage-document-completeness__summary">
             <div>
+              <span>阶段资料总数</span>
+              <strong>{{ stageDocumentSummary(stage).documentTotal }}</strong>
+            </div>
+            <div>
+              <span>适用资料总数</span>
+              <strong>{{ stageDocumentSummary(stage).applicableTotal }}</strong>
+            </div>
+            <div>
               <span>适用必填总数</span>
               <strong>{{ stageCompleteness(stage).requiredTotal }}</strong>
             </div>
             <div>
-              <span>已审核通过适用</span>
+              <span>必填已审核通过</span>
               <strong>{{ stageCompleteness(stage).confirmedRequiredCount }}</strong>
             </div>
             <div>
-              <span>未完成适用</span>
+              <span>非必填/条件性</span>
+              <strong>
+                {{ stageDocumentSummary(stage).optionalConditionalTotal }}，适用
+                {{ stageDocumentSummary(stage).applicableOptionalConditionalTotal }}
+              </strong>
+            </div>
+            <div>
+              <span>门禁未完成</span>
               <strong>{{ stageCompleteness(stage).incompleteRequiredCount }}</strong>
             </div>
             <div>
-              <span>完成百分比</span>
+              <span>门禁完成率</span>
               <strong>{{ stageCompleteness(stage).completionPercent }}%</strong>
             </div>
           </div>
 
           <div class="stage-document-missing">
-            <strong>未完成资料级审核的必填资料</strong>
+            <strong>推进门禁未完成的适用必填资料</strong>
+            <p>非必填/条件性资料不计入必填齐套门禁。</p>
             <ul v-if="stageCompleteness(stage).incompleteRequiredDocuments.length > 0">
               <li
                 v-for="document in stageCompleteness(stage).incompleteRequiredDocuments"
@@ -80,10 +96,27 @@
               >
                 <span class="mono">{{ document.documentCode }}</span>
                 <span>{{ document.documentName }}</span>
+                <span class="stage-document-pill">{{ formatApplicability(document) }}</span>
                 <StatusBadge :status="document.status" />
               </li>
             </ul>
             <p v-else>当前阶段适用必填资料均已通过资料级审核。</p>
+          </div>
+
+          <div class="stage-document-missing stage-document-optional">
+            <strong>非必填/条件性资料</strong>
+            <ul v-if="stageDocumentSummary(stage).optionalConditionalDocuments.length > 0">
+              <li
+                v-for="document in stageDocumentSummary(stage).optionalConditionalDocuments"
+                :key="document.id || document.documentCode"
+              >
+                <span class="mono">{{ document.documentCode }}</span>
+                <span>{{ document.documentName }}</span>
+                <span class="stage-document-pill">{{ formatApplicability(document) }}</span>
+                <StatusBadge :status="document.status" />
+              </li>
+            </ul>
+            <p v-else>本阶段暂无非必填/条件性资料。</p>
           </div>
         </div>
 
@@ -190,7 +223,8 @@ import {
   formatResponsibleUser,
   isApplicable,
   isResponsibleUserDisabled,
-  stageCompleteness
+  stageCompleteness,
+  stageDocumentSummary
 } from './stageDocumentViewHelpers.js';
 
 defineEmits([

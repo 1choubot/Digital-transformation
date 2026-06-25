@@ -20,7 +20,7 @@ function assertTemplateRowsReady(rows) {
 
   const nonEmptyFolderIds = rows.filter((row) => row.target_folder_id !== null);
   if (nonEmptyFolderIds.length > 0) {
-    throw new Error('Stage document templates must keep targetFolderId empty in v20260610');
+    throw new Error('Stage document templates must keep targetFolderId empty');
   }
 }
 

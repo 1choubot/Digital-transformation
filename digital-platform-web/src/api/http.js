@@ -378,6 +378,42 @@ export function toReadableApiError(error) {
     return '系统必须至少保留一个启用的系统管理员且具备平台管理员权限，不能执行该操作。';
   }
 
+  if (error.code === 'DAILY_REPORT_WRITER_REQUIRED') {
+    return '当前账号无权填写个人日报。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_WRITER_REQUIRED') {
+    return '当前账号无权填写个人周报。';
+  }
+
+  if (error.code === 'INVALID_WEEKLY_REPORT_WEEK') {
+    return '周报周期必须是自然周，开始日期为周一，结束日期为周日。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_REQUIRED_FIELDS') {
+    return '请补齐周报工作总结和工作计划的必填字段。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_DUPLICATE') {
+    return '该周期已经存在周报，请打开已有周报继续编辑。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_NOT_FOUND') {
+    return '周报不存在、已删除或不属于当前账号。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_DELETE_SUBMITTED') {
+    return '已提交周报不能删除。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_EVALUATE_SUBMITTED_ONLY') {
+    return '只有已提交周报可以发起评分。';
+  }
+
+  if (error.code === 'CENTER_SCOPE_FORBIDDEN') {
+    return '当前账号不能查看其他中心的考评总览。';
+  }
+
   if (error.code === 'UNAUTHENTICATED') {
     return '请先登录后再继续操作。';
   }

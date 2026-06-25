@@ -1,0 +1,91 @@
+import { request, requestBlob, toReadableApiError } from './http.js';
+
+export { toReadableApiError };
+
+// Build query strings while omitting empty filters.
+function buildQuery(params = {}) {
+  const query = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      query.set(key, String(value).trim());
+    }
+  });
+
+  const queryString = query.toString();
+  return queryString ? `?${queryString}` : '';
+}
+
+// Load the authenticated user's personal weekly report list.
+export async function listWeeklyReports(filters = {}, authToken = '') {
+  return request(`/api/weekly-reports${buildQuery(filters)}`, { authToken });
+}
+
+// Load one weekly report owned by the authenticated user.
+export async function getWeeklyReport(reportId, authToken = '') {
+  return request(`/api/weekly-reports/${reportId}`, { authToken });
+}
+
+// Load the weekly-vs-daily comparison rows for an employee weekly report.
+export async function getWeeklyReportComparisonTable(reportId, authToken = '') {
+  return request(`/api/weekly-reports/${reportId}/comparison-table`, { authToken });
+}
+
+// Create a draft or submitted weekly report.
+export async function createWeeklyReport(payload, authToken = '') {
+  return request('/api/weekly-reports', {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify(payload)
+  });
+}
+
+// Replace an existing weekly report and invalidate any cached score.
+export async function updateWeeklyReport(reportId, payload, authToken = '') {
+  return request(`/api/weekly-reports/${reportId}`, {
+    method: 'PUT',
+    authToken,
+    body: JSON.stringify(payload)
+  });
+}
+
+// Delete is backend-limited to draft weekly reports.
+export async function deleteWeeklyReport(reportId, authToken = '') {
+  return request(`/api/weekly-reports/${reportId}`, {
+    method: 'DELETE',
+    authToken
+  });
+}
+
+// Trigger AI scoring or deterministic fallback scoring for one submitted report.
+export async function evaluateWeeklyReport(reportId, { force = false } = {}, authToken = '') {
+  return request(`/api/weekly-reports/${reportId}/evaluate${buildQuery({ force: force ? 'true' : '' })}`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ force })
+  });
+}
+
+// Save the evaluator's final manual weekly review score.
+export async function saveWeeklyReportFinalReview(reportId, payload, authToken = '') {
+  return request(`/api/weekly-reports/${reportId}/final-review`, {
+    method: 'PUT',
+    authToken,
+    body: JSON.stringify(payload)
+  });
+}
+
+// Download the official personal weekly report workbook.
+export async function exportWeeklyReport(reportId, authToken = '') {
+  return requestBlob(`/api/weekly-reports/${reportId}/export`, {
+    method: 'POST',
+    authToken
+  });
+}
+
+// Load weekly evaluation overview rows for management roles.
+export async function listWeeklyComparisonOverview(filters = {}, authToken = '') {
+  return request(`/api/weekly-reports/comparison-overview${buildQuery(filters)}`, {
+    authToken
+  });
+}

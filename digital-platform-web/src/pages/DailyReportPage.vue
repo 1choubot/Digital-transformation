@@ -85,9 +85,19 @@
               <span>操作</span>
             </div>
             <div v-for="(item, index) in form.items" :key="item.localId" class="daily-edit-table__row">
-              <textarea v-model="item.workContent" required />
-              <input v-model="item.completionProgress" required placeholder="如 100% / 已完成" />
-              <input v-model="item.completedAt" type="time" required />
+              <textarea v-model="item.workContent" :class="{ invalid: itemErrors[item.localId]?.workContent }" required />
+              <input
+                v-model="item.completionProgress"
+                :class="{ invalid: itemErrors[item.localId]?.completionProgress }"
+                required
+                placeholder="如 100% / 已完成"
+              />
+              <input
+                v-model="item.completedAt"
+                :class="{ invalid: itemErrors[item.localId]?.completedAt }"
+                type="time"
+                required
+              />
               <input v-model="item.responsiblePerson" />
               <textarea v-model="item.deviationAndCorrectiveAction" />
               <button type="button" class="ghost-button" :disabled="form.items.length === 1" @click="removeItem(index)">
@@ -216,6 +226,10 @@ const uploading = ref(false);
 const exporting = ref(false);
 const message = ref('');
 const errorMessage = ref('');
+const itemErrors = ref({});
+const currentUserDisplayName = computed(
+  () => props.currentUser.displayName || props.currentUser.name || props.currentUser.account || ''
+);
 
 const form = reactive({
   reportDate: today,
@@ -226,6 +240,51 @@ const form = reactive({
 
 const canUseDailyReport = computed(() => props.currentUser.organizationRole === OrganizationRole.EMPLOYEE);
 const isBackfill = computed(() => form.reportDate && form.reportDate !== today);
+
+// Treat a completed-work row as empty when all submit-required business fields are blank.
+function isBlankCompletedItem(item) {
+  return !String(item?.workContent || '').trim() &&
+    !String(item?.completionProgress || '').trim() &&
+    !String(item?.completedAt || '').trim();
+}
+
+// Validate submitted rows locally so users see the exact highlighted fields before the API call.
+function prepareSubmittedItems() {
+  const nonBlankItems = form.items.filter((item) => !isBlankCompletedItem(item));
+  const errors = {};
+
+  if (nonBlankItems.length === 0) {
+    const firstItem = form.items[0] || createEmptyItem();
+    if (form.items.length === 0) {
+      form.items = [firstItem];
+    }
+    errors[firstItem.localId] = {
+      workContent: true,
+      completionProgress: true,
+      completedAt: true
+    };
+  }
+
+  for (const item of nonBlankItems) {
+    const rowErrors = {
+      workContent: !String(item.workContent || '').trim(),
+      completionProgress: !String(item.completionProgress || '').trim(),
+      completedAt: !String(item.completedAt || '').trim()
+    };
+    if (rowErrors.workContent || rowErrors.completionProgress || rowErrors.completedAt) {
+      errors[item.localId] = rowErrors;
+    }
+  }
+
+  itemErrors.value = errors;
+  if (Object.keys(errors).length > 0) {
+    errorMessage.value = '请补全高亮的今日完成情况：工作内容、完成进度、完成时间。';
+    return false;
+  }
+
+  form.items = nonBlankItems;
+  return true;
+}
 
 // Build a local id so Vue can track unsaved dynamic rows.
 function buildLocalId() {
@@ -239,7 +298,7 @@ function createEmptyItem() {
     workContent: '',
     completionProgress: '',
     completedAt: '',
-    responsiblePerson: props?.currentUser?.name || '',
+    responsiblePerson: currentUserDisplayName.value,
     deviationAndCorrectiveAction: ''
   };
 }
@@ -249,7 +308,7 @@ function createEmptyPlan() {
   return {
     localId: buildLocalId(),
     plannedWorkContent: '',
-    responsiblePerson: props?.currentUser?.name || '',
+    responsiblePerson: currentUserDisplayName.value,
     plannedCompleteAt: '',
     collaboratingCenter: '',
     collaborationItem: ''
@@ -294,15 +353,26 @@ function buildPayload(status) {
 // Copy a loaded report into the editable form.
 function hydrateForm(report) {
   savedReport.value = report;
+  itemErrors.value = {};
   form.reportDate = report.reportDate;
   form.projectId = report.projectId;
   projectKeyword.value = report.project ? `${report.project.projectCode} / ${report.project.projectName}` : '';
   projectOptions.value = report.project ? [report.project] : [];
   form.items = report.items.length
-    ? report.items.map((item) => ({ ...item, localId: buildLocalId() }))
+    ? report.items.map((item) => ({
+        ...item,
+        localId: buildLocalId(),
+        // Old or imported rows may have an empty responsible person; keep new edits user-attributed.
+        responsiblePerson: item.responsiblePerson || currentUserDisplayName.value
+      }))
     : [createEmptyItem()];
   form.plans = report.plans.length
-    ? report.plans.map((plan) => ({ ...plan, localId: buildLocalId() }))
+    ? report.plans.map((plan) => ({
+        ...plan,
+        localId: buildLocalId(),
+        // Old or imported rows may have an empty responsible person; keep new edits user-attributed.
+        responsiblePerson: plan.responsiblePerson || currentUserDisplayName.value
+      }))
     : [createEmptyPlan()];
 }
 
@@ -375,8 +445,13 @@ async function saveReport(status) {
   saving.value = true;
   message.value = '';
   errorMessage.value = '';
+  itemErrors.value = {};
 
   try {
+    if (status === ReportStatus.SUBMITTED && !prepareSubmittedItems()) {
+      return;
+    }
+
     const payload = buildPayload(status);
     const result = savedReport.value
       ? await updateDailyReport(savedReport.value.id, payload, props.authToken)

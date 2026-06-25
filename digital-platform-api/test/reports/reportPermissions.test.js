@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  canEvaluateWeeklyReport,
+  canFinalizeWeeklyReport,
   canManageWeeklyRestMode,
   canReadAllCenters,
   canReadCenterDailyReport,
+  canReadManagedWeeklyReport,
+  canReadWeeklyReviewOverview,
+  canReviewCenterManagerWeeklyReport,
+  canReviewEmployeeWeeklyReport,
   canWriteDailyReport,
   canWriteWeeklyReport,
   OrganizationRole
@@ -53,4 +59,43 @@ test('weekly rest mode manager permission is restricted', () => {
   assert.equal(canManageWeeklyRestMode(user(OrganizationRole.GENERAL_MANAGER)), true);
   assert.equal(canManageWeeklyRestMode(user(OrganizationRole.EMPLOYEE, { isPlatformAdmin: true })), true);
   assert.equal(canManageWeeklyRestMode(user(OrganizationRole.CENTER_MANAGER)), false);
+});
+
+// Weekly review overview excludes employees and system admins from the P0 business review surface.
+test('weekly review overview permission follows M5 reviewer matrix', () => {
+  assert.equal(canReadWeeklyReviewOverview(user(OrganizationRole.CENTER_MANAGER)), true);
+  assert.equal(canReadWeeklyReviewOverview(user(OrganizationRole.GENERAL_MANAGER)), true);
+  assert.equal(canReadWeeklyReviewOverview(user(OrganizationRole.GENERAL_MANAGER_ASSISTANT)), true);
+  assert.equal(canReadWeeklyReviewOverview(user(OrganizationRole.EMPLOYEE)), false);
+  assert.equal(canReadWeeklyReviewOverview(user(OrganizationRole.SYSTEM_ADMIN, { isPlatformAdmin: true })), false);
+});
+
+// Center managers can review and AI-evaluate only ordinary employees in their own center.
+test('center manager weekly employee review is department-scoped', () => {
+  const reviewer = user(OrganizationRole.CENTER_MANAGER, { id: 10, department: 'rd_center' });
+  const employee = user(OrganizationRole.EMPLOYEE, { id: 11, department: 'rd_center' });
+  const otherCenterEmployee = user(OrganizationRole.EMPLOYEE, { id: 12, department: 'manufacturing_center' });
+  const centerManagerSelf = user(OrganizationRole.CENTER_MANAGER, { id: 10, department: 'rd_center' });
+
+  assert.equal(canReviewEmployeeWeeklyReport(reviewer, employee), true);
+  assert.equal(canEvaluateWeeklyReport(reviewer, employee), true);
+  assert.equal(canReadManagedWeeklyReport(reviewer, employee), true);
+  assert.equal(canReviewEmployeeWeeklyReport(reviewer, otherCenterEmployee), false);
+  assert.equal(canReviewEmployeeWeeklyReport(reviewer, centerManagerSelf), false);
+});
+
+// General managers score center managers manually; assistants can only read those reports.
+test('general manager and assistant weekly center-manager review permissions are separated', () => {
+  const centerManager = user(OrganizationRole.CENTER_MANAGER, { id: 20, department: 'rd_center' });
+  const generalManager = user(OrganizationRole.GENERAL_MANAGER, { id: 21, department: null });
+  const assistant = user(OrganizationRole.GENERAL_MANAGER_ASSISTANT, { id: 22, department: null });
+
+  assert.equal(canReviewCenterManagerWeeklyReport(generalManager, centerManager), true);
+  assert.equal(canFinalizeWeeklyReport(generalManager, centerManager), true);
+  assert.equal(canReadManagedWeeklyReport(generalManager, centerManager), true);
+  assert.equal(canReviewCenterManagerWeeklyReport(assistant, centerManager), false);
+  assert.equal(canFinalizeWeeklyReport(assistant, centerManager), false);
+  assert.equal(canReadManagedWeeklyReport(assistant, centerManager), true);
+  assert.equal(canEvaluateWeeklyReport(generalManager, centerManager), false);
+  assert.equal(canEvaluateWeeklyReport(assistant, centerManager), false);
 });

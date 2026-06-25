@@ -46,6 +46,30 @@
           日报列表
         </button>
         <button
+          v-if="isWeeklyReportUser"
+          type="button"
+          :class="{ active: route.name === 'weekly-report' }"
+          @click="navigate('/weekly-report')"
+        >
+          我的周报
+        </button>
+        <button
+          v-if="canAccessWeeklyReports"
+          type="button"
+          :class="{ active: ['weekly-reports', 'weekly-report-review'].includes(route.name) }"
+          @click="navigate('/weekly-reports')"
+        >
+          周报列表
+        </button>
+        <button
+          v-if="canAccessCenterDailyReport"
+          type="button"
+          :class="{ active: route.name === 'center-daily-report' }"
+          @click="navigate('/center-daily-report')"
+        >
+          中心日报
+        </button>
+        <button
           type="button"
           :class="{ active: route.name === 'my-stage-document-tasks' }"
           @click="navigate('/my-stage-document-tasks')"
@@ -119,6 +143,35 @@
         :navigate="navigate"
         @auth-expired="handleAuthExpired"
       />
+      <WeeklyReportPage
+        v-else-if="route.name === 'weekly-report'"
+        :auth-token="authToken"
+        :current-user="currentUser"
+        :report-id="route.params?.reportId || ''"
+        :navigate="navigate"
+        @auth-expired="handleAuthExpired"
+      />
+      <WeeklyReportListPage
+        v-else-if="route.name === 'weekly-reports'"
+        :auth-token="authToken"
+        :current-user="currentUser"
+        :navigate="navigate"
+        @auth-expired="handleAuthExpired"
+      />
+      <WeeklyReportReviewPage
+        v-else-if="route.name === 'weekly-report-review'"
+        :auth-token="authToken"
+        :current-user="currentUser"
+        :report-id="route.params.reportId"
+        :navigate="navigate"
+        @auth-expired="handleAuthExpired"
+      />
+      <CenterDailyReportPage
+        v-else-if="route.name === 'center-daily-report'"
+        :auth-token="authToken"
+        :current-user="currentUser"
+        @auth-expired="handleAuthExpired"
+      />
       <MyStageDocumentTasksPage
         v-else-if="route.name === 'my-stage-document-tasks'"
         :auth-token="authToken"
@@ -152,6 +205,7 @@ import {
   storeAuthSession,
   updateStoredUser
 } from './auth/session.js';
+import CenterDailyReportPage from './pages/CenterDailyReportPage.vue';
 import DailyReportListPage from './pages/DailyReportListPage.vue';
 import DailyReportPage from './pages/DailyReportPage.vue';
 import LoginPage from './pages/LoginPage.vue';
@@ -161,6 +215,9 @@ import ProjectDetailPage from './pages/ProjectDetailPage.vue';
 import ProjectListPage from './pages/ProjectListPage.vue';
 import ProjectOverviewDashboardPage from './pages/ProjectOverviewDashboardPage.vue';
 import UserManagementPage from './pages/UserManagementPage.vue';
+import WeeklyReportListPage from './pages/WeeklyReportListPage.vue';
+import WeeklyReportPage from './pages/WeeklyReportPage.vue';
+import WeeklyReportReviewPage from './pages/WeeklyReportReviewPage.vue';
 import { useHashRouter } from './router.js';
 import {
   formatBusinessDepartment,
@@ -178,6 +235,20 @@ const canAccessUserManagement = computed(
 );
 // Daily report navigation is shown only for employee accounts.
 const isDailyReportUser = computed(() => currentUser.value?.organizationRole === 'employee');
+// Weekly report writing is available to employees and center managers.
+const isWeeklyReportUser = computed(() => ['employee', 'center_manager'].includes(currentUser.value?.organizationRole));
+// Weekly report list also hosts management overview for broader roles.
+const canAccessWeeklyReports = computed(() =>
+  ['employee', 'center_manager', 'general_manager', 'general_manager_assistant'].includes(
+    currentUser.value?.organizationRole
+  )
+);
+// Center daily reports are visible to management roles and platform system admins.
+const canAccessCenterDailyReport = computed(() =>
+  ['center_manager', 'general_manager', 'general_manager_assistant', 'system_admin'].includes(
+    currentUser.value?.organizationRole
+  )
+);
 
 function setAuth(token, user) {
   authToken.value = token;

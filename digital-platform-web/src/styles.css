@@ -2042,6 +2042,354 @@ p {
   gap: 8px;
 }
 
+/* Weekly report tabs keep the three M5 workflows close without nesting cards. */
+.weekly-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+}
+
+.weekly-tabs button {
+  min-height: 38px;
+  border: 1px solid #cfd9e4;
+  border-radius: 6px;
+  background: #fff;
+  color: #25364a;
+  padding: 0 14px;
+  cursor: pointer;
+}
+
+.weekly-tabs button.active {
+  border-color: #2f807b;
+  background: #e9f5f3;
+  color: #205d59;
+  font-weight: 700;
+}
+
+/* Weekly edit grids use fixed tracks so validation messages do not shift columns. */
+.weekly-edit-table {
+  overflow-x: auto;
+}
+
+.weekly-edit-table__head,
+.weekly-edit-table__row {
+  display: grid;
+  gap: 10px;
+  align-items: start;
+  min-width: 1180px;
+}
+
+.weekly-edit-table--summaries .weekly-edit-table__head,
+.weekly-edit-table--summaries .weekly-edit-table__row {
+  grid-template-columns: 1.4fr 1.6fr 130px 120px 1.4fr 130px 76px;
+}
+
+.weekly-edit-table--plans .weekly-edit-table__head,
+.weekly-edit-table--plans .weekly-edit-table__row {
+  grid-template-columns: 1.5fr 1.7fr 130px 150px 76px;
+}
+
+.weekly-edit-table__head {
+  color: #607086;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 0 8px;
+}
+
+.weekly-edit-table__row {
+  border-top: 1px solid #e6edf4;
+  padding: 12px 0;
+}
+
+.weekly-edit-table label {
+  display: grid;
+  gap: 5px;
+}
+
+.weekly-edit-table textarea,
+.weekly-edit-table input,
+.weekly-edit-table select,
+.weekly-form input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #cfd9e4;
+  border-radius: 6px;
+  padding: 8px 10px;
+  outline: none;
+}
+
+.weekly-edit-table textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.daily-edit-table .invalid,
+.weekly-edit-table .invalid,
+.weekly-form .invalid {
+  border-color: #c2410c;
+  box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.12);
+}
+
+.daily-edit-table small,
+.weekly-edit-table small,
+.weekly-form small {
+  color: #c2410c;
+  font-size: 12px;
+}
+
+.weekly-section {
+  display: grid;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+/* Weekly score panels show total score, source, and fallback dimensions at a glance. */
+.weekly-score {
+  display: grid;
+  gap: 18px;
+}
+
+.weekly-score__summary,
+.weekly-score__dimensions {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.weekly-score__summary div,
+.weekly-score__dimensions div {
+  border: 1px solid #e0e8f0;
+  border-radius: 8px;
+  background: #f8fbfd;
+  padding: 14px;
+}
+
+.weekly-score__summary span,
+.weekly-score__dimensions span {
+  display: block;
+  color: #607086;
+  font-size: 12px;
+}
+
+.weekly-score__summary strong,
+.weekly-score__dimensions strong {
+  display: block;
+  color: #1f2f43;
+  font-size: 24px;
+  margin-top: 6px;
+}
+
+.weekly-score__body {
+  border-top: 1px solid #e6edf4;
+  padding-top: 14px;
+}
+
+.weekly-score__body h3 {
+  margin: 0 0 10px;
+}
+
+.weekly-score__body ul {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.weekly-score__body li {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #e6edf4;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+/* Weekly list tables mirror the dense operational layout used by project tables. */
+.weekly-report-table,
+.weekly-overview-table {
+  overflow-x: auto;
+}
+
+.weekly-report-table__head,
+.weekly-report-table__row,
+.weekly-overview-table__head,
+.weekly-overview-table__row {
+  display: grid;
+  gap: 12px;
+  align-items: center;
+  min-width: 980px;
+  border-bottom: 1px solid #e6edf4;
+  padding: 12px 0;
+}
+
+.weekly-report-table__head,
+.weekly-overview-table__head {
+  color: #607086;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.weekly-report-table__head,
+.weekly-report-table__row {
+  grid-template-columns: 2fr 90px 120px 110px 150px 250px;
+}
+
+.weekly-report-table--employee .weekly-report-table__head,
+.weekly-report-table--employee .weekly-report-table__row {
+  grid-template-columns: 2fr 90px 150px 250px;
+}
+
+.weekly-overview-table__head,
+.weekly-overview-table__row {
+  grid-template-columns: 1.4fr 120px 90px 90px 80px 100px 150px;
+}
+
+.weekly-review-summary,
+.weekly-readonly-panel,
+.weekly-comparison-panel,
+.weekly-final-review-panel {
+  overflow: hidden;
+}
+
+.weekly-readonly-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.weekly-readonly-grid div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid #e0e8f0;
+  border-radius: 8px;
+  background: #f8fbfd;
+  padding: 12px;
+}
+
+.weekly-readonly-grid span,
+.weekly-final-review-form span {
+  color: #607086;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.weekly-readonly-grid strong {
+  min-width: 0;
+  color: #1f2f43;
+  overflow-wrap: anywhere;
+}
+
+.weekly-readonly-table,
+.weekly-comparison-table {
+  overflow-x: auto;
+  padding: 0 18px 16px;
+}
+
+.weekly-readonly-table__head,
+.weekly-readonly-table__row,
+.weekly-comparison-table__head,
+.weekly-comparison-table__row {
+  display: grid;
+  gap: 12px;
+  align-items: start;
+  min-width: 980px;
+  border-bottom: 1px solid #e6edf4;
+  padding: 12px 0;
+}
+
+.weekly-readonly-table__head,
+.weekly-comparison-table__head {
+  color: #607086;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.weekly-readonly-table--summaries .weekly-readonly-table__head,
+.weekly-readonly-table--summaries .weekly-readonly-table__row {
+  grid-template-columns: 1.3fr 1.3fr 110px 92px 1.5fr 110px;
+}
+
+.weekly-readonly-table--plans .weekly-readonly-table__head,
+.weekly-readonly-table--plans .weekly-readonly-table__row {
+  grid-template-columns: 1.5fr 1.7fr 120px 140px;
+}
+
+.weekly-comparison-table__head,
+.weekly-comparison-table__row {
+  min-width: 1460px;
+  grid-template-columns: 100px 70px 160px 220px 160px 260px 100px 90px 100px 90px;
+}
+
+.weekly-readonly-table__row > *,
+.weekly-comparison-table__row > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.weekly-final-review-form {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) minmax(120px, 180px) minmax(260px, 1fr);
+  gap: 14px;
+  padding: 16px 18px;
+}
+
+.weekly-final-review-form label {
+  display: grid;
+  gap: 7px;
+}
+
+.weekly-final-review-form input,
+.weekly-final-review-form textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #cfd9e4;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #17212f;
+  outline: none;
+  padding: 8px 10px;
+}
+
+.weekly-final-review-form input {
+  min-height: 40px;
+}
+
+.weekly-final-review-form textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.weekly-final-review-form input[readonly],
+.weekly-final-review-form textarea[readonly] {
+  background: #f6f8fa;
+  color: #617184;
+}
+
+.weekly-report-table__actions,
+.weekly-page-actions,
+.weekly-overview-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: end;
+}
+
+.weekly-overview-filters label {
+  display: grid;
+  gap: 5px;
+}
+
+.weekly-overview-filters input,
+.weekly-overview-filters select {
+  min-height: 36px;
+  border: 1px solid #cfd9e4;
+  border-radius: 6px;
+  padding: 0 10px;
+}
+
 .stage-document-return input,
 .stage-document-applicability-action input {
   width: 100%;
@@ -2122,8 +2470,16 @@ p {
   }
 
   .daily-page-actions,
-  .daily-section__heading {
+  .daily-section__heading,
+  .weekly-page-actions,
+  .weekly-overview-filters {
     justify-content: flex-start;
+  }
+
+  .weekly-score__summary,
+  .weekly-score__dimensions,
+  .weekly-readonly-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .task-table__head {
@@ -2162,6 +2518,10 @@ p {
 
   .stage-document-card__main,
   .stage-document-card__body {
+    grid-template-columns: 1fr;
+  }
+
+  .weekly-final-review-form {
     grid-template-columns: 1fr;
   }
 
@@ -2285,13 +2645,132 @@ p {
   .daily-page-actions,
   .daily-page-actions .ghost-button,
   .daily-page-actions .primary-button,
+  .weekly-page-actions,
+  .weekly-page-actions .ghost-button,
+  .weekly-page-actions .primary-button,
+  .weekly-tabs button,
+  .weekly-overview-filters,
+  .weekly-overview-filters label,
+  .weekly-overview-filters .primary-button,
   .daily-section__heading,
   .daily-section__heading .ghost-button,
   .daily-report-table__actions,
   .daily-report-table__actions .ghost-button,
+  .weekly-report-table__actions,
+  .weekly-report-table__actions .ghost-button,
   .daily-attachment-list div,
   .daily-attachment-list .ghost-button,
   .user-password-reset .ghost-button {
     width: 100%;
+  }
+
+  .weekly-score__summary,
+  .weekly-score__dimensions,
+  .weekly-readonly-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Center daily report preview cards keep grouped employee summaries scannable. */
+.report-preview {
+  display: grid;
+  gap: 16px;
+}
+
+/* KPI cells summarize the current center/day before the grouped details. */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-grid > div {
+  border: 1px solid #d8e0e8;
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.summary-grid span {
+  display: block;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.summary-grid strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 20px;
+}
+
+/* Employee cards contain the three center daily report sections side by side. */
+.employee-report-card {
+  border: 1px solid #d8e0e8;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 16px;
+}
+
+.employee-report-card header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.employee-report-card h3,
+.employee-report-card h4 {
+  margin: 0;
+}
+
+.employee-report-card header span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.three-column-report {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.three-column-report section {
+  border: 1px solid #d8e0e8;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.three-column-report ul {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.three-column-report li {
+  display: grid;
+  gap: 4px;
+}
+
+.three-column-report li span,
+.three-column-report p {
+  color: #253041;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.three-column-report em {
+  color: #64748b;
+  font-style: normal;
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  /* Center daily report sections collapse to one column on narrow screens. */
+  .summary-grid,
+  .three-column-report {
+    grid-template-columns: 1fr;
   }
 }

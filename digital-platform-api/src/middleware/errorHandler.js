@@ -1,6 +1,8 @@
 import { ValidationError } from '../domain/projects.js';
 import { AuthError } from '../domain/auth.js';
+import { CenterDailyReportError } from '../domain/centerDailyReports.js';
 import { DailyReportError } from '../domain/dailyReports.js';
+import { WeeklyReportError } from '../domain/weeklyReports.js';
 import { StageDocumentApplicabilityError } from '../domain/stageDocumentApplicability.js';
 import { StageDocumentStatusError } from '../domain/stageDocumentStatus.js';
 import {
@@ -70,6 +72,28 @@ export function errorHandler(error, req, res, next) {
   }
 
   if (error instanceof DailyReportError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      }
+    });
+    return;
+  }
+
+  if (error instanceof CenterDailyReportError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      }
+    });
+    return;
+  }
+
+  if (error instanceof WeeklyReportError) {
     res.status(error.statusCode).json({
       error: {
         code: error.code,

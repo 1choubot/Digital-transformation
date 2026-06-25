@@ -1,13 +1,16 @@
 import { ValidationError } from '../domain/projects.js';
 import { AuthError } from '../domain/auth.js';
+import { DailyReportError } from '../domain/dailyReports.js';
 import { StageDocumentApplicabilityError } from '../domain/stageDocumentApplicability.js';
 import { StageDocumentStatusError } from '../domain/stageDocumentStatus.js';
 import {
   DuplicateProjectCodeError,
   ProjectAuthorizationError,
+  ProjectApprovalError,
   ProjectManagerUserError,
   ProjectNotFoundError,
   ProjectOverviewDashboardQueryError,
+  ProjectStageNotFoundError,
   ProjectStageAdvanceError
 } from '../repositories/projectRepository.js';
 import { OperationLogLimitError } from '../repositories/operationLogRepository.js';
@@ -66,6 +69,17 @@ export function errorHandler(error, req, res, next) {
     return;
   }
 
+  if (error instanceof DailyReportError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      }
+    });
+    return;
+  }
+
   if (error instanceof ProjectNotFoundError) {
     res.status(error.statusCode).json({
       error: {
@@ -77,7 +91,30 @@ export function errorHandler(error, req, res, next) {
     return;
   }
 
+  if (error instanceof ProjectStageNotFoundError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: 'PROJECT_STAGE_NOT_FOUND',
+        message: 'Project stage not found',
+        projectId: error.projectId,
+        stageId: error.stageId
+      }
+    });
+    return;
+  }
+
   if (error instanceof ProjectAuthorizationError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      }
+    });
+    return;
+  }
+
+  if (error instanceof ProjectApprovalError) {
     res.status(error.statusCode).json({
       error: {
         code: error.code,

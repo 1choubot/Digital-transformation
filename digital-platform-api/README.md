@@ -30,10 +30,11 @@
 - 阶段资料附件：资料项附件上传、列表、下载和软删除，上传/删除写入业务日志
 - 我的资料任务查询：登录用户可集中查看分配给自己的适用阶段资料项
 - 项目总览看板：登录用户可只读查看跨项目汇总指标、当前阶段齐套摘要和未完成适用必填资料
+- 阶段级项目审批流：每个项目阶段保存唯一当前审批状态，项目经理提交/重新提交，匹配中心负责人审批，阶段 1、3、8 还需总经理审批
 - 项目阶段手工推进接口：项目经理可在自己负责项目齐套后推进；本中心相关项目的中心负责人或总经理也可推进；总经理助理、系统管理员和普通非项目经理员工会被拒绝
-- 项目维度业务操作日志：记录项目创建、资料状态流转、资料适用性变更、资料责任人变更、阶段推进和项目完成等成功业务动作
+- 项目维度业务操作日志：记录项目创建、资料状态流转、资料适用性变更、资料责任人变更、阶段审批、阶段推进和项目完成等成功业务动作
 
-不包含日报周报、文件管理平台联动、自动通知、复杂 RBAC、项目成员表、技术负责人表、项目参与人表、完整审批流引擎、项目类型模板、自动批量标记不适用、阶段回退、跳阶段、批量推进、在线表单填写、表单草稿、表单生成归档文件、文件管理平台上传/下载、附件预览、断点续传、多版本管理、病毒扫描、对象存储、全局审计日志、系统配置日志、登录日志、用户管理操作日志、文件平台日志、文件下载日志、管理层大屏图表、日志筛选导出、复杂分页、日志权限矩阵、基于文件上传/归档状态的齐套率、阶段推进操作人完整日志、复杂菜单权限、文件平台用户同步、权限同步、下载权限判断、部门权限继承、SSO 或细粒度按钮权限，也不读取、共用或迁移文件管理平台数据库。
+不包含日报周报、文件管理平台联动、自动通知、复杂 RBAC、项目成员表、技术负责人表、项目参与人表、完整审批流引擎、项目级审批单、审批节点配置器、项目类型模板、自动批量标记不适用、阶段回退、跳阶段、批量推进、在线表单填写、表单草稿、表单生成归档文件、文件管理平台上传/下载、附件预览、断点续传、多版本管理、病毒扫描、对象存储、全局审计日志、系统配置日志、登录日志、用户管理操作日志、文件平台日志、文件下载日志、管理层大屏图表、日志筛选导出、复杂分页、日志权限矩阵、基于文件上传/归档状态的齐套率、阶段推进操作人完整日志、复杂菜单权限、文件平台用户同步、权限同步、下载权限判断、部门权限继承、SSO 或细粒度按钮权限，也不读取、共用或迁移文件管理平台数据库。
 
 后端项目和阶段资料仓储按能力拆分为更小模块。`src/repositories/projectRepository.js` 和 `src/repositories/stageDocumentRepository.js` 保留为兼容出口；项目基础、阶段推进、项目总览、阶段资料清单、状态流转、适用性、责任人和我的资料任务等实现位于对应子模块中。该拆分仅调整代码结构，不改变 API、数据库、权限、错误码或用户可见业务行为。
 
@@ -129,7 +130,15 @@ migrations/010_organization_roles_project_governance.sql
 
 该迁移会为 `users` 增加 `organization_role`，允许总经理、系统管理员和总经理助理的 `department` 为空；为 `projects` 增加 `project_mode` 和 `project_manager_user_id`。执行后应重新运行 `npm run init-auth`，初始化账号会保存/恢复为 `organizationRole = system_admin`、`isPlatformAdmin = true`、`isEnabled = true`。
 
-13. 启动服务：
+13. 现有环境如已执行过 `010_organization_roles_project_governance.sql`，需要继续在 MySQL 中执行阶段审批流迁移：
+
+```bash
+migrations/011_project_stage_approval_workflow.sql
+```
+
+该迁移会为 `project_stages` 增加 `approval_status`，默认 `not_submitted`；并创建 `project_stage_approval_history` 表保存阶段级审批历史。第一版审批历史的 `stage_id` 必须非空，审批历史按 `created_at ASC, id ASC` 查询。迁移不修改 8 阶段定义或 20260610 版 54 项资料模板。
+
+14. 启动服务：
 
 ```bash
 npm run dev
@@ -348,7 +357,32 @@ Authorization: Bearer <token>
 GET /api/projects/{projectId}
 ```
 
-该接口必须携带登录态，只做 `requireAuth`，并按当前用户校验项目可见性。无权访问具体项目时返回 `FORBIDDEN_OPERATION`，不伪装成项目不存在；项目确实不存在时仍返回 `PROJECT_NOT_FOUND`。返回项目基础信息、全部 8 个阶段、当前阶段和创建人追溯字段。第 8 阶段推进完成后，项目 `status` 为 `completed`，当前阶段为空。
+该接口必须携带登录态，只做 `requireAuth`，并按当前用户校验项目可见性。无权访问具体项目时返回 `FORBIDDEN_OPERATION`，不伪装成项目不存在；项目确实不存在时仍返回 `PROJECT_NOT_FOUND`。返回项目基础信息、全部 8 个阶段、当前阶段和创建人追溯字段。每个阶段返回 `approvalStatus`，第一版取值为 `not_submitted`、`pending_center_manager`、`returned_by_center_manager`、`pending_general_manager`、`returned_by_general_manager`、`approved` 或 `cancelled`。第 8 阶段推进完成后，项目 `status` 为 `completed`，当前阶段为空。
+
+### Stage Approval Workflow
+
+第一版只做阶段级审批，不做独立项目级审批、项目级审批单或可空 `stageId`。每个项目阶段只有一个当前审批状态，状态保存在 `project_stages.approval_status`；审批历史只是流水，不作为当前状态来源。退回后重新提交复用同一阶段审批状态。
+
+固定接口：
+
+```http
+POST /api/projects/{projectId}/stages/{stageId}/approval/submit
+POST /api/projects/{projectId}/stages/{stageId}/approval/approve
+POST /api/projects/{projectId}/stages/{stageId}/approval/return
+POST /api/projects/{projectId}/stages/{stageId}/approval/resubmit
+GET /api/projects/{projectId}/stages/{stageId}/approval/history
+Authorization: Bearer <token>
+```
+
+`projectId` 和 `stageId` 必须是严格正整数；非法项目 ID 返回 `INVALID_PROJECT_ID`，非法阶段 ID 返回 `INVALID_PROJECT_STAGE_ID`，项目不存在返回 `PROJECT_NOT_FOUND`，阶段不存在或不属于该项目返回 `PROJECT_STAGE_NOT_FOUND`。
+
+审批节点固定为 8 阶段规则：阶段 1 立项和阶段 3 合同签订由营销中心负责人审批后进入总经理审批；阶段 2 方案设计和阶段 4 详细设计由研发中心负责人审批后直接通过；阶段 5 生产制作、阶段 6 预验收、阶段 7 终验收由制造中心负责人审批后直接通过；阶段 8 结题由项目经理所属中心负责人审批后进入总经理审批。阶段 8 如果项目经理没有有效业务部门，提交审批返回 `PROJECT_APPROVAL_NOT_SUBMITTABLE`。
+
+项目经理只能提交或重新提交自己负责项目的当前阶段审批，不能替代中心负责人或总经理审批。中心负责人只能处理匹配本中心审批节点的 `pending_center_manager`；总经理只能处理阶段 1、阶段 3、阶段 8 的 `pending_general_manager`；总经理助理、系统管理员、员工和仅因项目经理身份访问项目的用户调用审批通过或退回会返回 `PROJECT_APPROVAL_FORBIDDEN`。
+
+提交或重新提交前必须重新校验当前阶段适用必填资料全部 `confirmed`。审批通过前也会重新校验齐套；缺失适用必填资料返回 `PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE`。当前审批状态不能提交或重新提交返回 `PROJECT_APPROVAL_NOT_SUBMITTABLE`；当前审批状态不是待审批返回 `PROJECT_APPROVAL_NOT_PENDING`；退回原因为空或超过限制返回 `INVALID_APPROVAL_COMMENT`。
+
+审批成功动作会在同一事务中更新审批状态、写入 `project_stage_approval_history`，并写入项目业务日志。审批历史查询只读，按 `createdAt ASC, id ASC` 返回；没有审批历史时返回空列表，不写业务日志，也不改变项目、阶段、资料或审批状态。
 
 ### Advance Current Project Stage
 
@@ -364,7 +398,7 @@ Content-Type: application/json
 
 接口不接收、不信任目标阶段、目标阶段顺序或目标阶段标识。服务端只根据当前阶段自动推进到下一顺序阶段，不支持跳阶段、回退、批量推进或自由指定阶段。
 
-推进前只检查当前阶段适用必填资料齐套门禁。当前阶段必须已经存在项目级阶段资料项记录；如果当前阶段没有任何资料项记录，系统会认为阶段资料清单尚未初始化并拒绝推进。当前开发库项目可先执行新版资料清单初始化命令；旧模拟项目资料不做兼容迁移。
+推进前检查当前阶段审批状态和适用必填资料齐套门禁。当前阶段审批状态必须是 `approved`，否则返回 `PROJECT_APPROVAL_NOT_APPROVED`。当前阶段必须已经存在项目级阶段资料项记录；如果当前阶段没有任何资料项记录，系统会认为阶段资料清单尚未初始化并拒绝推进。当前开发库项目可先执行新版资料清单初始化命令；旧模拟项目资料不做兼容迁移。
 
 - 只统计 `isRequired = true` 且 `isApplicable = true` 的资料项
 - `confirmed` 计为完成
@@ -604,6 +638,6 @@ Authorization: Bearer <token>
 - `detailsJson`
 - `createdAt`
 
-第一版记录的 `actionType` 包括 `project.created`、`document.submitted`、`document.confirmed`、`document.returned`、`document.marked_not_applicable`、`document.restored_applicable`、`document.responsible_changed`、`document.attachment_uploaded`、`document.attachment_deleted`、`stage.advanced` 和 `project.completed`。所有日志必须归属于项目，操作人来自当前登录态，不信任前端提交的操作人。
+第一版记录的 `actionType` 包括 `project.created`、`document.submitted`、`document.confirmed`、`document.returned`、`document.marked_not_applicable`、`document.restored_applicable`、`document.responsible_changed`、`document.attachment_uploaded`、`document.attachment_deleted`、`approval.submitted`、`approval.center_approved`、`approval.center_returned`、`approval.general_approved`、`approval.general_returned`、`approval.resubmitted`、`stage.advanced` 和 `project.completed`。所有日志必须归属于项目，操作人来自当前登录态，不信任前端提交的操作人。
 
-业务日志写入与项目创建、资料状态/适用性操作、阶段推进等业务状态变更在同一事务中提交；日志写入失败时业务状态变更回滚。失败操作不记录日志。历史补初始化、模板初始化、系统脚本动作和本能力上线前已发生的业务动作不补写历史日志。
+业务日志写入与项目创建、资料状态/适用性操作、阶段审批、阶段推进等业务状态变更在同一事务中提交；日志写入失败时业务状态变更回滚。审批成功动作的审批状态、审批历史和业务日志必须同事务提交。失败操作和审批历史查询不记录成功日志。历史补初始化、模板初始化、系统脚本动作和本能力上线前已发生的业务动作不补写历史日志。

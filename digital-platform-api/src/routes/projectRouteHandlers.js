@@ -4,14 +4,20 @@ import { DOCUMENT_STATUS_ACTION } from '../domain/stageDocumentStatus.js';
 import {
   assertProjectViewable,
   advanceProjectStage,
+  approveStageApproval,
   createProject,
   getProjectDetail,
   getProjectOverviewDashboard,
+  listStageApprovalHistory,
   listProjects,
   normalizeProjectOverviewDashboardFilters,
   ProjectNotFoundError,
-  projectExists
+  projectExists,
+  resubmitStageApproval,
+  returnStageApproval,
+  submitStageApproval
 } from '../repositories/projectRepository.js';
+import { searchActiveProjectsForDailyReports } from '../repositories/dailyReportRepository.js';
 import {
   listProjectOperationLogs,
   normalizeOperationLogLimit
@@ -45,6 +51,26 @@ function parsePositiveId(rawValue, fieldName) {
 
 function parseProjectId(rawValue) {
   return parsePositiveId(rawValue, 'projectId');
+}
+
+function parseApprovalProjectId(rawValue) {
+  const id = Number.parseInt(rawValue, 10);
+
+  if (!Number.isSafeInteger(id) || id <= 0 || String(id) !== String(rawValue)) {
+    throw new ValidationError('Invalid projectId', ['projectId'], 'INVALID_PROJECT_ID');
+  }
+
+  return id;
+}
+
+function parseApprovalStageId(rawValue) {
+  const id = Number.parseInt(rawValue, 10);
+
+  if (!Number.isSafeInteger(id) || id <= 0 || String(id) !== String(rawValue)) {
+    throw new ValidationError('Invalid stageId', ['stageId'], 'INVALID_PROJECT_STAGE_ID');
+  }
+
+  return id;
 }
 
 function parseDocumentId(rawValue) {
@@ -135,6 +161,20 @@ export async function listProjectsHandler(req, res) {
   });
 }
 
+export async function listMyActiveProjectsHandler(req, res) {
+  const projects = await searchActiveProjectsForDailyReports({
+    q: req.query.q,
+    limit: req.query.limit,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: {
+      projects
+    }
+  });
+}
+
 export async function createProjectHandler(req, res) {
   const project = normalizeCreateProjectInput(req.body || {});
   const created = await createProject(project, req.auth.user.id);
@@ -182,6 +222,63 @@ export async function advanceProjectStageHandler(req, res) {
 
   res.json({
     data: detail
+  });
+}
+
+function parseApprovalRouteIds(req) {
+  return {
+    projectId: parseApprovalProjectId(req.params.projectId),
+    stageId: parseApprovalStageId(req.params.stageId)
+  };
+}
+
+export async function submitStageApprovalHandler(req, res) {
+  const { projectId, stageId } = parseApprovalRouteIds(req);
+  const result = await submitStageApproval({ projectId, stageId, user: req.auth.user });
+
+  res.json({
+    data: result
+  });
+}
+
+export async function approveStageApprovalHandler(req, res) {
+  const { projectId, stageId } = parseApprovalRouteIds(req);
+  const result = await approveStageApproval({ projectId, stageId, user: req.auth.user });
+
+  res.json({
+    data: result
+  });
+}
+
+export async function returnStageApprovalHandler(req, res) {
+  const { projectId, stageId } = parseApprovalRouteIds(req);
+  const result = await returnStageApproval({
+    projectId,
+    stageId,
+    user: req.auth.user,
+    comment: req.body?.comment ?? req.body?.returnReason
+  });
+
+  res.json({
+    data: result
+  });
+}
+
+export async function resubmitStageApprovalHandler(req, res) {
+  const { projectId, stageId } = parseApprovalRouteIds(req);
+  const result = await resubmitStageApproval({ projectId, stageId, user: req.auth.user });
+
+  res.json({
+    data: result
+  });
+}
+
+export async function listStageApprovalHistoryHandler(req, res) {
+  const { projectId, stageId } = parseApprovalRouteIds(req);
+  const history = await listStageApprovalHistory({ projectId, stageId, user: req.auth.user });
+
+  res.json({
+    data: history
   });
 }
 

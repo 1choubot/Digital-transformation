@@ -50,6 +50,32 @@
           </svg>
           <span>项目列表</span>
         </button>
+        <p class="nav-section-title">日报周报</p>
+        <button
+          v-if="isDailyReportUser"
+          type="button"
+          :class="{ active: route.name === 'daily-report' }"
+          @click="handleNavigate('/daily-report')"
+        >
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+          <span>我的日报</span>
+        </button>
+        <button
+          v-if="isDailyReportUser"
+          type="button"
+          :class="{ active: route.name === 'daily-reports' }"
+          @click="handleNavigate('/daily-reports')"
+        >
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z"/>
+          </svg>
+          <span>日报列表</span>
+        </button>
 
         <button 
           type="button" 
@@ -200,6 +226,21 @@
           :navigate="navigate"
           @auth-expired="handleAuthExpired"
         />
+        <DailyReportPage
+          v-else-if="route.name === 'daily-report'"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          :report-id="route.params?.reportId || ''"
+          :navigate="navigate"
+          @auth-expired="handleAuthExpired"
+        />
+        <DailyReportListPage
+          v-else-if="route.name === 'daily-reports'"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          :navigate="navigate"
+          @auth-expired="handleAuthExpired"
+        />
         <UserManagementPage
           v-else-if="route.name === 'users'"
           :auth-token="authToken"
@@ -251,6 +292,8 @@ import {
   storeAuthSession,
   updateStoredUser
 } from './auth/session.js';
+import DailyReportListPage from './pages/DailyReportListPage.vue';
+import DailyReportPage from './pages/DailyReportPage.vue';
 import LoginPage from './pages/LoginPage.vue';
 import MyStageDocumentTasksPage from './pages/MyStageDocumentTasksPage.vue';
 import ProjectCreatePage from './pages/ProjectCreatePage.vue';
@@ -310,6 +353,8 @@ function hideToast() {
 const canAccessUserManagement = computed(
   () => currentUser.value?.isPlatformAdmin && currentUser.value?.organizationRole === 'system_admin'
 );
+// Daily report navigation is shown only for employee accounts.
+const isDailyReportUser = computed(() => currentUser.value?.organizationRole === 'employee');
 
 function setAuth(token, user) {
   authToken.value = token;

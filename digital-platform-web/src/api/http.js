@@ -174,6 +174,34 @@ export function toReadableApiError(error) {
     return '当前账号无权执行该操作。';
   }
 
+  if (error.code === 'INVALID_APPROVAL_ACTION') {
+    return '当前审批动作无效或当前状态不允许该动作。';
+  }
+
+  if (error.code === 'INVALID_APPROVAL_COMMENT') {
+    return '审批意见或退回原因不能为空。';
+  }
+
+  if (error.code === 'PROJECT_APPROVAL_NOT_SUBMITTABLE') {
+    return '当前项目或阶段暂不能提交审批。';
+  }
+
+  if (error.code === 'PROJECT_APPROVAL_NOT_PENDING') {
+    return '当前审批不是待处理状态。';
+  }
+
+  if (error.code === 'PROJECT_APPROVAL_NOT_APPROVED') {
+    return '当前阶段审批未通过，暂不能推进阶段。';
+  }
+
+  if (error.code === 'PROJECT_APPROVAL_FORBIDDEN') {
+    return '当前用户无权执行该审批操作。';
+  }
+
+  if (error.code === 'PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE') {
+    return '当前阶段存在未完成的适用必填资料，不能提交或通过审批。';
+  }
+
   if (error.code === 'PROJECT_CODE_EXISTS') {
     return `项目编号 ${error.projectCode || ''} 已存在，请更换后再提交。`.trim();
   }
@@ -248,6 +276,14 @@ export function toReadableApiError(error) {
 
   if (error.code === 'INVALID_PROJECT_ID') {
     return '项目筛选参数无效，请刷新后重试。';
+  }
+
+  if (error.code === 'INVALID_PROJECT_STAGE_ID') {
+    return '阶段参数无效，请刷新后重试。';
+  }
+
+  if (error.code === 'PROJECT_STAGE_NOT_FOUND') {
+    return '阶段不存在或不属于当前项目。';
   }
 
   if (error.code === 'INVALID_PROJECT_STATUS_FILTER') {

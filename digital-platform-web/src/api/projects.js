@@ -56,6 +56,42 @@ export async function advanceProjectStage(projectId, authToken) {
   });
 }
 
+export async function submitStageApproval(projectId, stageId, authToken) {
+  return request(`/api/projects/${projectId}/stages/${stageId}/approval/submit`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({})
+  });
+}
+
+export async function approveStageApproval(projectId, stageId, authToken) {
+  return request(`/api/projects/${projectId}/stages/${stageId}/approval/approve`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({})
+  });
+}
+
+export async function returnStageApproval(projectId, stageId, comment, authToken) {
+  return request(`/api/projects/${projectId}/stages/${stageId}/approval/return`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ comment })
+  });
+}
+
+export async function resubmitStageApproval(projectId, stageId, authToken) {
+  return request(`/api/projects/${projectId}/stages/${stageId}/approval/resubmit`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({})
+  });
+}
+
+export async function listStageApprovalHistory(projectId, stageId, authToken = '') {
+  return request(`/api/projects/${projectId}/stages/${stageId}/approval/history`, { authToken });
+}
+
 export async function markStageDocumentSubmitted(projectId, documentId, authToken) {
   return request(`/api/projects/${projectId}/stage-documents/${documentId}/submit`, {
     method: 'POST',

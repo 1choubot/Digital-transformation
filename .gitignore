@@ -45,3 +45,12 @@ rendered/
 Thumbs.db
 .idea/
 .vscode/
+
+#agents files
+.workbuddy/
+.agents/
+.codex/
+    
+
+#report export files
+daily_and_weekly_files/    

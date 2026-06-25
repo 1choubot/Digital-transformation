@@ -29,12 +29,12 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 
 ### Requirement: 项目创建
 
-系统 MUST 提供项目创建能力。项目创建必须要求当前登录用户具备创建项目权限；创建成功后必须同时完成项目主数据保存、当前登录用户创建人记录、标准 8 阶段初始化、项目级阶段资料清单初始化和 `project.created` 项目业务操作日志写入。
+系统 MUST 提供项目创建能力。项目创建必须要求当前登录用户具备创建项目权限；创建成功后必须同时完成项目主数据保存、当前登录用户创建人记录、标准 8 阶段初始化、`v20260624` 64 项项目级阶段资料清单初始化和 `project.created` 项目业务操作日志写入。
 
 #### Scenario: 成功创建项目
 
 - **WHEN** 具备创建项目权限的已登录用户提交有效的项目创建信息
-- **THEN** 系统必须保存项目主数据、记录当前登录用户为创建人、为该项目生成标准 8 阶段记录、初始化项目级阶段资料清单，并在同一事务中记录 `action_type = project.created` 的项目业务操作日志
+- **THEN** 系统必须保存项目主数据、记录当前登录用户为创建人、为该项目生成标准 8 阶段记录、初始化 `v20260624` 64 项项目级阶段资料清单，并在同一事务中记录 `action_type = project.created` 的项目业务操作日志
 
 #### Scenario: 未登录不能创建项目
 
@@ -44,12 +44,12 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 #### Scenario: 总经理可以创建项目
 
 - **WHEN** 当前登录用户 `organizationRole = general_manager` 且提交有效项目创建信息
-- **THEN** 系统必须允许创建项目，并继续执行项目主数据保存、8 阶段初始化、54 项 v20260610 资料初始化和 `project.created` 业务日志写入
+- **THEN** 系统必须允许创建项目，并继续执行项目主数据保存、8 阶段初始化、64 项 `v20260624` 资料初始化和 `project.created` 业务日志写入
 
 #### Scenario: 中心负责人可以创建项目
 
 - **WHEN** 当前登录用户 `organizationRole = center_manager` 且提交有效项目创建信息
-- **THEN** 系统必须允许创建项目，并继续执行项目主数据保存、8 阶段初始化、54 项 v20260610 资料初始化和 `project.created` 业务日志写入
+- **THEN** 系统必须允许创建项目，并继续执行项目主数据保存、8 阶段初始化、64 项 `v20260624` 资料初始化和 `project.created` 业务日志写入
 
 #### Scenario: 普通员工不能创建项目
 
@@ -498,40 +498,6 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **WHEN** 实现项目核心后端模块拆分
 - **THEN** 系统不得因本次结构治理新增文件管理平台联动、在线表单、表单草稿、表单归档文件、消息提醒、超期提醒、项目成员权限、项目经理权限、复杂权限、导出、批量操作或管理大屏图表
 
-### Requirement: 20260610 项目流程依据
-系统 MUST 以 `智能制造项目管理流程图20260610.pdf` 作为项目管理主流程依据，并 MUST 使用 `docs/9.7_智能制造项目整体推进流程_20260610.md` 作为流程文字整理依据。
-
-#### Scenario: 使用 20260610 流程图作为主流程依据
-- **WHEN** 系统说明或实现项目主流程、阶段推进和阶段资料归属口径
-- **THEN** 系统必须以 20260610 新项目管理流程图为依据，而不得继续以旧资料模板作为主流程依据
-
-#### Scenario: 保持 8 阶段主干不变
-- **WHEN** 系统初始化或展示项目阶段
-- **THEN** 系统必须继续按顺序使用立项阶段、方案设计阶段、合同签订阶段、详细设计阶段、生产制作阶段、预验收阶段、终验收阶段和结题阶段
-
-#### Scenario: 阶段标识保持不变
-- **WHEN** 系统保存标准 8 阶段
-- **THEN** 系统必须继续使用 `initiation`、`solution`、`contract`、`detailedDesign`、`manufacturing`、`preAcceptance`、`finalAcceptance`、`closeout` 作为稳定阶段标识
-
-### Requirement: 20260610 阶段推进边界
-系统 MUST 在 20260610 项目流程依据下继续使用当前阶段齐套门禁推进项目阶段，并 MUST 在本 change 引入的阶段审批流中要求当前阶段审批通过后才允许推进。系统 MUST 不因审批流新增跳阶段、回退、自动阶段流转或复杂工作流引擎。
-
-#### Scenario: 阶段推进继续基于当前阶段齐套门禁
-- **WHEN** 已登录且有推进权限的用户请求推进项目当前阶段
-- **THEN** 系统必须继续只检查当前阶段适用必填资料齐套情况，并在满足门禁和审批状态后按 8 阶段顺序推进
-
-#### Scenario: 阶段推进要求当前阶段审批通过
-- **WHEN** 用户请求推进项目当前阶段且当前阶段审批状态不是 `approved`
-- **THEN** 系统必须返回 `PROJECT_APPROVAL_NOT_APPROVED`，并不得修改项目或阶段状态
-
-#### Scenario: 不新增跳阶段或回退
-- **WHEN** 系统按 20260610 流程和审批流推进项目阶段
-- **THEN** 系统不得新增跳阶段、阶段回退、任意选择目标阶段或自由调整阶段顺序能力
-
-#### Scenario: 不新增复杂审批流引擎
-- **WHEN** 系统实现阶段审批流
-- **THEN** 系统不得新增可视化流程编排、任意节点配置器、自动通知、日报周报或文件管理平台联动能力
-
 ### Requirement: 项目模式
 系统 MUST 为项目维护项目模式字段，并 MUST 保持自研模式和供应链/外包模式共用同一项目流程、阶段资料和状态机。
 
@@ -553,7 +519,7 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 
 #### Scenario: 项目模式不改变资料清单
 - **WHEN** 系统初始化自研或外包项目阶段资料
-- **THEN** 两种模式都必须使用同一套 20260610 版 54 项资料
+- **THEN** 两种模式都必须使用同一套 `v20260624` 64 项阶段资料
 
 #### Scenario: 项目模式不改变状态规则
 - **WHEN** 系统处理自研或外包项目
@@ -1252,4 +1218,60 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **WHEN** 系统判断中心负责人是否应获得 `stage_advance` 待办
 - **THEN** 系统 MUST 优先使用项目 `participatingDepartments`、阶段资料 `ownerDepartment` 和 `reviewDepartment`
 - **AND** 仅在阶段资料 `ownerDepartment` 和 `reviewDepartment` 均为空时，才 MAY 兼容使用责任人部门
+
+### Requirement: 20260624 项目流程依据
+
+系统 MUST 以 `智能制造项目管理流程图20260624.pdf`、20260624 版项目管理流程和 `docs/9.10_v20260624阶段资料模板规划_20260624.md` 作为当前阶段资料和项目推进规划依据。
+
+#### Scenario: 使用 20260624 流程作为主流程依据
+- **WHEN** 系统说明或实现项目主流程、阶段推进和阶段资料归属口径
+- **THEN** 系统必须以 `智能制造项目管理流程图20260624.pdf`、20260624 流程和 `v20260624` 64 项普通阶段资料模板为依据
+
+#### Scenario: 保持 8 阶段主干不变
+- **WHEN** 系统初始化或展示项目阶段
+- **THEN** 系统必须继续按顺序使用立项阶段、方案设计阶段、合同签订阶段、详细设计阶段、生产制作阶段、预验收阶段、终验收阶段和结题阶段
+
+#### Scenario: 阶段标识保持不变
+- **WHEN** 系统保存标准 8 阶段
+- **THEN** 系统必须继续使用 `initiation`、`solution`、`contract`、`detailedDesign`、`manufacturing`、`preAcceptance`、`finalAcceptance`、`closeout` 作为稳定阶段标识
+
+### Requirement: 简单阶段推进边界
+
+系统 MUST 继续使用当前阶段资料齐套门禁和阶段关口审批推进项目阶段，并 MUST 不因 20260624 资料模板引入跳阶段、回退、自动阶段流转或复杂工作流引擎。
+
+#### Scenario: 阶段推进继续基于当前阶段齐套门禁
+- **WHEN** 已登录且有推进权限的用户请求推进项目当前阶段
+- **THEN** 系统必须继续只检查当前阶段适用必填资料齐套情况，并在满足门禁和审批状态后按 8 阶段顺序推进
+
+#### Scenario: 阶段推进要求当前阶段审批通过
+- **WHEN** 用户请求推进项目当前阶段且当前阶段审批状态不是 `approved`
+- **THEN** 系统必须返回 `PROJECT_APPROVAL_NOT_APPROVED`，并不得修改项目或阶段状态
+
+#### Scenario: 不新增跳阶段或回退
+- **WHEN** 系统按 20260624 流程和阶段审批状态推进项目阶段
+- **THEN** 系统不得新增跳阶段、阶段回退、任意选择目标阶段或自由调整阶段顺序能力
+
+#### Scenario: 不新增复杂流程引擎
+- **WHEN** 系统实现阶段资料收集、资料审核或阶段审批
+- **THEN** 系统不得新增可视化流程编排、任意节点配置器、合同审批流、采购审批流、付款流、设计变更流程引擎、自动通知、日报周报或资料服务器核查流程
+
+### Requirement: 第一版简单资料闭环
+
+系统 MUST 将第一版业务闭环限定为阶段资料收集、资料审核、归档到文件管理平台和阶段推进。
+
+#### Scenario: 项目创建初始化闭环对象
+- **WHEN** 项目创建成功
+- **THEN** 系统必须初始化标准 8 阶段和 `v20260624` 64 项阶段资料，作为资料收集和阶段推进依据
+
+#### Scenario: 资料审核通过后计入齐套
+- **WHEN** 当前阶段资料项适用、必填且状态为 `confirmed`
+- **THEN** 系统必须将该资料项计入当前阶段齐套
+
+#### Scenario: 未审核通过不计入齐套
+- **WHEN** 当前阶段资料项未提交、待审核或被退回
+- **THEN** 系统不得将该资料项计入已完成适用必填资料
+
+#### Scenario: 文件平台只负责文件职责
+- **WHEN** 后续文件管理平台联动归档资料附件
+- **THEN** 文件管理平台职责必须限定为文件夹、归档存储、文件列表、下载权限和文件日志，不得承担项目阶段状态机或资料审核状态机
 

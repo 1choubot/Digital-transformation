@@ -13,7 +13,7 @@
           <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
         </div>
       </div>
-      <button type="button" class="primary-button create-btn" @click="navigate('/projects/new')">
+      <button v-if="canCreateProject" type="button" class="primary-button create-btn" @click="navigate('/projects/new')">
         <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
@@ -152,7 +152,7 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { getApiBaseUrlLabel, listProjects, toReadableApiError } from '../api/projects.js';
 import StatusBadge from '../components/StatusBadge.vue';
 import { formatDate, formatProjectMode, formatUser } from '../utils/format.js';
@@ -176,6 +176,9 @@ const apiBaseUrl = getApiBaseUrlLabel();
 const loading = ref(false);
 const errorMessage = ref('');
 const projects = ref([]);
+const canCreateProject = computed(() =>
+  ['general_manager', 'center_manager'].includes(props.currentUser?.organizationRole)
+);
 
 // STREAMING_CHUNK: 统一定义 Toast 控制状态...
 const toastVisible = ref(false);

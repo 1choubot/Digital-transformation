@@ -1,5 +1,6 @@
 import { pool } from '../../db/pool.js';
 import { canBeProjectManagerUser } from '../../domain/organization.js';
+import { canViewCompleteProjectAudit } from '../stageDocuments/accessControl.js';
 import { initializeProjectStageDocuments } from '../stageDocuments/checklistRepository.js';
 import {
   insertOperationLog,
@@ -167,6 +168,32 @@ export async function assertProjectViewable(projectId, user) {
     throw new ProjectAuthorizationError(
       'FORBIDDEN_OPERATION',
       'Current user cannot access this project',
+      ['projectId']
+    );
+  }
+}
+
+export async function assertProjectAuditViewable(projectId, user) {
+  const [rows] = await pool.execute(
+    `SELECT
+      id,
+      project_manager_user_id,
+      participating_departments
+    FROM projects
+    WHERE id = ?
+    LIMIT 1`,
+    [projectId]
+  );
+  const project = rows[0];
+
+  if (!project) {
+    throw new ProjectNotFoundError(projectId);
+  }
+
+  if (!canViewCompleteProjectAudit(user, project)) {
+    throw new ProjectAuthorizationError(
+      'FORBIDDEN_OPERATION',
+      'Current user cannot access complete project audit history',
       ['projectId']
     );
   }

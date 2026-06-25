@@ -1,7 +1,9 @@
 import { normalizeCreateProjectInput, ValidationError } from '../domain/projects.js';
+import { canCreateProject } from '../domain/organization.js';
 import { DOCUMENT_APPLICABILITY_ACTION } from '../domain/stageDocumentApplicability.js';
 import { DOCUMENT_STATUS_ACTION } from '../domain/stageDocumentStatus.js';
 import {
+  assertProjectAuditViewable,
   assertProjectViewable,
   advanceProjectStage,
   approveStageApproval,
@@ -11,6 +13,7 @@ import {
   listStageApprovalHistory,
   listProjects,
   normalizeProjectOverviewDashboardFilters,
+  ProjectAuthorizationError,
   ProjectNotFoundError,
   projectExists,
   resubmitStageApproval,
@@ -176,6 +179,14 @@ export async function listMyActiveProjectsHandler(req, res) {
 }
 
 export async function createProjectHandler(req, res) {
+  if (!canCreateProject(req.auth.user)) {
+    throw new ProjectAuthorizationError(
+      'FORBIDDEN_OPERATION',
+      'Current user cannot create project',
+      ['organizationRole']
+    );
+  }
+
   const project = normalizeCreateProjectInput(req.body || {});
   const created = await createProject(project, req.auth.user.id);
 
@@ -196,7 +207,7 @@ export async function getProjectOverviewDashboardHandler(req, res) {
 export async function listProjectOperationLogsHandler(req, res) {
   const projectId = parseProjectId(req.params.projectId);
 
-  await assertProjectViewable(projectId, req.auth.user);
+  await assertProjectAuditViewable(projectId, req.auth.user);
   const limit = normalizeOperationLogLimit(req.query.limit);
   const logs = await listProjectOperationLogs(projectId, limit);
 
@@ -209,7 +220,7 @@ export async function getStageDocumentChecklistHandler(req, res) {
   const projectId = parseProjectId(req.params.projectId);
 
   await assertProjectViewable(projectId, req.auth.user);
-  const checklist = await getProjectStageDocumentChecklist(projectId);
+  const checklist = await getProjectStageDocumentChecklist(projectId, req.auth.user);
 
   res.json({
     data: checklist
@@ -329,12 +340,12 @@ export async function uploadStageDocumentAttachmentHandler(req, res) {
   const documentId = parseAttachmentDocumentId(req.params.documentId);
 
   await assertProjectViewable(projectId, req.auth.user);
-  await assertStageDocumentAttachmentUploadTarget({ projectId, documentId });
+  await assertStageDocumentAttachmentUploadTarget({ projectId, documentId, user: req.auth.user });
   const file = await readMultipartFile(req);
   const attachment = await uploadStageDocumentAttachment({
     projectId,
     documentId,
-    userId: req.auth.user.id,
+    user: req.auth.user,
     file
   });
 
@@ -348,7 +359,7 @@ export async function listStageDocumentAttachmentsHandler(req, res) {
   const documentId = parseAttachmentDocumentId(req.params.documentId);
 
   await assertProjectViewable(projectId, req.auth.user);
-  const attachments = await listStageDocumentAttachments({ projectId, documentId });
+  const attachments = await listStageDocumentAttachments({ projectId, documentId, user: req.auth.user });
 
   res.json({
     data: attachments
@@ -361,7 +372,12 @@ export async function downloadStageDocumentAttachmentHandler(req, res) {
   const attachmentId = parseAttachmentId(req.params.attachmentId);
 
   await assertProjectViewable(projectId, req.auth.user);
-  const download = await getStageDocumentAttachmentDownload({ projectId, documentId, attachmentId });
+  const download = await getStageDocumentAttachmentDownload({
+    projectId,
+    documentId,
+    attachmentId,
+    user: req.auth.user
+  });
 
   await new Promise((resolve, reject) => {
     res.download(
@@ -395,7 +411,7 @@ export async function deleteStageDocumentAttachmentHandler(req, res) {
     projectId,
     documentId,
     attachmentId,
-    userId: req.auth.user.id
+    user: req.auth.user
   });
 
   res.status(204).send();

@@ -78,6 +78,7 @@
         </button>
 
         <button 
+          v-if="canCurrentUserCreateProject"
           type="button" 
           :class="{ active: route.name === 'project-create' }" 
           @click="handleNavigate('/projects/new')"
@@ -103,8 +104,8 @@
 
         <button 
           type="button" 
-          :class="{ active: route.name === 'my-stage-document-tasks' }" 
-          @click="handleNavigate('/my-stage-document-tasks')"
+          :class="{ active: route.name === 'my-workbench' }" 
+          @click="handleNavigate('/my-workbench')"
         >
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -113,7 +114,7 @@
             <line x1="16" y1="17" x2="8" y2="17"/>
             <polyline points="10 9 9 9 8 9"/>
           </svg>
-          <span>我的资料任务</span>
+          <span>我的工作台</span>
         </button>
 
         <p v-if="canAccessUserManagement" class="nav-section-title">系统管理员特权</p>
@@ -167,7 +168,6 @@
             <span class="breadcrumb-separator">/</span>
             <span class="breadcrumb-item breadcrumb-item--active">{{ currentRouteLabel }}</span>
           </div>
-        </div>
 
         <!-- 个人账户操作区 -->
         <div class="current-user">
@@ -217,10 +217,13 @@
           :auth-token="authToken"
           :current-user="currentUser"
           :project-id="route.params.projectId"
+          :task-mode="route.query?.taskMode || ''"
+          :focus-document-id="route.query?.documentId || ''"
+          :focus-stage-id="route.query?.stageId || ''"
           :navigate="navigate"
         />
         <MyStageDocumentTasksPage
-          v-else-if="route.name === 'my-stage-document-tasks'"
+          v-else-if="route.name === 'my-workbench'"
           :auth-token="authToken"
           :current-user="currentUser"
           :navigate="navigate"
@@ -332,7 +335,7 @@ const currentRouteLabel = computed(() => {
     case 'project-create': return '新建项目主数据';
     case 'project-overview-dashboard': return '跨项目齐套总览';
     case 'project-detail': return '项目详情控制台';
-    case 'my-stage-document-tasks': return '我的待办责任资料';
+    case 'my-workbench': return '我的工作台';
     case 'users': return '基础用户权限管理';
     default: return '管理驾驶舱';
   }
@@ -355,6 +358,9 @@ const canAccessUserManagement = computed(
 );
 // Daily report navigation is shown only for employee accounts.
 const isDailyReportUser = computed(() => currentUser.value?.organizationRole === 'employee');
+const canCurrentUserCreateProject = computed(() =>
+  ['general_manager', 'center_manager'].includes(currentUser.value?.organizationRole)
+);
 
 function setAuth(token, user) {
   authToken.value = token;

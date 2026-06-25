@@ -13,7 +13,7 @@
           <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
         </div>
         <p class="manual-status-note">
-          提示：齐套率基于当前手工状态和人工适用性判断，不代表物理文件已全部完成上传或在线表单已真实填写完毕。
+          齐套率基于资料级审核通过状态和人工适用性判断，不代表文件已上传，也不代表在线表单已填写。
         </p>
       </div>
       <button type="button" class="ghost-button reload-btn" :disabled="loading" @click="loadDashboard">
@@ -42,7 +42,7 @@
         <span class="metric-title">风险/延期</span>
         <strong class="metric-number">{{ summary.riskProjects }}</strong>
       </div>
-      <button type="button" class="overview-metric overview-metric--button metric-todo" @click="navigate('/my-stage-document-tasks')">
+      <button type="button" class="overview-metric overview-metric--button metric-todo" @click="navigate('/my-workbench')">
         <span class="metric-title">我的待办资料</span>
         <strong class="metric-number">{{ summary.myPendingStageDocumentTasks }}</strong>
         <span class="todo-btn-hint">立即处理 →</span>
@@ -50,7 +50,7 @@
     </section>
 
     <p class="summary-note">
-      * “我的待办资料”为当前登录用户全局待办数量，不随下方的项目状态、当前阶段或关键字筛选结果而变化。
+      "我的待办资料"为当前登录用户全局待处理资料数量，不随项目状态、当前阶段或关键字筛选变化。
     </p>
 
     <!-- 过滤器面板 -->
@@ -197,7 +197,7 @@
           <div class="overview-project__documents">
             <div class="docs-summary-header">
               <div class="docs-count-pill" :class="{ 'docs-count-pill--alert': project.currentStageIncompleteRequiredDocuments.length > 0 }">
-                <span>未完成适用必填资料</span>
+                <span>未完成资料级审核的适用必填资料</span>
                 <strong>{{ project.currentStageIncompleteRequiredDocuments.length }}</strong>
               </div>
             </div>
@@ -220,7 +220,7 @@
               <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
-              <span>当前阶段已全部齐套（无未完成适用必填资料）。</span>
+              <span>当前阶段适用必填资料均已通过资料级审核。</span>
             </p>
             
             <p v-else class="checklist-empty-placeholder">
@@ -379,7 +379,7 @@ function formatCompletionSummary(summaryValue) {
     return '暂无齐套摘要';
   }
 
-  return `适用必填 ${summaryValue.requiredTotal} 项，已确认 ${summaryValue.confirmedRequiredCount} 项，未完成 ${summaryValue.incompleteRequiredCount} 项`;
+  return `适用必填 ${summaryValue.requiredTotal} 项，审核通过 ${summaryValue.confirmedRequiredCount} 项，未完成 ${summaryValue.incompleteRequiredCount} 项`;
 }
 
 // STREAMING_CHUNK: 异步同步看板，失败时推送 Toast 异常提示弹窗...

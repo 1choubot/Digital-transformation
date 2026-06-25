@@ -39,13 +39,21 @@ export function buildProjectVisibilityCondition(user, projectAlias = 'p') {
         OR EXISTS (
           SELECT 1
           FROM project_stage_documents visible_department_documents
-          INNER JOIN users visible_department_users
+          LEFT JOIN users visible_department_users
             ON visible_department_users.id = visible_department_documents.responsible_user_id
           WHERE visible_department_documents.project_id = ${projectAlias}.id
-            AND visible_department_users.department = ?
+            AND (
+              visible_department_documents.owner_department = ?
+              OR visible_department_documents.review_department = ?
+              OR (
+                visible_department_documents.owner_department IS NULL
+                AND visible_department_documents.review_department IS NULL
+                AND visible_department_users.department = ?
+              )
+            )
         )
       )`,
-      params: [user.id, user.id, user.department, user.department]
+      params: [user.id, user.id, user.department, user.department, user.department, user.department]
     };
   }
 

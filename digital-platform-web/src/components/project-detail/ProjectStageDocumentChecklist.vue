@@ -3,11 +3,12 @@
     <div class="panel-heading">
       <div>
         <span class="section-eyebrow">阶段资料清单</span>
-        <h3>资料基础状态</h3>
+        <h3>资料级审核状态</h3>
         <p class="manual-status-note">
-          当前操作仅为手工标记状态，不代表文件已上传，也不代表在线表单已提交。
-          阶段资料齐套情况基于当前手工状态统计，不代表文件已上传或已归档。
-          不适用是人工业务判断，用于说明该项目不需要该资料，不代表资料已提交、已确认或已归档。
+          单个资料项先完成资料级审核，审核通过后才计入阶段齐套。
+          上传附件只表示资料文件准备，不等于提交资料审核、资料审核通过或阶段关口审批通过。
+          阶段资料齐套情况基于资料审核状态和人工适用性统计，不代表文件已归档。
+          不适用是人工业务判断，用于说明该项目不需要该资料，不代表资料已提交审核、审核通过或已归档。
           资料责任人为手工分配，不代表权限控制、个人待办或文件权限。
         </p>
       </div>
@@ -53,25 +54,41 @@
         <div class="stage-document-completeness">
           <div class="stage-document-completeness__summary">
             <div>
+              <span>阶段资料总数</span>
+              <strong>{{ stageDocumentSummary(stage).documentTotal }}</strong>
+            </div>
+            <div>
+              <span>适用资料总数</span>
+              <strong>{{ stageDocumentSummary(stage).applicableTotal }}</strong>
+            </div>
+            <div>
               <span>适用必填总数</span>
               <strong>{{ stageCompleteness(stage).requiredTotal }}</strong>
             </div>
             <div>
-              <span>已确认适用</span>
+              <span>必填已审核通过</span>
               <strong>{{ stageCompleteness(stage).confirmedRequiredCount }}</strong>
             </div>
             <div>
-              <span>未完成适用</span>
+              <span>非必填/条件性</span>
+              <strong>
+                {{ stageDocumentSummary(stage).optionalConditionalTotal }}，适用
+                {{ stageDocumentSummary(stage).applicableOptionalConditionalTotal }}
+              </strong>
+            </div>
+            <div>
+              <span>门禁未完成</span>
               <strong>{{ stageCompleteness(stage).incompleteRequiredCount }}</strong>
             </div>
             <div>
-              <span>完成百分比</span>
+              <span>门禁完成率</span>
               <strong>{{ stageCompleteness(stage).completionPercent }}%</strong>
             </div>
           </div>
 
           <div class="stage-document-missing">
-            <strong>缺失必填资料</strong>
+            <strong>推进门禁未完成的适用必填资料</strong>
+            <p>非必填/条件性资料不计入必填齐套门禁。</p>
             <ul v-if="stageCompleteness(stage).incompleteRequiredDocuments.length > 0">
               <li
                 v-for="document in stageCompleteness(stage).incompleteRequiredDocuments"
@@ -79,10 +96,27 @@
               >
                 <span class="mono">{{ document.documentCode }}</span>
                 <span>{{ document.documentName }}</span>
+                <span class="stage-document-pill">{{ formatApplicability(document) }}</span>
                 <StatusBadge :status="document.status" />
               </li>
             </ul>
-            <p v-else>暂无缺失必填资料。</p>
+            <p v-else>当前阶段适用必填资料均已通过资料级审核。</p>
+          </div>
+
+          <div class="stage-document-missing stage-document-optional">
+            <strong>非必填/条件性资料</strong>
+            <ul v-if="stageDocumentSummary(stage).optionalConditionalDocuments.length > 0">
+              <li
+                v-for="document in stageDocumentSummary(stage).optionalConditionalDocuments"
+                :key="document.id || document.documentCode"
+              >
+                <span class="mono">{{ document.documentCode }}</span>
+                <span>{{ document.documentName }}</span>
+                <span class="stage-document-pill">{{ formatApplicability(document) }}</span>
+                <StatusBadge :status="document.status" />
+              </li>
+            </ul>
+            <p v-else>本阶段暂无非必填/条件性资料。</p>
           </div>
         </div>
 
@@ -107,6 +141,14 @@
             </div>
 
             <dl class="stage-document-meta">
+              <div>
+                <dt>默认责任中心</dt>
+                <dd>{{ formatDepartment(document.ownerDepartment) }}</dd>
+              </div>
+              <div>
+                <dt>默认审核中心</dt>
+                <dd>{{ formatDepartment(document.reviewDepartment) }}</dd>
+              </div>
               <div>
                 <dt>责任角色</dt>
                 <dd>{{ document.defaultResponsibilityRole || '-' }}</dd>
@@ -177,10 +219,12 @@ import ProjectStageDocumentAttachments from './ProjectStageDocumentAttachments.v
 import ProjectStageDocumentTrace from './ProjectStageDocumentTrace.vue';
 import {
   formatApplicability,
+  formatDepartment,
   formatResponsibleUser,
   isApplicable,
   isResponsibleUserDisabled,
-  stageCompleteness
+  stageCompleteness,
+  stageDocumentSummary
 } from './stageDocumentViewHelpers.js';
 
 defineEmits([

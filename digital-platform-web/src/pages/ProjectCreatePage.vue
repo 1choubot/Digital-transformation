@@ -22,8 +22,14 @@
       </button>
     </div>
 
+    <section v-if="!canCreateProject" class="state-panel state-panel--error">
+      <h3>无权创建项目</h3>
+      <p>当前账号无权创建项目。项目创建仅开放给总经理和中心负责人。</p>
+      <button type="button" class="primary-button" @click="navigate('/projects')">返回项目列表</button>
+    </section>
+
     <!-- STREAMING_CHUNK: 构建卡片化的高保真表单网格，移除内嵌警示栏... -->
-    <form class="panel form-grid" @submit.prevent="submitProject">
+    <form v-else class="panel form-grid" @submit.prevent="submitProject">
       
       <!-- 项目编号 -->
       <label class="form-group">
@@ -116,7 +122,7 @@
       <!-- 底部操作按钮 -->
       <div class="form-actions form-grid__wide">
         <button type="button" class="ghost-button" @click="navigate('/projects')">取消</button>
-        <button type="submit" class="primary-button" :disabled="submitting">
+        <button type="submit" class="primary-button" :disabled="submitting || !canCreateProject">
           <span v-if="submitting" class="spinner"></span>
           <span>{{ submitting ? '正在创建...' : '创建项目' }}</span>
         </button>
@@ -150,12 +156,11 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref, onUnmounted } from 'vue';
+import { computed, onMounted, reactive, ref, onUnmounted } from 'vue';
 import { createProject, toReadableApiError } from '../api/projects.js';
 import { listResponsibilityCandidates } from '../api/users.js';
 import {
-  formatBusinessDepartment,
-  formatOrganizationRole,
+  formatBusinessUser,
   formatUser
 } from '../utils/format.js';
 
@@ -197,6 +202,9 @@ const departmentOptions = [
   { value: 'manufacturing_center', label: '制造中心' },
   { value: 'rd_center', label: '研发中心' }
 ];
+const canCreateProject = computed(() =>
+  ['general_manager', 'center_manager'].includes(props.currentUser?.organizationRole)
+);
 
 // STREAMING_CHUNK: 统一定义 Toast 控制状态...
 const toastVisible = ref(false);
@@ -224,12 +232,7 @@ onUnmounted(() => {
 });
 
 function formatManagerCandidate(user) {
-  return [
-    user.name,
-    formatBusinessDepartment(user.department),
-    formatOrganizationRole(user.organizationRole),
-    user.role
-  ]
+  return [formatBusinessUser(user), user.account ? `账号 ${user.account}` : '']
     .filter(Boolean)
     .join(' / ');
 }
@@ -251,6 +254,11 @@ function validateForm() {
 }
 
 async function loadManagerCandidates() {
+  if (!canCreateProject.value) {
+    managerCandidates.value = [];
+    return;
+  }
+
   managerCandidatesLoading.value = true;
 
   try {
@@ -268,6 +276,11 @@ async function loadManagerCandidates() {
 
 // STREAMING_CHUNK: 改造项目创建请求结果提示为 Toast 输出...
 async function submitProject() {
+  if (!canCreateProject.value) {
+    showToast('当前账号无权创建项目。', 'error');
+    return;
+  }
+
   if (!props.authToken) {
     const errorMsg = '请先登录后再创建项目。';
     showToast(errorMsg, 'error');

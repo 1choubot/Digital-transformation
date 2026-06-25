@@ -1,6 +1,6 @@
 <template>
   <section class="stage-document-card__actions" aria-label="资料项手工操作">
-    <h4>手工操作</h4>
+    <h4>资料级审核</h4>
     <div class="stage-document-actions">
       <ProjectStageDocumentResponsibility
         v-if="canManageResponsibility"
@@ -33,7 +33,7 @@
           :disabled="isActionPending(document.id, 'submit')"
           @click="$emit('submit-document', document)"
         >
-          {{ isActionPending(document.id, 'submit') ? '标记中...' : '标记提交' }}
+          {{ isActionPending(document.id, 'submit') ? '提交中...' : '提交资料审核' }}
         </button>
 
         <template v-else-if="document.status === 'submitted' && canConfirmReturnDocument">
@@ -43,13 +43,13 @@
             :disabled="isActionPending(document.id, 'confirm')"
             @click="$emit('confirm-document', document)"
           >
-            {{ isActionPending(document.id, 'confirm') ? '确认中...' : '确认' }}
+            {{ isActionPending(document.id, 'confirm') ? '审核中...' : '资料审核通过' }}
           </button>
           <div class="stage-document-return">
             <input
               v-model.trim="returnReasons[document.id]"
               type="text"
-              placeholder="退回原因"
+              placeholder="资料审核退回原因"
               :disabled="isActionPending(document.id, 'return')"
             />
             <button
@@ -58,13 +58,13 @@
               :disabled="isActionPending(document.id, 'return')"
               @click="$emit('return-document', document)"
             >
-              {{ isActionPending(document.id, 'return') ? '退回中...' : '退回' }}
+              {{ isActionPending(document.id, 'return') ? '退回中...' : '退回资料审核' }}
             </button>
           </div>
         </template>
 
         <span v-else class="stage-document-actions__empty">
-          {{ document.status === 'confirmed' ? '已确认' : '暂无状态操作' }}
+          {{ document.status === 'confirmed' ? '资料审核通过' : '暂无资料审核操作' }}
         </span>
 
         <div v-if="canChangeApplicability" class="stage-document-applicability-action">

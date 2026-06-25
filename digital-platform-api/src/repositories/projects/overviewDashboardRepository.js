@@ -319,8 +319,8 @@ async function countMyPendingStageDocumentTasks(userId) {
     FROM project_stage_documents
     WHERE responsible_user_id = ?
       AND is_applicable = 1
-      AND status IN (?, ?, ?)`,
-    [userId, DOCUMENT_STATUS.NOT_SUBMITTED, DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.RETURNED]
+      AND status IN (?, ?)`,
+    [userId, DOCUMENT_STATUS.NOT_SUBMITTED, DOCUMENT_STATUS.RETURNED]
   );
 
   return Number(rows[0].count);

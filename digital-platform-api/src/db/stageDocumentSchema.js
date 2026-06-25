@@ -1,3 +1,49 @@
+async function columnExists(executor, tableName, columnName) {
+  const [rows] = await executor.execute(
+    `SELECT COUNT(*) AS count
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = ?
+      AND COLUMN_NAME = ?`,
+    [tableName, columnName]
+  );
+
+  return Number(rows[0]?.count || 0) > 0;
+}
+
+async function ensureColumn(executor, tableName, columnName, addColumnSql) {
+  if (!(await columnExists(executor, tableName, columnName))) {
+    await executor.execute(addColumnSql);
+  }
+}
+
+async function ensureOwnershipColumns(executor) {
+  await ensureColumn(
+    executor,
+    'stage_document_templates',
+    'owner_department',
+    'ALTER TABLE stage_document_templates ADD COLUMN owner_department VARCHAR(64) NULL AFTER confirm_role'
+  );
+  await ensureColumn(
+    executor,
+    'stage_document_templates',
+    'review_department',
+    'ALTER TABLE stage_document_templates ADD COLUMN review_department VARCHAR(64) NULL AFTER owner_department'
+  );
+  await ensureColumn(
+    executor,
+    'project_stage_documents',
+    'owner_department',
+    'ALTER TABLE project_stage_documents ADD COLUMN owner_department VARCHAR(64) NULL AFTER confirm_role'
+  );
+  await ensureColumn(
+    executor,
+    'project_stage_documents',
+    'review_department',
+    'ALTER TABLE project_stage_documents ADD COLUMN review_department VARCHAR(64) NULL AFTER owner_department'
+  );
+}
+
 export async function ensureStageDocumentSchema(executor) {
   await executor.execute(
     `CREATE TABLE IF NOT EXISTS stage_document_templates (
@@ -12,6 +58,8 @@ export async function ensureStageDocumentSchema(executor) {
       is_required TINYINT(1) NOT NULL DEFAULT 1,
       default_responsibility_role VARCHAR(255) NOT NULL,
       confirm_role VARCHAR(255) NOT NULL,
+      owner_department VARCHAR(64) NULL,
+      review_department VARCHAR(64) NULL,
       submit_mode ENUM('online_form', 'file_upload', 'mixed', 'tbd') NOT NULL,
       target_folder_path VARCHAR(512) NOT NULL,
       target_folder_id VARCHAR(128) NULL,
@@ -39,6 +87,8 @@ export async function ensureStageDocumentSchema(executor) {
       is_required TINYINT(1) NOT NULL DEFAULT 1,
       default_responsibility_role VARCHAR(255) NOT NULL,
       confirm_role VARCHAR(255) NOT NULL,
+      owner_department VARCHAR(64) NULL,
+      review_department VARCHAR(64) NULL,
       submit_mode ENUM('online_form', 'file_upload', 'mixed', 'tbd') NOT NULL,
       target_folder_path VARCHAR(512) NOT NULL,
       target_folder_id VARCHAR(128) NULL,
@@ -116,4 +166,6 @@ export async function ensureStageDocumentSchema(executor) {
         ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
   );
+
+  await ensureOwnershipColumns(executor);
 }

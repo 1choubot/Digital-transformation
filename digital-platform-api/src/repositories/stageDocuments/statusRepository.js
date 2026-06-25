@@ -1,6 +1,5 @@
 import { pool } from '../../db/pool.js';
 import {
-  canApproveStageDocument,
   canSubmitStageDocument,
   isGeneralManagerAssistantUser,
   isSystemAdminUser
@@ -21,6 +20,7 @@ import {
   selectProjectStageDocument,
   selectProjectStageDocumentForUpdate
 } from './shared.js';
+import { isStageDocumentReviewAuthority } from './accessControl.js';
 import { selectProjectPermissionContext } from './permissionContext.js';
 
 function assertUserCanUpdateDocumentStatus({ user, action, currentDocument, project }) {
@@ -34,7 +34,7 @@ function assertUserCanUpdateDocumentStatus({ user, action, currentDocument, proj
   }
 
   if (action === DOCUMENT_STATUS_ACTION.CONFIRM || action === DOCUMENT_STATUS_ACTION.RETURN) {
-    if (!canApproveStageDocument(user, { project, document: currentDocument })) {
+    if (!isStageDocumentReviewAuthority(user, currentDocument)) {
       throw new StageDocumentStatusError(
         'FORBIDDEN_OPERATION',
         'Current user cannot approve stage document',
@@ -115,7 +115,7 @@ function buildStatusOperationLogPayload({ projectId, documentId, action, userId,
       actionType: OPERATION_ACTION_TYPE.DOCUMENT_SUBMITTED,
       targetType: OPERATION_TARGET_TYPE.STAGE_DOCUMENT,
       targetId: documentId,
-      summary: `手工标记资料提交：${currentDocument.document_name}`,
+      summary: `提交资料审核：${currentDocument.document_name}`,
       details: baseDetails
     };
   }
@@ -127,7 +127,7 @@ function buildStatusOperationLogPayload({ projectId, documentId, action, userId,
       actionType: OPERATION_ACTION_TYPE.DOCUMENT_CONFIRMED,
       targetType: OPERATION_TARGET_TYPE.STAGE_DOCUMENT,
       targetId: documentId,
-      summary: `手工确认资料：${currentDocument.document_name}`,
+      summary: `资料审核通过：${currentDocument.document_name}`,
       details: baseDetails
     };
   }
@@ -138,7 +138,7 @@ function buildStatusOperationLogPayload({ projectId, documentId, action, userId,
     actionType: OPERATION_ACTION_TYPE.DOCUMENT_RETURNED,
     targetType: OPERATION_TARGET_TYPE.STAGE_DOCUMENT,
     targetId: documentId,
-    summary: `手工退回资料：${currentDocument.document_name}`,
+    summary: `退回资料审核：${currentDocument.document_name}`,
     details: {
       ...baseDetails,
       returnReason: transition.returnReason

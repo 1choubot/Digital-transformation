@@ -6,6 +6,10 @@ import {
 } from '../../domain/stageDocumentTemplates.js';
 import { STANDARD_PROJECT_STAGES } from '../../domain/stages.js';
 import { buildStageCompletenessSummary, mapDocument } from './shared.js';
+import {
+  attachStageDocumentPermissions,
+  filterStageDocumentsForUser
+} from './accessControl.js';
 
 function assertTemplateRowsReady(rows) {
   if (rows.length !== EXPECTED_STAGE_DOCUMENT_ITEM_COUNT) {
@@ -16,7 +20,7 @@ function assertTemplateRowsReady(rows) {
 
   const nonEmptyFolderIds = rows.filter((row) => row.target_folder_id !== null);
   if (nonEmptyFolderIds.length > 0) {
-    throw new Error('Stage document templates must keep targetFolderId empty in v20260610');
+    throw new Error('Stage document templates must keep targetFolderId empty');
   }
 }
 
@@ -27,7 +31,7 @@ export async function upsertStageDocumentTemplates(executor, templateItems) {
     );
   }
 
-  const placeholders = templateItems.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+  const placeholders = templateItems.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
   const values = templateItems.flatMap((item) => [
     item.templateVersion,
     item.stageOrder,
@@ -39,6 +43,8 @@ export async function upsertStageDocumentTemplates(executor, templateItems) {
     item.isRequired ? 1 : 0,
     item.defaultResponsibilityRole,
     item.confirmRole,
+    item.ownerDepartment,
+    item.reviewDepartment,
     item.submitMode,
     item.targetFolderPath,
     item.targetFolderId,
@@ -57,6 +63,8 @@ export async function upsertStageDocumentTemplates(executor, templateItems) {
       is_required,
       default_responsibility_role,
       confirm_role,
+      owner_department,
+      review_department,
       submit_mode,
       target_folder_path,
       target_folder_id,
@@ -71,6 +79,8 @@ export async function upsertStageDocumentTemplates(executor, templateItems) {
       is_required = VALUES(is_required),
       default_responsibility_role = VALUES(default_responsibility_role),
       confirm_role = VALUES(confirm_role),
+      owner_department = VALUES(owner_department),
+      review_department = VALUES(review_department),
       submit_mode = VALUES(submit_mode),
       target_folder_path = VALUES(target_folder_path),
       target_folder_id = VALUES(target_folder_id),
@@ -85,6 +95,22 @@ export async function upsertStageDocumentTemplates(executor, templateItems) {
       AND document_code NOT IN (${templateItems.map(() => '?').join(', ')})`,
     [STAGE_DOCUMENT_TEMPLATE_VERSION, ...templateItems.map((item) => item.documentCode)]
   );
+
+  await backfillProjectStageDocumentOwnership(executor, templateItems);
+}
+
+async function backfillProjectStageDocumentOwnership(executor, templateItems) {
+  for (const item of templateItems) {
+    await executor.execute(
+      `UPDATE project_stage_documents
+      SET owner_department = CASE WHEN owner_department IS NULL THEN ? ELSE owner_department END,
+        review_department = CASE WHEN review_department IS NULL THEN ? ELSE review_department END
+      WHERE template_version = ?
+        AND document_code = ?
+        AND (owner_department IS NULL OR review_department IS NULL)`,
+      [item.ownerDepartment, item.reviewDepartment, item.templateVersion, item.documentCode]
+    );
+  }
 }
 
 async function getActiveTemplateRows(executor) {
@@ -107,7 +133,7 @@ export async function initializeProjectStageDocuments(executor, projectId) {
     'SELECT COUNT(*) AS count FROM project_stage_documents WHERE project_id = ?',
     [projectId]
   );
-  const placeholders = templateRows.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+  const placeholders = templateRows.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
   const values = templateRows.flatMap((template) => [
     projectId,
     template.id,
@@ -121,6 +147,8 @@ export async function initializeProjectStageDocuments(executor, projectId) {
     template.is_required,
     template.default_responsibility_role,
     template.confirm_role,
+    template.owner_department,
+    template.review_department,
     template.submit_mode,
     template.target_folder_path,
     null,
@@ -142,6 +170,8 @@ export async function initializeProjectStageDocuments(executor, projectId) {
       is_required,
       default_responsibility_role,
       confirm_role,
+      owner_department,
+      review_department,
       submit_mode,
       target_folder_path,
       target_folder_id,
@@ -171,8 +201,24 @@ export async function listProjectsForStageDocumentBackfill(executor = pool) {
   }));
 }
 
-export async function getProjectStageDocumentChecklist(projectId) {
+async function selectChecklistProject(projectId) {
   const [rows] = await pool.execute(
+    `SELECT
+      id,
+      project_manager_user_id,
+      participating_departments
+    FROM projects
+    WHERE id = ?
+    LIMIT 1`,
+    [projectId]
+  );
+
+  return rows[0] || null;
+}
+
+export async function getProjectStageDocumentChecklist(projectId, user = null) {
+  const [[rows], project] = await Promise.all([
+    pool.execute(
     `SELECT
       d.*,
       u.account AS responsible_account,
@@ -188,13 +234,23 @@ export async function getProjectStageDocumentChecklist(projectId) {
     WHERE d.project_id = ?
     ORDER BY d.stage_order ASC, d.document_order ASC`,
     [projectId]
-  );
+    ),
+    selectChecklistProject(projectId)
+  ]);
 
   const documentsByStage = new Map(STANDARD_PROJECT_STAGES.map((stage) => [stage.stageKey, []]));
-  for (const row of rows) {
-    const documents = documentsByStage.get(row.stage_key);
+  const mappedDocuments = rows.map(mapDocument);
+  const visibleDocuments =
+    user && project
+      ? filterStageDocumentsForUser({ user, project, documents: mappedDocuments }).map((document) =>
+          attachStageDocumentPermissions({ user, project, document })
+        )
+      : mappedDocuments;
+
+  for (const document of visibleDocuments) {
+    const documents = documentsByStage.get(document.stageKey);
     if (documents) {
-      documents.push(mapDocument(row));
+      documents.push(document);
     }
   }
 

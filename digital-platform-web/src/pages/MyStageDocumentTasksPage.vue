@@ -1,10 +1,10 @@
 <template>
   <section class="page-stack animate-fadeIn">
-    <!-- STREAMING_CHUNK: 渲染页面顶部标题与快速同步栏... -->
+    <!-- 页面顶部标题 -->
     <div class="page-title-row">
       <div class="title-left">
-        <span class="section-eyebrow">我的责任资料</span>
-        <h2>我的资料任务</h2>
+        <span class="section-eyebrow">我的待办</span>
+        <h2>我的工作台</h2>
         <div class="user-meta">
           <svg class="meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -13,31 +13,43 @@
           <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
         </div>
         <p class="manual-status-note">
-          提示：这里展示的是分配给您的资料项。资料状态为手工标记状态，不代表文件已上传或在线表单已填写。
+          工作台汇总需要当前账号处理的资料责任、资料审核、阶段关口审批和阶段推进事项。
         </p>
       </div>
-      <button type="button" class="ghost-button reload-btn" :disabled="loading" @click="loadTasks">
+      <button type="button" class="ghost-button reload-btn" :disabled="loading" @click="loadWorkbench">
         <svg v-if="loading" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-          <circle cx="12" cy="12" r="10" stroke="rgba(0,0,0,0.1)" stroke-top="currentColor" />
+          <circle cx="12" cy="12" r="10" stroke="rgba(0,0,0,0.1)" />
         </svg>
         <span>{{ loading ? '加载中...' : '重新加载' }}</span>
       </button>
     </div>
 
-    <!-- STREAMING_CHUNK: 渲染顶部分类筛选工具面板... -->
+    <!-- 分类型汇总与筛选面板 -->
     <section class="panel task-filter-panel">
+      <div class="stage-advance-summary">
+        <div>
+          <span>总待办</span>
+          <strong>{{ summary.total }}</strong>
+        </div>
+        <div v-for="option in typeOptions" :key="option.value">
+          <span>{{ option.label }}</span>
+          <strong>{{ summary.byType?.[option.value] || 0 }}</strong>
+        </div>
+      </div>
+
       <div class="task-filters">
         <label class="filter-group">
-          <span class="filter-label">状态筛选</span>
+          <span class="filter-label">待办类型</span>
           <div class="select-wrapper">
-            <select v-model="selectedStatus" :disabled="loading" @change="loadTasks">
-              <option v-for="option in statusOptions" :key="option.value" :value="option.value">
+            <select v-model="selectedType" :disabled="loading">
+              <option value="all">全部待办</option>
+              <option v-for="option in typeOptions" :key="option.value" :value="option.value">
                 {{ option.label }}
               </option>
             </select>
           </div>
         </label>
-        
+
         <label class="filter-group flex-1">
           <span class="filter-label">项目关键字</span>
           <div class="input-wrapper">
@@ -56,26 +68,26 @@
       </div>
     </section>
 
-    <!-- STREAMING_CHUNK: 渲染任务展示卡片或异常处理块... -->
+    <!-- 待办列表面板 -->
     <section class="panel task-list-panel">
       <div class="panel-toolbar">
         <div class="toolbar-info">
-          <strong class="toolbar-title">任务列表</strong>
-          <span class="toolbar-subtitle">共 {{ filteredTasks.length }} 项，已按后端优先级从高到低排序</span>
+          <strong class="toolbar-title">待办列表</strong>
+          <span class="toolbar-subtitle">共 {{ filteredItems.length }} 项，按待办类型和更新时间排序。</span>
         </div>
       </div>
 
-      <!-- 数据加载中 -->
+      <!-- 加载中 -->
       <div v-if="loading" class="state-panel state-panel--inline">
         <div class="loading-wave">
           <div class="wave-bar"></div>
           <div class="wave-bar"></div>
           <div class="wave-bar"></div>
         </div>
-        <p>正在努力加载您的专属资料任务，请稍候...</p>
+        <p>正在加载我的工作台...</p>
       </div>
 
-      <!-- 错误提示（保留底层重试机制，同时通过Toast呼出错误） -->
+      <!-- 错误状态 -->
       <div v-else-if="errorMessage" class="state-panel state-panel--error">
         <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="10" />
@@ -83,71 +95,67 @@
           <line x1="12" y1="16" x2="12.01" y2="16" />
         </svg>
         <div class="error-details">
-          <h3>资料任务加载失败</h3>
+          <h3>我的工作台加载失败</h3>
           <p>{{ errorMessage }}</p>
         </div>
-        <button type="button" class="primary-button inline-btn" @click="loadTasks">重试</button>
+        <button type="button" class="primary-button inline-btn" @click="loadWorkbench">重试</button>
       </div>
 
-      <!-- 暂无数据 -->
-      <div v-else-if="filteredTasks.length === 0" class="state-panel state-panel--empty">
+      <!-- 空状态 -->
+      <div v-else-if="filteredItems.length === 0" class="state-panel state-panel--empty">
         <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
           <circle cx="9" cy="7" r="4" />
           <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
           <path d="M16 3.13a4 4 0 0 1 0 7.75" />
         </svg>
-        <h3>暂无匹配的资料任务</h3>
-        <p>当前筛选条件下，没有分配给您的适用资料项。</p>
+        <h3>暂无匹配待办</h3>
+        <p>当前筛选下没有需要你处理的事项。</p>
       </div>
 
-      <!-- 核心表格列表 -->
+      <!-- 待办列表表格 -->
       <div v-else class="table-container">
         <div class="task-table">
           <div class="task-table__head">
-            <span>项目信息</span>
-            <span>当前阶段</span>
-            <span>资料项名称</span>
-            <span>资料类型</span>
-            <span>当前状态</span>
-            <span>退回原因</span>
-            <span>责任更新时间</span>
+            <span>项目</span>
+            <span>阶段</span>
+            <span>资料项</span>
+            <span>类型</span>
+            <span>状态</span>
+            <span>动作</span>
+            <span>更新时间</span>
             <span class="text-right">操作</span>
           </div>
 
           <div class="user-table__body">
-            <article v-for="task in filteredTasks" :key="task.documentId" class="task-table__row">
+            <article v-for="item in filteredItems" :key="itemKey(item)" class="task-table__row">
               <div class="task-cell task-cell--project">
-                <span class="mono-badge">{{ task.projectCode }}</span>
-                <strong class="project-name">{{ task.projectName }}</strong>
+                <span class="mono-badge">{{ item.projectCode }}</span>
+                <strong class="project-name">{{ item.projectName }}</strong>
               </div>
               <div class="task-cell task-cell--stage">
-                <span class="stage-text">{{ task.stageName || `第 ${task.stageOrder} 阶段` }}</span>
-                <span class="stage-sub">第 {{ task.stageOrder }} 阶段</span>
+                <span class="stage-text">{{ item.stageName || `第 ${item.stageOrder} 阶段` }}</span>
+                <span class="stage-sub">第 {{ item.stageOrder }} 阶段</span>
               </div>
               <div class="task-cell task-cell--document">
-                <span class="mono-code">{{ task.documentCode }}</span>
-                <strong class="document-name">{{ task.documentName }}</strong>
+                <span class="mono-code">{{ item.documentCode || '-' }}</span>
+                <strong class="document-name">{{ item.documentName || '-' }}</strong>
               </div>
               <div class="task-cell">
-                <span :class="['type-badge', task.isRequired ? 'type-badge--required' : 'type-badge--suggest']">
-                  {{ formatTaskRequired(task.isRequired) }}
-                </span>
+                <span class="type-badge type-badge--required">{{ formatTodoType(item.type) }}</span>
               </div>
               <div class="task-cell">
-                <StatusBadge :status="task.status" />
-              </div>
-              <div class="task-cell task-cell--reason">
-                <span :class="{ 'reason-text': task.returnReason, 'empty-placeholder': !task.returnReason }">
-                  {{ task.returnReason || '-' }}
-                </span>
+                <StatusBadge :status="item.status" />
               </div>
               <div class="task-cell">
-                <time class="time-text">{{ formatDateTime(task.responsibilityUpdatedAt) }}</time>
+                <span>{{ item.actionText || '-' }}</span>
+              </div>
+              <div class="task-cell">
+                <time class="time-text">{{ formatDateTime(item.updatedAt || item.createdAt) }}</time>
               </div>
               <div class="task-cell text-right">
-                <button type="button" class="action-button" @click="navigate(`/projects/${task.projectId}`)">
-                  <span>查看项目</span>
+                <button type="button" class="action-button" @click="openTodo(item)">
+                  <span>处理</span>
                   <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="5" y1="12" x2="19" y2="12" />
                     <polyline points="12 5 19 12 12 19" />
@@ -160,7 +168,7 @@
       </div>
     </section>
 
-    <!-- STREAMING_CHUNK: 统一样式的 Toast 消息弹出浮层... -->
+    <!-- Toast 消息弹出浮层 -->
     <Transition name="toast">
       <div v-if="toastVisible" class="toast" :class="{ 'toast--error': toastType === 'error', 'toast--success': toastType === 'success' }">
         <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -188,7 +196,7 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { listMyStageDocumentTasks } from '../api/me.js';
+import { getMyWorkbench } from '../api/me.js';
 import { toReadableApiError } from '../api/http.js';
 import StatusBadge from '../components/StatusBadge.vue';
 import { formatDateTime, formatUser } from '../utils/format.js';
@@ -210,13 +218,24 @@ const props = defineProps({
 
 const emit = defineEmits(['auth-expired']);
 
-const selectedStatus = ref('pending');
+const typeOptions = [
+  { value: 'document_responsibility', label: '我负责的资料' },
+  { value: 'document_review', label: '待我审核的资料' },
+  { value: 'stage_gate_approval', label: '待我阶段关口审批' },
+  { value: 'stage_advance', label: '待我推进阶段' }
+];
+
+const selectedType = ref('all');
 const projectKeyword = ref('');
 const loading = ref(false);
 const errorMessage = ref('');
-const tasks = ref([]);
+const items = ref([]);
+const summary = ref({
+  total: 0,
+  byType: {}
+});
 
-// STREAMING_CHUNK: 统一定义 Toast 控制状态...
+// Toast 控制状态
 const toastVisible = ref(false);
 const toastMessage = ref('');
 const toastType = ref('error');
@@ -241,38 +260,42 @@ onUnmounted(() => {
   if (toastTimer) clearTimeout(toastTimer);
 });
 
-const statusOptions = [
-  { value: 'pending', label: '待办' },
-  { value: 'returned', label: '已退回' },
-  { value: 'not_submitted', label: '待提交' },
-  { value: 'submitted', label: '已提交' },
-  { value: 'confirmed', label: '已确认' },
-  { value: 'all', label: '全部状态' }
-];
-
-const filteredTasks = computed(() => {
+const filteredItems = computed(() => {
   const keyword = projectKeyword.value.trim().toLowerCase();
-  if (!keyword) {
-    return tasks.value;
-  }
+  return items.value.filter((item) => {
+    if (selectedType.value !== 'all' && item.type !== selectedType.value) {
+      return false;
+    }
 
-  return tasks.value.filter((task) => {
-    const haystack = `${task.projectCode || ''} ${task.projectName || ''}`.toLowerCase();
+    if (!keyword) {
+      return true;
+    }
+
+    const haystack = `${item.projectCode || ''} ${item.projectName || ''}`.toLowerCase();
     return haystack.includes(keyword);
   });
 });
 
-function formatTaskRequired(value) {
-  return value ? '必填' : '建议';
+function itemKey(item) {
+  return [item.type, item.projectId, item.stageId || '', item.documentId || ''].join(':');
 }
 
-// STREAMING_CHUNK: 封装数据拉取并在失败时推送 Toast 异常弹窗...
-async function loadTasks() {
+function formatTodoType(type) {
+  return typeOptions.find((option) => option.value === type)?.label || type || '-';
+}
+
+function openTodo(item) {
+  props.navigate(item.targetRoute || `/projects/${item.projectId}`);
+}
+
+async function loadWorkbench() {
   loading.value = true;
   errorMessage.value = '';
 
   try {
-    tasks.value = await listMyStageDocumentTasks({ status: selectedStatus.value }, props.authToken);
+    const result = await getMyWorkbench(props.authToken);
+    items.value = Array.isArray(result?.items) ? result.items : [];
+    summary.value = result?.summary || { total: items.value.length, byType: {} };
   } catch (error) {
     const message = toReadableApiError(error);
     errorMessage.value = message;
@@ -286,7 +309,7 @@ async function loadTasks() {
   }
 }
 
-onMounted(loadTasks);
+onMounted(loadWorkbench);
 </script>
 
 <style scoped>
@@ -368,6 +391,33 @@ onMounted(loadTasks);
   padding: 0.6rem 1rem;
   border-radius: 8px;
   border-left: 3px solid #cbd5e1;
+}
+
+/* 分类型汇总 */
+.stage-advance-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.stage-advance-summary > div {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: #475569;
+}
+
+.stage-advance-summary strong {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
 }
 
 /* 按钮样式 */
@@ -654,7 +704,7 @@ onMounted(loadTasks);
 
 .task-table__head {
   display: grid;
-  grid-template-columns: 2fr 1.2fr 2fr 1fr 1.2fr 1.5fr 1.5fr 1.2fr;
+  grid-template-columns: 2fr 1.2fr 2fr 1fr 1fr 1fr 1.5fr 1fr;
   padding: 0.85rem 1.5rem;
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
@@ -667,7 +717,7 @@ onMounted(loadTasks);
 
 .task-table__row {
   display: grid;
-  grid-template-columns: 2fr 1.2fr 2fr 1fr 1.2fr 1.5fr 1.5fr 1.2fr;
+  grid-template-columns: 2fr 1.2fr 2fr 1fr 1fr 1fr 1.5fr 1fr;
   padding: 1.1rem 1.5rem;
   align-items: center;
   border-bottom: 1px solid #f1f5f9;
@@ -799,7 +849,7 @@ onMounted(loadTasks);
   transform: translateX(3px);
 }
 
-/* STREAMING_CHUNK: 统一样式的 Toast 消息弹出浮层 CSS... */
+/* Toast 消息弹出浮层 */
 .toast {
   position: fixed;
   top: 2rem;

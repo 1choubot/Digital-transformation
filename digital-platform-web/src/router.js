@@ -1,26 +1,28 @@
 import { ref } from 'vue';
 
 function parseHash() {
-  const path = window.location.hash.replace(/^#/, '') || '/projects';
+  const rawPath = window.location.hash.replace(/^#/, '') || '/projects';
+  const [path, queryString = ''] = rawPath.split('?');
+  const query = Object.fromEntries(new URLSearchParams(queryString));
 
   if (path === '/' || path === '/projects') {
-    return { name: 'projects', path: '/projects' };
+    return { name: 'projects', path: '/projects', query: {} };
   }
 
   if (path === '/projects/new') {
-    return { name: 'project-create', path };
+    return { name: 'project-create', path, query };
   }
 
   if (path === '/projects/overview-dashboard') {
-    return { name: 'project-overview-dashboard', path };
+    return { name: 'project-overview-dashboard', path, query };
   }
 
   if (path === '/users') {
-    return { name: 'users', path };
+    return { name: 'users', path, query };
   }
 
-  if (path === '/my-stage-document-tasks') {
-    return { name: 'my-stage-document-tasks', path };
+  if (path === '/my-workbench' || path === '/my-stage-document-tasks') {
+    return { name: 'my-workbench', path, query };
   }
 
   // Daily report routes are employee-only at page/API level.
@@ -39,10 +41,10 @@ function parseHash() {
 
   const detailMatch = path.match(/^\/projects\/(\d+)$/);
   if (detailMatch) {
-    return { name: 'project-detail', path, params: { projectId: detailMatch[1] } };
+    return { name: 'project-detail', path, params: { projectId: detailMatch[1] }, query };
   }
 
-  return { name: 'not-found', path };
+  return { name: 'not-found', path, query };
 }
 
 export function useHashRouter() {

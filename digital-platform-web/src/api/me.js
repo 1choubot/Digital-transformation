@@ -1,5 +1,9 @@
 import { request } from './http.js';
 
+export async function getMyWorkbench(authToken = '') {
+  return request('/api/me/workbench', { authToken });
+}
+
 export async function listMyStageDocumentTasks({ status = 'pending', projectId = null } = {}, authToken = '') {
   const params = new URLSearchParams();
 

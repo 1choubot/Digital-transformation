@@ -5,7 +5,7 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 ## Requirements
 ### Requirement: 阶段资料项模板
 
-系统 MUST 维护 20260610 版阶段资料项模板，模板 MUST 以 `智能制造项目管理流程图20260610.pdf`、`docs/9.7_智能制造项目整体推进流程_20260610.md` 和 `docs/9.2_阶段资料清单与责任角色表_20260610.md` 为来源。
+系统 MUST 维护当前 active 阶段资料项模板，当前正式运行模板 MUST 为 `v20260624`，模板 MUST 以 `智能制造项目管理流程图20260624.pdf` 和 `docs/9.10_v20260624阶段资料模板规划_20260624.md` 为来源。
 
 #### Scenario: 模板字段完整
 
@@ -24,47 +24,47 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 #### Scenario: 不凭空补资料项
 
-- **WHEN** 系统初始化 20260610 版模板
-- **THEN** 系统不得添加 `docs/9.2_阶段资料清单与责任角色表_20260610.md` 之外的资料项
+- **WHEN** 系统初始化当前 active 阶段资料模板
+- **THEN** 系统不得添加 `docs/9.10_v20260624阶段资料模板规划_20260624.md` 之外的普通阶段资料项
 
 #### Scenario: 无法可靠解析资料文档
 
-- **WHEN** 实现时无法可靠解析 `docs/9.2_阶段资料清单与责任角色表_20260610.md`
+- **WHEN** 实现时无法可靠解析 `docs/9.10_v20260624阶段资料模板规划_20260624.md`
 - **THEN** 必须暂停实现并说明原因，不得自行编造资料项
 
-#### Scenario: 模板版本为 v20260610
+#### Scenario: 模板版本为 v20260624
 
-- **WHEN** 系统保存 20260610 版阶段资料项模板
-- **THEN** 模板版本必须使用 `v20260610`，不得继续使用旧版 `v1` 作为程序运行模板版本
+- **WHEN** 系统保存当前 active 阶段资料项模板
+- **THEN** 模板版本必须使用 `v20260624`，不得继续使用旧版 `v1` 或历史模板版本作为程序运行模板版本
 
-#### Scenario: 旧 48 项模板废弃
+#### Scenario: 历史模板不再作为 active 口径
 
 - **WHEN** 系统初始化阶段资料项模板
-- **THEN** 系统必须废弃旧版 48 项资料模板，不得继续以旧 48 项作为程序运行依据，也不得同时运行旧模板和 `v20260610` 模板
+- **THEN** 系统必须废弃历史模板运行口径，不得继续以旧版模板作为当前 active 模板依据，也不得并行初始化多套普通阶段资料模板
 
-#### Scenario: 新版资料项数量校验
+#### Scenario: 当前资料项数量校验
 
-- **WHEN** 系统初始化或校验 20260610 版阶段资料项模板
-- **THEN** `EXPECTED_STAGE_DOCUMENT_ITEM_COUNT` 必须按新版资料项实际数量设置；当前正式文档为 54 项
+- **WHEN** 系统初始化或校验当前 active 阶段资料项模板
+- **THEN** `EXPECTED_STAGE_DOCUMENT_ITEM_COUNT` 必须按当前 active 模板资料项实际数量设置；当前正式运行口径为 64 项
 
-#### Scenario: 20260610 版目标目录字段
+#### Scenario: 当前模板目标目录字段
 
-- **WHEN** 系统初始化 20260610 版模板
-- **THEN** 系统必须从正式资料清单的 `文件平台目标目录` 字段读取并保存 `targetFolderPath`
+- **WHEN** 系统初始化当前 active 阶段资料模板
+- **THEN** 系统必须为每个模板项保存文件管理平台目标文件夹路径 `targetFolderPath`
 
-#### Scenario: 20260610 版目录 ID 为空
+#### Scenario: 当前模板目录 ID 为空
 
-- **WHEN** 系统初始化 20260610 版模板
+- **WHEN** 系统初始化当前 active 阶段资料模板
 - **THEN** 系统必须保持 `targetFolderId` 为空
 
 ### Requirement: 项目级阶段资料清单初始化
 
-系统 MUST 为项目维护项目级阶段资料清单，并 MUST 根据 20260610 版阶段资料项模板初始化项目资料项。
+系统 MUST 为项目维护项目级阶段资料清单，并 MUST 根据当前 active 阶段资料模板初始化项目资料项。
 
 #### Scenario: 新项目初始化资料清单
 
 - **WHEN** 项目创建成功
-- **THEN** 系统必须按 `v20260610` 阶段资料项模板为该项目生成项目级阶段资料清单
+- **THEN** 系统必须按 `v20260624` 阶段资料项模板为该项目生成项目级阶段资料清单
 
 #### Scenario: 初始化资料项基础状态
 
@@ -79,11 +79,11 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 #### Scenario: 保存模板快照字段
 
 - **WHEN** 系统生成项目级资料项
-- **THEN** 项目级资料项必须保存 20260610 版资料项编号、资料项名称、是否必填、默认责任部门或责任角色、提交方式、`targetFolderPath` 和可空 `targetFolderId` 等模板快照字段
+- **THEN** 项目级资料项必须保存当前 active 模板的资料项编号、资料项名称、是否必填、默认责任部门或责任角色、提交方式、`targetFolderPath` 和可空 `targetFolderId` 等模板快照字段
 
-#### Scenario: 20260610 版项目资料项目录 ID 为空
+#### Scenario: 当前项目资料项目录 ID 为空
 
-- **WHEN** 系统生成 20260610 版项目级资料项
+- **WHEN** 系统生成当前 active 模板的项目级资料项
 - **THEN** 项目级资料项必须保存 `targetFolderPath`，并保持 `targetFolderId` 为空
 
 #### Scenario: 预留后续能力字段
@@ -93,7 +93,7 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 #### Scenario: 不兼容旧模拟项目资料
 
-- **WHEN** 系统切换为 20260610 版阶段资料模板
+- **WHEN** 系统切换为 `v20260624` 阶段资料模板
 - **THEN** 系统不得要求兼容旧模拟项目的旧资料项，也不得为旧资料项提供新旧模板映射或共存初始化逻辑
 
 ### Requirement: 资料项基础状态
@@ -293,7 +293,7 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 ### Requirement: 阶段资料齐套摘要
 
-系统 MUST 为每个阶段分组返回适用必填资料齐套摘要，并 MUST 只基于 20260610 版项目级阶段资料项、当前手工状态和人工适用性判断计算。
+系统 MUST 为每个阶段分组返回适用必填资料齐套摘要，并 MUST 只基于当前项目级阶段资料项、当前手工状态和人工适用性判断计算。
 
 #### Scenario: 返回阶段齐套摘要字段
 
@@ -303,7 +303,7 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 #### Scenario: 只统计适用且必填资料项
 
 - **WHEN** 系统计算阶段齐套摘要
-- **THEN** 系统必须只统计 `isRequired = true` 且 `isApplicable = true` 的 20260610 版资料项
+- **THEN** 系统必须只统计 `isRequired = true` 且 `isApplicable = true` 的当前项目级资料项
 
 #### Scenario: 已确认适用必填资料计为完成
 
@@ -327,7 +327,7 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 #### Scenario: 非必需资料继续展示但不影响齐套率
 
-- **WHEN** 20260610 版资料项为非必需或建议资料
+- **WHEN** 当前项目级资料项为非必需或建议资料
 - **THEN** 系统必须继续在资料清单中展示该资料项，但不得将其计入 `requiredTotal`、`confirmedRequiredCount`、`incompleteRequiredCount` 或阶段推进门禁
 
 #### Scenario: 完成百分比计算规则
@@ -348,7 +348,7 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 #### Scenario: 阶段推进读取当前阶段摘要口径
 
 - **WHEN** 系统执行阶段推进齐套门禁
-- **THEN** 系统必须使用同一 20260610 版资料项齐套摘要口径判断当前阶段是否可推进
+- **THEN** 系统必须使用同一当前项目级资料项齐套摘要口径判断当前阶段是否可推进
 
 #### Scenario: 齐套摘要不代表文件归档
 
@@ -1014,32 +1014,32 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 - **WHEN** 实现阶段资料后端模块拆分
 - **THEN** 系统不得因本次结构治理新增文件管理平台联动、在线表单、表单草稿、表单归档文件、附件预览、版本管理、病毒扫描、消息提醒、超期提醒、项目成员权限、资料责任人权限、复杂权限或批量资料操作
 
-### Requirement: 20260610 资料能力行为保持
-系统 MUST 在替换为 20260610 版资料项模板后保持资料状态、适用性、责任人、附件、我的资料任务和项目总览的既有行为，只改变资料项模板数据。
+### Requirement: 阶段资料能力行为保持
+系统 MUST 在当前 active 资料项模板下保持资料状态、适用性、责任人、附件、我的工作台和项目总览的既有行为，模板版本切换不得改变这些能力的状态机和权限边界。
 
 #### Scenario: 资料状态机保持
-- **WHEN** 已登录用户对 20260610 版资料项执行提交、确认或退回
+- **WHEN** 已登录用户对当前项目级资料项执行提交、确认或退回
 - **THEN** 系统必须继续使用 `not_submitted`、`submitted`、`confirmed`、`returned` 状态机和既有错误口径
 
 #### Scenario: 适用性规则保持
-- **WHEN** 已登录用户对 20260610 版资料项标记不适用或恢复适用
+- **WHEN** 已登录用户对当前项目级资料项标记不适用或恢复适用
 - **THEN** 系统必须继续保持既有适用性规则、原因校验和状态不自动改变口径
 
 #### Scenario: 责任人分配规则保持
-- **WHEN** 已登录用户为 20260610 版资料项分配或清空责任人
+- **WHEN** 已登录用户为当前项目级资料项分配或清空责任人
 - **THEN** 系统必须继续保持既有候选用户、责任人安全字段、责任人追溯和责任人不代表权限的口径
 
 #### Scenario: 附件能力保持
-- **WHEN** 已登录用户对 20260610 版资料项上传、查询、下载或删除附件
+- **WHEN** 已登录用户对当前项目级资料项上传、查询、下载或删除附件
 - **THEN** 系统必须继续保持既有附件接口路径、文件参数校验、软删除、业务日志和不改变资料业务状态的口径
 
-#### Scenario: 我的资料任务使用新版资料项
+#### Scenario: 我的工作台使用当前资料项
 - **WHEN** 当前登录用户查询我的资料任务
-- **THEN** 系统必须按 20260610 版项目级资料项返回任务，并保持现有状态筛选、项目筛选、排序和只读边界
+- **THEN** 系统必须按当前项目级资料项返回任务，并保持现有状态筛选、项目筛选、排序和只读边界
 
-#### Scenario: 项目总览使用新版资料项
+#### Scenario: 项目总览使用当前资料项
 - **WHEN** 当前登录用户查询项目总览看板
-- **THEN** 系统必须按 20260610 版当前阶段资料项计算齐套摘要和未完成适用必填资料，并保持现有筛选、排序和只读边界
+- **THEN** 系统必须按当前阶段资料项计算齐套摘要和未完成适用必填资料，并保持现有筛选、排序和只读边界
 
 ### Requirement: 资料责任人与组织角色边界
 系统 MUST 继续使用资料项级 `responsibleUserId` 表达资料责任人，并 MUST 明确资料责任人负责提交或整理资料但不代表审批权。
@@ -1145,9 +1145,9 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 ### Requirement: 项目模式不改变阶段资料规则
 系统 MUST 保持自研模式和供应链/外包模式使用同一阶段资料清单、齐套摘要和附件规则。
 
-#### Scenario: 自研外包共用 54 项资料
+#### Scenario: 自研外包共用 v20260624 64 项资料
 - **WHEN** 系统初始化自研或外包项目的阶段资料
-- **THEN** 两种项目模式都必须使用 20260610 版 54 项阶段资料
+- **THEN** 两种项目模式都必须使用 `v20260624` 的 64 项阶段资料
 
 #### Scenario: 项目模式不改变资料责任人规则
 - **WHEN** 项目为供应链/外包模式
@@ -1553,11 +1553,11 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 ### Requirement: 阶段资料结构化归属中心
 
-系统 MUST 为现有 `v20260610` 阶段资料模板和项目级阶段资料快照维护结构化归属中心字段，并 MUST 不切换到 `v20260624` 模板。
+系统 MUST 为当前 active 阶段资料模板和项目级阶段资料快照维护结构化归属中心字段，当前 active 模板 MUST 为 `v20260624`。
 
 #### Scenario: 模板包含结构化归属中心
 
-- **WHEN** 系统初始化或读取 `v20260610` 阶段资料模板
+- **WHEN** 系统初始化或读取当前 active 阶段资料模板
 - **THEN** 每个模板项 MUST 包含可空 `ownerDepartment` 和可空 `reviewDepartment`
 
 #### Scenario: 归属中心使用现有部门枚举
@@ -1567,13 +1567,13 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 #### Scenario: 新项目保存归属中心快照
 
-- **WHEN** 项目创建成功并初始化 54 项 `v20260610` 阶段资料
+- **WHEN** 项目创建成功并初始化 `v20260624` 的 64 项阶段资料
 - **THEN** 系统 MUST 将模板中的 `ownerDepartment` 和 `reviewDepartment` 保存到项目级资料快照
 
-#### Scenario: 不切换新版模板
+#### Scenario: 当前 active 模板使用 v20260624
 
 - **WHEN** 本 change 实现后创建新项目
-- **THEN** 系统 MUST 仍初始化 `v20260610` 的 54 项资料模板，不得初始化 20260624 的 64 个文件产出或 66 行规划表
+- **THEN** 系统 MUST 初始化 `v20260624` 的 64 项普通阶段资料，不得按 66 行规划表初始化普通阶段资料
 
 #### Scenario: 旧数据兼容
 
@@ -1756,8 +1756,7 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 - **WHEN** 系统切换到 `v20260624` 模板
 - **THEN** 本规划 MUST NOT 要求兼容旧模拟数据
 
-#### Scenario: 不要求保留 v20260610 项目资料
+#### Scenario: 不要求保留历史项目资料
 
 - **WHEN** 系统切换到 `v20260624` 模板并重置模拟数据
-- **THEN** 本规划 MUST NOT 要求保留 `v20260610` 项目资料
-
+- **THEN** 本规划 MUST NOT 要求保留历史项目资料

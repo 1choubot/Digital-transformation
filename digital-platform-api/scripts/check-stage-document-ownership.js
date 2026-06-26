@@ -318,6 +318,20 @@ async function assertApprovalRevisionResubmitCycle({ projectId, sourceCode, targ
         item.revisionRequired === true
     )
   );
+  const pendingDocumentTasksBeforeResubmit = await listMyStageDocumentTasks(
+    user.id,
+    normalizeStageDocumentTaskFilters({ status: 'pending' })
+  );
+  assert.ok(
+    pendingDocumentTasksBeforeResubmit.some(
+      (task) =>
+        task.projectId === projectId &&
+        task.documentCode === targetCode &&
+        task.revisionRequired === true
+    )
+  );
+  const overviewBeforeResubmit = await getProjectOverviewDashboard(user, {});
+  const pendingCountBeforeResubmit = overviewBeforeResubmit.summary.myPendingStageDocumentTasks;
 
   const resubmittedTarget = await updateProjectStageDocumentStatus({
     projectId,
@@ -341,6 +355,23 @@ async function assertApprovalRevisionResubmitCycle({ projectId, sourceCode, targ
         item.documentCode === targetCode &&
         item.revisionRequired === true
     )
+  );
+  const pendingDocumentTasksAfterResubmit = await listMyStageDocumentTasks(
+    user.id,
+    normalizeStageDocumentTaskFilters({ status: 'pending' })
+  );
+  assert.equal(
+    pendingDocumentTasksAfterResubmit.some(
+      (task) =>
+        task.projectId === projectId &&
+        task.documentCode === targetCode
+    ),
+    false
+  );
+  const overviewAfterResubmit = await getProjectOverviewDashboard(user, {});
+  assert.equal(
+    overviewAfterResubmit.summary.myPendingStageDocumentTasks,
+    pendingCountBeforeResubmit - 1
   );
 
   const returnedResubmittedTarget = await updateProjectStageDocumentStatus({

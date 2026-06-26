@@ -1,6 +1,6 @@
 import { pool } from '../../db/pool.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
-import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
+import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import { buildStageCompletenessSummary } from '../stageDocuments/shared.js';
 import { mapCreator } from '../userRepository.js';
 import {
@@ -345,10 +345,24 @@ async function countMyPendingStageDocumentTasks(userId) {
     WHERE responsible_user_id = ?
       AND is_applicable = 1
       AND (
-        revision_required = 1
+        (
+          revision_required = 1
+          AND NOT (
+            completion_mode IN (?, ?)
+            AND status = ?
+            AND revision_resubmitted_at IS NOT NULL
+          )
+        )
         OR status IN (?, ?)
       )`,
-    [userId, DOCUMENT_STATUS.NOT_SUBMITTED, DOCUMENT_STATUS.RETURNED]
+    [
+      userId,
+      COMPLETION_MODE.APPROVAL_REQUIRED,
+      COMPLETION_MODE.CONDITIONAL_APPROVAL,
+      DOCUMENT_STATUS.SUBMITTED,
+      DOCUMENT_STATUS.NOT_SUBMITTED,
+      DOCUMENT_STATUS.RETURNED
+    ]
   );
 
   return Number(rows[0].count);

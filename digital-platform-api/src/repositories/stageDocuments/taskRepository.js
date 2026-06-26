@@ -1,5 +1,5 @@
 import { pool } from '../../db/pool.js';
-import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
+import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import {
   mapStageDocumentTask,
   STAGE_DOCUMENT_TASK_ERROR,
@@ -101,10 +101,26 @@ export async function listMyStageDocumentTasks(userId, filters) {
   const statusFilter =
     filters.status === 'pending'
       ? `AND (
-          d.status IN (${filters.statuses.map(() => '?').join(', ')})
-          OR d.revision_required = 1
+          (
+            d.status IN (${filters.statuses.map(() => '?').join(', ')})
+            OR d.revision_required = 1
+          )
+          AND NOT (
+            d.revision_required = 1
+            AND d.completion_mode IN (?, ?)
+            AND d.status = ?
+            AND d.revision_resubmitted_at IS NOT NULL
+          )
         )`
       : `AND d.status IN (${filters.statuses.map(() => '?').join(', ')})`;
+
+  if (filters.status === 'pending') {
+    params.push(
+      COMPLETION_MODE.APPROVAL_REQUIRED,
+      COMPLETION_MODE.CONDITIONAL_APPROVAL,
+      DOCUMENT_STATUS.SUBMITTED
+    );
+  }
 
   if (filters.projectId !== null) {
     params.push(filters.projectId);

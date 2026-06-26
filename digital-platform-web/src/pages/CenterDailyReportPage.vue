@@ -33,6 +33,7 @@
         <button type="button" class="secondary-button" :disabled="loading" @click="loadReport">查询</button>
       </section>
 
+      <!-- 已停用中心日报“每日固定时间自动留档 Excel”，暂不展示自动生成计划配置。
       <section class="form-card">
         <div class="section-title-row">
           <div>
@@ -63,6 +64,7 @@
           </label>
         </div>
       </section>
+      -->
 
       <section v-if="errorMessage" class="state-panel state-panel--error">
         <p>{{ errorMessage }}</p>
@@ -333,7 +335,8 @@ async function loadReport() {
   try {
     const result = await getCenterDailyReport({ date: filters.date, department: filters.department }, props.authToken);
     report.value = result.report;
-    await loadSchedule();
+    // 已停用固定时间自动留档 Excel，因此查询中心日报时不再加载自动生成计划。
+    // await loadSchedule();
   } catch (error) {
     handleApiError(error);
   } finally {

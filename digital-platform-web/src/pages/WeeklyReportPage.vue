@@ -65,7 +65,12 @@
               </div>
               <div v-for="(summary, index) in form.summaries" :key="summary.localId" class="weekly-edit-table__row">
                 <label>
-                  <textarea v-model="summary.workTask" :class="{ invalid: fieldErrors[`summaries.${index}.workTask`] }" />
+                  <input
+                    v-model="summary.workTask"
+                    list="weekly-project-options"
+                    :class="{ invalid: fieldErrors[`summaries.${index}.workTask`] }"
+                    @input="scheduleProjectSearch(summary.workTask)"
+                  />
                   <small v-if="fieldErrors[`summaries.${index}.workTask`]">
                     {{ fieldErrors[`summaries.${index}.workTask`] }}
                   </small>
@@ -149,7 +154,12 @@
               </div>
               <div v-for="(plan, index) in form.plans" :key="plan.localId" class="weekly-edit-table__row">
                 <label>
-                  <textarea v-model="plan.workTask" :class="{ invalid: fieldErrors[`plans.${index}.workTask`] }" />
+                  <input
+                    v-model="plan.workTask"
+                    list="weekly-project-options"
+                    :class="{ invalid: fieldErrors[`plans.${index}.workTask`] }"
+                    @input="scheduleProjectSearch(plan.workTask)"
+                  />
                   <small v-if="fieldErrors[`plans.${index}.workTask`]">{{ fieldErrors[`plans.${index}.workTask`] }}</small>
                 </label>
                 <label>
@@ -175,6 +185,10 @@
               </div>
             </div>
           </section>
+
+          <datalist id="weekly-project-options">
+            <option v-for="project in projectOptions" :key="project.id" :value="projectOptionLabel(project)" />
+          </datalist>
 
           <section v-if="message" class="state-panel state-panel--success state-panel--compact">
             <p>{{ message }}</p>
@@ -218,6 +232,7 @@ import {
   toReadableApiError,
   updateWeeklyReport
 } from '../api/weeklyReports.js';
+import { searchMyActiveProjects } from '../api/projects.js';
 
 const props = defineProps({
   authToken: {
@@ -247,6 +262,8 @@ const exporting = ref(false);
 const message = ref('');
 const errorMessage = ref('');
 const fieldErrors = reactive({});
+const projectOptions = ref([]);
+let projectSearchTimer = null;
 
 const form = reactive({
   weekStart: '',
@@ -318,6 +335,38 @@ function blankPlan() {
     plannedDate: form.weekEnd,
     responsiblePerson: currentUserDisplayName.value
   });
+}
+
+function projectOptionLabel(project) {
+  return [project.projectCode, project.projectName].filter(Boolean).join(' / ');
+}
+
+async function loadProjectOptions(keyword = '') {
+  if (!canUseWeeklyReport.value) {
+    return;
+  }
+
+  try {
+    const result = await searchMyActiveProjects({ keyword, limit: 50 }, props.authToken);
+    projectOptions.value = result.projects || [];
+  } catch (error) {
+    if (error.code === 'UNAUTHENTICATED') {
+      emit('auth-expired');
+      return;
+    }
+    errorMessage.value = toReadableApiError(error);
+  }
+}
+
+// 输入关键词后延迟刷新候选项目，避免每个按键都请求接口。
+function scheduleProjectSearch(keyword) {
+  if (projectSearchTimer) {
+    clearTimeout(projectSearchTimer);
+  }
+
+  projectSearchTimer = setTimeout(() => {
+    void loadProjectOptions(keyword);
+  }, 250);
 }
 
 // Reset the form around the default previous week.
@@ -539,5 +588,8 @@ async function loadInitialReport() {
   }
 }
 
-onMounted(loadInitialReport);
+onMounted(() => {
+  void loadProjectOptions();
+  void loadInitialReport();
+});
 </script>

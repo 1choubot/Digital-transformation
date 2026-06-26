@@ -24,6 +24,8 @@ export const WeeklyCompletionStatus = {
 };
 
 const WEEKLY_COMPLETION_STATUSES = new Set(Object.values(WeeklyCompletionStatus));
+// 最终评审等级只允许使用固定的 A-E 档位。
+const FINAL_REVIEW_GRADES = new Set(['A', 'B', 'C', 'D', 'E']);
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -223,10 +225,19 @@ export function normalizeWeeklyFinalReviewPayload(payload = {}) {
       ['finalScore']
     );
   }
+  const finalGrade = normalizeNullableText(payload.finalGrade, 20);
+  if (finalGrade && !FINAL_REVIEW_GRADES.has(finalGrade)) {
+    throw new WeeklyReportError(
+      WEEKLY_REPORT_ERROR.INVALID_FINAL_REVIEW,
+      'Final grade must be A, B, C, D, or E',
+      400,
+      ['finalGrade']
+    );
+  }
 
   return {
     finalScore: Math.round(finalScore * 100) / 100,
-    finalGrade: normalizeNullableText(payload.finalGrade, 20),
+    finalGrade,
     finalComment: normalizeNullableText(payload.finalComment, 5000)
   };
 }

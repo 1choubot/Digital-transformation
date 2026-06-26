@@ -3,6 +3,7 @@ import test from 'node:test';
 import { WeeklyRestMode } from '../../src/domain/reports.js';
 import {
   getPreviousWeeklyPeriod,
+  normalizeWeeklyFinalReviewPayload,
   normalizeWeeklyReportPayload
 } from '../../src/domain/weeklyReports.js';
 import {
@@ -165,12 +166,29 @@ test('AI success response is cached as ai source', async () => {
     comparisonRows: comparisonRowsFixture(),
     expectedWorkdates: ['2026-06-15', '2026-06-16', '2026-06-17', '2026-06-18', '2026-06-19'],
     workdayContext: workdayContextFixture(),
-    deepseekClient: async () => ({ totalScore: 91, grade: 'A', summary: 'ok', suggestions: ['keep going'] })
+    deepseekClient: async () => ({ totalScore: 91, grade: '优秀', summary: 'ok', suggestions: ['keep going'] })
   });
 
   assert.equal(result.source, 'ai');
   assert.equal(result.score.totalScore, 91);
+  assert.equal(result.score.grade, 'A');
+  // AI 成功时也要保留规则维度，供评审页面展示填写率、完成进度和日报吻合度。
+  assert.equal(result.score.components.fillingRateScore, 12);
+  assert.equal(result.score.components.progressScore, 23);
+  assert.equal(result.score.components.matchScore, 20);
   assert.equal(result.error, null);
+});
+
+test('final review grade only accepts A-E values', () => {
+  // 最终等级由前端下拉框选择，后端仍要兜底拒绝非固定档位。
+  assert.equal(
+    normalizeWeeklyFinalReviewPayload({ finalScore: 88, finalGrade: 'B', finalComment: '' }).finalGrade,
+    'B'
+  );
+  assert.throws(
+    () => normalizeWeeklyFinalReviewPayload({ finalScore: 88, finalGrade: '优秀', finalComment: '' }),
+    /Final grade must be A, B, C, D, or E/
+  );
 });
 
 test('AI timeout or adapter error falls back to rule score without 500 behavior', async () => {

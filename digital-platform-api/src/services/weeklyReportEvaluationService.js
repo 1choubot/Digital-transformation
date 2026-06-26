@@ -79,7 +79,7 @@ export function calculateRuleWeeklyScore({ comparisonRows, dailyEvidence, expect
 }
 
 // Validate the small JSON schema accepted from DeepSeek before caching it.
-function normalizeAiScorePayload(payload, workdayContext) {
+function normalizeAiScorePayload(payload, workdayContext, ruleComponents) {
   const totalScore = Number(payload?.totalScore);
   if (!Number.isFinite(totalScore)) {
     throw new Error('AI score payload missing totalScore');
@@ -87,10 +87,11 @@ function normalizeAiScorePayload(payload, workdayContext) {
 
   return {
     totalScore: clampScore(totalScore),
-    grade: payload.grade || gradeWeeklyScore(totalScore),
+    grade: gradeWeeklyScore(totalScore),
     source: 'ai',
     summary: String(payload.summary || '').slice(0, 1000),
     suggestions: Array.isArray(payload.suggestions) ? payload.suggestions.map((item) => String(item).slice(0, 500)) : [],
+    components: ruleComponents,
     resolvedRestMode: workdayContext.resolvedRestMode,
     restModeAnchorWeekStart: workdayContext.restModeAnchorWeekStart,
     workdaySource: workdayContext.workdaySource
@@ -173,18 +174,20 @@ export async function evaluateWeeklyReportScore({
   deepseekClient = defaultDeepSeekClient
 }) {
   const evaluationInput = buildWeeklyEvaluationInput({ weeklyReport, comparisonRows, workdayContext });
+  // AI 总分仍以模型结果为准，三项维度用确定性规则补齐，保证页面展示稳定。
+  const ruleScore = calculateRuleWeeklyScore({ comparisonRows, dailyEvidence, expectedWorkdates, workdayContext });
 
   try {
     const aiPayload = await deepseekClient(evaluationInput);
     return {
-      score: normalizeAiScorePayload(aiPayload, workdayContext),
+      score: normalizeAiScorePayload(aiPayload, workdayContext, ruleScore.components),
       source: 'ai',
       error: null,
       evaluationInput
     };
   } catch (error) {
     return {
-      score: calculateRuleWeeklyScore({ comparisonRows, dailyEvidence, expectedWorkdates, workdayContext }),
+      score: ruleScore,
       source: 'fallback_rule',
       error: error.message,
       evaluationInput

@@ -205,7 +205,10 @@
           </label>
           <label>
             <span>最终等级</span>
-            <input v-model="finalReviewForm.finalGrade" :readonly="!canEditFinalReview" />
+            <select v-model="finalReviewForm.finalGrade" :disabled="!canEditFinalReview">
+              <option value="">请选择</option>
+              <option v-for="grade in finalGradeOptions" :key="grade" :value="grade">{{ grade }}</option>
+            </select>
           </label>
           <label>
             <span>最终评语</span>
@@ -275,6 +278,8 @@ const finalReviewForm = reactive({
   finalGrade: '',
   finalComment: ''
 });
+// 最终等级固定为 A-E，避免人工评审输入自由文本。
+const finalGradeOptions = ['A', 'B', 'C', 'D', 'E'];
 
 const score = computed(() => report.value?.aiScore || null);
 const targetTitle = computed(() => (isCenterManagerTarget.value ? '中心负责人周报' : '员工周报'));

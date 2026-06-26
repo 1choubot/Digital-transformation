@@ -3,7 +3,8 @@ import path from 'node:path';
 import ExcelJS from 'exceljs';
 import { env } from '../config/env.js';
 
-const CENTER_DAILY_TEMPLATE_FILE = '部门工作日报-研发中心20260618.xlsx';
+// 使用当前仓库实际存在的中心日报模板，避免导出时因模板缺失返回 500。
+const CENTER_DAILY_TEMPLATE_FILE = '部门工作日报-研发中心20260619.xlsx';
 const CENTER_DAILY_SHEET_NAME = '项目管理工作日报汇总';
 
 const DEPARTMENT_DISPLAY_TEXT = {

@@ -98,6 +98,7 @@
                 <span class="stage-document-pill">{{ formatApplicability(document) }}</span>
                 <span class="stage-document-pill">{{ formatDocumentCompletionMode(document) }}</span>
                 <span class="stage-document-pill">{{ formatDocumentCompletionStatus(document) }}</span>
+                <span v-if="isRevisionRequired(document)" class="stage-document-pill stage-document-pill--warning">需返工</span>
                 <StatusBadge :status="document.status" />
               </li>
             </ul>
@@ -116,6 +117,7 @@
                 <span class="stage-document-pill">{{ formatApplicability(document) }}</span>
                 <span class="stage-document-pill">{{ formatDocumentCompletionMode(document) }}</span>
                 <span class="stage-document-pill">{{ formatDocumentCompletionStatus(document) }}</span>
+                <span v-if="isRevisionRequired(document)" class="stage-document-pill stage-document-pill--warning">需返工</span>
                 <StatusBadge :status="document.status" />
               </li>
             </ul>
@@ -129,7 +131,10 @@
             v-for="document in stage.documents"
             :key="document.documentCode"
             class="stage-document-card"
-            :class="{ 'stage-document-card--not-applicable': !isApplicable(document) }"
+            :class="{
+              'stage-document-card--not-applicable': !isApplicable(document),
+              'stage-document-card--revision-required': isRevisionRequired(document)
+            }"
           >
             <div class="stage-document-card__main">
               <div class="stage-document-card__identity">
@@ -141,6 +146,7 @@
                 <span class="stage-document-pill">{{ formatApplicability(document) }}</span>
                 <span class="stage-document-pill">{{ formatDocumentCompletionMode(document) }}</span>
                 <span class="stage-document-pill">{{ formatDocumentCompletionStatus(document) }}</span>
+                <span v-if="isRevisionRequired(document)" class="stage-document-pill stage-document-pill--warning">需返工</span>
                 <StatusBadge :status="document.status" />
               </div>
             </div>
@@ -177,6 +183,15 @@
                 <dt>完成状态</dt>
                 <dd>{{ formatDocumentCompletionStatus(document) }}</dd>
               </div>
+              <div v-if="isRevisionRequired(document)">
+                <dt>返工状态</dt>
+                <dd>
+                  {{ formatRevisionSummary(document) }}
+                  <span v-if="!document.responsibleUserId && !document.responsibleUser" class="inline-muted">
+                    （需返工但未分配责任人）
+                  </span>
+                </dd>
+              </div>
             </dl>
 
             <div class="stage-document-card__body">
@@ -203,6 +218,7 @@
                 @submit-document="$emit('submit-document', $event)"
                 @confirm-document="$emit('confirm-document', $event)"
                 @return-document="$emit('return-document', $event)"
+                @complete-revision-document="$emit('complete-revision-document', $event)"
                 @mark-not-applicable="$emit('mark-not-applicable', $event)"
                 @restore-applicable="$emit('restore-applicable', $event)"
                 @save-responsible-user="$emit('save-responsible-user', $event)"
@@ -227,8 +243,10 @@ import {
   formatDocumentCompletionMode,
   formatDocumentCompletionStatus,
   formatDepartment,
+  formatRevisionSummary,
   formatResponsibleUser,
   isApplicable,
+  isRevisionRequired,
   isResponsibleUserDisabled,
   stageCompleteness,
   stageDocumentSummary
@@ -238,6 +256,7 @@ defineEmits([
   'submit-document',
   'confirm-document',
   'return-document',
+  'complete-revision-document',
   'mark-not-applicable',
   'restore-applicable',
   'save-responsible-user',

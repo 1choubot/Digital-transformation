@@ -98,6 +98,13 @@ export function normalizeStageDocumentTaskFilters(query = {}) {
 export async function listMyStageDocumentTasks(userId, filters) {
   const params = [userId, ...filters.statuses];
   const projectFilter = filters.projectId === null ? '' : 'AND d.project_id = ?';
+  const statusFilter =
+    filters.status === 'pending'
+      ? `AND (
+          d.status IN (${filters.statuses.map(() => '?').join(', ')})
+          OR d.revision_required = 1
+        )`
+      : `AND d.status IN (${filters.statuses.map(() => '?').join(', ')})`;
 
   if (filters.projectId !== null) {
     params.push(filters.projectId);
@@ -122,6 +129,15 @@ export async function listMyStageDocumentTasks(userId, filters) {
       d.status,
       d.is_applicable,
       d.return_reason,
+      d.revision_required,
+      d.revision_reason,
+      d.revision_source_document_id,
+      source.document_code AS revision_source_document_code,
+      source.document_name AS revision_source_document_name,
+      d.revision_requested_at,
+      d.revision_resubmitted_by_user_id,
+      d.revision_resubmitted_at,
+      d.revision_completed_at,
       d.submitted_at,
       d.confirmed_at,
       d.returned_at,
@@ -129,11 +145,13 @@ export async function listMyStageDocumentTasks(userId, filters) {
     FROM project_stage_documents d
     INNER JOIN projects p
       ON p.id = d.project_id
+    LEFT JOIN project_stage_documents source
+      ON source.id = d.revision_source_document_id
     LEFT JOIN project_stages s
       ON s.project_id = d.project_id
       AND s.stage_order = d.stage_order
     WHERE d.responsible_user_id = ?
-      AND d.status IN (${filters.statuses.map(() => '?').join(', ')})
+      ${statusFilter}
       AND d.is_applicable = 1
       ${projectFilter}
     ORDER BY

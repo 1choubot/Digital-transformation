@@ -118,7 +118,20 @@ function mapProjectOverviewDocument(row) {
     isRequired: Boolean(row.is_required),
     isApplicable: row.is_applicable === undefined ? true : Boolean(row.is_applicable),
     status: row.status,
-    completionMode: row.completion_mode
+    completionMode: row.completion_mode,
+    revisionRequired: Boolean(row.revision_required),
+    revisionReason: row.revision_reason ?? null,
+    revisionSourceDocumentId: row.revision_source_document_id ?? null,
+    revisionSourceDocument: row.revision_source_document_id
+      ? {
+          id: row.revision_source_document_id,
+          documentCode: row.revision_source_document_code ?? null,
+          documentName: row.revision_source_document_name ?? null
+        }
+      : null,
+    revisionRequestedAt: row.revision_requested_at ?? null,
+    revisionResubmittedByUserId: row.revision_resubmitted_by_user_id ?? null,
+    revisionResubmittedAt: row.revision_resubmitted_at ?? null
   };
 }
 
@@ -296,19 +309,29 @@ async function selectProjectOverviewDocuments(projectIds) {
 
   const [rows] = await pool.execute(
     `SELECT
-      id,
-      project_id,
-      stage_order,
-      document_order,
-      document_code,
-      document_name,
-      is_required,
-      is_applicable,
-      completion_mode,
-      status
-    FROM project_stage_documents
-    WHERE project_id IN (${buildInClause(projectIds)})
-    ORDER BY project_id ASC, stage_order ASC, document_order ASC, id ASC`,
+      d.id,
+      d.project_id,
+      d.stage_order,
+      d.document_order,
+      d.document_code,
+      d.document_name,
+      d.is_required,
+      d.is_applicable,
+      d.completion_mode,
+      d.status,
+      d.revision_required,
+      d.revision_reason,
+      d.revision_source_document_id,
+      d.revision_requested_at,
+      d.revision_resubmitted_by_user_id,
+      d.revision_resubmitted_at,
+      source.document_code AS revision_source_document_code,
+      source.document_name AS revision_source_document_name
+    FROM project_stage_documents d
+    LEFT JOIN project_stage_documents source
+      ON source.id = d.revision_source_document_id
+    WHERE d.project_id IN (${buildInClause(projectIds)})
+    ORDER BY d.project_id ASC, d.stage_order ASC, d.document_order ASC, d.id ASC`,
     projectIds
   );
 
@@ -321,7 +344,10 @@ async function countMyPendingStageDocumentTasks(userId) {
     FROM project_stage_documents
     WHERE responsible_user_id = ?
       AND is_applicable = 1
-      AND status IN (?, ?)`,
+      AND (
+        revision_required = 1
+        OR status IN (?, ?)
+      )`,
     [userId, DOCUMENT_STATUS.NOT_SUBMITTED, DOCUMENT_STATUS.RETURNED]
   );
 

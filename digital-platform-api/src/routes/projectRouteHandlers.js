@@ -27,6 +27,7 @@ import {
 } from '../repositories/operationLogRepository.js';
 import {
   getProjectStageDocumentChecklist,
+  completeProjectStageDocumentRevision,
   updateProjectStageDocumentApplicability,
   updateProjectStageDocumentResponsibleUser,
   updateProjectStageDocumentStatus
@@ -127,7 +128,9 @@ async function handleStageDocumentStatusAction(req, res, action) {
     documentId,
     action,
     user: req.auth.user,
-    returnReason: req.body?.returnReason
+    returnReason: req.body?.returnReason,
+    revisionTargetDocumentIds: req.body?.revisionTargetDocumentIds,
+    designChangeTargetDocumentIds: req.body?.designChangeTargetDocumentIds
   });
 
   res.json({
@@ -302,6 +305,23 @@ export async function confirmStageDocumentHandler(req, res) {
 
 export async function returnStageDocumentHandler(req, res) {
   await handleStageDocumentStatusAction(req, res, DOCUMENT_STATUS_ACTION.RETURN);
+}
+
+export async function completeStageDocumentRevisionHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const documentId = parseDocumentId(req.params.documentId);
+
+  const document = await completeProjectStageDocumentRevision({
+    projectId,
+    documentId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: {
+      document
+    }
+  });
 }
 
 export async function markStageDocumentNotApplicableHandler(req, res) {

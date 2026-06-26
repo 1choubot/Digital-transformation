@@ -116,11 +116,27 @@ export async function confirmStageDocument(projectId, documentId, authToken) {
   });
 }
 
-export async function returnStageDocument(projectId, documentId, returnReason, authToken) {
+export async function returnStageDocument(projectId, documentId, returnReason, authToken, options = {}) {
   return request(`/api/projects/${projectId}/stage-documents/${documentId}/return`, {
     method: 'POST',
     authToken,
-    body: JSON.stringify({ returnReason })
+    body: JSON.stringify({
+      returnReason,
+      ...(Array.isArray(options.revisionTargetDocumentIds)
+        ? { revisionTargetDocumentIds: options.revisionTargetDocumentIds }
+        : {}),
+      ...(Array.isArray(options.designChangeTargetDocumentIds)
+        ? { designChangeTargetDocumentIds: options.designChangeTargetDocumentIds }
+        : {})
+    })
+  });
+}
+
+export async function completeStageDocumentRevision(projectId, documentId, authToken) {
+  return request(`/api/projects/${projectId}/stage-documents/${documentId}/revision/complete`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({})
   });
 }
 

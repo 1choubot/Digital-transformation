@@ -1524,6 +1524,11 @@ p {
   background: #f8fafc;
 }
 
+.stage-document-card--revision-required {
+  border-color: rgba(217, 119, 6, 0.42);
+  background: #fffbeb;
+}
+
 .stage-document-card__main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1565,6 +1570,12 @@ p {
   font-size: 12px;
   font-weight: 700;
   padding: 0 9px;
+}
+
+.stage-document-pill--warning {
+  border-color: rgba(217, 119, 6, 0.32);
+  background: #fef3c7;
+  color: #92400e;
 }
 
 .stage-document-meta {
@@ -1748,6 +1759,31 @@ p {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
+}
+
+.stage-document-rework-selector {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(217, 119, 6, 0.24);
+  border-radius: 6px;
+  background: #fffbeb;
+}
+
+.stage-document-rework-selector strong,
+.stage-document-rework-selector p {
+  margin: 0;
+}
+
+.stage-document-rework-selector label {
+  display: grid;
+  grid-template-columns: auto minmax(44px, auto) minmax(120px, 1fr) repeat(4, minmax(72px, auto));
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #334252;
+  font-size: 12px;
 }
 
 .stage-document-responsibility-action {
@@ -2007,6 +2043,10 @@ p {
   .stage-document-attachment-item__actions .ghost-button,
   .stage-document-attachment-upload__button {
     width: 100%;
+  }
+
+  .stage-document-rework-selector label {
+    grid-template-columns: auto minmax(0, 1fr);
   }
 
   .task-table__row .ghost-button {

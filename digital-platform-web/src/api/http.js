@@ -246,6 +246,46 @@ export function toReadableApiError(error) {
     return '该资料提交后即完成，不需要执行审核通过或退回。';
   }
 
+  if (error.code === 'REVISION_TARGETS_REQUIRED') {
+    return '请至少选择 1 个需返工资料。';
+  }
+
+  if (error.code === 'DESIGN_CHANGE_TARGETS_REQUIRED') {
+    return '请至少选择 1 个设计变更资料。';
+  }
+
+  if (error.code === 'INVALID_REVISION_TARGETS') {
+    return '返工资料选择不在固定候选范围内，请刷新后重试。';
+  }
+
+  if (error.code === 'INVALID_DESIGN_CHANGE_TARGETS') {
+    return '设计变更资料只能选择 5.13 到 5.16，请刷新后重试。';
+  }
+
+  if (error.code === 'REVISION_TARGET_NOT_APPLICABLE') {
+    return '条件未触发或不适用的资料不能作为本次返工目标。';
+  }
+
+  if (error.code === 'REVISION_TARGETS_NOT_ALLOWED') {
+    return '当前资料退回不允许携带上游返工目标。';
+  }
+
+  if (error.code === 'REVISION_RESUBMIT_REQUIRED') {
+    return '该资料需先返工重提后才能审核通过或退回。';
+  }
+
+  if (error.code === 'REVISION_NOT_REQUIRED') {
+    return '该资料当前没有需返工标记。';
+  }
+
+  if (error.code === 'REVISION_COMPLETION_NOT_ALLOWED') {
+    return '该资料需返工重提并审核确认后完成，不能直接清除返工。';
+  }
+
+  if (error.code === 'REVISION_COMPLETION_NOT_READY') {
+    return '请先提交或上传返工后的资料，再完成返工。';
+  }
+
   if (error.code === 'INVALID_DOCUMENT_APPLICABILITY_TRANSITION') {
     return '当前资料适用性不允许执行该操作，请刷新清单后重试。';
   }

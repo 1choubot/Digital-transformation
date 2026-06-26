@@ -35,6 +35,7 @@ export const completionModeText = {
 export const completionStatusText = {
   incomplete: '未完成',
   pending_review: '待审核',
+  revision_required: '需返工',
   completed: '已完成',
   not_applicable: '未触发/不适用'
 };

@@ -59,6 +59,63 @@ async function ensureCompletionModeColumns(executor) {
   );
 }
 
+async function ensureRevisionColumns(executor) {
+  await ensureColumn(
+    executor,
+    'project_stage_documents',
+    'revision_required',
+    'ALTER TABLE project_stage_documents ADD COLUMN revision_required TINYINT(1) NOT NULL DEFAULT 0 AFTER return_reason'
+  );
+  await ensureColumn(
+    executor,
+    'project_stage_documents',
+    'revision_reason',
+    'ALTER TABLE project_stage_documents ADD COLUMN revision_reason VARCHAR(1000) NULL AFTER revision_required'
+  );
+  await ensureColumn(
+    executor,
+    'project_stage_documents',
+    'revision_source_document_id',
+    'ALTER TABLE project_stage_documents ADD COLUMN revision_source_document_id BIGINT UNSIGNED NULL AFTER revision_reason'
+  );
+  await ensureColumn(
+    executor,
+    'project_stage_documents',
+    'revision_requested_by_user_id',
+    'ALTER TABLE project_stage_documents ADD COLUMN revision_requested_by_user_id BIGINT UNSIGNED NULL AFTER revision_source_document_id'
+  );
+  await ensureColumn(
+    executor,
+    'project_stage_documents',
+    'revision_requested_at',
+    'ALTER TABLE project_stage_documents ADD COLUMN revision_requested_at DATETIME NULL AFTER revision_requested_by_user_id'
+  );
+  await ensureColumn(
+    executor,
+    'project_stage_documents',
+    'revision_resubmitted_by_user_id',
+    'ALTER TABLE project_stage_documents ADD COLUMN revision_resubmitted_by_user_id BIGINT UNSIGNED NULL AFTER revision_requested_at'
+  );
+  await ensureColumn(
+    executor,
+    'project_stage_documents',
+    'revision_resubmitted_at',
+    'ALTER TABLE project_stage_documents ADD COLUMN revision_resubmitted_at DATETIME NULL AFTER revision_resubmitted_by_user_id'
+  );
+  await ensureColumn(
+    executor,
+    'project_stage_documents',
+    'revision_completed_by_user_id',
+    'ALTER TABLE project_stage_documents ADD COLUMN revision_completed_by_user_id BIGINT UNSIGNED NULL AFTER revision_resubmitted_at'
+  );
+  await ensureColumn(
+    executor,
+    'project_stage_documents',
+    'revision_completed_at',
+    'ALTER TABLE project_stage_documents ADD COLUMN revision_completed_at DATETIME NULL AFTER revision_completed_by_user_id'
+  );
+}
+
 export async function ensureStageDocumentSchema(executor) {
   await executor.execute(
     `CREATE TABLE IF NOT EXISTS stage_document_templates (
@@ -123,6 +180,15 @@ export async function ensureStageDocumentSchema(executor) {
       confirmed_at DATETIME NULL,
       returned_at DATETIME NULL,
       return_reason VARCHAR(1000) NULL,
+      revision_required TINYINT(1) NOT NULL DEFAULT 0,
+      revision_reason VARCHAR(1000) NULL,
+      revision_source_document_id BIGINT UNSIGNED NULL,
+      revision_requested_by_user_id BIGINT UNSIGNED NULL,
+      revision_requested_at DATETIME NULL,
+      revision_resubmitted_by_user_id BIGINT UNSIGNED NULL,
+      revision_resubmitted_at DATETIME NULL,
+      revision_completed_by_user_id BIGINT UNSIGNED NULL,
+      revision_completed_at DATETIME NULL,
       not_applicable_by_user_id BIGINT UNSIGNED NULL,
       not_applicable_at DATETIME NULL,
       not_applicable_reason VARCHAR(1000) NULL,
@@ -186,4 +252,5 @@ export async function ensureStageDocumentSchema(executor) {
 
   await ensureOwnershipColumns(executor);
   await ensureCompletionModeColumns(executor);
+  await ensureRevisionColumns(executor);
 }

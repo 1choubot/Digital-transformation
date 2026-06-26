@@ -5,6 +5,7 @@ import {
   advanceProjectStageHandler,
   approveStageApprovalHandler,
   confirmStageDocumentHandler,
+  completeStageDocumentRevisionHandler,
   createProjectHandler,
   deleteStageDocumentAttachmentHandler,
   downloadStageDocumentAttachmentHandler,
@@ -108,6 +109,12 @@ projectsRouter.post(
   '/:projectId/stage-documents/:documentId/return',
   requireAuth,
   asyncHandler(returnStageDocumentHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/stage-documents/:documentId/revision/complete',
+  requireAuth,
+  asyncHandler(completeStageDocumentRevisionHandler)
 );
 
 projectsRouter.post(

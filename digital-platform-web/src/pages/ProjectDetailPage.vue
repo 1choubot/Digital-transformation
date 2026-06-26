@@ -87,6 +87,7 @@
         @submit-document="submitDocument"
         @confirm-document="confirmDocument"
         @return-document="returnDocument"
+        @complete-revision-document="completeRevisionDocument"
         @mark-not-applicable="markNotApplicable"
         @restore-applicable="restoreApplicable"
         @save-responsible-user="saveResponsibleUser"
@@ -104,6 +105,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
   advanceProjectStage,
   confirmStageDocument,
+  completeStageDocumentRevision,
   deleteStageDocumentAttachment,
   downloadStageDocumentAttachment,
   getProjectDetail,
@@ -428,15 +430,36 @@ async function runDocumentAction(document, action, runner, successText, onSucces
 }
 
 async function submitDocument(document) {
-  const requiresReview = getCompletionMode(document) === 'approval_required';
+  const completionMode = getCompletionMode(document);
+  const requiresReview = completionMode === 'approval_required' || completionMode === 'conditional_approval';
+  const isSubmitOnlyMode = completionMode === 'submit_only' || completionMode === 'conditional_submit';
+  const isRevisionSubmit = Boolean(document.revisionRequired);
+  const successText = isRevisionSubmit
+    ? requiresReview
+      ? '资料项已返工重提，等待资料审核。'
+      : isSubmitOnlyMode
+        ? '资料项已提交，请继续完成返工。'
+        : '资料项已提交。'
+    : requiresReview
+      ? '资料项已提交资料审核。'
+      : '资料项已提交并按完成规则完成。';
   await runDocumentAction(
     document,
     'submit',
     () => markStageDocumentSubmitted(props.projectId, document.id, props.authToken),
-    requiresReview ? '资料项已提交资料审核。' : '资料项已提交并按完成规则完成。',
+    successText,
     () => {
       delete returnReasons[document.id];
     }
+  );
+}
+
+async function completeRevisionDocument(document) {
+  await runDocumentAction(
+    document,
+    'complete-revision',
+    () => completeStageDocumentRevision(props.projectId, document.id, props.authToken),
+    '资料项返工已完成。'
   );
 }
 
@@ -449,19 +472,40 @@ async function confirmDocument(document) {
   );
 }
 
-async function returnDocument(document) {
+async function returnDocument(payload) {
   clearActionState();
+  const document = payload?.document || payload;
   const reason = String(returnReasons[document.id] || '').trim();
+  const revisionTargetDocumentIds = Array.isArray(payload?.revisionTargetDocumentIds)
+    ? payload.revisionTargetDocumentIds
+    : [];
+  const designChangeTargetDocumentIds = Array.isArray(payload?.designChangeTargetDocumentIds)
+    ? payload.designChangeTargetDocumentIds
+    : [];
 
   if (!reason) {
     actionErrorMessage.value = '请填写资料审核退回原因。';
     return;
   }
 
+  if ((document.reworkClass || document.rework_class) === 'a_class' && revisionTargetDocumentIds.length === 0) {
+    actionErrorMessage.value = '请至少选择 1 个需返工资料。';
+    return;
+  }
+
+  if ((document.reworkClass || document.rework_class) === 'c_class' && designChangeTargetDocumentIds.length === 0) {
+    actionErrorMessage.value = '请至少选择 1 个设计变更资料。';
+    return;
+  }
+
   await runDocumentAction(
     document,
     'return',
-    () => returnStageDocument(props.projectId, document.id, reason, props.authToken),
+    () =>
+      returnStageDocument(props.projectId, document.id, reason, props.authToken, {
+        revisionTargetDocumentIds,
+        designChangeTargetDocumentIds
+      }),
     '资料项已退回资料审核。',
     () => {
       delete returnReasons[document.id];

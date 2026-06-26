@@ -13,6 +13,8 @@ export const operationActionText = {
   'document.submitted': '提交资料',
   'document.confirmed': '资料审核通过',
   'document.returned': '退回资料审核',
+  'document.revision_requested': '要求资料返工',
+  'document.revision_completed': '完成资料返工',
   'document.marked_not_applicable': '资料标记不适用',
   'document.restored_applicable': '资料恢复适用',
   'document.responsible_changed': '资料责任人变更',
@@ -36,6 +38,33 @@ export function getCompletionMode(document) {
   return document?.completionMode || document?.completion_mode || 'approval_required';
 }
 
+export function isRevisionRequired(document) {
+  const value = document?.revisionRequired ?? document?.revision_required;
+  return value === true || value === 1 || value === '1';
+}
+
+export function isRevisionResubmitted(document) {
+  if (!isRevisionRequired(document) || document?.status !== 'submitted') {
+    return false;
+  }
+
+  if (typeof document?.revisionResubmitted === 'boolean') {
+    return document.revisionResubmitted;
+  }
+
+  return Boolean(document?.revisionResubmittedAt ?? document?.revision_resubmitted_at);
+}
+
+export function isReviewCompletionMode(document) {
+  const completionMode = getCompletionMode(document);
+  return completionMode === 'approval_required' || completionMode === 'conditional_approval';
+}
+
+export function isSubmitCompletionMode(document) {
+  const completionMode = getCompletionMode(document);
+  return completionMode === 'submit_only' || completionMode === 'conditional_submit';
+}
+
 export function getCompletionStatus(document) {
   if (document?.completionStatus) {
     return document.completionStatus;
@@ -47,6 +76,12 @@ export function getCompletionStatus(document) {
 
   if (document?.status === 'returned') {
     return 'incomplete';
+  }
+
+  if (isRevisionRequired(document)) {
+    return isReviewCompletionMode(document) && isRevisionResubmitted(document)
+      ? 'pending_review'
+      : 'revision_required';
   }
 
   const completionMode = getCompletionMode(document);
@@ -88,7 +123,14 @@ export function buildFallbackCompletenessSummary(stage) {
       status: document.status,
       completionMode: getCompletionMode(document),
       isComplete: false,
-      completionStatus: getCompletionStatus(document)
+      completionStatus: getCompletionStatus(document),
+      revisionRequired: isRevisionRequired(document),
+      revisionReason: document.revisionReason ?? document.revision_reason ?? null,
+      revisionSourceDocumentId: document.revisionSourceDocumentId ?? document.revision_source_document_id ?? null,
+      revisionSourceDocument: document.revisionSourceDocument ?? null,
+      revisionResubmittedByUserId:
+        document.revisionResubmittedByUserId ?? document.revision_resubmitted_by_user_id ?? null,
+      revisionResubmittedAt: document.revisionResubmittedAt ?? document.revision_resubmitted_at ?? null
     }));
   const requiredTotal = applicableDocuments.length;
   const incompleteRequiredCount = incompleteRequiredDocuments.length;
@@ -122,7 +164,11 @@ export function buildStageDocumentSummary(stage) {
       completionMode: getCompletionMode(document),
       isComplete: isDocumentComplete(document),
       completionStatus: getCompletionStatus(document),
-      isApplicable: isApplicable(document)
+      isApplicable: isApplicable(document),
+      revisionRequired: isRevisionRequired(document),
+      revisionReason: document.revisionReason ?? document.revision_reason ?? null,
+      revisionSourceDocumentId: document.revisionSourceDocumentId ?? document.revision_source_document_id ?? null,
+      revisionSourceDocument: document.revisionSourceDocument ?? null
     }));
 
   return {
@@ -152,6 +198,18 @@ export function formatResponsibleUser(document) {
   }
 
   return formatUser(document.responsibleUser);
+}
+
+export function formatRevisionSummary(document) {
+  const reason = document?.revisionReason || document?.revision_reason || '未填写返工原因';
+  const source = document?.revisionSourceDocument || null;
+  const sourceText = source?.documentCode
+    ? `${source.documentCode} ${source.documentName || ''}`.trim()
+    : document?.revisionSourceDocumentId
+      ? `来源资料ID ${document.revisionSourceDocumentId}`
+      : '来源审批资料未记录';
+
+  return `需返工：${reason}；来源：${sourceText}`;
 }
 
 export function formatDepartment(value) {
@@ -191,14 +249,22 @@ export function showDisabledResponsibleOption(document, responsibilityCandidates
 }
 
 export function canSubmit(document) {
-  return isApplicable(document) && (document.status === 'not_submitted' || document.status === 'returned');
+  return (
+    isApplicable(document) &&
+    (
+      document.status === 'not_submitted' ||
+      document.status === 'returned' ||
+      (isRevisionRequired(document) && isReviewCompletionMode(document) && !isRevisionResubmitted(document))
+    )
+  );
 }
 
 export function canReview(document) {
   return (
     isApplicable(document) &&
-    getCompletionMode(document) === 'approval_required' &&
-    document.status === 'submitted'
+    isReviewCompletionMode(document) &&
+    document.status === 'submitted' &&
+    (!isRevisionRequired(document) || isRevisionResubmitted(document))
   );
 }
 

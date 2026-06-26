@@ -8,7 +8,13 @@ import {
 import { PROJECT_STATUS } from '../../domain/projects.js';
 import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import { attachStageDocumentPermissions } from './accessControl.js';
-import { mapDocument } from './shared.js';
+import {
+  getDocumentCompletionMode,
+  isRevisionRequired,
+  isRevisionResubmitted,
+  isReviewCompletionMode,
+  mapDocument
+} from './shared.js';
 
 const WORKBENCH_TODO_TYPES = [
   'document_responsibility',
@@ -61,6 +67,14 @@ function buildDocumentTodo({ row, user, type, actionText }) {
     completionMode: document.completionMode,
     isComplete: document.isComplete,
     completionStatus: document.completionStatus,
+    revisionRequired: document.revisionRequired,
+    revisionReason: document.revisionReason,
+    revisionSourceDocumentId: document.revisionSourceDocumentId,
+    revisionSourceDocument: document.revisionSourceDocument,
+    revisionRequestedAt: document.revisionRequestedAt,
+    revisionResubmittedByUserId: document.revisionResubmittedByUserId,
+    revisionResubmittedAt: document.revisionResubmittedAt,
+    revisionResubmitted: document.revisionResubmitted,
     isApplicable: document.isApplicable,
     status: row.status,
     actionText,
@@ -131,15 +145,33 @@ async function selectDocumentResponsibilityTodos(user) {
       ON u.id = d.responsible_user_id
     WHERE d.responsible_user_id = ?
       AND d.is_applicable = 1
-      AND d.status IN (?, ?)
+      AND (
+        d.status IN (?, ?)
+        OR (
+          d.revision_required = 1
+          AND NOT (
+            d.completion_mode IN (?, ?)
+            AND d.status = ?
+            AND d.revision_resubmitted_at IS NOT NULL
+          )
+        )
+      )
     ORDER BY
+      CASE WHEN d.revision_required = 1 THEN 0 ELSE 1 END ASC,
       CASE d.status WHEN 'returned' THEN 1 ELSE 2 END ASC,
       COALESCE(d.returned_at, d.responsibility_updated_at, d.updated_at) DESC,
       p.project_code ASC,
       d.stage_order ASC,
       d.document_order ASC,
       d.id ASC`,
-    [user.id, DOCUMENT_STATUS.NOT_SUBMITTED, DOCUMENT_STATUS.RETURNED]
+    [
+      user.id,
+      DOCUMENT_STATUS.NOT_SUBMITTED,
+      DOCUMENT_STATUS.RETURNED,
+      COMPLETION_MODE.APPROVAL_REQUIRED,
+      COMPLETION_MODE.CONDITIONAL_APPROVAL,
+      DOCUMENT_STATUS.SUBMITTED
+    ]
   );
 
   return rows.map((row) =>
@@ -147,7 +179,13 @@ async function selectDocumentResponsibilityTodos(user) {
       row,
       user,
       type: 'document_responsibility',
-      actionText: row.status === DOCUMENT_STATUS.RETURNED ? '修改后重新提交资料' : '提交资料'
+      actionText: isRevisionRequired(row)
+        ? isReviewCompletionMode(getDocumentCompletionMode(row))
+          ? '返工重提'
+          : '完成返工'
+        : row.status === DOCUMENT_STATUS.RETURNED
+          ? '修改后重新提交资料'
+          : '提交资料'
     })
   );
 }
@@ -188,6 +226,13 @@ async function selectDocumentReviewTodos(user) {
       AND d.status = ?
       AND d.completion_mode = ?
       AND (
+        d.revision_required = 0
+        OR (
+          d.revision_required = 1
+          AND d.revision_resubmitted_at IS NOT NULL
+        )
+      )
+      AND (
         d.review_department = ?
         OR (
           d.review_department IS NULL
@@ -208,7 +253,7 @@ async function selectDocumentReviewTodos(user) {
       row,
       user,
       type: 'document_review',
-      actionText: '处理资料级审核'
+      actionText: isRevisionRequired(row) && isRevisionResubmitted(row) ? '审核返工重提' : '处理资料级审核'
     })
   );
 }
@@ -277,6 +322,8 @@ async function selectStageAdvanceTodos(user) {
             AND incomplete_documents.stage_order = s.stage_order
             AND incomplete_documents.is_applicable = 1
             AND (
+            incomplete_documents.revision_required = 1
+            OR
             incomplete_documents.status = ?
             OR (
               incomplete_documents.completion_mode IN (?, ?)

@@ -6,7 +6,11 @@ import {
   STAGE_DOCUMENT_TEMPLATE_VERSION
 } from '../../domain/stageDocumentTemplates.js';
 import { STANDARD_PROJECT_STAGES } from '../../domain/stages.js';
-import { buildStageCompletenessSummary, mapDocument } from './shared.js';
+import {
+  attachReworkCandidatesToDocuments,
+  buildStageCompletenessSummary,
+  mapDocument
+} from './shared.js';
 import {
   attachStageDocumentPermissions,
   filterStageDocumentsForUser
@@ -273,12 +277,29 @@ export async function getProjectStageDocumentChecklist(projectId, user = null) {
 
   const documentsByStage = new Map(STANDARD_PROJECT_STAGES.map((stage) => [stage.stageKey, []]));
   const mappedDocuments = rows.map(mapDocument);
+  const documentsById = new Map(mappedDocuments.map((document) => [document.id, document]));
+  const documentsWithRevisionSource = mappedDocuments.map((document) => {
+    const sourceDocument = documentsById.get(document.revisionSourceDocumentId);
+    if (!sourceDocument) {
+      return document;
+    }
+
+    return {
+      ...document,
+      revisionSourceDocument: {
+        id: sourceDocument.id,
+        documentCode: sourceDocument.documentCode,
+        documentName: sourceDocument.documentName
+      }
+    };
+  });
+  const documentsWithReworkContext = attachReworkCandidatesToDocuments(documentsWithRevisionSource);
   const visibleDocuments =
     user && project
-      ? filterStageDocumentsForUser({ user, project, documents: mappedDocuments }).map((document) =>
+      ? filterStageDocumentsForUser({ user, project, documents: documentsWithReworkContext }).map((document) =>
           attachStageDocumentPermissions({ user, project, document })
         )
-      : mappedDocuments;
+      : documentsWithReworkContext;
 
   for (const document of visibleDocuments) {
     const documents = documentsByStage.get(document.stageKey);

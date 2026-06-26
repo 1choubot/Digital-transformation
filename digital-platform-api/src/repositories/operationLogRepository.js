@@ -9,6 +9,8 @@ export const OPERATION_ACTION_TYPE = {
   DOCUMENT_SUBMITTED: 'document.submitted',
   DOCUMENT_CONFIRMED: 'document.confirmed',
   DOCUMENT_RETURNED: 'document.returned',
+  DOCUMENT_REVISION_REQUESTED: 'document.revision_requested',
+  DOCUMENT_REVISION_COMPLETED: 'document.revision_completed',
   DOCUMENT_MARKED_NOT_APPLICABLE: 'document.marked_not_applicable',
   DOCUMENT_RESTORED_APPLICABLE: 'document.restored_applicable',
   DOCUMENT_RESPONSIBLE_CHANGED: 'document.responsible_changed',

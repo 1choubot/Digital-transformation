@@ -97,7 +97,7 @@
             <span class="mono">{{ item.documentCode || '-' }}</span>
             <strong>{{ item.documentName || '-' }}</strong>
           </div>
-          <span>{{ formatTodoType(item.type) }}</span>
+          <span>{{ formatTodoType(item.type, item) }}</span>
           <span>{{ item.completionMode ? formatCompletionMode(item.completionMode) : '-' }}</span>
           <span>{{ item.completionStatus ? formatCompletionStatus(item.completionStatus) : formatStatus(item.status) }}</span>
           <span>{{ item.actionText || '-' }}</span>
@@ -177,7 +177,11 @@ function itemKey(item) {
   return [item.type, item.projectId, item.stageId || '', item.documentId || ''].join(':');
 }
 
-function formatTodoType(type) {
+function formatTodoType(type, item = null) {
+  if (item?.revisionRequired && type === 'document_responsibility') {
+    return '需返工资料';
+  }
+
   return typeOptions.find((option) => option.value === type)?.label || type || '-';
 }
 

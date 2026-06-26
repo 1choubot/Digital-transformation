@@ -15,6 +15,8 @@ import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import {
   getDocumentCompletionMode,
   isReviewCompletionMode,
+  isRevisionRequired,
+  isRevisionResubmitted,
   isStageDocumentComplete
 } from './shared.js';
 
@@ -84,6 +86,7 @@ export function canReviewStageDocument(user, document) {
   return (
     getDocumentStatus(document) === DOCUMENT_STATUS.SUBMITTED &&
     isReviewCompletionMode(getDocumentCompletionMode(document)) &&
+    (!isRevisionRequired(document) || isRevisionResubmitted(document)) &&
     isStageDocumentReviewAuthority(user, document)
   );
 }

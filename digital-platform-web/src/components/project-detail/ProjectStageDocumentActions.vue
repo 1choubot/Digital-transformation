@@ -27,7 +27,17 @@
 
       <template v-else>
         <button
-          v-if="canSubmitDocument && canSubmit(document)"
+          v-if="canSubmitDocument && canCompleteRevisionDocument"
+          type="button"
+          class="ghost-button"
+          :disabled="isActionPending(document.id, 'complete-revision')"
+          @click="$emit('complete-revision-document', document)"
+        >
+          {{ isActionPending(document.id, 'complete-revision') ? '处理中...' : '完成返工' }}
+        </button>
+
+        <button
+          v-else-if="canSubmitDocument && canSubmit(document)"
           type="button"
           class="ghost-button"
           :disabled="isActionPending(document.id, 'submit')"
@@ -52,11 +62,46 @@
               placeholder="资料审核退回原因"
               :disabled="isActionPending(document.id, 'return')"
             />
+            <div v-if="isAClassReturn" class="stage-document-rework-selector">
+              <strong>选择需返工资料</strong>
+              <p v-if="revisionCandidates.length === 0">当前没有可选的适用返工候选。</p>
+              <label v-for="candidate in revisionCandidates" :key="candidate.id">
+                <input
+                  v-model="revisionTargetSelections[document.id]"
+                  type="checkbox"
+                  :value="candidate.id"
+                  :disabled="isActionPending(document.id, 'return')"
+                />
+                <span class="mono">{{ candidate.documentCode }}</span>
+                <span>{{ candidate.documentName }}</span>
+                <span>{{ formatResponsibleUser(candidate) }}</span>
+                <span>{{ formatDocumentCompletionMode(candidate) }}</span>
+                <span>{{ formatDocumentCompletionStatus(candidate) }}</span>
+                <span>{{ formatApplicability(candidate) }}</span>
+              </label>
+            </div>
+            <div v-if="isCClassReturn" class="stage-document-rework-selector">
+              <strong>选择设计变更触发资料</strong>
+              <label v-for="candidate in designChangeCandidates" :key="candidate.id">
+                <input
+                  v-model="designChangeTargetSelections[document.id]"
+                  type="checkbox"
+                  :value="candidate.id"
+                  :disabled="isActionPending(document.id, 'return')"
+                />
+                <span class="mono">{{ candidate.documentCode }}</span>
+                <span>{{ candidate.documentName }}</span>
+                <span>{{ formatResponsibleUser(candidate) }}</span>
+                <span>{{ formatDocumentCompletionMode(candidate) }}</span>
+                <span>{{ formatDocumentCompletionStatus(candidate) }}</span>
+                <span>将设置为适用且需返工</span>
+              </label>
+            </div>
             <button
               type="button"
               class="ghost-button"
-              :disabled="isActionPending(document.id, 'return')"
-              @click="$emit('return-document', document)"
+              :disabled="isActionPending(document.id, 'return') || !canSubmitReturn"
+              @click="emitReturnDocument"
             >
               {{ isActionPending(document.id, 'return') ? '退回中...' : '退回资料审核' }}
             </button>
@@ -89,20 +134,28 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, reactive, watch } from 'vue';
 import ProjectStageDocumentResponsibility from './ProjectStageDocumentResponsibility.vue';
 import {
   canReview,
   canSubmit,
   formatDocumentCompletionStatus,
+  formatApplicability,
   getCompletionMode,
-  isApplicable
+  formatDocumentCompletionMode,
+  formatResponsibleUser,
+  isApplicable,
+  isReviewCompletionMode,
+  isRevisionRequired,
+  isRevisionResubmitted,
+  isSubmitCompletionMode
 } from './stageDocumentViewHelpers.js';
 
-defineEmits([
+const emit = defineEmits([
   'submit-document',
   'confirm-document',
   'return-document',
+  'complete-revision-document',
   'mark-not-applicable',
   'restore-applicable',
   'save-responsible-user',
@@ -156,7 +209,56 @@ const props = defineProps({
   }
 });
 
+const revisionTargetSelections = reactive({});
+const designChangeTargetSelections = reactive({});
+
+watch(
+  () => props.document.id,
+  (documentId) => {
+    if (!Array.isArray(revisionTargetSelections[documentId])) {
+      revisionTargetSelections[documentId] = [];
+    }
+    if (!Array.isArray(designChangeTargetSelections[documentId])) {
+      designChangeTargetSelections[documentId] = [];
+    }
+  },
+  { immediate: true }
+);
+
+const revisionCandidates = computed(() => props.document.reworkCandidates || []);
+const designChangeCandidates = computed(() => props.document.designChangeCandidates || []);
+const reworkClass = computed(() => props.document.reworkClass || props.document.rework_class || 'b_class');
+const isAClassReturn = computed(() => reworkClass.value === 'a_class');
+const isCClassReturn = computed(() => props.document.documentCode === '5.12' || reworkClass.value === 'c_class');
+const selectedRevisionTargetIds = computed(() => revisionTargetSelections[props.document.id] || []);
+const selectedDesignChangeTargetIds = computed(() => designChangeTargetSelections[props.document.id] || []);
+const canSubmitReturn = computed(() => {
+  if (isAClassReturn.value) {
+    return selectedRevisionTargetIds.value.length > 0;
+  }
+
+  if (isCClassReturn.value) {
+    return selectedDesignChangeTargetIds.value.length > 0;
+  }
+
+  return true;
+});
+const canCompleteRevisionDocument = computed(
+  () =>
+    isRevisionRequired(props.document) &&
+    isSubmitCompletionMode(props.document) &&
+    ['submitted', 'confirmed'].includes(props.document.status)
+);
+
 const submitButtonText = computed(() => {
+  if (isRevisionRequired(props.document) && isReviewCompletionMode(props.document)) {
+    return '返工重提';
+  }
+
+  if (isRevisionRequired(props.document) && isSubmitCompletionMode(props.document)) {
+    return '提交返工资料';
+  }
+
   const completionMode = getCompletionMode(props.document);
   if (completionMode === 'approval_required' || completionMode === 'conditional_approval') {
     return '提交资料审核';
@@ -171,7 +273,15 @@ const emptyActionText = computed(() => {
   }
 
   if (props.document.status === 'confirmed') {
-    return '资料审核通过';
+    return isRevisionRequired(props.document) ? '需返工' : '资料审核通过';
+  }
+
+  if (isRevisionRequired(props.document)) {
+    if (!props.document.responsibleUserId && !props.document.responsibleUser) {
+      return '需返工但未分配责任人';
+    }
+
+    return isRevisionResubmitted(props.document) ? '返工已重提，待审核' : '需返工';
   }
 
   if (props.document.isComplete || props.document.completionStatus === 'completed') {
@@ -184,4 +294,12 @@ const emptyActionText = computed(() => {
 
   return '暂无资料操作';
 });
+
+function emitReturnDocument() {
+  emit('return-document', {
+    document: props.document,
+    revisionTargetDocumentIds: isAClassReturn.value ? [...selectedRevisionTargetIds.value] : [],
+    designChangeTargetDocumentIds: isCClassReturn.value ? [...selectedDesignChangeTargetIds.value] : []
+  });
+}
 </script>

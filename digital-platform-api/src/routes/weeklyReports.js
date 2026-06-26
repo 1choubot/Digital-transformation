@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import {
   requireAuth,
-  requireWeeklyReportWriter
+  requireWeeklyReportWriter,
+  requireWeeklyRestModeManager
 } from '../middleware/auth.js';
 import { AuthError } from '../domain/auth.js';
 import {
@@ -30,10 +31,15 @@ import {
   listWeeklyReports,
   saveWeeklyReportEvaluation,
   saveWeeklyReportFinalReview,
-  updateWeeklyReport
+  updateWeeklyReport,
+  resolveWeeklyReportWorkdayContext
 } from '../repositories/weeklyReportRepository.js';
 import { evaluateWeeklyReportScore } from '../services/weeklyReportEvaluationService.js';
 import { generateWeeklyReportWorkbook } from '../services/weeklyReportExportService.js';
+import { upsertWeeklyRestModeAnchor, findLatestWeeklyRestModeAnchor } from '../repositories/reportSettingsRepository.js';
+import { resolveWeeklyRestMode, getWeekStart } from '../domain/reportWorkdays.js';
+import { WeeklyRestMode } from '../domain/reports.js';
+import { env } from '../config/env.js';
 
 export const weeklyReportsRouter = Router();
 
@@ -74,6 +80,69 @@ function resolveWeeklyReviewOverviewScope(user, requestedDepartment) {
     subjectRole: OrganizationRole.CENTER_MANAGER
   };
 }
+
+// ── Rest-mode anchor endpoints ──
+
+// GET /api/weekly-reports/rest-mode?weekStart=YYYY-MM-DD
+// Returns the resolved rest mode for the specified (or current) week and the closest anchor.
+weeklyReportsRouter.get(
+  '/rest-mode',
+  asyncHandler(async (req, res) => {
+    const rawWeekStart = req.query.weekStart || getWeekStart(new Date().toISOString().slice(0, 10));
+    const weekStart = String(rawWeekStart);
+    const anchor = await findLatestWeeklyRestModeAnchor(weekStart);
+    const resolvedRestMode = resolveWeeklyRestMode({
+      targetWeekStart: weekStart,
+      latestAnchor: anchor,
+      defaultMode: env.reports.defaultWeeklyRestMode
+    });
+
+    res.json({
+      data: {
+        weekStart,
+        resolvedRestMode,
+        anchor
+      }
+    });
+  })
+);
+
+// PUT /api/weekly-reports/rest-mode
+// Creates or updates the rest-mode anchor for a specific week start.
+// Only general_manager and system_admin (platform admin) may call this.
+weeklyReportsRouter.put(
+  '/rest-mode',
+  requireWeeklyRestModeManager,
+  asyncHandler(async (req, res) => {
+    const { weekStart, restMode } = req.body || {};
+    if (!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(String(weekStart)) || getWeekStart(String(weekStart)) !== String(weekStart)) {
+      throw new WeeklyReportError(WEEKLY_REPORT_ERROR.FORBIDDEN, 'weekStart must be a valid Monday date', 400, ['weekStart']);
+    }
+    if (![WeeklyRestMode.SINGLE_REST, WeeklyRestMode.DOUBLE_REST].includes(restMode)) {
+      throw new WeeklyReportError(WEEKLY_REPORT_ERROR.FORBIDDEN, 'restMode must be single_rest or double_rest', 400, ['restMode']);
+    }
+
+    const anchor = await upsertWeeklyRestModeAnchor({
+      weekStart: String(weekStart),
+      restMode,
+      userId: req.auth.user.id
+    });
+    const resolvedRestMode = resolveWeeklyRestMode({
+      targetWeekStart: String(weekStart),
+      latestAnchor: anchor,
+      defaultMode: env.reports.defaultWeeklyRestMode
+    });
+
+    res.json({
+      data: {
+        anchor,
+        resolvedRestMode
+      }
+    });
+  })
+);
+
+// ── Comparison overview ──
 
 weeklyReportsRouter.get(
   '/comparison-overview',

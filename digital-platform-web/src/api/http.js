@@ -69,14 +69,22 @@ export async function request(path, options = {}) {
       ...options,
       headers
     });
-  } catch {
+  } catch (networkError) {
     throw new ApiError({
       code: 'NETWORK_ERROR',
       message: '无法连接到后端服务，请检查 API 地址或网络连接。'
     });
   }
 
-  const body = await parseResponse(response);
+  let body;
+  try {
+    body = await parseResponse(response);
+  } catch (parseError) {
+    throw new ApiError({
+      code: 'PARSE_ERROR',
+      message: '服务器响应解析失败，请稍后重试。'
+    });
+  }
 
   if (!response.ok) {
     throw toApiError(body, response.status);
@@ -412,6 +420,15 @@ export function toReadableApiError(error) {
 
   if (error.code === 'CENTER_SCOPE_FORBIDDEN') {
     return '当前账号不能查看其他中心的考评总览。';
+  }
+
+  if (error.code === 'WEEKLY_REST_MODE_MANAGER_REQUIRED') {
+    return '当前账号无权管理单双休设置，仅总经理和系统管理员可操作。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_FORBIDDEN') {
+    const field = (error.details || []).join('、');
+    return field ? `参数无效（${field}），请检查后重试。` : '周报操作被拒绝，请刷新页面后重试。';
   }
 
   if (error.code === 'UNAUTHENTICATED') {

@@ -17,6 +17,56 @@
     </section>
 
     <template v-else>
+      <!-- Rest-mode anchor card: shown to general_manager / system_admin -->
+      <section v-if="canManageRestMode" class="panel rest-mode-panel">
+        <div class="panel-toolbar">
+          <div>
+            <strong>单双休设置</strong>
+            <span>设置一次后自动交替推算，无需每周重复设置</span>
+          </div>
+        </div>
+        <div class="rest-mode-body">
+          <div class="rest-mode-info">
+            <span class="rest-mode-label">当前周（{{ restModeWeekLabel }}）</span>
+            <strong :class="resolvedRestMode === WeeklyRestMode.SINGLE_REST ? 'rest-mode--single' : 'rest-mode--double'">
+              {{ resolvedRestMode === WeeklyRestMode.SINGLE_REST ? '单休（6天）' : '双休（5天）' }}
+            </strong>
+            <span v-if="restModeAnchor" class="rest-mode-anchor-note">
+              锚点周：{{ restModeAnchor.weekStart }}（{{ restModeAnchor.restMode === WeeklyRestMode.SINGLE_REST ? '单休' : '双休' }}）
+            </span>
+            <span v-else class="rest-mode-anchor-note">默认双休（无锚点设置）</span>
+          </div>
+          <div class="rest-mode-actions">
+            <label class="rest-mode-select">
+              <span>设为本周锚点</span>
+              <select v-model="selectedAnchorMode" :disabled="savingRestMode">
+                <option :value="WeeklyRestMode.SINGLE_REST">本周单休</option>
+                <option :value="WeeklyRestMode.DOUBLE_REST">本周双休</option>
+              </select>
+            </label>
+            <button type="button" class="primary-button" :disabled="savingRestMode" @click="handleSetRestMode">
+              {{ savingRestMode ? '正在保存...' : '设置锚点' }}
+            </button>
+          </div>
+        </div>
+        <section v-if="restModeError" class="state-panel state-panel--error state-panel--compact">
+          <p>{{ restModeError }}</p>
+        </section>
+      </section>
+
+      <!-- Rest-mode read-only info for non-managers who can see overview -->
+      <section v-else-if="canReadOverview && resolvedRestMode" class="panel rest-mode-panel rest-mode-panel--readonly">
+        <div class="rest-mode-body">
+          <span class="rest-mode-label">本周（{{ restModeWeekLabel }}）：</span>
+          <strong :class="resolvedRestMode === WeeklyRestMode.SINGLE_REST ? 'rest-mode--single' : 'rest-mode--double'">
+            {{ resolvedRestMode === WeeklyRestMode.SINGLE_REST ? '单休（6天）' : '双休（5天）' }}
+          </strong>
+          <span v-if="restModeAnchor" class="rest-mode-anchor-note">
+            锚点：{{ restModeAnchor.weekStart }}（{{ restModeAnchor.restMode === WeeklyRestMode.SINGLE_REST ? '单休' : '双休' }}）
+          </span>
+        </div>
+      </section>
+
       <section v-if="canUseWeeklyReport" class="panel weekly-list-panel">
         <div class="panel-toolbar">
           <div>
@@ -133,12 +183,14 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
-import { OrganizationRole, ReportStatus } from '../constants/reports.js';
+import { OrganizationRole, ReportStatus, WeeklyRestMode } from '../constants/reports.js';
 import {
   deleteWeeklyReport,
   exportWeeklyReport,
+  getWeeklyRestMode,
   listWeeklyComparisonOverview,
   listWeeklyReports,
+  setWeeklyRestMode,
   toReadableApiError
 } from '../api/weeklyReports.js';
 import { formatBusinessDepartment } from '../utils/format.js';
@@ -162,14 +214,20 @@ const emit = defineEmits(['auth-expired']);
 
 const loading = ref(false);
 const overviewLoading = ref(false);
+const savingRestMode = ref(false);
 const reports = ref([]);
 const overviewRows = ref([]);
 const errorMessage = ref('');
 const overviewError = ref('');
+const restModeError = ref('');
 const overviewFilters = reactive({
   weekStart: previousWeekStart(),
   department: ''
 });
+const resolvedRestMode = ref('');
+const restModeWeekStart = ref('');
+const restModeAnchor = ref(null);
+const selectedAnchorMode = ref(WeeklyRestMode.DOUBLE_REST);
 
 // Weekly report personal pages are writable by employees and center managers.
 const canUseWeeklyReport = computed(() =>
@@ -189,6 +247,15 @@ const canReadAllCenters = computed(() =>
     OrganizationRole.GENERAL_MANAGER_ASSISTANT
   ].includes(props.currentUser.organizationRole)
 );
+const canManageRestMode = computed(() =>
+  props.currentUser.organizationRole === OrganizationRole.GENERAL_MANAGER ||
+  (props.currentUser.organizationRole === OrganizationRole.SYSTEM_ADMIN && props.currentUser.isPlatformAdmin)
+);
+
+const restModeWeekLabel = computed(() => {
+  if (!restModeWeekStart.value) return '';
+  return `${restModeWeekStart.value} 起`;
+});
 
 // Return previous natural week Monday for default overview filtering.
 function previousWeekStart() {
@@ -201,6 +268,19 @@ function previousWeekStart() {
   const year = currentMonday.getFullYear();
   const month = String(currentMonday.getMonth() + 1).padStart(2, '0');
   const date = String(currentMonday.getDate()).padStart(2, '0');
+  return `${year}-${month}-${date}`;
+}
+
+// Current week Monday for rest-mode display.
+function currentWeekStart() {
+  const now = new Date();
+  const day = now.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + mondayOffset);
+  const year = monday.getFullYear();
+  const month = String(monday.getMonth() + 1).padStart(2, '0');
+  const date = String(monday.getDate()).padStart(2, '0');
   return `${year}-${month}-${date}`;
 }
 
@@ -266,7 +346,50 @@ function saveBlob(download, fallbackName) {
   URL.revokeObjectURL(url);
 }
 
-// Load personal weekly reports for employee and center-manager users.
+// ── Rest-mode anchor management ──
+
+async function loadRestMode() {
+  try {
+    const result = await getWeeklyRestMode(currentWeekStart(), props.authToken);
+    // result 已经是解包后的 data 对象（request() 内部做了 body?.data ?? body）
+    resolvedRestMode.value = result.resolvedRestMode;
+    restModeWeekStart.value = result.weekStart;
+    restModeAnchor.value = result.anchor || null;
+    // Default the select to the current resolved mode
+    selectedAnchorMode.value = result.resolvedRestMode || WeeklyRestMode.DOUBLE_REST;
+  } catch (error) {
+    if (error?.code === 'UNAUTHENTICATED') {
+      emit('auth-expired');
+      return;
+    }
+    restModeError.value = toReadableApiError(error);
+  }
+}
+
+async function handleSetRestMode() {
+  savingRestMode.value = true;
+  restModeError.value = '';
+  try {
+    // result 已经是解包后的 data 对象（request() 内部做了 body?.data ?? body）
+    const result = await setWeeklyRestMode({
+      weekStart: currentWeekStart(),
+      restMode: selectedAnchorMode.value
+    }, props.authToken);
+    restModeAnchor.value = result.anchor;
+    resolvedRestMode.value = result.resolvedRestMode;
+  } catch (error) {
+    if (error?.code === 'UNAUTHENTICATED') {
+      emit('auth-expired');
+      return;
+    }
+    restModeError.value = toReadableApiError(error);
+  } finally {
+    savingRestMode.value = false;
+  }
+}
+
+// ── Report list management ──
+
 async function loadReports() {
   if (!canUseWeeklyReport.value) {
     return;
@@ -289,7 +412,6 @@ async function loadReports() {
   }
 }
 
-// Load management overview with center scoping enforced by the backend.
 async function loadOverview() {
   if (!canReadOverview.value) {
     return;
@@ -316,7 +438,6 @@ async function loadOverview() {
   }
 }
 
-// Delete a draft weekly report and refresh the current list.
 async function removeDraft(report) {
   errorMessage.value = '';
 
@@ -328,7 +449,6 @@ async function removeDraft(report) {
   }
 }
 
-// Download a weekly report workbook from the backend export endpoint.
 async function downloadReportExcel(report) {
   errorMessage.value = '';
 
@@ -343,5 +463,6 @@ async function downloadReportExcel(report) {
 onMounted(() => {
   loadReports();
   loadOverview();
+  loadRestMode();
 });
 </script>

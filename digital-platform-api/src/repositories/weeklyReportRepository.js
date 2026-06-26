@@ -119,6 +119,7 @@ function mapDailyEvidenceRow(row) {
     reportDate: dateOnly(row.report_date),
     projectCode: row.project_code,
     projectName: row.project_name,
+    projectLabel: [row.project_code, row.project_name].filter(Boolean).join(' / '),
     workContent: row.work_content,
     completionProgress: row.completion_progress
   };
@@ -494,6 +495,7 @@ function buildWeeklyComparisonRows(report, dailyEvidence) {
         weeklyTask: summary.workTask,
         weeklySummaryText: summary.workTarget,
         dailyProjectName: null,
+        dailyProjectLabel: null,
         dailyWorkContent: null,
         dailyCompletionProgress: null,
         dailyCompletedAt: null,
@@ -513,6 +515,7 @@ function buildWeeklyComparisonRows(report, dailyEvidence) {
         weeklyTask: summary.workTask,
         weeklySummaryText: summary.workTarget,
         dailyProjectName: dailyItem.projectName,
+        dailyProjectLabel: dailyItem.projectLabel,
         dailyWorkContent: dailyItem.workContent,
         dailyCompletionProgress: dailyItem.completionProgress,
         // The comparison table uses the daily report date as the actual completion date.
@@ -536,6 +539,7 @@ function buildWeeklyComparisonRows(report, dailyEvidence) {
       weeklyTask: null,
       weeklySummaryText: null,
       dailyProjectName: dailyItem.projectName,
+      dailyProjectLabel: dailyItem.projectLabel,
       dailyWorkContent: dailyItem.workContent,
       dailyCompletionProgress: dailyItem.completionProgress,
       // The comparison table uses the daily report date as the actual completion date.

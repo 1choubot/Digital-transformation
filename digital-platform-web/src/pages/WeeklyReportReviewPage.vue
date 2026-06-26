@@ -130,7 +130,7 @@
             <span>{{ row.weekday || '-' }}</span>
             <span>{{ row.weeklyTask || '-' }}</span>
             <span>{{ row.weeklySummaryText || '-' }}</span>
-            <span>{{ row.dailyProjectName || '-' }}</span>
+            <span>{{ row.dailyProjectLabel || row.dailyProjectName || '-' }}</span>
             <span>{{ row.dailyWorkContent || '-' }}</span>
             <span>{{ row.dailyCompletionProgress || '-' }}</span>
             <span>{{ row.dailyCompletedAt || '-' }}</span>
@@ -351,7 +351,7 @@ function formatDateTime(value) {
 }
 
 function comparisonRowKey(row) {
-  return [row.date, row.weeklyTask, row.dailyProjectName, row.dailyWorkContent].join('|');
+  return [row.date, row.weeklyTask, row.dailyProjectLabel || row.dailyProjectName, row.dailyWorkContent].join('|');
 }
 
 // Convert missing fallback dimensions to a visible placeholder for AI-only responses.

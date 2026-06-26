@@ -89,3 +89,17 @@ export async function listWeeklyComparisonOverview(filters = {}, authToken = '')
     authToken
   });
 }
+
+// Get the resolved weekly rest mode and anchor for a specified (or current) week.
+export async function getWeeklyRestMode(weekStart = '', authToken = '') {
+  return request(`/api/weekly-reports/rest-mode${buildQuery({ weekStart })}`, { authToken });
+}
+
+// Set the weekly rest-mode anchor for a specific week (general_manager/system_admin only).
+export async function setWeeklyRestMode({ weekStart, restMode }, authToken = '') {
+  return request('/api/weekly-reports/rest-mode', {
+    method: 'PUT',
+    authToken,
+    body: JSON.stringify({ weekStart, restMode })
+  });
+}

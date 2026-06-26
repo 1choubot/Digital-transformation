@@ -252,6 +252,82 @@ p {
   overflow-wrap: anywhere;
 }
 
+/* ── Weekly rest-mode anchor panel ── */
+.rest-mode-panel {
+  margin-bottom: 0;
+}
+
+.rest-mode-panel--readonly {
+  background: #f8fafc;
+}
+
+.rest-mode-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  flex-wrap: wrap;
+}
+
+.rest-mode-info {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rest-mode-label {
+  font-size: 14px;
+  color: #475569;
+}
+
+.rest-mode--single {
+  color: #c62828;
+}
+
+.rest-mode--double {
+  color: #2e7d32;
+}
+
+.rest-mode-anchor-note {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.rest-mode-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rest-mode-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #475569;
+}
+
+.rest-mode-select select {
+  padding: 6px 10px;
+  border: 1px solid #d4dde7;
+  border-radius: 6px;
+  background: #ffffff;
+  font-size: 14px;
+}
+
+@media (max-width: 900px) {
+  .rest-mode-body {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .rest-mode-actions {
+    width: 100%;
+  }
+}
+
 .manual-status-note {
   margin-top: 6px;
   color: #6c7b8c;

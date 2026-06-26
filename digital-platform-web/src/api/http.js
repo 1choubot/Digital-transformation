@@ -69,14 +69,22 @@ export async function request(path, options = {}) {
       ...options,
       headers
     });
-  } catch {
+  } catch (networkError) {
     throw new ApiError({
       code: 'NETWORK_ERROR',
       message: '无法连接到后端服务，请检查 API 地址或网络连接。'
     });
   }
 
-  const body = await parseResponse(response);
+  let body;
+  try {
+    body = await parseResponse(response);
+  } catch (parseError) {
+    throw new ApiError({
+      code: 'PARSE_ERROR',
+      message: '服务器响应解析失败，请稍后重试。'
+    });
+  }
 
   if (!response.ok) {
     throw toApiError(body, response.status);
@@ -376,6 +384,51 @@ export function toReadableApiError(error) {
 
   if (error.code === 'LAST_ENABLED_SYSTEM_ADMIN_REQUIRED') {
     return '系统必须至少保留一个启用的系统管理员且具备平台管理员权限，不能执行该操作。';
+  }
+
+  if (error.code === 'DAILY_REPORT_WRITER_REQUIRED') {
+    return '当前账号无权填写个人日报。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_WRITER_REQUIRED') {
+    return '当前账号无权填写个人周报。';
+  }
+
+  if (error.code === 'INVALID_WEEKLY_REPORT_WEEK') {
+    return '周报周期必须是自然周，开始日期为周一，结束日期为周日。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_REQUIRED_FIELDS') {
+    return '请补齐周报工作总结和工作计划的必填字段。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_DUPLICATE') {
+    return '该周期已经存在周报，请打开已有周报继续编辑。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_NOT_FOUND') {
+    return '周报不存在、已删除或不属于当前账号。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_DELETE_SUBMITTED') {
+    return '已提交周报不能删除。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_EVALUATE_SUBMITTED_ONLY') {
+    return '只有已提交周报可以发起评分。';
+  }
+
+  if (error.code === 'CENTER_SCOPE_FORBIDDEN') {
+    return '当前账号不能查看其他中心的考评总览。';
+  }
+
+  if (error.code === 'WEEKLY_REST_MODE_MANAGER_REQUIRED') {
+    return '当前账号无权管理单双休设置，仅总经理和系统管理员可操作。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_FORBIDDEN') {
+    const field = (error.details || []).join('、');
+    return field ? `参数无效（${field}），请检查后重试。` : '周报操作被拒绝，请刷新页面后重试。';
   }
 
   if (error.code === 'UNAUTHENTICATED') {

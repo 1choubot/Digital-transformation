@@ -68,6 +68,13 @@ export const requireWeeklyReportWriter = requireReportPermission(
   'Weekly report writer role required'
 );
 
+// 项目搜索同时服务日报和周报填写，允许任一填写权限通过。
+export const requireReportProjectSearchUser = requireReportPermission(
+  (user) => canWriteDailyReport(user) || canWriteWeeklyReport(user),
+  'REPORT_PROJECT_SEARCH_REQUIRED',
+  'Report project search role required'
+);
+
 // Center daily report reads are restricted to management roles.
 export const requireCenterDailyReportReader = requireReportPermission(
   canReadCenterDailyReport,

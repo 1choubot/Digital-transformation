@@ -50,6 +50,18 @@
           </svg>
           <span>项目列表</span>
         </button>
+        <button 
+          v-if="canCurrentUserCreateProject"
+          type="button" 
+          :class="{ active: route.name === 'project-create' }" 
+          @click="handleNavigate('/projects/new')"
+        >
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>新建项目</span>
+        </button>
+
         <p class="nav-section-title">日报周报</p>
         <button
           v-if="isDailyReportUser"
@@ -76,17 +88,47 @@
           </svg>
           <span>日报列表</span>
         </button>
-
-        <button 
-          v-if="canCurrentUserCreateProject"
-          type="button" 
-          :class="{ active: route.name === 'project-create' }" 
-          @click="handleNavigate('/projects/new')"
+        <button
+          v-if="isWeeklyReportUser"
+          type="button"
+          :class="{ active: route.name === 'weekly-report' }"
+          @click="handleNavigate('/weekly-report')"
         >
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 5v14M5 12h14" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+            <line x1="8" y1="7" x2="16" y2="7"/>
+            <line x1="8" y1="11" x2="16" y2="11"/>
           </svg>
-          <span>新建项目</span>
+          <span>我的周报</span>
+        </button>
+        <button
+          v-if="canAccessWeeklyReports"
+          type="button"
+          :class="{ active: ['weekly-reports', 'weekly-report-review'].includes(route.name) }"
+          @click="handleNavigate('/weekly-reports')"
+        >
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+          <span>周报列表</span>
+        </button>
+        <button
+          v-if="canAccessCenterDailyReport"
+          type="button"
+          :class="{ active: route.name === 'center-daily-report' }"
+          @click="handleNavigate('/center-daily-report')"
+        >
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <line x1="16" y1="1" x2="16" y2="5"/>
+            <line x1="8" y1="1" x2="8" y2="5"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+          <span>中心日报</span>
         </button>
 
         <p class="nav-section-title">过程追踪看板</p>
@@ -168,6 +210,7 @@
             <span class="breadcrumb-separator">/</span>
             <span class="breadcrumb-item breadcrumb-item--active">{{ currentRouteLabel }}</span>
           </div>
+        </div>
 
         <!-- 个人账户操作区 -->
         <div class="current-user">
@@ -244,6 +287,35 @@
           :navigate="navigate"
           @auth-expired="handleAuthExpired"
         />
+        <WeeklyReportPage
+          v-else-if="route.name === 'weekly-report'"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          :report-id="route.params?.reportId || ''"
+          :navigate="navigate"
+          @auth-expired="handleAuthExpired"
+        />
+        <WeeklyReportListPage
+          v-else-if="route.name === 'weekly-reports'"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          :navigate="navigate"
+          @auth-expired="handleAuthExpired"
+        />
+        <WeeklyReportReviewPage
+          v-else-if="route.name === 'weekly-report-review'"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          :report-id="route.params.reportId"
+          :navigate="navigate"
+          @auth-expired="handleAuthExpired"
+        />
+        <CenterDailyReportPage
+          v-else-if="route.name === 'center-daily-report'"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          @auth-expired="handleAuthExpired"
+        />
         <UserManagementPage
           v-else-if="route.name === 'users'"
           :auth-token="authToken"
@@ -295,6 +367,7 @@ import {
   storeAuthSession,
   updateStoredUser
 } from './auth/session.js';
+import CenterDailyReportPage from './pages/CenterDailyReportPage.vue';
 import DailyReportListPage from './pages/DailyReportListPage.vue';
 import DailyReportPage from './pages/DailyReportPage.vue';
 import LoginPage from './pages/LoginPage.vue';
@@ -304,6 +377,9 @@ import ProjectDetailPage from './pages/ProjectDetailPage.vue';
 import ProjectListPage from './pages/ProjectListPage.vue';
 import ProjectOverviewDashboardPage from './pages/ProjectOverviewDashboardPage.vue';
 import UserManagementPage from './pages/UserManagementPage.vue';
+import WeeklyReportListPage from './pages/WeeklyReportListPage.vue';
+import WeeklyReportPage from './pages/WeeklyReportPage.vue';
+import WeeklyReportReviewPage from './pages/WeeklyReportReviewPage.vue';
 import { useHashRouter } from './router.js';
 import {
   formatBusinessDepartment,
@@ -336,6 +412,12 @@ const currentRouteLabel = computed(() => {
     case 'project-overview-dashboard': return '跨项目齐套总览';
     case 'project-detail': return '项目详情控制台';
     case 'my-workbench': return '我的工作台';
+    case 'daily-report': return '我的日报';
+    case 'daily-reports': return '日报列表';
+    case 'weekly-report': return '我的周报';
+    case 'weekly-reports': return '周报列表';
+    case 'weekly-report-review': return '周报审阅';
+    case 'center-daily-report': return '中心日报';
     case 'users': return '基础用户权限管理';
     default: return '管理驾驶舱';
   }
@@ -360,6 +442,20 @@ const canAccessUserManagement = computed(
 const isDailyReportUser = computed(() => currentUser.value?.organizationRole === 'employee');
 const canCurrentUserCreateProject = computed(() =>
   ['general_manager', 'center_manager'].includes(currentUser.value?.organizationRole)
+);
+// Weekly report writing is available to employees and center managers.
+const isWeeklyReportUser = computed(() => ['employee', 'center_manager'].includes(currentUser.value?.organizationRole));
+// Weekly report list also hosts management overview for broader roles.
+const canAccessWeeklyReports = computed(() =>
+  ['employee', 'center_manager', 'general_manager', 'general_manager_assistant'].includes(
+    currentUser.value?.organizationRole
+  )
+);
+// Center daily reports are visible to management roles and platform system admins.
+const canAccessCenterDailyReport = computed(() =>
+  ['center_manager', 'general_manager', 'general_manager_assistant', 'system_admin'].includes(
+    currentUser.value?.organizationRole
+  )
 );
 
 function setAuth(token, user) {
@@ -440,7 +536,7 @@ onMounted(restoreAuth);
 
 /* ===== 1. 高级深色侧边栏 ===== */
 .app-sidebar {
-  width: 260px; height: 100vh; background-color: #0f172a; /* 深色背景，与登录按钮同色系 */
+  width: 260px; height: 100vh; background-color: #0f172a;
   display: flex; flex-direction: column; flex-shrink: 0; z-index: 110;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border-right: 1px solid rgba(255, 255, 255, 0.05);
@@ -472,7 +568,7 @@ onMounted(restoreAuth);
 .nav-icon { width: 18px; height: 18px; stroke: currentColor; flex-shrink: 0; }
 
 .sidebar-nav button.active {
-  background-color: #2563eb; color: #ffffff; /* 点击字体白色，蓝色背景 */
+  background-color: #2563eb; color: #ffffff;
 }
 .sidebar-nav button.active .nav-icon { stroke: #ffffff; }
 .sidebar-nav button span { font-size: 0.9rem; font-weight: 600; }

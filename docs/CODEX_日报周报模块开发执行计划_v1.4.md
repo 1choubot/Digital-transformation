@@ -40,11 +40,12 @@ DEEPSEEK_MODEL=deepseek-chat
 
 模板映射如下。模板文件中的日期、姓名、中心仅为样式样例，导出时必须按实际报告数据替换，不得把“陈芋如”或样例日期遗留在最终导出文件中。
 
-| 导出类型 | 模板绝对路径 | 输出命名规范 | 说明 |
+| 导出/参考类型 | 模板绝对路径 | 输出命名规范 | 说明 |
 |---|---|---|---|
 | 个人日报 | `E:\Digital-transformation\docs\项目工作日报-陈芋如20260616.xlsx` | `项目工作日报-{姓名}{YYYYMMDD}.xlsx` | P0 必须按此模板复刻 |
 | 中心日报 | `E:\Digital-transformation\docs\部门工作日报-研发中心20260618.xlsx` | `部门工作日报-{中心名}{YYYYMMDD}.xlsx` | P0 必须按此模板复刻 |
 | 个人周报 | `E:\Digital-transformation\docs\周绩效考核表-研发中心陈芋如20260621.xlsx` | `周绩效考核表-{中心名}{姓名}{YYYYMMDD}.xlsx` | P0 必须按此模板复刻 |
+| 周vs日对照表 | `E:\Digital-transformation\docs\周vs日对照表.xlsx` | 不单独导出，作为周报详情内对照表字段参考 | M5 起作为 AI/规则评分的主要输入视图 |
 
 模板处理规则：
 
@@ -291,16 +292,24 @@ CREATE TABLE weekly_reports (
   ai_evaluated_at DATETIME NULL,
   ai_evaluation_source ENUM('ai','fallback_rule') NULL,
   ai_evaluation_error VARCHAR(1000) NULL,
+  final_score DECIMAL(5,2) NULL COMMENT '考核人最终评分，以人工填写为准',
+  final_grade VARCHAR(20) NULL COMMENT '按最终评分或人工口径确认的等级',
+  final_comment TEXT NULL COMMENT '考核人最终评语',
+  final_reviewed_by_user_id BIGINT UNSIGNED NULL,
+  final_reviewed_at DATETIME NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_weekly_reports_user
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT fk_weekly_reports_final_reviewer
+    FOREIGN KEY (final_reviewed_by_user_id) REFERENCES users(id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   UNIQUE KEY uk_weekly_reports_user_week (user_id, week_start, week_end),
   KEY idx_weekly_reports_week_status_user (week_start, status, user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
 > `ai_evaluated_at`、`ai_evaluation_source`、`ai_evaluation_error` 为工程可观测性字段；它们不改变需求中的 `ai_score` 作为评分结果缓存的核心约束。如团队明确要求“严格仅 7 张业务表 + 最小字段”，这三个字段可改为仅保留 `ai_score`，但错误日志仍必须记录在应用日志中。
+> `final_score`、`final_grade`、`final_comment`、`final_reviewed_by_user_id`、`final_reviewed_at` 是 M5 新增的人工最终评分字段。AI 或规则评分只作为参考，不得覆盖最终评分；最终进入周报考核结果和列表展示的分数以考核人填写的 `final_score` 为准。已执行到 021 的环境需新增后续迁移（建议 022）补齐这些字段，不得改写历史迁移。
 
 #### `weekly_report_summaries`（工作总结）
 
@@ -417,8 +426,10 @@ CREATE TABLE center_daily_report_schedules (
 | 写个人日报 | 本人 | 否 | 否 | 否 | 否 |
 | 看/导出个人日报 | 本人 | 否 | 否 | 否 | 否 |
 | 写、看、导出自己的周报 | 是 | 是 | 否 | 否 | 否 |
-| 触发自己周报评估 | 是 | 是 | 否 | 否 | 否 |
-| 看周报 AI 结果 | 本人 | 本中心员工 + 自己 | 全部 | 全部 | 全部 |
+| 看自己的周报历史 | 本人 | 本人 | 否 | 否 | 否 |
+| 看周报 AI/规则参考结果 | 否 | 本中心员工，不含本人 | 否，中心负责人不写日报 | 否，仅查看中心负责人周报内容 | 否 |
+| 触发周报 AI/规则参考评估 | 否 | 本中心员工，不含本人 | 否，中心负责人不写日报 | 否 | 否 |
+| 填写周报最终评分 | 否 | 本中心员工，不含本人 | 各中心负责人 | 否，仅查看 | 否 |
 | 看/导出中心日报 | 否 | 仅本中心 | 全部 | 全部 | 全部 |
 | 配置本中心日报自动生成时间 | 否 | 仅本中心 | 否 | 否 | 全部 |
 | 维护单双休交替锚点 | 否 | 否 | 全部 | 否 | 全部 |
@@ -428,7 +439,13 @@ CREATE TABLE center_daily_report_schedules (
 
 - `is_platform_admin=1` 可作为平台管理员的等价授权条件；保留 `organization_role=system_admin` 兼容。
 - 中心负责人访问中心日报或对比总览时，后端从当前用户 `department` 推导范围；传入其他中心代码时返回 403，而不是悄悄返回空数据。
-- 总经理、总经理助理、平台管理员不允许冒充员工填写日报/周报。
+- 普通员工完全不可见 AI 对比考评入口、AI/规则参考分与最终评分录入入口；员工只能填写/导出自己的周报，并在周报列表查看自己的历史周报。
+- 中心负责人可填写/导出自己的周报，但不用写日报、不能被周vs日对照或 AI/规则参考评分；其个人周报由总经理仅查看周报内容后手动填写最终评分并点击确认，总经理助理只能查看。
+- 中心负责人只能查看、详情打开、触发参考评分、填写最终评分其本人 `department` 下 employee 的周报；不得访问其他中心，也不得评估 center_manager 自己。
+- 总经理本阶段只查看各中心负责人的周报内容并手动填写最终评分；总经理助理本阶段只查看各中心负责人的周报内容和最终评分，不可填写最终评分。两者均不查看普通员工周报全量列表，也不填写个人周报。
+- 总经理考核中心负责人周报时，不查询日报、不生成周vs日对照表、不触发 AI/规则参考评分；最终分数完全以总经理人工输入并保存的 `final_score` 为准。
+- 系统管理员本阶段不作为业务考核角色，不在前端展示周报考评入口；如后续需要排障型只读能力，必须另行确认。
+- 总经理、总经理助理、平台管理员不允许冒充员工或中心负责人填写日报/周报。
 - 用户禁用 (`is_enabled=0`) 时沿用现有全局认证规则；若全局规则未拦截，本模块必须拒绝其新建、修改、提交操作。
 
 ---
@@ -478,15 +495,27 @@ CREATE TABLE center_daily_report_schedules (
 2. `POST /api/weekly-reports/:id/export`
    - 仅所有者可导出个人周报。
 
-3. `POST /api/weekly-reports/:id/evaluate`
-   - 仅所有者可触发；被评估周报必须为 `submitted`。
-   - 评估输入固定为：周报“工作总结” + 同一用户、考核周期内、`status=submitted` 的全部日报“今日工作完成情况”。
-   - 不能纳入周报工作计划或日报明日计划。
-   - 允许 `force=true` 重新评估；普通调用在已有有效 `ai_score` 时直接返回缓存。
+3. `GET /api/weekly-reports/:id/comparison-table`
+   - 返回周报详情内“周vs日对照表”数据，字段先按 `周vs日对照表.xlsx` 的一般字段设计：
+     `date`、`weekday`、`weeklyTask`、`weeklySummaryText`、`dailyProjectName`、`dailyWorkContent`、`dailyCompletionProgress`、`dailyCompletedAt`、`weeklyCompletedDate`、`matchStatus`、`matchReason`。
+   - 对照口径固定为：周报“本周工作总结”对比同一用户、同一周期内、`status=submitted` 的日报“今日工作完成情况”；不得纳入周报工作计划或日报明日计划。
+   - 一天内多条周报总结或多条日报完成项均展开为多行，后端可按日期、项目、关键词匹配给出 `matchStatus` 初判。
 
-4. `GET /api/weekly-reports/comparison-overview?weekStart=&department=`
-   - center_manager 仅能查询本人中心；general_manager、general_manager_assistant、platform admin 可查询所有中心或指定中心。
-   - 返回用户姓名、中心、周报状态、总分、等级、评估来源、评估时间；不返回 DeepSeek 原始提示词或密钥。
+4. `POST /api/weekly-reports/:id/evaluate`
+   - 仅被授权考核人可触发；普通员工不可触发、不可见。
+   - center_manager 仅能评估本中心 employee 的已提交周报，不含自己的周报。
+   - general_manager 与 general_manager_assistant 不触发中心负责人周报 AI/规则评估，因为中心负责人不用写日报，没有周vs日对照评分输入。
+   - AI/规则评分输入以 `comparison-table` 的规范化行数据为主，仍可附带周报总结与日报完成项原文作为解释上下文。
+   - 允许 `force=true` 重新评估；普通调用在已有有效 `ai_score` 时直接返回缓存；AI/规则评分只能作为参考评分，不得写入最终评分字段。
+
+5. `PUT /api/weekly-reports/:id/final-review`
+   - 仅被授权考核人可写入最终评分：center_manager 可写本中心 employee 周报，general_manager 可写 center_manager 周报；general_manager_assistant 只读不可写。
+   - 请求体：`{ finalScore: number, finalGrade?: string, finalComment?: string }`。
+   - 最终评分保存到 `weekly_reports.final_score` 等人工评分字段；列表、详情、总览优先展示最终评分。员工周报可同时展示 AI/规则参考评分；中心负责人周报不展示 AI/规则参考评分区。
+
+6. `GET /api/weekly-reports/comparison-overview?weekStart=&department=`
+   - center_manager 仅能查询本人中心 employee 周报，不含本人；general_manager、general_manager_assistant 仅能查询 center_manager 周报，其中 general_manager_assistant 只读；system_admin 本阶段不展示业务考评入口。
+   - 返回用户姓名、中心、周报状态、AI/规则参考分（仅 employee 周报可能存在）、最终评分、最终评语、评分人、评分时间；不返回 DeepSeek 原始提示词或密钥。
 
 ### 4.3 中心日报 API（M6）
 
@@ -578,6 +607,21 @@ CREATE TABLE center_daily_report_schedules (
       "completedDate": "2026-06-18"
     }
   ],
+  "comparisonRows": [
+    {
+      "date": "2026-06-16",
+      "weekday": "周二",
+      "weeklyTask": "KRF26033燃烧窑温度监测项目",
+      "weeklySummaryText": "估计上位机成本，完成成本估算表",
+      "dailyProjectName": "燃烧窑温度监测",
+      "dailyWorkContent": "完成上位机成本估算表并同步项目组",
+      "dailyCompletionProgress": "已完成",
+      "dailyCompletedAt": "16:30",
+      "weeklyCompletedDate": "2026-06-16",
+      "matchStatus": "matched",
+      "matchReason": "项目名称与工作内容关键词均命中"
+    }
+  ],
   "dailyRecords": [
     {
       "reportDate": "2026-06-16",
@@ -603,13 +647,15 @@ CREATE TABLE center_daily_report_schedules (
 - `temperature=0.3`，要求 JSON 对象输出；把返回值 JSON parse 后再使用。
 - 以运行时 schema 校验返回对象：`totalScore 0..100`、`grade A/B/C/D`、三个维度分数分别不超 40/30/30、`itemAnalysis` 是数组、评语为字符串。
 - 任一 AI 网络/解析/schema 失败，记录不含敏感信息的失败原因，执行规则评分，并返回 `evaluationSource: "fallback_rule"`。
+- AI 的主要判断输入为 `comparisonRows`，即“周vs日对照表”规范化行；`weeklySummaries` 与 `dailyRecords` 只作为解释和追溯上下文，不得把周报工作计划或日报明日计划传入评分。
+- AI/规则输出均为参考评分，保存到 `ai_score`；最终考核结果必须由授权考核人在页面输入并保存到人工最终评分字段。
 
 **规则评分降级定义（必须可测试、可重复）**：
 
 1. 填写率：先取得考核周期的 `expectedWorkDates`；统计其中存在已提交日报的不同日期数。`submittedExpectedWorkdayCount / expectedWorkdayCount * 30`，四舍五入为整数，最高 30 分。同一天多项目日报只计 1 天；草稿和非工作日不计分。双休周通常分母为 5，单休周通常分母为 6。
 2. 先按单双休交替锚点解析考核周模式：有最近锚点时，以锚点周与目标周的相隔周数奇偶性决定 `single_rest` 或 `double_rest`，并写入 `workdaySource: "alternating_manual_rest_mode"`、`resolvedRestMode` 和 `restModeAnchorWeekStart`；不存在任何历史锚点时，按 `REPORT_DEFAULT_WEEKLY_REST_MODE=double_rest` 临时推导 5 个应工作日，并写入 `workdaySource: "default_double_rest"`、`resolvedRestMode: "double_rest"`、`restModeAnchorWeekStart: null`。本期不产生钉钉来源。
-3. 完成度：`completion_progress` 经大小写/空格归一化后包含“已完成”或等价约定值的条目数 / 全部日报条目数 × 30；无日报条目时为 0。
-4. 吻合度：逐条周报总结与日报文本做归一化关键词匹配。每条周报总结中，任务名或目标的有效关键词与任一日报工作内容、项目名称或项目编号有交集，即视为匹配；`matched / weeklySummaryCount × 40`。无周报总结时为 0。
+3. 完成度：优先使用 `comparisonRows.dailyCompletionProgress`，经大小写/空格归一化后包含“已完成”或等价约定值的条目数 / 有日报实际工作内容的对照行数 × 30；无日报实际工作内容时为 0。
+4. 吻合度：以 `comparisonRows` 为主。每行根据 `weeklyTask`、`weeklySummaryText` 与 `dailyProjectName`、`dailyWorkContent` 的项目名和有效关键词交集生成 `matchStatus`；`matched / 有周报总结内容的对照行数 × 40`。无周报总结内容时为 0。
 5. 总分 = 三项之和，等级映射：90+ A、75~89 B、60~74 C、0~59 D。
 6. 结果 JSON 结构必须与 AI 正常结果结构一致，并在顶层有 `evaluationSource`、`evaluatedAt`、`expectedWorkdayCount`、`submittedExpectedWorkdayCount`、`workdaySource`、`resolvedRestMode`、`restModeAnchorWeekStart`。
 
@@ -709,16 +755,27 @@ ReportExportService
 1. `#/weekly-report`
    - employee + center_manager 专属。
    - 默认展示上一自然周；如该周期已存在报告，加载后允许编辑。
-   - 使用三个明确区域或 Tab：
+   - 普通员工只显示两个明确区域或 Tab：
      1. 标准填写（工作总结、工作计划）
      2. 标准表格导出
-     3. AI 对比考评
+   - 普通员工完全不显示“AI 对比考评”、参考评分、最终评分或考评总览入口。
+   - 中心负责人在自己的 `#/weekly-report` 只填写和导出个人周报，不显示自己的 AI 对比考评；其个人周报由总经理评分，总经理助理只读查看。
    - 工作总结、计划可分别增删行，最少一行。
    - 提交时对所有必填字段逐行高亮；不可只弹一个笼统错误。
-   - AI 评估区：未评估、评分中、AI评分完成、规则评分完成、请求失败五种清晰状态；展示总分、等级、三维度、逐条分析和综合评语；支持重新评估。
 
 2. `#/weekly-reports`
-   - 显示本人周报列表、周期、状态、最新评分、评分来源；进入详情/编辑/导出。
+   - employee：仅显示本人历史周报、周期、状态、导出入口和“详情/编辑”按钮；草稿/已提交均进入同一个 `#/weekly-report/:id`，员工可继续编辑自己的周报。
+   - center_manager：显示本人历史周报，同时显示本中心 employee 周报考评列表；列表中必须有“详情”按钮进入员工周报只读详情，可触发 AI/规则参考评分并填写最终评分，但不可编辑员工周报。
+   - general_manager：仅显示 center_manager 周报考评列表；可进入中心负责人周报只读详情，查看周报内容并手动填写最终评分；不显示周vs日对照表、不显示 AI/规则参考评分区、不显示普通员工周报全量列表。
+   - general_manager_assistant：仅显示 center_manager 周报只读列表和详情；可查看中心负责人周报内容和最终评分，但不可触发评估、不可填写最终评分；不显示周vs日对照表、不显示 AI/规则参考评分区、不显示普通员工周报全量列表。
+   - system_admin：本阶段不展示周报业务考评页面。
+   - 个人历史列表和考评列表均应显示最终评分；无最终评分时显示“待最终评分”，AI/规则评分仅作为参考标签。
+
+3. 周报只读考评详情
+   - 当考核对象是 employee 时，详情顶部先展示“周vs日对照表”，字段按 `周vs日对照表.xlsx` 一般字段设计：日期、星期、周报的任务、周报工作总结、日报的任务/项目名称、日报实际工作内容、完成进度、实际完成时间、周报完成时间、匹配状态/说明。
+   - 当考核对象是 employee 时，对照表下方展示 AI/规则参考评分区：未评估、评分中、AI评分完成、规则评分完成、请求失败五种清晰状态；展示参考总分、等级、三维度、逐条分析和综合评语；支持授权考核人重新评估。
+   - 当考核对象是 center_manager 时，不展示周vs日对照表和 AI/规则参考评分区；详情只展示该中心负责人的周报内容、导出入口（如有权限）和最终评分信息。
+   - 详情底部按权限提供最终评分输入框、最终等级、最终评语和保存按钮；最终保存分数以考核人输入为准。总经理助理访问中心负责人周报时只能查看这些字段，不显示保存按钮。
 
 ### M6：中心日报页面
 
@@ -738,10 +795,10 @@ ReportExportService
 按 `organization_role` 和 `is_platform_admin` 显示：
 
 ```text
-employee: 我的日报、我的周报、项目总览
-center_manager: 我的周报、中心日报、项目日报(P2)、项目总览
-general_manager: 中心日报、项目日报(P2)、项目总览
-general_manager_assistant: 中心日报、项目日报(P2)、项目总览
+employee: 我的日报、我的周报、周报列表、项目总览
+center_manager: 我的周报、周报列表、中心日报、项目日报(P2)、项目总览
+general_manager: 周报列表、中心日报、项目日报(P2)、项目总览
+general_manager_assistant: 周报列表、中心日报、项目日报(P2)、项目总览
 system_admin / is_platform_admin: 用户管理、中心日报、项目日报(P2)、项目总览
 ```
 
@@ -789,7 +846,7 @@ system_admin / is_platform_admin: 用户管理、中心日报、项目日报(P2)
 
 ### M4 — 周报后端、AI 评分与周报 Excel
 
-**任务**：周报 CRUD、上周默认周期、提交校验、单双休交替锚点解析接入、DeepSeek 适配器、规则降级、评分缓存、对比总览、Excel。  
+**任务**：周报 CRUD、上周默认周期、提交校验、单双休交替锚点解析接入、周vs日对照表 DTO、DeepSeek 适配器、规则降级、参考评分缓存、最终人工评分字段、对比总览、Excel。  
 **验收**：
 
 - 相同用户相同周只能有一份周报。
@@ -797,17 +854,21 @@ system_admin / is_platform_admin: 用户管理、中心日报、项目日报(P2)
 - AI 正常响应、超时、非 JSON、schema 不合法四类测试均覆盖；后三类返回规则评分且不报 500。
 - 锚点设为单休后下一周自动双休、下下周自动单休；锚点设为双休后下一周自动单休；无锚点周默认双休 5 天；在新的锚点前，修改锚点导致受影响区间评分失效；同日多项目只计 1 天、草稿不计分的填写率测试均覆盖。
 - 修改周报后 AI 缓存失效；重新评估可覆盖旧结果。
-- 评分输入不包含“周报工作计划”和“日报明日计划”。
+- 评分输入以周vs日对照表为主，且不包含“周报工作计划”和“日报明日计划”。
+- AI/规则评分只保存为参考评分；最终评分字段只能由授权考核人填写。
 - 导出文件名与路径严格正确；有签字区；周报模板快照测试通过。
 
 ### M5 — 周报前端与考评展示
 
-**任务**：周报填写、列表、导出、AI 评分区、评分重试/重新评估、中心负责人考评总览（如果产品要求在本阶段可访问）。  
+**任务**：周报填写、列表、导出、员工无考评入口、中心负责人/总经理/总助只读详情、周vs日对照表、AI/规则参考评分区、最终评分录入、考评总览。  
 **验收**：
 
 - 前端将每个未填字段定位并高亮。
 - 评分中有加载状态；规则评分有明确降级标签。
-- employee 只能看自己结果；center_manager 只能看本中心；GM/总助/管理员可看全量。
+- employee 只能填写、导出、查看自己的历史周报，完全看不到 AI 对比考评、参考评分和最终评分入口。
+- center_manager 可填写/导出自己的周报；可查看本中心 employee 周报详情、周vs日对照表、触发参考评分并录入最终评分；不可编辑员工周报，不可评估自己。
+- general_manager 可查看 center_manager 周报内容并手动填写最终评分，不展示周vs日对照表或 AI/规则参考评分；general_manager_assistant 仅能查看 center_manager 周报内容与最终评分，不可触发评估或填写最终评分；二者均不显示普通员工周报全量列表。
+- 周报列表每条记录必须提供详情按钮；有最终评分时优先展示最终评分，无最终评分时显示“待最终评分”。
 
 ### M6 — 中心日报自动汇总与导出
 
@@ -840,7 +901,8 @@ system_admin / is_platform_admin: 用户管理、中心日报、项目日报(P2)
 - 上周周期计算（跨月、跨年）。
 - 日报/周报提交校验。
 - `completed` 项目过滤。
-- 规则评分：无日报、单休锚点周 6 个应工作日、单休锚点下一周自动双休 5 天、下下周恢复单休 6 天、双休锚点下一周自动单休 6 天、无锚点周按默认双休 5 天、插入/更新锚点后的受影响区间、同日多项目日报只计 1 天、草稿/非工作日不计填写率、周报事项有/无匹配、完成进度各类文本。
+- 周vs日对照表：同日多条周报总结、多条日报完成项、周报有日报无、日报有周报无、项目名相似、关键词匹配/不匹配、完成日期不一致。
+- 规则评分：无日报、单休锚点周 6 个应工作日、单休锚点下一周自动双休 5 天、下下周恢复单休 6 天、双休锚点下一周自动单休 6 天、无锚点周按默认双休 5 天、插入/更新锚点后的受影响区间、同日多项目日报只计 1 天、草稿/非工作日不计填写率、基于周vs日对照表的事项有/无匹配、完成进度各类文本。
 - 文件名清洗和绝对路径限制。
 - AI JSON schema 校验与降级。
 
@@ -849,10 +911,11 @@ system_admin / is_platform_admin: 用户管理、中心日报、项目日报(P2)
 最低覆盖以下矩阵：
 
 ```text
-employee      : 只可管理本人日报、本人周报；不可访问中心/项目汇总
-center_manager: 可管理自己周报；仅看本中心日报与本中心考评总览
-general_manager / assistant: 可看所有中心日报和全量考评总览；不可填写个人日报/周报
-platform admin: 可看全量汇总；不可因管理员身份填写个人日报/周报
+employee      : 只可管理本人日报、本人周报；不可访问 AI 对比考评、最终评分、中心/项目汇总
+center_manager: 可管理自己周报；仅看本中心 employee 周报详情、周vs日对照表、参考评分与最终评分；不可考核自己
+general_manager: 可看 center_manager 周报详情和最终评分，并可手动填写最终评分；不看中心负责人周vs日对照表或参考评分；不可填写个人日报/周报，不看普通员工全量周报
+general_manager_assistant: 仅看 center_manager 周报详情和最终评分；不可触发评估、不可填写最终评分、不可填写个人日报/周报，不看普通员工全量周报
+platform admin: 不参与周报业务考核页面；不可因管理员身份填写个人日报/周报
 ```
 
 ### 9.3 导出测试
@@ -866,7 +929,9 @@ platform admin: 可看全量汇总；不可因管理员身份填写个人日报/
 ### 9.4 浏览器 e2e 测试
 
 - 员工日报从新建到导出。
-- 员工周报从草稿到提交、AI 正常/降级结果展示、重新评估。
+- 员工周报从草稿到提交、导出、历史列表详情；确认员工页面完全不显示 AI 对比考评。
+- 中心负责人进入本中心员工周报详情，查看周vs日对照表，触发 AI 正常/降级参考评分，填写最终评分并保存；确认不可编辑员工周报、不可评估本人。
+- 总经理进入中心负责人周报详情，查看周报内容后手动输入分数并保存最终评分；总经理助理进入中心负责人周报详情只读查看，确认无周vs日对照表、无 AI/规则评估触发、无最终评分保存入口；确认二者均不显示普通员工周报全量列表。
 - 中心负责人查看本中心汇总并导出。
 - 权限路由被直接输入 URL 时仍拦截。
 

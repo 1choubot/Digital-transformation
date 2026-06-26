@@ -15,6 +15,7 @@ const PLAN_RESERVED_ROWS = 2;
 
 // Keep all personal daily report cell coordinates in this service.
 const DAILY_REPORT_CELLS = {
+  currentStage: 'B3',
   project: 'B4',
   reporter: 'D4',
   reportDate: 'G4'
@@ -201,7 +202,7 @@ async function writeWorkbookAtomically(workbook, filePath) {
 
 // Generate the personal daily report workbook and return the download metadata.
 export async function generateDailyReportWorkbook(exportDto) {
-  const { report, user } = exportDto;
+  const { report, user, currentStageName } = exportDto;
   const templatePath = path.resolve(env.reports.templateRoot, DAILY_TEMPLATE_FILE);
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(templatePath);
@@ -211,6 +212,7 @@ export async function generateDailyReportWorkbook(exportDto) {
     throw new Error('Daily report template worksheet is missing');
   }
 
+  setCell(worksheet, DAILY_REPORT_CELLS.currentStage, currentStageName || '');
   setCell(worksheet, DAILY_REPORT_CELLS.project, `项目：${report.project?.projectName || ''}`);
   setCell(worksheet, DAILY_REPORT_CELLS.reporter, `报告人：${user.name || user.account || ''}`);
   setCell(worksheet, DAILY_REPORT_CELLS.reportDate, `报告时间：${formatDottedDate(report.reportDate)}`);

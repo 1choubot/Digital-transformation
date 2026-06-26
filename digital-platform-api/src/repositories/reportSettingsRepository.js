@@ -1,5 +1,17 @@
 import { pool } from '../db/pool.js';
 
+// MySQL DATE values may be strings or Date objects depending on driver settings.
+function dateOnly(value) {
+  if (value instanceof Date) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  return String(value || '').slice(0, 10);
+}
+
 // Map a rest-mode anchor row into API/domain field names.
 function mapWeeklyRestModeAnchor(row) {
   if (!row) {
@@ -8,7 +20,7 @@ function mapWeeklyRestModeAnchor(row) {
 
   return {
     id: row.id,
-    weekStart: row.week_start,
+    weekStart: dateOnly(row.week_start),
     restMode: row.rest_mode,
     createdByUserId: row.created_by_user_id,
     updatedByUserId: row.updated_by_user_id,

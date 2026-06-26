@@ -17,7 +17,6 @@ import {
   OPERATION_ACTION_TYPE,
   OPERATION_TARGET_TYPE
 } from '../operationLogRepository.js';
-import { canViewCompleteProjectAudit } from '../stageDocuments/accessControl.js';
 import { canViewProject } from './visibility.js';
 import {
   ProjectApprovalError,
@@ -239,7 +238,7 @@ function buildApprovalActionContext({ action, user, stage, rule, returnComment }
           ? PROJECT_APPROVAL_STATUS.PENDING_GENERAL_MANAGER
           : PROJECT_APPROVAL_STATUS.APPROVED,
         comment: null,
-        summary: `中心负责人关口审批通过：${stage.stage_name}`
+        summary: `中心负责人审批通过：${stage.stage_name}`
       };
     }
 
@@ -260,7 +259,7 @@ function buildApprovalActionContext({ action, user, stage, rule, returnComment }
         approvalNode: rule.centerApprovalNode,
         nextStatus: PROJECT_APPROVAL_STATUS.RETURNED_BY_CENTER_MANAGER,
         comment: returnComment,
-        summary: `中心负责人关口审批退回：${stage.stage_name}`
+        summary: `中心负责人审批退回：${stage.stage_name}`
       };
     }
   }
@@ -283,7 +282,7 @@ function buildApprovalActionContext({ action, user, stage, rule, returnComment }
         approvalNode: rule.generalApprovalNode,
         nextStatus: PROJECT_APPROVAL_STATUS.APPROVED,
         comment: null,
-        summary: `总经理关口审批通过：${stage.stage_name}`
+        summary: `总经理审批通过：${stage.stage_name}`
       };
     }
 
@@ -295,7 +294,7 @@ function buildApprovalActionContext({ action, user, stage, rule, returnComment }
         approvalNode: rule.generalApprovalNode,
         nextStatus: PROJECT_APPROVAL_STATUS.RETURNED_BY_GENERAL_MANAGER,
         comment: returnComment,
-        summary: `总经理关口审批退回：${stage.stage_name}`
+        summary: `总经理审批退回：${stage.stage_name}`
       };
     }
   }
@@ -390,7 +389,7 @@ export async function submitStageApproval({ projectId, stageId, user }) {
     expectedStatuses: [PROJECT_APPROVAL_STATUS.NOT_SUBMITTED],
     actionType: PROJECT_APPROVAL_ACTION.SUBMIT,
     operationActionType: OPERATION_ACTION_TYPE.APPROVAL_SUBMITTED,
-    summaryPrefix: '提交阶段关口审批'
+    summaryPrefix: '提交阶段审批'
   });
 }
 
@@ -405,7 +404,7 @@ export async function resubmitStageApproval({ projectId, stageId, user }) {
     ],
     actionType: PROJECT_APPROVAL_ACTION.RESUBMIT,
     operationActionType: OPERATION_ACTION_TYPE.APPROVAL_RESUBMITTED,
-    summaryPrefix: '重新提交阶段关口审批'
+    summaryPrefix: '重新提交阶段审批'
   });
 }
 
@@ -556,12 +555,9 @@ export async function listStageApprovalHistory({ projectId, stageId, user }) {
     const project = await selectProjectForApproval(connection, projectId, false);
     await selectStageForApproval(connection, projectId, stageId, false);
 
-    if (
-      !(await canViewProject(connection, user, project.id)) ||
-      !canViewCompleteProjectAudit(user, project)
-    ) {
+    if (!(await canViewProject(connection, user, project.id))) {
       throw new ProjectAuthorizationError(
-        'FORBIDDEN_OPERATION',
+        PROJECT_APPROVAL_ERROR.PROJECT_APPROVAL_FORBIDDEN,
         'Current user cannot view this stage approval history',
         ['projectId']
       );

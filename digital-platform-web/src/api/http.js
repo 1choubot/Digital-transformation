@@ -187,11 +187,11 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'INVALID_APPROVAL_COMMENT') {
-    return '阶段关口审批意见或退回原因不能为空。';
+    return '审批意见或退回原因不能为空。';
   }
 
   if (error.code === 'PROJECT_APPROVAL_NOT_SUBMITTABLE') {
-    return '当前项目或阶段暂不能提交阶段关口审批。';
+    return '当前项目或阶段暂不能提交审批。';
   }
 
   if (error.code === 'PROJECT_APPROVAL_NOT_PENDING') {
@@ -199,7 +199,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'PROJECT_APPROVAL_NOT_APPROVED') {
-    return '当前阶段关口审批未通过，暂不能推进阶段。';
+    return '当前阶段审批未通过，暂不能推进阶段。';
   }
 
   if (error.code === 'PROJECT_APPROVAL_FORBIDDEN') {
@@ -207,7 +207,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE') {
-    return '当前阶段存在未完成资料级审核的适用必填资料，不能提交或通过阶段关口审批。';
+    return '当前阶段存在未完成的适用必填资料，不能提交或通过审批。';
   }
 
   if (error.code === 'PROJECT_CODE_EXISTS') {
@@ -223,11 +223,11 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'RETURN_REASON_REQUIRED') {
-    return '请填写资料审核退回原因。';
+    return '请填写退回原因。';
   }
 
   if (error.code === 'RETURN_REASON_TOO_LONG') {
-    return '资料审核退回原因过长，请控制在 1000 字以内。';
+    return '退回原因过长，请控制在 1000 字以内。';
   }
 
   if (error.code === 'NOT_APPLICABLE_REASON_REQUIRED') {

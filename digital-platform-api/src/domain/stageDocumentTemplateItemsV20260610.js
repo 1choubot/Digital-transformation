@@ -1,12 +1,4 @@
-import { BUSINESS_DEPARTMENT } from './organization.js';
-
-const {
-  MARKETING_CENTER,
-  MANUFACTURING_CENTER,
-  RD_CENTER
-} = BUSINESS_DEPARTMENT;
-
-const STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260610_RAW = Object.freeze([
+export const STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260610 = Object.freeze([
   Object.freeze({
     templateVersion: 'v20260610',
     stageOrder: 1,
@@ -818,69 +810,3 @@ const STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260610_RAW = Object.freeze([
     targetFolderId: null
   })
 ]);
-
-const DOCUMENT_DEPARTMENT_OWNERSHIP = Object.freeze({
-  '1.1': { ownerDepartment: MARKETING_CENTER, reviewDepartment: MARKETING_CENTER },
-  '1.2': { ownerDepartment: MARKETING_CENTER, reviewDepartment: MARKETING_CENTER },
-  '1.3': { ownerDepartment: MARKETING_CENTER, reviewDepartment: MARKETING_CENTER },
-  '1.4': { ownerDepartment: null, reviewDepartment: null },
-  '2.1': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '2.2': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '2.3': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '2.4': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '2.5': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '2.6': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '2.7': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '2.8': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '2.9': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '2.10': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '2.11': { ownerDepartment: RD_CENTER, reviewDepartment: MANUFACTURING_CENTER },
-  '2.12': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '2.13': { ownerDepartment: MARKETING_CENTER, reviewDepartment: MARKETING_CENTER },
-  '3.1': { ownerDepartment: RD_CENTER, reviewDepartment: MARKETING_CENTER },
-  '3.2': { ownerDepartment: MARKETING_CENTER, reviewDepartment: MARKETING_CENTER },
-  '3.3': { ownerDepartment: MANUFACTURING_CENTER, reviewDepartment: MANUFACTURING_CENTER },
-  '3.4': { ownerDepartment: null, reviewDepartment: null },
-  '4.1': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '4.2': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '4.3': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '4.4': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '4.5': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '4.6': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '4.7': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '4.8': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '4.9': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '4.10': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '4.11': { ownerDepartment: MARKETING_CENTER, reviewDepartment: MARKETING_CENTER },
-  '4.12': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '4.13': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '4.14': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '4.15': { ownerDepartment: MARKETING_CENTER, reviewDepartment: MARKETING_CENTER },
-  '4.16': { ownerDepartment: RD_CENTER, reviewDepartment: MANUFACTURING_CENTER },
-  '5.1': { ownerDepartment: MANUFACTURING_CENTER, reviewDepartment: MANUFACTURING_CENTER },
-  '5.2': { ownerDepartment: MANUFACTURING_CENTER, reviewDepartment: MANUFACTURING_CENTER },
-  '5.3': { ownerDepartment: MANUFACTURING_CENTER, reviewDepartment: MANUFACTURING_CENTER },
-  '5.4': { ownerDepartment: MANUFACTURING_CENTER, reviewDepartment: MANUFACTURING_CENTER },
-  '5.5': { ownerDepartment: MANUFACTURING_CENTER, reviewDepartment: MANUFACTURING_CENTER },
-  '6.1': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '6.2': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '6.3': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '6.4': { ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER },
-  '6.5': { ownerDepartment: MANUFACTURING_CENTER, reviewDepartment: MANUFACTURING_CENTER },
-  '6.6': { ownerDepartment: MANUFACTURING_CENTER, reviewDepartment: MANUFACTURING_CENTER },
-  '6.7': { ownerDepartment: MANUFACTURING_CENTER, reviewDepartment: MARKETING_CENTER },
-  '7.1': { ownerDepartment: MANUFACTURING_CENTER, reviewDepartment: MANUFACTURING_CENTER },
-  '7.2': { ownerDepartment: MANUFACTURING_CENTER, reviewDepartment: MANUFACTURING_CENTER },
-  '7.3': { ownerDepartment: MANUFACTURING_CENTER, reviewDepartment: MARKETING_CENTER },
-  '7.4': { ownerDepartment: MARKETING_CENTER, reviewDepartment: MARKETING_CENTER },
-  '8.1': { ownerDepartment: null, reviewDepartment: null }
-});
-
-export const STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260610 = Object.freeze(
-  STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260610_RAW.map((item) =>
-    Object.freeze({
-      ...item,
-      ...DOCUMENT_DEPARTMENT_OWNERSHIP[item.documentCode]
-    })
-  )
-);

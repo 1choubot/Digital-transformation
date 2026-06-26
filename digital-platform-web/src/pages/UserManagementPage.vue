@@ -108,20 +108,12 @@
               <span>{{ loading ? '同步中...' : '重新加载' }}</span>
             </button>
 
-            <button type="button" class="ghost-button back-to-list-btn" @click="navigate('/projects')">
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                <line x1="19" y1="12" x2="5" y2="12" />
-                <polyline points="12 19 5 12 12 5" />
-              </svg>
-              <span>返回项目列表</span>
-            </button>
-
             <button type="button" class="primary-button create-user-btn" @click="openCreateModal">
               <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
               </svg>
-              <span>录入平台新成员</span>
+              <span class="create-user-btn-text">录入平台新成员</span>
             </button>
           </div>
         </div>
@@ -136,7 +128,7 @@
           <p>正在同步最新的平台用户列表...</p>
         </div>
 
-        <!-- 数据加载失败 -->
+        <!-- 数据加载失败（页面级错误，保留在页面内） -->
         <div v-else-if="errorMessage" class="state-panel state-panel--error">
           <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10" />
@@ -167,14 +159,14 @@
           <p>没有姓名或账号包含“{{ searchQuery }}”的用户，请尝试其他关键词。</p>
         </div>
 
-        <!-- 极致优化的 5列 强合并流式行表格（绝不换行，绝不横向溢出） -->
+        <!-- 极致优化的 5列 强合并流式行表格 -->
         <div v-else class="table-container">
           <div class="user-table">
             <div class="user-table__head">
               <span>账户信息</span>
               <span>组织与部门</span>
               <span>岗位职务</span>
-              <span>系统权限</span>
+              <span>状态权限</span>
               <span class="text-right">管理操作</span>
             </div>
 
@@ -184,7 +176,7 @@
                 <!-- 列 1: 账号与身份集合 -->
                 <div class="card-column min-w-0 gap-0.5">
                   <div class="flex items-center gap-2">
-                    <strong class="text-[13px] font-bold text-slate-900 truncate" :title="user.name">{{ user.name }}</strong>
+                    <strong class="text-[14px] font-bold text-slate-800 truncate" :title="user.name">{{ user.name }}</strong>
                     <span class="mono-badge">{{ user.account }}</span>
                   </div>
                   <span class="mono-code">平台ID: {{ user.filePlatformUserId || '未绑定' }}</span>
@@ -198,9 +190,9 @@
                   </span>
                 </div>
                 
-                <!-- 列 3: 岗位职务（强制不换行截断，并预留充足宽度） -->
+                <!-- 列 3: 岗位职务 -->
                 <div class="card-column min-w-0">
-                  <span class="text-[13px] text-slate-800 font-semibold truncate" :title="user.role">
+                  <span class="text-[13px] text-slate-700 font-medium truncate" :title="user.role">
                     {{ user.role || '-' }}
                   </span>
                 </div>
@@ -213,7 +205,7 @@
                   <span v-if="user.isPlatformAdmin" class="admin-badge admin-badge--yes">管理员</span>
                 </div>
                 
-                <!-- 列 5: 交互动作组（强制一行） -->
+                <!-- 列 5: 交互动作组 -->
                 <div class="user-row-actions whitespace-nowrap">
                   <button type="button" class="row-btn edit-btn" @click="startEdit(user)">编辑</button>
                   <button
@@ -225,24 +217,15 @@
                     {{ user.isEnabled ? '禁用' : '启用' }}
                   </button>
                   
-                  <!-- 重置密码组 -->
-                  <div class="user-password-reset">
-                    <input
-                      v-model="resetPasswords[user.id]"
-                      type="password"
-                      autocomplete="new-password"
-                      placeholder="新密码"
-                      :disabled="isActionPending(user.id, 'reset-password')"
-                    />
-                    <button
-                      type="button"
-                      class="reset-btn"
-                      :disabled="isActionPending(user.id, 'reset-password')"
-                      @click="resetPassword(user)"
-                    >
-                      重置
-                    </button>
-                  </div>
+                  <!-- 重置密码按钮（弹窗触发） -->
+                  <button
+                    type="button"
+                    class="row-btn reset-pwd-btn"
+                    :disabled="isActionPending(user.id, 'reset-password')"
+                    @click="openResetPasswordModal(user)"
+                  >
+                    重置密码
+                  </button>
                 </div>
 
               </article>
@@ -301,7 +284,7 @@
         </div>
       </footer>
 
-      <!-- 磨砂滑入式配置弹窗（Modal Drawer） -->
+      <!-- 磨砂滑入式配置弹窗（Modal Drawer） — 已移除内部提示区块，所有反馈通过 Toast 展示 -->
       <div v-if="isModalOpen" class="modal-backdrop-overlay animate-fadeIn" @click.self="closeModal">
         <form class="panel form-grid modal-container animate-slideIn" @submit.prevent="saveUser">
           <div class="form-grid__wide user-form-heading">
@@ -404,15 +387,7 @@
             </label>
           </div>
 
-          <!-- 保存提示信息区块 -->
-          <div v-if="clientError || operationError" class="state-panel state-panel--error form-grid__wide animate-slideIn">
-            <p>{{ clientError || operationError }}</p>
-          </div>
-          <div v-if="successMessage" class="state-panel state-panel--success form-grid__wide animate-slideIn">
-            <p>{{ successMessage }}</p>
-          </div>
-
-          <!-- 操作区 -->
+          <!-- 操作区（已移除提示区块，所有反馈通过 Toast 展示） -->
           <div class="form-actions form-grid__wide">
             <button type="button" class="ghost-button" @click="closeModal">取消</button>
             <button type="submit" class="primary-button submit-btn" :disabled="saving">
@@ -422,9 +397,51 @@
           </div>
         </form>
       </div>
+
+      <!-- 重置密码弹窗（已移除内部错误提示，所有反馈通过 Toast 展示） -->
+      <div v-if="showResetModal" class="modal-backdrop-overlay animate-fadeIn" @click.self="closeResetModal">
+        <div class="panel reset-modal-container animate-slideIn">
+          <div class="reset-modal-header">
+            <h3 class="reset-modal-title">重置密码</h3>
+            <button type="button" class="close-modal-x-btn" @click="closeResetModal" aria-label="关闭">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+          <div class="reset-modal-body">
+            <p class="reset-user-info">正在为 <strong>{{ resetTargetUser?.account }}</strong> 设置新密码</p>
+            <div class="form-group">
+              <label class="label-text">新密码 <span class="required-star">*</span></label>
+              <div class="input-wrapper">
+                <input
+                  v-model="resetNewPassword"
+                  type="password"
+                  autocomplete="new-password"
+                  placeholder="请输入新密码"
+                  @keyup.enter="confirmResetPassword"
+                />
+              </div>
+            </div>
+            <!-- 错误提示已移除，统一使用 Toast -->
+          </div>
+          <div class="reset-modal-footer">
+            <button type="button" class="ghost-button" @click="closeResetModal">取消</button>
+            <button
+              type="button"
+              class="primary-button"
+              :disabled="!resetNewPassword || saving"
+              @click="confirmResetPassword"
+            >
+              {{ saving ? '重置中...' : '确认重置' }}
+            </button>
+          </div>
+        </div>
+      </div>
     </template>
 
-    <!-- 统一 Toast 弹窗 -->
+    <!-- 统一 Toast 弹窗 — 所有操作反馈统一在此展示 -->
     <Transition name="toast">
       <div v-if="toastVisible" class="toast" :class="{ 'toast--error': toastType === 'error', 'toast--success': toastType === 'success' }">
         <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -501,9 +518,14 @@ const searchQuery = ref('');
 // 高保真滑入式配置弹窗可见性变量
 const isModalOpen = ref(false);
 
+// 重置密码弹窗状态
+const showResetModal = ref(false);
+const resetTargetUser = ref(null);
+const resetNewPassword = ref('');
+
 // 本地分页控制
 const currentPage = ref(1);
-const pageSize = ref(8); // 默认每页展现 8 个用户账号
+const pageSize = ref(5);
 
 const canAccessUserManagement = computed(
   () => props.currentUser.isPlatformAdmin && props.currentUser.organizationRole === 'system_admin'
@@ -631,6 +653,7 @@ function hideToast() {
   toastVisible.value = false;
 }
 
+// 统一监听所有反馈变量，通过 Toast 展示
 watch(errorMessage, (newVal) => {
   if (newVal) showToast(newVal, 'error');
 });
@@ -658,6 +681,21 @@ function openCreateModal() {
 function closeModal() {
   isModalOpen.value = false;
   resetForm();
+}
+
+// 重置密码弹窗控制
+function openResetPasswordModal(user) {
+  resetTargetUser.value = user;
+  resetNewPassword.value = '';
+  clientError.value = '';
+  showResetModal.value = true;
+}
+
+function closeResetModal() {
+  showResetModal.value = false;
+  resetTargetUser.value = null;
+  resetNewPassword.value = '';
+  clientError.value = '';
 }
 
 function isGlobalOrganizationRole(value) {
@@ -870,11 +908,24 @@ async function resetPassword(user) {
     await resetUserPassword(user.id, password, props.authToken);
     resetPasswords[user.id] = '';
     successMessage.value = `已重置 ${user.account} 的密码。`;
+    closeResetModal(); // 成功后关闭弹窗
   } catch (error) {
     handleRequestError(error);
+    // 保留弹窗，显示错误
   } finally {
     pendingAction.value = '';
   }
+}
+
+// 弹窗确认重置
+function confirmResetPassword() {
+  if (!resetNewPassword.value) {
+    clientError.value = '请填写新密码。';
+    return;
+  }
+  // 将密码存入 resetPasswords 供 resetPassword 使用
+  resetPasswords[resetTargetUser.value.id] = resetNewPassword.value;
+  resetPassword(resetTargetUser.value);
 }
 
 onMounted(loadUsers);
@@ -885,123 +936,126 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 全局页面布局 */
+/* 全局页面布局 - 引入类似图片的清爽浅色背景 */
 .page-stack {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  padding: 1.5rem 0;
+  padding: 1.5rem;
+  background-color: #f4f6f9;
   max-width: 100%;
   margin: 0 auto;
   min-height: 100vh;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  color: #0f172a;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #333333;
 }
 
 .animate-fadeIn {
   animation: fadeIn 0.4s ease-out;
 }
 
-/* 优化后：高度极致压缩、完美的单排行自适应统计面板 */
+/* 扁平化面板基础样式 */
+.panel {
+  background: #ffffff;
+  border-radius: 8px;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.04);
+}
+
+/* 优化后的指标面板 */
 .dashboard-stats-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.75rem;
+  gap: 1rem;
 }
 
 .stat-card {
   background: #ffffff;
-  border-radius: 12px;
-  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  padding: 1.25rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.04);
+  transition: all 0.3s ease;
 }
 
 .stat-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 6px 16px rgba(0, 21, 41, 0.08);
 }
 
 .stat-info {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.25rem;
 }
 
 .stat-label {
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: -0.01em;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #8c939d;
 }
 
 .stat-value {
-  font-size: 1.15rem;
-  font-weight: 800;
-  color: #0f172a;
-  line-height: 1.1;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #303133;
+  line-height: 1;
 }
 
 .stat-value small {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   font-weight: 500;
-  color: #64748b;
+  color: #8c939d;
+  margin-left: 2px;
 }
 
+/* 采用渐变色块包围白色图标，模仿图片中的入口图标风格 */
 .stat-icon-wrapper {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .stat-icon-wrapper svg {
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
+  color: #ffffff;
 }
 
-.stat-card--blue { border-left: 4px solid #3b82f6; }
-.stat-card--blue .stat-icon-wrapper { background: #eff6ff; color: #3b82f6; }
+.stat-card--blue .stat-icon-wrapper { background: linear-gradient(135deg, #5b86e5 0%, #36d1dc 100%); }
+.stat-card--emerald .stat-icon-wrapper { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+.stat-card--indigo .stat-icon-wrapper { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+.stat-card--amber .stat-icon-wrapper { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); }
 
-.stat-card--emerald { border-left: 4px solid #10b981; }
-.stat-card--emerald .stat-icon-wrapper { background: #ecfdf5; color: #10b981; }
 
-.stat-card--indigo { border-left: 4px solid #6366f1; }
-.stat-card--indigo .stat-icon-wrapper { background: #eef2ff; color: #6366f1; }
-
-.stat-card--amber { border-left: 4px solid #f59e0b; }
-.stat-card--amber .stat-icon-wrapper { background: #fffbeb; color: #f59e0b; }
-
-/* 按钮基础风格 */
+/* 按钮基础风格改造，采用更鲜亮的蓝色系 */
 .ghost-button {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.6rem 1rem;
+  padding: 0.5rem 1rem;
   font-size: 0.875rem;
   font-weight: 500;
   background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  color: #334155;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  color: #606266;
   cursor: pointer;
   transition: all 0.2s;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-  height: 38px;
+  height: 36px;
   white-space: nowrap;
 }
 
 .ghost-button:hover:not(:disabled) {
-  border-color: #cbd5e1;
-  background: #f8fafc;
-  color: #0f172a;
+  border-color: #c6e2ff;
+  background: #ecf5ff;
+  color: #3e63dd;
 }
 
 .btn-icon {
@@ -1014,30 +1068,31 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  background: #0f172a;
+  background: #3e63dd;
   color: #ffffff;
   border: none;
-  font-weight: 600;
-  padding: 0.625rem 1.25rem;
-  border-radius: 8px;
+  font-weight: 500;
+  padding: 0.5rem 1.25rem;
+  border-radius: 4px;
   font-size: 0.875rem;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
-  height: 40px;
+  transition: all 0.2s ease;
+  height: 36px;
 }
 
 .primary-button:hover:not(:disabled) {
-  background: #1e293b;
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.15);
-  transform: translateY(-1px);
+  background: #5275e7;
 }
 
 .primary-button:disabled {
   opacity: 0.6;
-  background: #475569;
+  background: #a0cfff;
   cursor: not-allowed;
-  box-shadow: none;
+}
+
+/* 确保“录入平台新成员”按钮文字为白色 */
+.create-user-btn-text {
+  color: #ffffff !important;
 }
 
 /* 独立滑入提示区 */
@@ -1046,55 +1101,52 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 4.5rem 2rem;
+  padding: 4rem 2rem;
   text-align: center;
+  background: #ffffff;
 }
 
 .state-panel p {
   font-size: 0.9rem;
-  color: #64748b;
+  color: #909399;
+  margin-top: 0.5rem;
 }
 
 .state-panel--inline {
-  padding: 3.5rem 1.5rem;
+  padding: 3rem 1.5rem;
 }
 
 .state-panel--error {
-  background: #fef2f2;
-  border: 1px solid #fee2e2;
-  border-radius: 12px;
-  color: #b91c1c;
+  background: #fef0f0;
+  border-radius: 8px;
+  color: #f56c6c;
 }
 
 .state-panel--success {
-  background: #f0fdf4;
-  border: 1px solid #dcfce7;
-  border-radius: 12px;
-  color: #15803d;
+  background: #f0f9eb;
+  border-radius: 8px;
+  color: #67c23a;
 }
 
 .error-icon {
   width: 32px;
   height: 32px;
-  stroke: #ef4444;
+  stroke: #f56c6c;
   margin-bottom: 0.75rem;
 }
 
-.inline-btn {
-  margin-top: 1rem;
-}
 
 /* 极简等待动画 */
 .loading-wave {
   display: flex;
   gap: 6px;
-  margin-bottom: 1.25rem;
+  margin-bottom: 1rem;
 }
 
 .wave-bar {
   width: 4px;
-  height: 24px;
-  background: #0f172a;
+  height: 20px;
+  background: #3e63dd;
   border-radius: 4px;
   animation: wave 1s ease-in-out infinite;
 }
@@ -1105,29 +1157,22 @@ onUnmounted(() => {
 .empty-icon {
   width: 48px;
   height: 48px;
-  stroke: #94a3b8;
+  stroke: #c0c4cc;
   margin-bottom: 1rem;
 }
 
-/* 基础面板容器 */
-.panel {
-  background: #ffffff;
-  border-radius: 16px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 4px 20px rgba(0, 20, 40, 0.02);
-}
 
+/* 工具栏重新设计，增添左侧蓝色强调线 */
 .list-panel {
   overflow: hidden;
 }
 
-/* 工具栏重新设计：按钮与搜索整合 */
 .panel-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid #f1f5f9;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #ebeef5;
   flex-wrap: wrap;
   gap: 1rem;
 }
@@ -1139,16 +1184,29 @@ onUnmounted(() => {
 }
 
 .toolbar-title {
-  font-size: 1rem;
-  font-weight: 700;
-  color: #0f172a;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #303133;
+  position: relative;
+  padding-left: 10px;
+}
+
+.toolbar-title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 3px;
+  bottom: 3px;
+  width: 4px;
+  background: #3e63dd;
+  border-radius: 2px;
 }
 
 .toolbar-subtitle {
   display: block;
   font-size: 0.8rem;
-  color: #64748b;
-  margin-top: 0.2rem;
+  color: #909399;
+  margin-top: 0.4rem;
 }
 
 .toolbar-actions {
@@ -1156,10 +1214,10 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
-  margin-left: auto; /* 推至右侧 */
+  margin-left: auto;
 }
 
-/* 搜索框样式 */
+/* 搜索框样式扁平化 */
 .search-input-wrapper {
   position: relative;
   display: flex;
@@ -1172,30 +1230,29 @@ onUnmounted(() => {
   left: 10px;
   width: 16px;
   height: 16px;
-  color: #94a3b8;
+  color: #c0c4cc;
   pointer-events: none;
 }
 
 .search-input {
   width: 100%;
-  padding: 0.55rem 2rem 0.55rem 2.2rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #f8fafc;
+  padding: 0.45rem 2rem 0.45rem 2.2rem;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  background: #ffffff;
   font-size: 0.875rem;
-  color: #0f172a;
+  color: #303133;
   outline: none;
   transition: all 0.2s ease;
+  height: 36px;
 }
 
 .search-input:focus {
-  border-color: #2563eb;
-  background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: #3e63dd;
 }
 
 .search-input::placeholder {
-  color: #94a3b8;
+  color: #c0c4cc;
 }
 
 .search-clear-btn {
@@ -1204,13 +1261,13 @@ onUnmounted(() => {
   background: transparent;
   border: none;
   cursor: pointer;
-  color: #94a3b8;
+  color: #c0c4cc;
   padding: 2px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  transition: color 0.2s, background 0.2s;
+  transition: color 0.2s;
 }
 
 .search-clear-btn svg {
@@ -1219,18 +1276,17 @@ onUnmounted(() => {
 }
 
 .search-clear-btn:hover {
-  color: #0f172a;
-  background: #f1f5f9;
+  color: #909399;
 }
 
-/* 核心优化：9 列高对齐度完美黄金比例流式栅格。解决全部换行错乱！ */
+
+/* 表格区域美化 */
 .table-container {
   overflow-x: auto;
   width: 100%;
 }
 
 .user-table {
-  /* 调整限制，使其能够在单屏完整适配 */
   min-width: 900px;
   width: 100%;
   border-collapse: collapse;
@@ -1238,17 +1294,19 @@ onUnmounted(() => {
 
 .user-table__head {
   display: grid;
-  /* 严格使用 minmax(0, Xfr) 防止撑爆 Grid，给予操作区充裕空间 */
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 0.85fr) minmax(0, 2.2fr);
-  padding: 0.85rem 1.5rem;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: #475569;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  padding: 1rem 1.5rem;
+  background: #fafafa;
+  border-bottom: 1px solid #ebeef5;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #909399;
   gap: 1rem;
+}
+
+/* 右对齐辅助类 */
+.text-right {
+  text-align: right;
 }
 
 .user-table__body {
@@ -1258,76 +1316,63 @@ onUnmounted(() => {
 
 .user-table__row {
   display: grid;
-  /* 保持与头部完美对齐一致的严格 5 列栅格比例 */
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 0.85fr) minmax(0, 2.2fr);
-  padding: 0.75rem 1.5rem;
+  padding: 1rem 1.5rem;
   align-items: center;
-  border-bottom: 1px solid #f1f5f9;
-  transition: background 0.15s ease;
-  font-size: 13px; /* 紧凑美观的13号字 */
+  border-bottom: 1px solid #ebeef5;
+  transition: background 0.2s ease;
+  font-size: 13px;
   gap: 1rem;
 }
 
 .user-table__row:hover {
-  background: #f8fafc;
+  background: #fdfdfe;
 }
 
 .user-table__row:last-child {
   border-bottom: none;
 }
 
-/* 单元格信息集合（去除9列散装结构，改为5列复合展示） */
 .card-column {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.35rem;
   min-width: 0;
 }
 
-.identity-name-wrap {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
 .mono-badge {
-  font-family: 'Courier New', Courier, monospace;
-  font-size: 0.725rem;
-  font-weight: 700;
-  color: #1e293b;
-  background: #f1f5f9;
+  font-family: Consolas, monospace;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #3e63dd;
+  background: #f0f3ff;
+  border: 1px solid #d6e0ff;
   padding: 0.15rem 0.45rem;
   border-radius: 4px;
   width: fit-content;
 }
 
+/* 管理员徽章 — 自动匹配文字长度，不横向拉伸 */
 .admin-badge {
-  font-size: 0.65rem;
-  font-weight: 700;
-  padding: 0.1rem 0.4rem;
+  display: inline-block;
+  width: fit-content;
+  white-space: nowrap;
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 0.15rem 0.4rem;
   border-radius: 4px;
 }
 
 .admin-badge--yes {
-  background: #eff6ff;
-  color: #2563eb;
-  border: 1px solid #bfdbfe;
+  background: #fdf6ec;
+  color: #e6a23c;
+  border: 1px solid #faecd8;
 }
 
-.user-display-name {
-  font-size: 13px;
-  font-weight: 700;
-  color: #0f172a;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* 极小化平台ID */
 .mono-code {
-  font-family: monospace;
-  color: #94a3b8;
-  font-size: 10px;
+  font-family: Consolas, monospace;
+  color: #c0c4cc;
+  font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1336,148 +1381,143 @@ onUnmounted(() => {
 .role-tag {
   display: inline-block;
   font-size: 11px;
-  font-weight: 600;
-  background: #f1f5f9;
-  color: #475569;
+  font-weight: 500;
+  background: #f4f4f5;
+  color: #909399;
   padding: 0.15rem 0.5rem;
   border-radius: 4px;
   width: fit-content;
-  border: 1px solid #e2e8f0;
-}
-
-.department-text {
-  color: #475569;
-  font-size: 12px;
-}
-
-/* 岗位职务强制不换行截断 */
-.title-text {
-  color: #1e293b;
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  border: 1px solid #e9e9eb;
 }
 
 .status-indicator {
   display: inline-flex;
   align-items: center;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   padding: 0.15rem 0.45rem;
-  border-radius: 6px;
+  border-radius: 4px;
   width: fit-content;
 }
 
 .status-indicator--active {
-  background: #f0fdf4;
-  color: #16a34a;
+  background: #f0f9eb;
+  color: #67c23a;
+  border: 1px solid #e1f3d8;
 }
 
 .status-indicator--disabled {
-  background: #fef2f2;
-  color: #dc2626;
+  background: #fef0f0;
+  color: #f56c6c;
+  border: 1px solid #fde2e2;
 }
 
-/* 交互动作组 - 保持在一排！ */
+/* 交互动作组 */
 .user-row-actions {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.5rem;
   justify-content: flex-end;
   white-space: nowrap;
 }
 
 .row-btn {
   padding: 0.35rem 0.65rem;
-  font-size: 11px;
-  font-weight: 600;
-  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 4px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
   background: #ffffff;
-  border: 1px solid #cbd5e1;
-  color: #475569;
+  border: 1px solid #dcdfe6;
+  color: #606266;
   white-space: nowrap;
 }
 
 .edit-btn:hover {
-  border-color: #2563eb;
-  color: #2563eb;
-  background: #eff6ff;
-}
-
-.toggle-btn--disable {
-  border-color: #fca5a5;
-  color: #ef4444;
-  background: #fef2f2;
+  border-color: #a4b3ff;
+  color: #3e63dd;
+  background: #f0f3ff;
 }
 
 .toggle-btn--disable:hover {
-  background: #fecaca;
-  color: #b91c1c;
-}
-
-.toggle-btn--enable {
-  border-color: #bbf7d0;
-  color: #16a34a;
-  background: #f0fdf4;
+  border-color: #fbc4c4;
+  color: #f56c6c;
+  background: #fef0f0;
 }
 
 .toggle-btn--enable:hover {
-  background: #86efac;
-  color: #15803d;
+  border-color: #e1f3d8;
+  color: #67c23a;
+  background: #f0f9eb;
 }
 
-/* 密码重置组 */
-.user-password-reset {
-  display: flex;
-  align-items: center;
-  border: 1px solid #cbd5e1;
-  background: #f8fafc;
-  border-radius: 6px;
-  overflow: hidden;
-  height: 28px;
+.reset-pwd-btn:hover {
+  border-color: #ffd6a0;
+  color: #e6a23c;
+  background: #fdf6ec;
 }
 
-.user-password-reset:focus-within {
-  border-color: #2563eb;
+.reset-pwd-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 重置密码弹窗样式 */
+.reset-modal-container {
+  width: 100%;
+  max-width: 480px;
+  padding: 1.5rem;
   background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
 }
 
-.user-password-reset input {
-  border: none;
-  background: transparent;
-  width: 70px;
-  padding: 0 0.4rem;
-  font-size: 11px;
-  color: #0f172a;
-  outline: none;
+.reset-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #ebeef5;
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
 }
 
-.reset-btn {
-  border: none;
-  background: #475569;
-  color: #ffffff;
-  height: 100%;
-  padding: 0 0.5rem;
-  font-size: 11px;
+.reset-modal-title {
+  font-size: 1.1rem;
   font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
+  color: #303133;
+  margin: 0;
 }
 
-.reset-btn:hover:not(:disabled) {
-  background: #0f172a;
+.reset-modal-body {
+  margin-bottom: 1.5rem;
 }
 
-/* 高保真分页控制面板 */
+.reset-user-info {
+  font-size: 0.9rem;
+  color: #606266;
+  margin-top: 0;
+  margin-bottom: 1.25rem;
+}
+
+.reset-user-info strong {
+  color: #3e63dd;
+}
+
+.reset-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  border-top: 1px solid #ebeef5;
+  padding-top: 1rem;
+}
+
+/* 扁平化分页面板 */
 .pagination-panel {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.85rem 1.25rem;
+  padding: 1rem 1.5rem;
   flex-wrap: wrap;
   gap: 1rem;
   margin-top: 1rem;
@@ -1488,26 +1528,26 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.35rem;
   font-size: 0.85rem;
-  color: #475569;
+  color: #606266;
   flex-wrap: wrap;
 }
 
 .page-current-highlight {
-  font-weight: 700;
-  color: #2563eb;
-  background: #eff6ff;
+  font-weight: 600;
+  color: #3e63dd;
+  background: #f0f3ff;
   padding: 0.15rem 0.45rem;
   border-radius: 4px;
 }
 
 .pagination-info .divider {
-  color: #cbd5e1;
-  margin: 0 0.25rem;
+  color: #ebeef5;
+  margin: 0 0.5rem;
 }
 
 .search-indicator {
   font-style: italic;
-  color: #2563eb;
+  color: #3e63dd;
   font-size: 0.8rem;
   margin-left: 0.25rem;
 }
@@ -1519,26 +1559,26 @@ onUnmounted(() => {
 }
 
 .page-control-btn {
-  padding: 0.4rem 0.75rem;
+  padding: 0.35rem 0.75rem;
   font-size: 0.8rem;
-  font-weight: 600;
-  border: 1px solid #cbd5e1;
+  font-weight: 500;
+  border: 1px solid #dcdfe6;
   background: #ffffff;
-  color: #475569;
-  border-radius: 6px;
+  color: #606266;
+  border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .page-control-btn:hover:not(:disabled) {
-  background: #f1f5f9;
-  color: #0f172a;
-  border-color: #94a3b8;
+  color: #3e63dd;
+  border-color: #a4b3ff;
 }
 
 .page-control-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+  background: #f4f4f5;
 }
 
 .page-numbers-group {
@@ -1550,24 +1590,25 @@ onUnmounted(() => {
 .page-number-btn {
   width: 32px;
   height: 32px;
-  border-radius: 6px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: #475569;
+  border-radius: 4px;
+  border: 1px solid #dcdfe6;
+  background: #ffffff;
+  color: #606266;
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .page-number-btn:hover {
-  background: #f1f5f9;
-  color: #0f172a;
+  color: #3e63dd;
+  border-color: #a4b3ff;
 }
 
 .page-number-btn--active {
-  background: #0f172a !important;
+  background: #3e63dd !important;
   color: #ffffff !important;
+  border-color: #3e63dd !important;
 }
 
 .pagination-sizes {
@@ -1575,7 +1616,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.5rem;
   font-size: 0.85rem;
-  color: #475569;
+  color: #606266;
 }
 
 .select-size {
@@ -1583,16 +1624,16 @@ onUnmounted(() => {
 }
 
 .select-size select {
-  padding: 0.4rem 1.5rem 0.4rem 0.65rem;
+  padding: 0.3rem 1.5rem 0.3rem 0.65rem;
   font-size: 0.8rem;
 }
+
 
 /* 高保真滑入式弹窗（Modal Drawer） */
 .modal-backdrop-overlay {
   position: fixed;
   inset: 0;
-  background-color: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(4px);
+  background-color: rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1602,32 +1643,38 @@ onUnmounted(() => {
 
 .modal-container {
   width: 100%;
-  max-width: 760px; /* 放宽表单弹窗上限宽度，防止局促 */
+  max-width: 760px;
   max-height: 90vh;
   overflow-y: auto;
-  border-radius: 16px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
   background-color: #ffffff;
-  border: 1px solid #e2e8f0;
+  border: none;
 }
 
 .user-form-heading {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid #ebeef5;
   padding-bottom: 1rem;
 }
 
 .form-title-text {
-  font-size: 1.15rem;
-  font-weight: 700;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #303133;
+}
+
+.section-eyebrow {
+  font-size: 0.8rem;
+  color: #909399;
 }
 
 .close-modal-x-btn {
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: #909399;
   cursor: pointer;
   padding: 0.25rem;
   border-radius: 50%;
@@ -1635,21 +1682,15 @@ onUnmounted(() => {
 }
 
 .close-modal-x-btn:hover {
-  background: #f1f5f9;
-  color: #0f172a;
+  background: #f4f4f5;
+  color: #606266;
 }
 
-.close-modal-x-btn svg {
-  width: 20px;
-  height: 20px;
-}
-
-/* 核心优化：高保真表单网格，使用 minmax(0, 1fr) 防爆宽保护 */
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.25rem 1.75rem;
-  padding: 2.25rem;
+  padding: 2rem;
 }
 
 .form-grid__wide {
@@ -1664,42 +1705,40 @@ onUnmounted(() => {
 
 .label-text {
   font-size: 0.85rem;
-  font-weight: 600;
-  color: #475569;
-  white-space: nowrap; /* 表单标题不换行保护 */
+  font-weight: 500;
+  color: #606266;
+  white-space: nowrap;
 }
 
 .required-star {
-  color: #ef4444;
+  color: #f56c6c;
 }
 
 /* 包装层与光晕 */
 .input-wrapper,
 .select-wrapper {
   position: relative;
-  border-radius: 8px;
-  border: 1px solid #cbd5e1;
-  background: #f8fafc;
-  transition: all 0.2s ease;
+  border-radius: 4px;
+  border: 1px solid #dcdfe6;
+  background: #ffffff;
+  transition: border-color 0.2s ease;
   overflow: hidden;
 }
 
 .input-wrapper:focus-within,
 .select-wrapper:focus-within {
-  border-color: #2563eb;
-  background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: #3e63dd;
 }
 
 .input-wrapper--disabled,
 .select-wrapper--disabled {
-  background: #e2e8f0 !important;
-  border-color: #cbd5e1 !important;
+  background: #f5f7fa !important;
+  border-color: #e4e7ed !important;
   cursor: not-allowed;
 }
 
 .input-wrapper--disabled input {
-  color: #64748b;
+  color: #c0c4cc;
   cursor: not-allowed;
 }
 
@@ -1707,11 +1746,11 @@ onUnmounted(() => {
 .select-wrapper select {
   width: 100%;
   min-width: 0;
-  padding: 0.7rem 1rem;
+  padding: 0.6rem 1rem;
   border: none;
   background: transparent;
-  font-size: 0.95rem;
-  color: #0f172a;
+  font-size: 0.9rem;
+  color: #303133;
   outline: none;
 }
 
@@ -1731,7 +1770,7 @@ onUnmounted(() => {
   height: 0;
   border-left: 5px solid transparent;
   border-right: 5px solid transparent;
-  border-top: 5px solid #64748b;
+  border-top: 5px solid #c0c4cc;
   pointer-events: none;
 }
 
@@ -1747,12 +1786,12 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.8rem 1.1rem;
-  background: #f8fafc;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
+  padding: 0.8rem 1rem;
+  background: #fafafa;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s;
   user-select: none;
   flex: 1;
   min-width: 240px;
@@ -1770,30 +1809,29 @@ onUnmounted(() => {
   position: relative;
   width: 18px;
   height: 18px;
-  border: 2px solid #cbd5e1;
-  border-radius: 4px;
+  border: 1px solid #dcdfe6;
+  border-radius: 3px;
   background: #ffffff;
-  transition: all 0.15s;
+  transition: all 0.2s;
   flex-shrink: 0;
 }
 
 .user-checkbox-card:hover {
-  border-color: #94a3b8;
-  background: #f1f5f9;
+  border-color: #c6e2ff;
 }
 
 /* 复选选中状态 */
 .user-checkbox-card input:checked ~ .checkbox-indicator {
-  border-color: #2563eb;
-  background: #2563eb;
+  border-color: #3e63dd;
+  background: #3e63dd;
 }
 
 .user-checkbox-card input:checked ~ .checkbox-indicator::after {
   content: '';
   position: absolute;
-  left: 4px;
-  top: 1px;
-  width: 5px;
+  left: 5px;
+  top: 2px;
+  width: 4px;
   height: 8px;
   border: solid white;
   border-width: 0 2px 2px 0;
@@ -1801,35 +1839,30 @@ onUnmounted(() => {
 }
 
 .checkbox-label-text {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 500;
-  color: #334155;
-  transition: color 0.15s;
-  white-space: nowrap; /* 强制防换行 */
+  color: #606266;
+  white-space: nowrap;
 }
 
 .user-checkbox-card input:checked ~ .checkbox-label-text {
-  color: #1e40af;
-  font-weight: 600;
+  color: #3e63dd;
 }
 
 .user-checkbox-card--disabled {
-  opacity: 0.5;
+  opacity: 0.6;
   cursor: not-allowed;
-  background: #e2e8f0 !important;
-}
-
-.user-checkbox-card--disabled:hover {
-  border-color: #cbd5e1;
+  background: #f5f7fa !important;
 }
 
 .form-actions {
   display: flex;
   justify-content: flex-end;
   gap: 1rem;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid #ebeef5;
   padding-top: 1.5rem;
 }
+
 
 /* 全局 Toast 提示 */
 .toast {
@@ -1840,39 +1873,23 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.7rem 1rem 0.7rem 1.2rem;
-  border-radius: 10px;
+  padding: 0.7rem 1rem;
+  border-radius: 4px;
   background: #ffffff;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
-  font-size: 0.875rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  font-size: 0.85rem;
   font-weight: 500;
-  color: #0f172a;
+  color: #303133;
   z-index: 10000;
-  border: 1px solid #f1f5f9;
+  border: 1px solid #ebeef5;
   max-width: 90%;
 }
 
-.toast--error {
-  border-left: 4px solid #ef4444;
-}
+.toast--error { border-left: 4px solid #f56c6c; }
+.toast--error .toast-icon { stroke: #f56c6c; flex-shrink: 0; width: 20px; height: 20px; }
 
-.toast--error .toast-icon {
-  stroke: #dc2626;
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-}
-
-.toast--success {
-  border-left: 4px solid #22c55e;
-}
-
-.toast--success .toast-icon {
-  stroke: #16a34a;
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-}
+.toast--success { border-left: 4px solid #67c23a; }
+.toast--success .toast-icon { stroke: #67c23a; flex-shrink: 0; width: 20px; height: 20px; }
 
 .toast-close {
   display: flex;
@@ -1888,102 +1905,37 @@ onUnmounted(() => {
   flex-shrink: 0;
   border-radius: 50%;
   transition: background 0.2s;
-  color: #94a3b8;
+  color: #c0c4cc;
 }
+.toast-close:hover { background: #f4f4f5; }
+.toast-close svg { width: 14px; height: 14px; }
 
-.toast-close:hover {
-  background: #f1f5f9;
-}
+.toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
+.toast-enter-from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+.toast-enter-to { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast-leave-from { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(-20px); }
 
-.toast-close svg {
-  width: 14px;
-  height: 14px;
-}
-
-.toast-enter-active,
-.toast-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.toast-enter-from {
-  opacity: 0;
-  transform: translateX(-50%) translateY(-20px) scale(0.95);
-}
-
-.toast-enter-to {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0) scale(1);
-}
-
-.toast-leave-from {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0) scale(1);
-}
-
-.toast-leave-to {
-  opacity: 0;
-  transform: translateX(-50%) translateY(-20px) scale(0.95);
-}
-
-@keyframes wave {
-  0%, 100% { transform: scaleY(0.4); }
-  50% { transform: scaleY(1); }
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes slideIn {
-  from { opacity: 0; transform: translateY(-5px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+@keyframes wave { 0%, 100% { transform: scaleY(0.4); } 50% { transform: scaleY(1); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slideIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
 /* 响应式调整 */
 @media (max-width: 1200px) {
-  .dashboard-stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
+  .dashboard-stats-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 768px) {
-  .user-table__head {
-    display: none;
-  }
-  .user-table__row {
-    grid-template-columns: 1fr;
-    gap: 0.75rem;
-    padding: 1.1rem;
-  }
-  .user-row-actions {
-    width: 100%;
-    justify-content: space-between;
-  }
-  .form-grid {
-    grid-template-columns: 1fr;
-    padding: 1.5rem;
-  }
-  .form-grid__wide {
-    grid-column: span 1;
-  }
-  .search-input-wrapper {
-    width: 100%;
-  }
-  .panel-toolbar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .toolbar-info {
-    max-width: 100%;
-  }
-  .toolbar-actions {
-    margin-left: 0;
-    justify-content: space-between;
-  }
+  .page-stack { padding: 1rem; }
+  .user-table__head { display: none; }
+  .user-table__row { grid-template-columns: 1fr; gap: 0.75rem; padding: 1.1rem; }
+  .user-row-actions { width: 100%; justify-content: space-between; }
+  .form-grid { grid-template-columns: 1fr; padding: 1.5rem; }
+  .form-grid__wide { grid-column: span 1; }
+  .search-input-wrapper { width: 100%; }
+  .panel-toolbar { flex-direction: column; align-items: stretch; }
+  .toolbar-info { max-width: 100%; }
+  .toolbar-actions { margin-left: 0; justify-content: space-between; }
 }
 </style>

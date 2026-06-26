@@ -5,7 +5,7 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 ## Requirements
 ### Requirement: 阶段资料项模板
 
-系统 MUST 维护当前 active 阶段资料项模板，当前正式运行模板 MUST 为 `v20260624`，模板 MUST 以 `智能制造项目管理流程图20260624.pdf` 和 `docs/9.10_v20260624阶段资料模板规划_20260624.md` 为来源。
+系统 MUST 维护 20260610 版阶段资料项模板，模板 MUST 以 `智能制造项目管理流程图20260610.pdf`、`docs/9.7_智能制造项目整体推进流程_20260610.md` 和 `docs/9.2_阶段资料清单与责任角色表_20260610.md` 为来源。
 
 #### Scenario: 模板字段完整
 
@@ -24,47 +24,47 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 #### Scenario: 不凭空补资料项
 
-- **WHEN** 系统初始化当前 active 阶段资料模板
-- **THEN** 系统不得添加 `docs/9.10_v20260624阶段资料模板规划_20260624.md` 之外的普通阶段资料项
+- **WHEN** 系统初始化 20260610 版模板
+- **THEN** 系统不得添加 `docs/9.2_阶段资料清单与责任角色表_20260610.md` 之外的资料项
 
 #### Scenario: 无法可靠解析资料文档
 
-- **WHEN** 实现时无法可靠解析 `docs/9.10_v20260624阶段资料模板规划_20260624.md`
+- **WHEN** 实现时无法可靠解析 `docs/9.2_阶段资料清单与责任角色表_20260610.md`
 - **THEN** 必须暂停实现并说明原因，不得自行编造资料项
 
-#### Scenario: 模板版本为 v20260624
+#### Scenario: 模板版本为 v20260610
 
-- **WHEN** 系统保存当前 active 阶段资料项模板
-- **THEN** 模板版本必须使用 `v20260624`，不得继续使用旧版 `v1` 或历史模板版本作为程序运行模板版本
+- **WHEN** 系统保存 20260610 版阶段资料项模板
+- **THEN** 模板版本必须使用 `v20260610`，不得继续使用旧版 `v1` 作为程序运行模板版本
 
-#### Scenario: 历史模板不再作为 active 口径
+#### Scenario: 旧 48 项模板废弃
 
 - **WHEN** 系统初始化阶段资料项模板
-- **THEN** 系统必须废弃历史模板运行口径，不得继续以旧版模板作为当前 active 模板依据，也不得并行初始化多套普通阶段资料模板
+- **THEN** 系统必须废弃旧版 48 项资料模板，不得继续以旧 48 项作为程序运行依据，也不得同时运行旧模板和 `v20260610` 模板
 
-#### Scenario: 当前资料项数量校验
+#### Scenario: 新版资料项数量校验
 
-- **WHEN** 系统初始化或校验当前 active 阶段资料项模板
-- **THEN** `EXPECTED_STAGE_DOCUMENT_ITEM_COUNT` 必须按当前 active 模板资料项实际数量设置；当前正式运行口径为 64 项
+- **WHEN** 系统初始化或校验 20260610 版阶段资料项模板
+- **THEN** `EXPECTED_STAGE_DOCUMENT_ITEM_COUNT` 必须按新版资料项实际数量设置；当前正式文档为 54 项
 
-#### Scenario: 当前模板目标目录字段
+#### Scenario: 20260610 版目标目录字段
 
-- **WHEN** 系统初始化当前 active 阶段资料模板
-- **THEN** 系统必须为每个模板项保存文件管理平台目标文件夹路径 `targetFolderPath`
+- **WHEN** 系统初始化 20260610 版模板
+- **THEN** 系统必须从正式资料清单的 `文件平台目标目录` 字段读取并保存 `targetFolderPath`
 
-#### Scenario: 当前模板目录 ID 为空
+#### Scenario: 20260610 版目录 ID 为空
 
-- **WHEN** 系统初始化当前 active 阶段资料模板
+- **WHEN** 系统初始化 20260610 版模板
 - **THEN** 系统必须保持 `targetFolderId` 为空
 
 ### Requirement: 项目级阶段资料清单初始化
 
-系统 MUST 为项目维护项目级阶段资料清单，并 MUST 根据当前 active 阶段资料模板初始化项目资料项。
+系统 MUST 为项目维护项目级阶段资料清单，并 MUST 根据 20260610 版阶段资料项模板初始化项目资料项。
 
 #### Scenario: 新项目初始化资料清单
 
 - **WHEN** 项目创建成功
-- **THEN** 系统必须按 `v20260624` 阶段资料项模板为该项目生成项目级阶段资料清单
+- **THEN** 系统必须按 `v20260610` 阶段资料项模板为该项目生成项目级阶段资料清单
 
 #### Scenario: 初始化资料项基础状态
 
@@ -79,11 +79,11 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 #### Scenario: 保存模板快照字段
 
 - **WHEN** 系统生成项目级资料项
-- **THEN** 项目级资料项必须保存当前 active 模板的资料项编号、资料项名称、是否必填、默认责任部门或责任角色、提交方式、`targetFolderPath` 和可空 `targetFolderId` 等模板快照字段
+- **THEN** 项目级资料项必须保存 20260610 版资料项编号、资料项名称、是否必填、默认责任部门或责任角色、提交方式、`targetFolderPath` 和可空 `targetFolderId` 等模板快照字段
 
-#### Scenario: 当前项目资料项目录 ID 为空
+#### Scenario: 20260610 版项目资料项目录 ID 为空
 
-- **WHEN** 系统生成当前 active 模板的项目级资料项
+- **WHEN** 系统生成 20260610 版项目级资料项
 - **THEN** 项目级资料项必须保存 `targetFolderPath`，并保持 `targetFolderId` 为空
 
 #### Scenario: 预留后续能力字段
@@ -93,7 +93,7 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 #### Scenario: 不兼容旧模拟项目资料
 
-- **WHEN** 系统切换为 `v20260624` 阶段资料模板
+- **WHEN** 系统切换为 20260610 版阶段资料模板
 - **THEN** 系统不得要求兼容旧模拟项目的旧资料项，也不得为旧资料项提供新旧模板映射或共存初始化逻辑
 
 ### Requirement: 资料项基础状态
@@ -293,7 +293,7 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 ### Requirement: 阶段资料齐套摘要
 
-系统 MUST 为每个阶段分组返回适用必填资料齐套摘要，并 MUST 只基于当前项目级阶段资料项、当前手工状态和人工适用性判断计算。
+系统 MUST 为每个阶段分组返回适用必填资料齐套摘要，并 MUST 只基于 20260610 版项目级阶段资料项、当前手工状态和人工适用性判断计算。
 
 #### Scenario: 返回阶段齐套摘要字段
 
@@ -303,7 +303,7 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 #### Scenario: 只统计适用且必填资料项
 
 - **WHEN** 系统计算阶段齐套摘要
-- **THEN** 系统必须只统计 `isRequired = true` 且 `isApplicable = true` 的当前项目级资料项
+- **THEN** 系统必须只统计 `isRequired = true` 且 `isApplicable = true` 的 20260610 版资料项
 
 #### Scenario: 已确认适用必填资料计为完成
 
@@ -327,7 +327,7 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 #### Scenario: 非必需资料继续展示但不影响齐套率
 
-- **WHEN** 当前项目级资料项为非必需或建议资料
+- **WHEN** 20260610 版资料项为非必需或建议资料
 - **THEN** 系统必须继续在资料清单中展示该资料项，但不得将其计入 `requiredTotal`、`confirmedRequiredCount`、`incompleteRequiredCount` 或阶段推进门禁
 
 #### Scenario: 完成百分比计算规则
@@ -348,7 +348,7 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 #### Scenario: 阶段推进读取当前阶段摘要口径
 
 - **WHEN** 系统执行阶段推进齐套门禁
-- **THEN** 系统必须使用同一当前项目级资料项齐套摘要口径判断当前阶段是否可推进
+- **THEN** 系统必须使用同一 20260610 版资料项齐套摘要口径判断当前阶段是否可推进
 
 #### Scenario: 齐套摘要不代表文件归档
 
@@ -1014,32 +1014,32 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 - **WHEN** 实现阶段资料后端模块拆分
 - **THEN** 系统不得因本次结构治理新增文件管理平台联动、在线表单、表单草稿、表单归档文件、附件预览、版本管理、病毒扫描、消息提醒、超期提醒、项目成员权限、资料责任人权限、复杂权限或批量资料操作
 
-### Requirement: 阶段资料能力行为保持
-系统 MUST 在当前 active 资料项模板下保持资料状态、适用性、责任人、附件、我的工作台和项目总览的既有行为，模板版本切换不得改变这些能力的状态机和权限边界。
+### Requirement: 20260610 资料能力行为保持
+系统 MUST 在替换为 20260610 版资料项模板后保持资料状态、适用性、责任人、附件、我的资料任务和项目总览的既有行为，只改变资料项模板数据。
 
 #### Scenario: 资料状态机保持
-- **WHEN** 已登录用户对当前项目级资料项执行提交、确认或退回
+- **WHEN** 已登录用户对 20260610 版资料项执行提交、确认或退回
 - **THEN** 系统必须继续使用 `not_submitted`、`submitted`、`confirmed`、`returned` 状态机和既有错误口径
 
 #### Scenario: 适用性规则保持
-- **WHEN** 已登录用户对当前项目级资料项标记不适用或恢复适用
+- **WHEN** 已登录用户对 20260610 版资料项标记不适用或恢复适用
 - **THEN** 系统必须继续保持既有适用性规则、原因校验和状态不自动改变口径
 
 #### Scenario: 责任人分配规则保持
-- **WHEN** 已登录用户为当前项目级资料项分配或清空责任人
+- **WHEN** 已登录用户为 20260610 版资料项分配或清空责任人
 - **THEN** 系统必须继续保持既有候选用户、责任人安全字段、责任人追溯和责任人不代表权限的口径
 
 #### Scenario: 附件能力保持
-- **WHEN** 已登录用户对当前项目级资料项上传、查询、下载或删除附件
+- **WHEN** 已登录用户对 20260610 版资料项上传、查询、下载或删除附件
 - **THEN** 系统必须继续保持既有附件接口路径、文件参数校验、软删除、业务日志和不改变资料业务状态的口径
 
-#### Scenario: 我的工作台使用当前资料项
+#### Scenario: 我的资料任务使用新版资料项
 - **WHEN** 当前登录用户查询我的资料任务
-- **THEN** 系统必须按当前项目级资料项返回任务，并保持现有状态筛选、项目筛选、排序和只读边界
+- **THEN** 系统必须按 20260610 版项目级资料项返回任务，并保持现有状态筛选、项目筛选、排序和只读边界
 
-#### Scenario: 项目总览使用当前资料项
+#### Scenario: 项目总览使用新版资料项
 - **WHEN** 当前登录用户查询项目总览看板
-- **THEN** 系统必须按当前阶段资料项计算齐套摘要和未完成适用必填资料，并保持现有筛选、排序和只读边界
+- **THEN** 系统必须按 20260610 版当前阶段资料项计算齐套摘要和未完成适用必填资料，并保持现有筛选、排序和只读边界
 
 ### Requirement: 资料责任人与组织角色边界
 系统 MUST 继续使用资料项级 `responsibleUserId` 表达资料责任人，并 MUST 明确资料责任人负责提交或整理资料但不代表审批权。
@@ -1145,9 +1145,9 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 ### Requirement: 项目模式不改变阶段资料规则
 系统 MUST 保持自研模式和供应链/外包模式使用同一阶段资料清单、齐套摘要和附件规则。
 
-#### Scenario: 自研外包共用 v20260624 64 项资料
+#### Scenario: 自研外包共用 54 项资料
 - **WHEN** 系统初始化自研或外包项目的阶段资料
-- **THEN** 两种项目模式都必须使用 `v20260624` 的 64 项阶段资料
+- **THEN** 两种项目模式都必须使用 20260610 版 54 项阶段资料
 
 #### Scenario: 项目模式不改变资料责任人规则
 - **WHEN** 项目为供应链/外包模式
@@ -1249,559 +1249,4 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 #### Scenario: 审批流不新增文件平台联动
 - **WHEN** 系统根据阶段资料状态提交或处理审批
 - **THEN** 系统不得调用文件管理平台、回填 `targetFolderId`、归档附件或判断文件平台权限
-
-### Requirement: 资料级审核语义
-
-系统 MUST 将资料项提交、确认和退回表达为资料级审核，并 MUST 与阶段关口审批保持概念边界。
-
-#### Scenario: 资料级审核对象是单个资料项
-
-- **WHEN** 用户提交、确认或退回资料项
-- **THEN** 系统和页面必须将该动作表达为单个资料项的资料级审核，不得表达为整个阶段已经审批
-
-#### Scenario: 资料项状态流转
-
-- **WHEN** 系统展示或处理资料项状态
-- **THEN** `not_submitted` 必须表示“待提交”，`submitted` 必须表示“已提交”，`confirmed` 必须表示“已确认”或“审核通过”，`returned` 必须表示“已退回”
-
-#### Scenario: 责任人提交资料项
-
-- **WHEN** 资料责任人完成资料准备并提交单个资料项
-- **THEN** 系统必须将资料项从可提交状态流转到 `submitted`，并等待有权审核人确认或退回
-
-#### Scenario: 审核人确认资料项
-
-- **WHEN** 有权审核人确认单个资料项
-- **THEN** 系统必须将该资料项状态流转为 `confirmed`，该动作只表示该资料项审核通过
-
-#### Scenario: 审核人退回资料项
-
-- **WHEN** 有权审核人退回单个资料项
-- **THEN** 系统必须将该资料项状态流转为 `returned` 并记录退回原因，该动作不得改变阶段关口审批状态
-
-#### Scenario: 资料项确认退回不是阶段审批
-
-- **WHEN** 用户确认或退回某个资料项
-- **THEN** 系统不得把该动作解释为阶段级审批通过、阶段级审批退回或阶段推进
-
-### Requirement: 附件准备与资料提交边界
-
-阶段资料附件 MUST 只表示资料项文件准备，不得等同于资料提交审核、资料审核通过或阶段关口审批通过。
-
-#### Scenario: 上传附件不等于提交审核
-
-- **WHEN** 责任人或有权用户上传阶段资料附件
-- **THEN** 系统不得自动将资料项状态改为 `submitted`，不得自动提交资料审核，也不得自动提交阶段关口审批
-
-#### Scenario: 删除附件不等于退回资料
-
-- **WHEN** 用户删除阶段资料附件
-- **THEN** 系统不得自动将资料项状态改为 `returned`、`not_submitted` 或其他状态
-
-#### Scenario: 附件存在不等于资料合格
-
-- **WHEN** 阶段资料项存在一个或多个附件
-- **THEN** 系统仍必须以资料项状态是否为 `confirmed` 判断该资料项是否计入齐套完成，不得仅凭附件存在判断资料合格
-
-#### Scenario: 页面避免误解附件动作
-
-- **WHEN** 页面展示附件上传、附件列表、下载或删除操作
-- **THEN** 页面文案必须避免让用户误解为上传文件后已提交审核、已审核通过或已满足阶段关口审批
-
-### Requirement: 资料级审核与阶段关口审批关系
-
-系统 MUST 使用资料级审核结果作为阶段齐套摘要和阶段关口审批提交条件，但阶段关口审批不得替代资料级审核。
-
-#### Scenario: 齐套摘要只统计已确认适用必填资料
-
-- **WHEN** 系统计算阶段资料齐套摘要
-- **THEN** 系统必须只将状态为 `confirmed` 的适用必填资料计入已完成，不得将 `submitted`、`not_submitted`、`returned` 或仅有附件的资料计为完成
-
-#### Scenario: 未确认资料阻止阶段关口审批提交
-
-- **WHEN** 当前阶段存在适用必填资料状态不是 `confirmed`
-- **THEN** 项目经理不得提交该阶段关口审批，系统必须按既有阶段审批规格返回 `PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE`
-
-#### Scenario: 资料全部确认不自动提交阶段关口审批
-
-- **WHEN** 当前阶段适用必填资料全部状态为 `confirmed`
-- **THEN** 系统不得自动提交阶段关口审批，仍必须由项目经理主动提交
-
-#### Scenario: 阶段关口审批不替代资料级审核
-
-- **WHEN** 阶段关口审批被提交、退回或通过
-- **THEN** 系统不得因此自动确认、退回或提交单个资料项
-
-#### Scenario: 页面文案避免首次审核误解
-
-- **WHEN** 页面展示阶段齐套摘要或阶段关口审批入口
-- **THEN** 页面必须避免让用户误解为“所有文件全部齐套后才第一次审核”，并应表达为“单个资料先审核，通过后进入阶段关口审批”
-
-### Requirement: 阶段资料清单权限过滤
-
-系统 MUST 支持按当前用户权限过滤阶段资料清单，并 MUST 区分完整项目资料视图和受限任务资料视图。
-
-#### Scenario: 普通员工只看自己负责资料
-
-- **WHEN** 普通员工仅因负责资料项而查询某项目阶段资料清单
-- **THEN** 系统必须只返回该员工负责的资料项，不得返回其他人负责的资料项
-
-#### Scenario: 资料审核人可看待审核资料
-
-- **WHEN** 当前用户有权审核某资料项且该资料项处于待审核状态
-- **THEN** 系统必须允许其查看该资料项及必要的审核上下文
-
-#### Scenario: 资料级审核人按责任人部门确定
-
-- **WHEN** 资料项 `status = submitted` 且已分配责任人
-- **THEN** 第一版资料审核人必须是该责任人所属部门的中心负责人
-
-#### Scenario: 项目经理不是资料级审核人
-
-- **WHEN** 当前用户仅因 `projectManagerUserId = 当前用户 id` 访问资料项
-- **THEN** 系统不得授予其资料审核权限或 `document_review` 待办
-
-#### Scenario: 总经理不默认接收全部资料审核
-
-- **WHEN** 资料项 `status = submitted`
-- **THEN** 系统不得默认为总经理生成所有资料项的 `document_review` 待办；总经理主要处理阶段关口审批
-
-#### Scenario: 未分配责任人资料不生成中心审核待办
-
-- **WHEN** 资料项没有分配责任人
-- **THEN** 系统不得根据项目参与部门或中文责任角色模糊生成中心负责人资料审核待办
-
-#### Scenario: 项目经理可看自己项目完整资料
-
-- **WHEN** 当前用户是项目经理并查询自己负责项目的资料清单
-- **THEN** 系统必须允许返回完整阶段资料清单
-
-#### Scenario: 总经理可看完整资料
-
-- **WHEN** 当前用户 `organizationRole = general_manager`
-- **THEN** 系统必须允许返回完整阶段资料清单
-
-#### Scenario: 中心负责人资料范围收敛
-
-- **WHEN** 当前用户是中心负责人并查询项目资料清单
-- **THEN** 第一版应只返回本中心相关资料，除非后续设计明确允许中心负责人查看项目全量资料
-
-#### Scenario: 本中心相关资料按责任人部门判断
-
-- **WHEN** 系统判断某资料项是否属于中心负责人本中心相关资料
-- **THEN** 第一版必须优先使用 `responsibleUser.department` 与中心负责人 `department` 是否一致判断
-
-#### Scenario: 项目参与部门不放开全量资料
-
-- **WHEN** 项目 `participatingDepartments` 包含某中心
-- **THEN** 系统可以将其用于项目基础可见性，但不得因此允许该中心负责人查看项目全量资料或全量附件
-
-#### Scenario: 未分配责任人资料默认不展示附件
-
-- **WHEN** 资料项没有分配责任人且当前用户不是项目经理或总经理
-- **THEN** 系统不得默认返回该资料项附件列表或附件操作权限
-
-#### Scenario: 不使用中文字符串模糊判断审核中心
-
-- **WHEN** 系统判断资料审核中心或附件访问中心
-- **THEN** 系统不得依赖中文 `confirmRole`、默认责任角色或资料名称的模糊匹配；如需模板审核中心映射，必须另行设计结构化字段
-
-#### Scenario: 返回资料项权限字段
-
-- **WHEN** 系统返回阶段资料清单或工作台资料项
-- **THEN** 响应必须包含当前用户对资料项的权限字段，包括 `canViewAttachments`、`canUploadAttachment`、`canDownloadAttachment`、`canDeleteAttachment`、`canSubmitDocument` 和 `canReviewDocument`，或提供等价结构化权限结果
-
-#### Scenario: 受限资料清单仍保留阶段上下文
-
-- **WHEN** 系统返回受限任务资料视图
-- **THEN** 响应必须保留项目、阶段和资料项必要字段，使前端能展示任务所属项目和阶段
-
-### Requirement: 资料审核待办来源
-
-系统 MUST 将待当前用户审核的资料项作为工作台资料审核待办来源。
-
-#### Scenario: 待审核资料状态
-
-- **WHEN** 资料项适用、未删除、`status = submitted`，且当前用户符合资料审核人规则
-- **THEN** 系统必须将该资料项纳入 `document_review` 待办
-
-#### Scenario: 资料责任任务来源
-
-- **WHEN** 资料项适用、未删除、`responsibleUserId = 当前用户 id`，且状态为 `not_submitted` 或 `returned`
-- **THEN** 系统必须将该资料项纳入 `document_responsibility` 待办
-
-#### Scenario: 已提交资料不是责任人处理待办
-
-- **WHEN** 资料项 `responsibleUserId = 当前用户 id` 且状态为 `submitted`
-- **THEN** 系统不得将其计入责任人待办处理数，只能作为已提交待审核状态信息展示
-
-#### Scenario: 非待审核状态不进入审核待办
-
-- **WHEN** 资料项状态为 `not_submitted`、`returned` 或 `confirmed`
-- **THEN** 系统不得仅因用户有审核权限就将其纳入 `document_review` 待办
-
-#### Scenario: 资料审核待办只读查询
-
-- **WHEN** 系统查询资料审核待办
-- **THEN** 系统不得改变资料状态、审批状态、附件、责任人或业务日志
-
-### Requirement: 阶段资料附件资料项级权限
-
-阶段资料附件接口 MUST 在项目存在和资料项存在校验后执行资料项级权限判断，不能只用项目可见性作为附件访问依据。
-
-#### Scenario: 附件访问不能只按项目可见性
-
-- **WHEN** 用户对某资料项调用附件列表、下载、上传或删除接口
-- **THEN** 系统必须校验当前用户是否有权访问该资料项附件，不得仅因用户可见项目就允许操作
-
-#### Scenario: 普通员工访问自己负责资料附件
-
-- **WHEN** 普通员工是资料项 `responsibleUserId`
-- **THEN** 系统可以允许其上传、查看和下载该资料项附件
-
-#### Scenario: 普通员工不能访问别人资料附件
-
-- **WHEN** 普通员工不是资料项责任人且不具备其他资料访问身份
-- **THEN** 系统必须拒绝其查看、下载、上传或删除该资料项附件，并返回 `FORBIDDEN_OPERATION`
-
-#### Scenario: 项目经理查看自己项目附件
-
-- **WHEN** 当前用户是该项目项目经理
-- **THEN** 系统可以允许其查看和下载该项目资料附件
-
-#### Scenario: 附件上传只允许资料责任人
-
-- **WHEN** 用户上传资料项附件
-- **THEN** 第一版系统必须要求该资料项 `responsibleUserId` 等于当前用户 ID；项目经理、中心负责人、总经理默认不得代替责任人上传附件
-
-#### Scenario: 上传权限不得复用宽泛提交权限
-
-- **WHEN** 系统计算 `canUploadAttachment`
-- **THEN** 系统不得直接复用现有宽泛 `canSubmitStageDocument` 或等价阶段资料提交权限；上传权限必须按资料项责任人本人单独判断
-
-#### Scenario: 审核和统筹权限不产生代上传权限
-
-- **GIVEN** 当前用户是项目经理、中心负责人或总经理
-- **AND** 当前用户不是该资料项责任人
-- **WHEN** 用户上传该资料项附件
-- **THEN** 系统必须拒绝请求并返回 `FORBIDDEN_OPERATION`
-
-#### Scenario: 项目经理删除附件边界
-
-- **WHEN** 项目经理删除自己负责项目的附件
-- **THEN** 第一版只允许其删除自己上传、当前仍有资料项附件访问权且资料尚未审核通过的附件
-
-#### Scenario: 中心负责人访问本中心资料附件
-
-- **WHEN** 当前用户是中心负责人且资料项属于本中心相关范围
-- **THEN** 系统可以允许其查看、下载和审核该资料项附件
-
-#### Scenario: 中心负责人默认不删除他人附件
-
-- **WHEN** 中心负责人审核本中心资料附件
-- **THEN** 系统默认不得允许其删除他人上传的附件，应通过退回资料让责任人处理附件问题
-
-#### Scenario: 附件删除要求当前访问权
-
-- **WHEN** 用户删除某资料项附件
-- **THEN** 系统必须同时校验当前用户不是系统管理员或总经理助理、当前用户仍有该资料项附件访问权、当前用户是该附件上传人、且资料状态不是 `confirmed`
-
-#### Scenario: 旧责任人不能删除已失权附件
-
-- **WHEN** 用户曾是资料责任人并上传附件，但该资料项责任人后来变更为其他用户
-- **THEN** 原责任人不得仅凭 `uploadedByUserId = 当前用户 id` 删除该附件，系统必须返回 `FORBIDDEN_OPERATION`
-
-#### Scenario: 中心负责人跨中心附件访问失败
-
-- **WHEN** 中心负责人访问非本中心相关资料项附件
-- **THEN** 系统必须返回 `FORBIDDEN_OPERATION`
-
-#### Scenario: 总经理访问全部附件
-
-- **WHEN** 当前用户 `organizationRole = general_manager`
-- **THEN** 系统可以允许其查看和下载全部资料附件
-
-#### Scenario: 总经理删除附件记录日志
-
-- **WHEN** 系统允许总经理删除任意资料附件
-- **THEN** 删除成功必须写入业务日志，且失败不得改变附件记录
-
-#### Scenario: 系统管理员无默认附件访问
-
-- **WHEN** 当前用户 `organizationRole = system_admin`
-- **THEN** 系统不得仅因系统管理员身份允许其访问业务资料附件
-
-#### Scenario: 总经理助理无默认附件访问
-
-- **WHEN** 当前用户 `organizationRole = general_manager_assistant`
-- **THEN** 系统不得允许其下载、上传或删除业务资料附件
-
-#### Scenario: 无权附件上传无副作用
-
-- **WHEN** 用户无权上传某资料项附件
-- **THEN** 系统必须在解析或保存文件前拒绝请求，不得留下临时文件、不得保存上传文件、不得新增附件记录、不得写成功业务日志
-
-#### Scenario: 无权附件删除无副作用
-
-- **WHEN** 用户无权删除某资料项附件
-- **THEN** 系统不得软删除附件、不得改变附件记录、不得写成功业务日志
-
-#### Scenario: 上传附件仍不等于提交审核
-
-- **WHEN** 用户成功上传附件
-- **THEN** 系统仍不得自动提交资料审核、不得自动审核通过、不得自动提交阶段关口审批
-
-### Requirement: 阶段资料结构化归属中心
-
-系统 MUST 为当前 active 阶段资料模板和项目级阶段资料快照维护结构化归属中心字段，当前 active 模板 MUST 为 `v20260624`。
-
-#### Scenario: 模板包含结构化归属中心
-
-- **WHEN** 系统初始化或读取当前 active 阶段资料模板
-- **THEN** 每个模板项 MUST 包含可空 `ownerDepartment` 和可空 `reviewDepartment`
-
-#### Scenario: 归属中心使用现有部门枚举
-
-- **WHEN** 模板或项目级资料项保存 `ownerDepartment` 或 `reviewDepartment`
-- **THEN** 字段值 MUST 为空或属于现有 `BUSINESS_DEPARTMENT` 常量
-
-#### Scenario: 新项目保存归属中心快照
-
-- **WHEN** 项目创建成功并初始化 `v20260624` 的 64 项阶段资料
-- **THEN** 系统 MUST 将模板中的 `ownerDepartment` 和 `reviewDepartment` 保存到项目级资料快照
-
-#### Scenario: 当前 active 模板使用 v20260624
-
-- **WHEN** 本 change 实现后创建新项目
-- **THEN** 系统 MUST 初始化 `v20260624` 的 64 项普通阶段资料，不得按 66 行规划表初始化普通阶段资料
-
-#### Scenario: 旧数据兼容
-
-- **WHEN** 旧项目资料缺少或未保存 `ownerDepartment`、`reviewDepartment`
-- **THEN** 系统 MUST 不因字段为空导致资料清单、权限判断、附件查询或工作台查询报错
-
-### Requirement: 中心负责人按归属中心访问资料
-
-系统 MUST 使用结构化归属中心判断中心负责人对阶段资料的可见、分配、审核和附件访问范围。
-
-#### Scenario: 中心负责人查看本中心未分配资料
-
-- **WHEN** 当前用户是中心负责人且资料项 `ownerDepartment` 或 `reviewDepartment` 等于本人部门
-- **THEN** 系统 MUST 允许其查看该资料项，即使该资料项尚未分配责任人
-
-#### Scenario: 中心负责人分配本中心未分配资料
-
-- **WHEN** 当前用户是中心负责人且资料项 `ownerDepartment` 等于本人部门
-- **THEN** 系统 MUST 允许其为该资料项分配或清空本中心责任人
-
-#### Scenario: 中心负责人不能分配其他中心资料
-
-- **WHEN** 当前用户是中心负责人但资料项 `ownerDepartment` 不等于本人部门
-- **THEN** 系统 MUST 拒绝其分配该资料项责任人，除非其同时具备项目经理或总经理等其他允许身份
-
-#### Scenario: 中心负责人按审核中心审核资料
-
-- **WHEN** 当前用户是中心负责人、资料项 `reviewDepartment` 等于本人部门、资料项适用且状态为 `submitted`
-- **THEN** 系统 MUST 允许其确认或退回该资料项
-
-#### Scenario: 中心负责人按归属中心管理资料适用性
-
-- **WHEN** 当前用户是中心负责人且资料项 `ownerDepartment` 或 `reviewDepartment` 等于本人部门
-- **THEN** 系统 MUST 允许其按既有适用性状态机标记该资料项不适用或恢复适用
-
-#### Scenario: 适用性管理旧数据 fallback
-
-- **WHEN** 资料项 `ownerDepartment` 和 `reviewDepartment` 都为空
-- **THEN** 系统 MAY 继续使用资料责任人部门判断中心负责人是否可管理该资料项适用性
-
-#### Scenario: 适用性管理不扩大无关用户权限
-
-- **WHEN** 当前用户是普通员工、系统管理员、总经理助理或跨中心中心负责人
-- **THEN** 系统 MUST 拒绝其仅因归属中心字段存在而标记资料不适用或恢复适用
-
-#### Scenario: 审核待办按审核中心生成
-
-- **WHEN** 资料项适用、状态为 `submitted` 且 `reviewDepartment` 等于中心负责人部门
-- **THEN** 系统 MUST 将该资料项纳入该中心负责人的 `document_review` 工作台待办
-
-#### Scenario: 不生成未分配资料待办
-
-- **WHEN** 资料项尚未分配责任人且状态不是 `submitted`
-- **THEN** 系统 MUST 不仅因 `ownerDepartment` 匹配中心负责人部门而生成工作台待办
-
-#### Scenario: 普通员工范围不扩大
-
-- **WHEN** 当前用户是普通员工
-- **THEN** 系统 MUST 仍只允许其查看、处理和访问本人负责的资料项，不得仅因 `ownerDepartment` 或 `reviewDepartment` 扩大可见范围
-
-#### Scenario: 管理辅助角色权限不扩大
-
-- **WHEN** 当前用户是系统管理员或总经理助理
-- **THEN** 系统 MUST 不因资料归属中心字段授予其业务附件上传、下载、删除、资料审核或责任人分配权限
-
-#### Scenario: 附件访问使用资料可见性但上传不放宽
-
-- **WHEN** 中心负责人因归属中心匹配获得资料项附件查看权限
-- **THEN** 系统 MAY 允许其查看和下载附件，但 MUST 仍只允许资料责任人本人上传附件
-
-### Requirement: 归属中心字段返回
-
-阶段资料清单和工作台资料项响应 MUST 返回结构化归属中心字段。
-
-#### Scenario: 阶段资料清单返回归属中心
-
-- **WHEN** 用户查询项目阶段资料清单
-- **THEN** 每个资料项 MUST 返回 `ownerDepartment` 和 `reviewDepartment`
-
-#### Scenario: 工作台资料项返回归属中心
-
-- **WHEN** 用户查询我的工作台且返回资料类待办
-- **THEN** 每个资料项待办 MUST 返回 `ownerDepartment` 和 `reviewDepartment`，或在权限计算上下文中包含等价字段
-
-#### Scenario: 权限字段继续返回
-
-- **WHEN** 系统返回阶段资料清单或工作台资料项
-- **THEN** 响应 MUST 继续包含 `canViewAttachments`、`canUploadAttachment`、`canDownloadAttachment`、`canDeleteAttachment`、`canSubmitDocument`、`canReviewDocument`、`canManageResponsibility` 或等价权限字段
-
-### Requirement: v20260624 阶段资料模板
-
-系统 MUST 支持以 20260624 版项目管理流程图为来源的 `v20260624` 阶段资料模板，并 MUST 将普通阶段资料模板口径限定为流程图直接产出文件。
-
-#### Scenario: 当前 active 模板版本
-
-- **WHEN** 系统加载当前阶段资料模板
-- **THEN** 当前 active 模板版本 MUST 为 `v20260624`
-
-#### Scenario: v20260624 模板包含 64 个产出文件
-
-- **WHEN** 系统加载 `v20260624` 普通阶段资料模板
-- **THEN** 模板 MUST 包含 64 个阶段产出文件
-
-#### Scenario: v20260624 阶段分布
-
-- **WHEN** 系统加载 `v20260624` 普通阶段资料模板
-- **THEN** 各阶段资料数量 MUST 分别为立项 3、方案设计 15、合同签订 4、详细设计 17、生产制作 17、预验收 2、终验收 4、结题 2
-- **AND** `4.1` MUST 为 `项目启动书`
-- **AND** `5.1` MUST 为 `采购申请表`
-- **AND** `7.1` MUST 为 `发货单`
-- **AND** `7.2` MUST 为 `安装调试记录（现场）`
-- **AND** `8.1` MUST 为 `发票（尾款）`
-- **AND** `8.2` MUST 为 `项目结题报告`
-
-#### Scenario: 排除非普通资料节点
-
-- **WHEN** 系统加载 `v20260624` 普通阶段资料模板
-- **THEN** 模板 MUST NOT 将 `7.P1 随机资料移交` 和 `8.P1 资料服务器核查` 计入普通阶段资料模板，除非后续业务确认它们形成独立文件
-
-#### Scenario: 模板字段规划
-
-- **WHEN** 系统定义 `v20260624` 阶段资料模板项
-- **THEN** 每个资料项 MUST 包含稳定 `documentCode`、阶段、文件名、模板默认必填、适用条件、`ownerDepartment`、`reviewDepartment`、提交方式和备注
-- **AND** `ownerDepartment` 和 `reviewDepartment` MUST 为空或属于现有 `BUSINESS_DEPARTMENT`
-- **AND** 总经理、客户、项目经理、供应商或相关负责人等非中心审核/确认对象 MUST 只写入备注字段，不得写入 `ownerDepartment` 或 `reviewDepartment`
-- **AND** 模板默认必填 MUST 使用布尔口径
-- **AND** 条件性资料 MUST 通过适用条件说明，不得将自由文本必填值写入模板默认必填字段
-
-#### Scenario: Markdown 规划表备用解析
-
-- **WHEN** 系统从 `docs/9.10_v20260624阶段资料模板规划_20260624.md` 解析阶段资料模板
-- **THEN** 系统 MUST 支持该文档当前 10 列规划表
-- **AND** 解析结果 MUST 包含 64 个普通资料项
-- **AND** 解析结果阶段分布 MUST 为 3/15/4/17/17/2/4/2
-- **AND** 解析结果 MUST NOT 包含 `7.P1 随机资料移交` 或 `8.P1 资料服务器核查`
-
-### Requirement: 阶段推进沿用资料齐套口径
-
-系统使用 `v20260624` 阶段资料模板时，阶段推进 MUST 继续沿用现有资料齐套和阶段审批口径，并 MUST NOT 因本 change 新增复杂审批流。
-
-#### Scenario: 适用必填资料全部审核通过才允许推进
-
-- **WHEN** 系统判断项目是否可从当前阶段推进
-- **THEN** 当前阶段适用且必填资料 MUST 全部审核通过
-
-#### Scenario: 阶段资料汇总展示全部产出口径
-
-- **WHEN** 用户查看项目详情阶段资料清单
-- **THEN** 阶段汇总 MUST 展示本阶段资料总数、适用资料总数、适用必填总数和非必填/条件性资料口径
-- **AND** 非必填/条件性资料 MUST 在阶段资料详情中显示状态和适用性
-- **AND** 非必填/条件性资料 MUST NOT 计入适用必填齐套门禁
-
-#### Scenario: 不改变阶段推进状态机
-
-- **WHEN** 系统使用 `v20260624` 阶段资料模板
-- **THEN** 系统 MUST NOT 因本规划改变现有阶段推进状态机
-
-#### Scenario: 不新增复杂审批流
-
-- **WHEN** 系统使用 `v20260624` 阶段资料模板
-- **THEN** 系统 MUST NOT 因本规划新增合同审批流、付款流、采购审批流、设计变更自动触发流程或资料服务器核查流程
-
-### Requirement: 模拟数据重置策略
-
-实现 `v20260624` 模板时 MAY 基于当前模拟数据性质重置旧项目资料，并 MUST NOT 将旧模拟资料兼容作为本 change 要求。
-
-#### Scenario: 可重置模拟项目资料
-
-- **WHEN** 本 change 将运行模板切换到 `v20260624`
-- **THEN** 实现 MAY 清理当前模拟项目资料并重新初始化 `v20260624` 64 项模板
-- **AND** reset MUST 将项目状态重置为 `normal`
-- **AND** reset MUST 将每个项目第 1 阶段重置为 `current` 且审批状态为 `not_submitted`
-- **AND** reset MUST 将每个项目第 2-8 阶段重置为 `not_started` 且审批状态为 `not_submitted`
-- **AND** reset MUST 清理旧阶段审批历史、阶段推进/审批/资料业务日志、阶段资料附件记录、附件物理文件、项目阶段资料和旧模板
-- **AND** reset MUST 在数据库事务提交成功后再删除附件物理文件
-- **AND** reset MUST 拒绝清理明显过宽或非阶段资料附件目录
-
-#### Scenario: 不要求兼容旧模拟数据
-
-- **WHEN** 系统切换到 `v20260624` 模板
-- **THEN** 本规划 MUST NOT 要求兼容旧模拟数据
-
-#### Scenario: 不要求保留历史项目资料
-
-- **WHEN** 系统切换到 `v20260624` 模板并重置模拟数据
-- **THEN** 本规划 MUST NOT 要求保留历史项目资料
-
-### Requirement: 特殊资料项简单处理口径
-
-系统 MUST 将 `v20260624` 中的合同、采购、发票和设计变更相关产出先按普通或条件性阶段资料项处理，不得在第一版为其新增独立流程状态机。
-
-#### Scenario: 合同审核记录表作为资料项
-- **WHEN** 系统处理合同审核记录表
-- **THEN** 系统必须按阶段资料项处理其适用性、责任人、附件、提交、审核和齐套状态，不得新增合同审批流程状态机
-
-#### Scenario: 采购申请和采购合同审核作为资料项
-- **WHEN** 系统处理采购申请表或采购合同审核记录表
-- **THEN** 系统必须按阶段资料项处理其适用性、责任人、附件、提交、审核和齐套状态，不得新增采购审批流程状态机
-
-#### Scenario: 发票作为条件性资料项
-- **WHEN** 系统处理预付款、发货款或尾款发票资料项
-- **THEN** 系统必须按普通或条件性资料项处理，不得新增付款状态、发票状态或资金审批流程
-
-#### Scenario: 设计变更产出作为条件性资料项
-- **WHEN** 系统处理设计变更 3D 模型、产品平面图、零部件清单或技术通知单
-- **THEN** 系统必须按条件性资料项处理，不得新增设计变更流程引擎或自动触发机制
-
-#### Scenario: 随机资料移交和资料服务器核查不进入普通模板
-- **WHEN** 业务尚未确认 `7.P1 随机资料移交` 或 `8.P1 资料服务器核查` 形成独立文件
-- **THEN** 系统不得将其计入普通阶段资料模板
-
-### Requirement: 阶段资料收集审核归档闭环
-
-系统 MUST 将阶段资料闭环表达为资料收集、资料审核、文件归档和阶段推进的顺序协作关系。
-
-#### Scenario: 责任人提交资料审核
-- **WHEN** 资料责任人完成附件上传或资料整理
-- **THEN** 系统必须允许其按资料项提交审核
-
-#### Scenario: 审核通过后进入齐套
-- **WHEN** 资料项适用、必填且审核状态为 `confirmed`
-- **THEN** 系统必须将该资料项计入阶段适用必填齐套
-
-#### Scenario: 归档不改变审核状态机
-- **WHEN** 后续文件管理平台完成资料附件归档
-- **THEN** 系统不得仅因归档成功自动改变资料审核状态、阶段审批状态或阶段推进状态
-
-#### Scenario: 阶段推进只看当前阶段门禁
-- **WHEN** 系统判断阶段推进
-- **THEN** 系统必须只基于当前阶段适用必填资料审核通过情况、阶段关口审批状态和既有推进权限判断，不得因未建复杂业务流而阻止推进
 

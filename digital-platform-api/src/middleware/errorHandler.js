@@ -270,6 +270,7 @@ export function errorHandler(error, req, res, next) {
     return;
   }
 
+  console.error('[INTERNAL_ERROR]', error);
   res.status(500).json({
     error: {
       code: 'INTERNAL_SERVER_ERROR',

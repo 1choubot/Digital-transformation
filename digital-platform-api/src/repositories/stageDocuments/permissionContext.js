@@ -13,23 +13,15 @@ export async function selectProjectPermissionContext(connection, projectId, user
         EXISTS (
           SELECT 1
           FROM project_stage_documents d
-          LEFT JOIN users u
+          INNER JOIN users u
             ON u.id = d.responsible_user_id
           WHERE d.project_id = p.id
-            AND (
-              d.owner_department = ?
-              OR d.review_department = ?
-              OR (
-                d.owner_department IS NULL
-                AND d.review_department IS NULL
-                AND u.department = ?
-              )
-            )
+            AND u.department = ?
         ) AS has_department_responsible
       FROM projects p
       WHERE p.id = ?
       LIMIT 1`,
-      [user.department, user.department, user.department, projectId]
+      [user.department, projectId]
     );
 
     return rows[0] || null;

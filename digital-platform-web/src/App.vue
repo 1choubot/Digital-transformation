@@ -21,9 +21,8 @@
   <!-- 登录后的高保真主控制台外壳 -->
   <div v-else class="app-shell">
     
-    <!-- 1. 左侧高级深色侧边栏导航 -->
+    <!-- 1. 左侧高级侧边栏导航 -->
     <aside class="app-sidebar" :class="{ 'app-sidebar--open': isSidebarOpen }">
-      <!-- 平台通用高保真 Brand Logo -->
       <div class="brand-logo-area">
         <svg class="logo-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -34,168 +33,186 @@
         </div>
       </div>
 
-      <!-- 核心功能导航组 -->
       <nav class="sidebar-nav">
-        <p class="nav-section-title">项目主数据</p>
-        <button 
-          type="button" 
-          :class="{ active: route.name === 'projects' }" 
-          @click="handleNavigate('/projects')"
-        >
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="7" height="9" />
-            <rect x="14" y="3" width="7" height="5" />
-            <rect x="14" y="12" width="7" height="9" />
-            <rect x="3" y="16" width="7" height="5" />
-          </svg>
-          <span>项目列表</span>
-        </button>
-        <button 
-          v-if="canCurrentUserCreateProject"
-          type="button" 
-          :class="{ active: route.name === 'project-create' }" 
-          @click="handleNavigate('/projects/new')"
-        >
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 5v14M5 12h14" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <span>新建项目</span>
-        </button>
+        <div class="nav-group">
+          <div class="nav-group-header" :class="{ 'is-active': isGroupActive('projects') }" @click="toggleMenu('projects')">
+            <div class="header-left">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="9" />
+                <rect x="14" y="3" width="7" height="5" />
+                <rect x="14" y="12" width="7" height="9" />
+                <rect x="3" y="16" width="7" height="5" />
+              </svg>
+              <span>项目主数据</span>
+            </div>
+            <svg class="chevron-icon" :class="{ 'rotated': openMenus.projects }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </div>
+          <div class="nav-children-wrapper" :class="{ 'is-open': openMenus.projects }">
+            <div class="nav-children-inner">
+              <button 
+                type="button" 
+                class="nav-child-item"
+                :class="{ active: route.name === 'projects' }" 
+                @click="handleNavigate('/projects')"
+              >
+                <span>项目列表</span>
+              </button>
+              <button 
+                type="button" 
+                class="nav-child-item"
+                :class="{ active: route.name === 'project-create' }" 
+                @click="handleNavigate('/projects/new')"
+              >
+                <span>新建项目</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <div v-if="isDailyReportUser || isWeeklyReportUser || canAccessWeeklyReports || canAccessCenterDailyReport" class="nav-group">
+          <div class="nav-group-header" :class="{ 'is-active': isGroupActive('reports') }" @click="toggleMenu('reports')">
+            <div class="header-left">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+              <span>日报周报</span>
+            </div>
+            <svg class="chevron-icon" :class="{ 'rotated': openMenus.reports }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </div>
+          <div class="nav-children-wrapper" :class="{ 'is-open': openMenus.reports }">
+            <div class="nav-children-inner">
+              <button
+                type="button"
+                class="nav-child-item"
+                :class="{ active: route.name === 'daily-report' }"
+                @click="handleNavigate('/daily-report')"
+              >
+                <span>我的日报</span>
+              </button>
+              <button
+                type="button"
+                class="nav-child-item"
+                :class="{ active: route.name === 'daily-reports' }"
+                @click="handleNavigate('/daily-reports')"
+              >
+                <span>日报列表</span>
+              </button>
+              <button
+                type="button"
+                class="nav-child-item"
+                :class="{ active: route.name === 'weekly-report' }"
+                v-if="isWeeklyReportUser"
+                @click="handleNavigate('/weekly-report')"
+              >
+                <span>我的周报</span>
+              </button>
+              <button
+                type="button"
+                class="nav-child-item"
+                :class="{ active: ['weekly-reports', 'weekly-report-review'].includes(route.name) }"
+                v-if="canAccessWeeklyReports"
+                @click="handleNavigate('/weekly-reports')"
+              >
+                <span>周报列表</span>
+              </button>
+              <button
+                type="button"
+                class="nav-child-item"
+                :class="{ active: route.name === 'center-daily-report' }"
+                v-if="canAccessCenterDailyReport"
+                @click="handleNavigate('/center-daily-report')"
+              >
+                <span>中心日报</span>
+              </button>
+            </div>
+          </div>
+        </div>
 
-        <p class="nav-section-title">日报周报</p>
-        <button
-          v-if="isDailyReportUser"
-          type="button"
-          :class="{ active: route.name === 'daily-report' }"
-          @click="handleNavigate('/daily-report')"
-        >
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-            <line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/>
-          </svg>
-          <span>我的日报</span>
-        </button>
-        <button
-          v-if="isDailyReportUser"
-          type="button"
-          :class="{ active: route.name === 'daily-reports' }"
-          @click="handleNavigate('/daily-reports')"
-        >
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z"/>
-          </svg>
-          <span>日报列表</span>
-        </button>
-        <button
-          v-if="isWeeklyReportUser"
-          type="button"
-          :class="{ active: route.name === 'weekly-report' }"
-          @click="handleNavigate('/weekly-report')"
-        >
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-            <line x1="8" y1="7" x2="16" y2="7"/>
-            <line x1="8" y1="11" x2="16" y2="11"/>
-          </svg>
-          <span>我的周报</span>
-        </button>
-        <button
-          v-if="canAccessWeeklyReports"
-          type="button"
-          :class="{ active: ['weekly-reports', 'weekly-report-review'].includes(route.name) }"
-          @click="handleNavigate('/weekly-reports')"
-        >
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-            <line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/>
-          </svg>
-          <span>周报列表</span>
-        </button>
-        <button
-          v-if="canAccessCenterDailyReport"
-          type="button"
-          :class="{ active: route.name === 'center-daily-report' }"
-          @click="handleNavigate('/center-daily-report')"
-        >
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-            <line x1="16" y1="1" x2="16" y2="5"/>
-            <line x1="8" y1="1" x2="8" y2="5"/>
-            <line x1="3" y1="10" x2="21" y2="10"/>
-          </svg>
-          <span>中心日报</span>
-        </button>
+        <div class="nav-group">
+          <div class="nav-group-header" :class="{ 'is-active': isGroupActive('dashboards') }" @click="toggleMenu('dashboards')">
+            <div class="header-left">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21.21 15.89A10 10 0 1 1 8 2.83" stroke-linecap="round"/>
+                <path d="M22 12A10 10 0 0 0 12 2v10z" stroke-linecap="round"/>
+              </svg>
+              <span>过程追踪看板</span>
+            </div>
+            <svg class="chevron-icon" :class="{ 'rotated': openMenus.dashboards }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </div>
+          <div class="nav-children-wrapper" :class="{ 'is-open': openMenus.dashboards }">
+            <div class="nav-children-inner">
+              <button 
+                type="button" 
+                class="nav-child-item"
+                :class="{ active: route.name === 'project-overview-dashboard' }" 
+                @click="handleNavigate('/projects/overview-dashboard')"
+              >
+                <span>项目总览</span>
+              </button>
+              <button 
+                type="button" 
+                class="nav-child-item"
+                :class="{ active: route.name === 'my-stage-document-tasks' }" 
+                @click="handleNavigate('/my-stage-document-tasks')"
+              >
+                <span>我的资料任务</span>
+              </button>
+            </div>
+          </div>
+        </div>
 
-        <p class="nav-section-title">过程追踪看板</p>
-        <button 
-          type="button" 
-          :class="{ active: route.name === 'project-overview-dashboard' }" 
-          @click="handleNavigate('/projects/overview-dashboard')"
-        >
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21.21 15.89A10 10 0 1 1 8 2.83" stroke-linecap="round"/>
-            <path d="M22 12A10 10 0 0 0 12 2v10z" stroke-linecap="round"/>
-          </svg>
-          <span>项目总览</span>
-        </button>
-
-        <button 
-          type="button" 
-          :class="{ active: route.name === 'my-workbench' }" 
-          @click="handleNavigate('/my-workbench')"
-        >
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-            <line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/>
-            <polyline points="10 9 9 9 8 9"/>
-          </svg>
-          <span>我的工作台</span>
-        </button>
-
-        <p v-if="canAccessUserManagement" class="nav-section-title">系统管理员特权</p>
-        <button 
-          v-if="canAccessUserManagement"
-          type="button" 
-          :class="{ active: route.name === 'users' }" 
-          @click="handleNavigate('/users')"
-        >
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-            <circle cx="9" cy="7" r="4"/>
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-          </svg>
-          <span>用户管理</span>
-        </button>
+        <div v-if="canAccessUserManagement" class="nav-group">
+          <div class="nav-group-header" :class="{ 'is-active': isGroupActive('admin') }" @click="toggleMenu('admin')">
+            <div class="header-left">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+              <span>系统设置</span>
+            </div>
+            <svg class="chevron-icon" :class="{ 'rotated': openMenus.admin }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </div>
+          <div class="nav-children-wrapper" :class="{ 'is-open': openMenus.admin }">
+            <div class="nav-children-inner">
+              <button 
+                type="button" 
+                class="nav-child-item"
+                :class="{ active: route.name === 'users' }" 
+                @click="handleNavigate('/users')"
+              >
+                <span>用户管理</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </nav>
 
-      <!-- 侧边栏底部版权 -->
       <footer class="sidebar-footer">
         <span>© 2026 数字化管理平台</span>
       </footer>
     </aside>
 
-    <!-- 移动端侧边栏半透明遮罩背景 -->
     <div 
       v-if="isSidebarOpen" 
       class="sidebar-overlay" 
       @click="closeSidebar"
     ></div>
 
-    <!-- 右侧核心工作区容器 -->
     <div class="main-container">
       
-      <!-- 2. 顶部分层控制台顶栏 -->
       <header class="app-header">
         <div class="app-header__left">
-          <!-- 移动端汉堡菜单触发按钮 -->
           <button type="button" class="mobile-menu-toggle" @click="toggleSidebar" aria-label="切换侧边栏">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
               <line x1="3" y1="12" x2="21" y2="12" />
@@ -204,7 +221,6 @@
             </svg>
           </button>
           
-          <!-- 面包屑/板块当前定位指示 -->
           <div class="header-breadcrumbs">
             <span class="breadcrumb-item">数字化管理平台</span>
             <span class="breadcrumb-separator">/</span>
@@ -212,7 +228,6 @@
           </div>
         </div>
 
-        <!-- 个人账户操作区 -->
         <div class="current-user">
           <div class="user-avatar">
             {{ String(currentUser.name || 'U').charAt(0) }}
@@ -233,7 +248,6 @@
         </div>
       </header>
 
-      <!-- 3. 子页面渲染主视口 (独立温和滚动，并带有渐入位移过渡) -->
       <main class="app-main animate-content" ref="appMainRef">
         <ProjectListPage
           v-if="route.name === 'projects'"
@@ -260,13 +274,10 @@
           :auth-token="authToken"
           :current-user="currentUser"
           :project-id="route.params.projectId"
-          :task-mode="route.query?.taskMode || ''"
-          :focus-document-id="route.query?.documentId || ''"
-          :focus-stage-id="route.query?.stageId || ''"
           :navigate="navigate"
         />
         <MyStageDocumentTasksPage
-          v-else-if="route.name === 'my-workbench'"
+          v-else-if="route.name === 'my-stage-document-tasks'"
           :auth-token="authToken"
           :current-user="currentUser"
           :navigate="navigate"
@@ -306,7 +317,7 @@
           v-else-if="route.name === 'weekly-report-review'"
           :auth-token="authToken"
           :current-user="currentUser"
-          :report-id="route.params.reportId"
+          :report-id="route.params?.reportId || ''"
           :navigate="navigate"
           @auth-expired="handleAuthExpired"
         />
@@ -314,6 +325,7 @@
           v-else-if="route.name === 'center-daily-report'"
           :auth-token="authToken"
           :current-user="currentUser"
+          :navigate="navigate"
           @auth-expired="handleAuthExpired"
         />
         <UserManagementPage
@@ -331,7 +343,6 @@
       </main>
     </div>
 
-    <!-- 全局统一样式的 Toast 消息弹出层 -->
     <Transition name="toast">
       <div v-if="toastVisible" class="toast" :class="{ 'toast--error': toastType === 'error', 'toast--success': toastType === 'success' }">
         <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -358,7 +369,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch, nextTick, onUnmounted } from 'vue';
+import { computed, onMounted, ref, watch, nextTick, onUnmounted, reactive } from 'vue';
 import { getCurrentUser, logout as logoutRequest } from './api/auth.js';
 import {
   clearAuthSession,
@@ -367,9 +378,12 @@ import {
   storeAuthSession,
   updateStoredUser
 } from './auth/session.js';
-import CenterDailyReportPage from './pages/CenterDailyReportPage.vue';
 import DailyReportListPage from './pages/DailyReportListPage.vue';
 import DailyReportPage from './pages/DailyReportPage.vue';
+import CenterDailyReportPage from './pages/CenterDailyReportPage.vue';
+import WeeklyReportListPage from './pages/WeeklyReportListPage.vue';
+import WeeklyReportPage from './pages/WeeklyReportPage.vue';
+import WeeklyReportReviewPage from './pages/WeeklyReportReviewPage.vue';
 import LoginPage from './pages/LoginPage.vue';
 import MyStageDocumentTasksPage from './pages/MyStageDocumentTasksPage.vue';
 import ProjectCreatePage from './pages/ProjectCreatePage.vue';
@@ -377,16 +391,35 @@ import ProjectDetailPage from './pages/ProjectDetailPage.vue';
 import ProjectListPage from './pages/ProjectListPage.vue';
 import ProjectOverviewDashboardPage from './pages/ProjectOverviewDashboardPage.vue';
 import UserManagementPage from './pages/UserManagementPage.vue';
-import WeeklyReportListPage from './pages/WeeklyReportListPage.vue';
-import WeeklyReportPage from './pages/WeeklyReportPage.vue';
-import WeeklyReportReviewPage from './pages/WeeklyReportReviewPage.vue';
 import { useHashRouter } from './router.js';
 import {
   formatBusinessDepartment,
   formatOrganizationRole
 } from './utils/format.js';
 
-const { route, navigate } = useHashRouter();
+// ===== 核心修改：自定义导航，新标签页打开项目详情 =====
+const { route, navigate: baseNavigate } = useHashRouter();
+
+const navigate = (path, options = {}) => {
+  // 检测是否为项目详情页路径（如 /projects/123）
+  const isProjectDetail = /^\/projects\/\d+$/.test(path);
+  // 如果当前已经在项目详情页，且点击的是同一个项目，则不重复打开新标签
+  const currentProjectId = route.value.params?.projectId;
+  const targetProjectId = path.split('/').pop();
+  const isSameDetail = route.value.name === 'project-detail' && currentProjectId === targetProjectId;
+
+  // 若是项目详情且不是同一个，且没有显式禁用新标签，则在新标签页打开
+  if (isProjectDetail && !isSameDetail && options.newTab !== false) {
+    const base = window.location.origin + window.location.pathname;
+    const hash = path.startsWith('#') ? path : '#' + path;
+    window.open(base + hash, '_blank');
+  } else {
+    // 其他情况使用原始导航（同标签页跳转）
+    baseNavigate(path);
+  }
+};
+// ===== 修改结束 =====
+
 const authLoading = ref(true);
 const loggingOut = ref(false);
 const authToken = ref('');
@@ -395,6 +428,27 @@ const authMessage = ref('');
 const appMainRef = ref(null);
 
 const isSidebarOpen = ref(false);
+
+const openMenus = reactive({
+  projects: true,
+  reports: true,
+  dashboards: true,
+  admin: true
+});
+
+function toggleMenu(menuName) {
+  openMenus[menuName] = !openMenus[menuName];
+}
+
+function isGroupActive(groupName) {
+  const map = {
+    projects: ['projects', 'project-create', 'project-detail'],
+    reports: ['daily-report', 'daily-reports', 'weekly-report', 'weekly-reports', 'weekly-report-review', 'center-daily-report'],
+    dashboards: ['project-overview-dashboard', 'my-stage-document-tasks'],
+    admin: ['users']
+  };
+  return map[groupName]?.includes(route.value.name);
+}
 
 const toastVisible = ref(false);
 const toastMessage = ref('');
@@ -407,18 +461,18 @@ function handleNavigate(path) { navigate(path); closeSidebar(); }
 
 const currentRouteLabel = computed(() => {
   switch (route.value.name) {
-    case 'projects': return '项目台账列表';
-    case 'project-create': return '新建项目主数据';
-    case 'project-overview-dashboard': return '跨项目齐套总览';
+    case 'projects': return '项目列表';
+    case 'project-create': return '新建项目';
+    case 'project-overview-dashboard': return '项目总览';
     case 'project-detail': return '项目详情控制台';
-    case 'my-workbench': return '我的工作台';
+    case 'my-stage-document-tasks': return '我的资料任务';
+    case 'users': return '用户管理';
     case 'daily-report': return '我的日报';
     case 'daily-reports': return '日报列表';
     case 'weekly-report': return '我的周报';
     case 'weekly-reports': return '周报列表';
     case 'weekly-report-review': return '周报审阅';
     case 'center-daily-report': return '中心日报';
-    case 'users': return '基础用户权限管理';
     default: return '管理驾驶舱';
   }
 });
@@ -438,20 +492,13 @@ function hideToast() {
 const canAccessUserManagement = computed(
   () => currentUser.value?.isPlatformAdmin && currentUser.value?.organizationRole === 'system_admin'
 );
-// Daily report navigation is shown only for employee accounts.
 const isDailyReportUser = computed(() => currentUser.value?.organizationRole === 'employee');
-const canCurrentUserCreateProject = computed(() =>
-  ['general_manager', 'center_manager'].includes(currentUser.value?.organizationRole)
-);
-// Weekly report writing is available to employees and center managers.
 const isWeeklyReportUser = computed(() => ['employee', 'center_manager'].includes(currentUser.value?.organizationRole));
-// Weekly report list also hosts management overview for broader roles.
 const canAccessWeeklyReports = computed(() =>
   ['employee', 'center_manager', 'general_manager', 'general_manager_assistant'].includes(
     currentUser.value?.organizationRole
   )
 );
-// Center daily reports are visible to management roles and platform system admins.
 const canAccessCenterDailyReport = computed(() =>
   ['center_manager', 'general_manager', 'general_manager_assistant', 'system_admin'].includes(
     currentUser.value?.organizationRole
@@ -515,178 +562,250 @@ onMounted(restoreAuth);
 
 .app-shell {
   display: flex; height: 100vh; width: 100vw;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  color: #0f172a; background: #f8fafc; overflow: hidden; position: relative;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #333333; background: #f4f6f9; overflow: hidden; position: relative;
 }
 
-/* 加载画面 */
 .app-loading-screen {
-  display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #f8fafc;
+  display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #f4f6f9;
 }
 .loading-container { display: flex; flex-direction: column; align-items: center; gap: 1rem; }
 .loading-wave { display: flex; gap: 6px; }
 .wave-bar {
-  width: 4px; height: 24px; background: #0f172a; border-radius: 4px;
+  width: 4px; height: 24px; background: #3e63dd; border-radius: 4px;
   animation: wave 1s ease-in-out infinite;
 }
 .wave-bar:nth-child(2) { animation-delay: 0.15s; }
 .wave-bar:nth-child(3) { animation-delay: 0.3s; }
 @keyframes wave { 0%, 100% { transform: scaleY(0.4); } 50% { transform: scaleY(1); } }
-.app-loading-screen p { font-size: 0.9rem; color: #64748b; font-weight: 500; }
+.app-loading-screen p { font-size: 0.9rem; color: #909399; font-weight: 500; }
 
-/* ===== 1. 高级深色侧边栏 ===== */
 .app-sidebar {
-  width: 260px; height: 100vh; background-color: #0f172a;
+  width: 250px; height: 100vh; background-color: #ffffff; 
   display: flex; flex-direction: column; flex-shrink: 0; z-index: 110;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  border-right: 1px solid #ebeef5;
 }
 
 .brand-logo-area {
-  padding: 1.5rem 1.75rem; display: flex; align-items: center; gap: 0.75rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 1.5rem 1.5rem; display: flex; align-items: center; gap: 0.75rem;
+  border-bottom: 1px solid #ebeef5;
 }
-.logo-svg { width: 28px; height: 28px; color: #3b82f6; }
-.brand-text { display: flex; flex-direction: column; line-height: 1.2; }
-.brand-title { font-size: 1.15rem; font-weight: 800; color: #f1f5f9; letter-spacing: -0.01em; }
-.brand-subtitle { font-size: 0.65rem; font-weight: 600; color: #94a3b8; letter-spacing: 0.08em; }
+.logo-svg { width: 28px; height: 28px; color: #3e63dd; }
+.brand-text { display: flex; flex-direction: column; line-height: 1.25; }
+.brand-title { font-size: 1.1rem; font-weight: 700; color: #303133; }
+.brand-subtitle { font-size: 0.6rem; font-weight: 500; color: #909399; letter-spacing: 0.05em; margin-top: 2px;}
 
 .sidebar-nav {
-  flex: 1; padding: 1.5rem 1rem; display: flex; flex-direction: column; gap: 0.35rem; overflow-y: auto;
+  flex: 1; padding: 1.25rem 1rem; display: flex; flex-direction: column; gap: 0.5rem; overflow-y: auto;
 }
-.nav-section-title {
-  font-size: 0.65rem; font-weight: 700; text-transform: uppercase; color: #64748b;
-  letter-spacing: 0.08em; margin: 1rem 0.75rem 0.35rem;
+
+.nav-group {
+  display: flex;
+  flex-direction: column;
 }
-.sidebar-nav button {
-  width: 100%; padding: 0.65rem 0.85rem; background: transparent; border: none; border-radius: 8px;
-  display: flex; align-items: center; gap: 0.75rem; cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  font-family: inherit; color: #cbd5e1; text-align: left;
+
+.nav-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.7rem 0.85rem;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #303133;
+  transition: background-color 0.2s, color 0.2s;
 }
-.sidebar-nav button:hover { background-color: rgba(255, 255, 255, 0.05); color: #ffffff; }
+
+.nav-group-header:hover {
+  background-color: #f4f6f9;
+  color: #3e63dd;
+}
+
+.nav-group-header.is-active {
+  color: #3e63dd;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.header-left span {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 .nav-icon { width: 18px; height: 18px; stroke: currentColor; flex-shrink: 0; }
 
-.sidebar-nav button.active {
-  background-color: #2563eb; color: #ffffff;
+.chevron-icon {
+  width: 16px;
+  height: 16px;
+  color: #909399;
+  transition: transform 0.3s ease;
 }
-.sidebar-nav button.active .nav-icon { stroke: #ffffff; }
-.sidebar-nav button span { font-size: 0.9rem; font-weight: 600; }
+
+.chevron-icon.rotated {
+  transform: rotate(180deg);
+}
+
+.nav-group-header:hover .chevron-icon,
+.nav-group-header.is-active .chevron-icon {
+  color: #3e63dd;
+}
+
+.nav-children-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.nav-children-wrapper.is-open {
+  grid-template-rows: 1fr;
+}
+
+.nav-children-inner {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  margin-left: 1.35rem;
+  padding-left: 1.15rem;
+  border-left: 1px solid #ebeef5;
+  margin-top: 0.25rem;
+  gap: 0.2rem;
+}
+
+.nav-child-item {
+  width: 100%; padding: 0.6rem 0.85rem; background: transparent; border: none; border-radius: 4px;
+  display: flex; align-items: center; cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit; color: #606266; text-align: left;
+}
+
+.nav-child-item span {
+  font-size: 0.85rem; font-weight: 500;
+}
+
+.nav-child-item:hover { 
+  background-color: #f4f6f9; 
+  color: #3e63dd; 
+}
+
+.nav-child-item.active {
+  background-color: #ecf5ff;
+  color: #3e63dd;
+}
+.nav-child-item.active span { font-weight: 600; }
+
 
 .sidebar-footer {
-  padding: 1.25rem; border-top: 1px solid rgba(255, 255, 255, 0.06); text-align: center;
+  padding: 1.25rem; border-top: 1px solid #ebeef5; text-align: center;
 }
-.sidebar-footer span { font-size: 0.725rem; color: #64748b; font-weight: 500; }
+.sidebar-footer span { font-size: 0.75rem; color: #909399; font-weight: 500; }
 
-/* 遮罩 */
 .sidebar-overlay {
-  position: fixed; inset: 0; background-color: rgba(15, 23, 42, 0.5);
-  backdrop-filter: blur(4px); z-index: 105; animation: fadeInOverlay 0.25s ease-out;
+  position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px); z-index: 105; animation: fadeInOverlay 0.25s ease-out;
 }
 @keyframes fadeInOverlay { from { opacity: 0; } to { opacity: 1; } }
 
-/* ===== 2. 右侧主容器 ===== */
 .main-container { flex: 1; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 
 .app-header {
-  height: 70px; background-color: #ffffff; border-bottom: 1px solid #e2e8f0;
-  display: flex; align-items: center; justify-content: space-between; padding: 0 2.5rem;
-  flex-shrink: 0; box-shadow: 0 4px 12px rgba(0, 20, 40, 0.015); z-index: 100;
+  height: 64px; background-color: #ffffff; border-bottom: 1px solid #ebeef5;
+  display: flex; align-items: center; justify-content: space-between; padding: 0 2rem;
+  flex-shrink: 0; z-index: 100;
 }
 .app-header__left { display: flex; align-items: center; gap: 1rem; }
 .mobile-menu-toggle {
-  display: none; background: none; border: none; color: #334155; cursor: pointer;
-  padding: 0.35rem; border-radius: 6px; transition: background-color 0.2s;
+  display: none; background: none; border: none; color: #606266; cursor: pointer;
+  padding: 0.35rem; border-radius: 4px; transition: background-color 0.2s;
 }
-.mobile-menu-toggle:hover { background-color: #f1f5f9; }
-.mobile-menu-toggle svg { width: 22px; height: 22px; }
+.mobile-menu-toggle:hover { background-color: #f4f6f9; }
+.mobile-menu-toggle svg { width: 20px; height: 20px; }
 
-.header-breadcrumbs { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 500; color: #64748b; }
-.breadcrumb-separator { color: #cbd5e1; }
-.breadcrumb-item--active { color: #0f172a; font-weight: 700; }
+.header-breadcrumbs { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; font-weight: 500; color: #909399; }
+.breadcrumb-separator { color: #c0c4cc; }
+.breadcrumb-item--active { color: #303133; font-weight: 600; }
 
 .current-user { display: flex; align-items: center; gap: 0.85rem; }
 .user-avatar {
-  width: 36px; height: 36px; border-radius: 50%;
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-  color: #ffffff; font-weight: 700; font-size: 0.95rem;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: linear-gradient(135deg, #5b86e5 0%, #36d1dc 100%);
+  color: #ffffff; font-weight: 600; font-size: 0.95rem;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.15);
 }
 .user-info { display: flex; flex-direction: column; line-height: 1.3; }
-.user-name { font-size: 0.875rem; font-weight: 700; color: #0f172a; }
-.user-role-desc { font-size: 0.725rem; color: #94a3b8; font-weight: 500; }
-.divider { color: #cbd5e1; margin: 0 0.1rem; }
+.user-name { font-size: 0.875rem; font-weight: 600; color: #303133; }
+.user-role-desc { font-size: 0.725rem; color: #909399; font-weight: 500; }
+.divider { color: #c0c4cc; margin: 0 0.1rem; }
 
 .logout-button {
-  background: transparent; border: 1px solid #e2e8f0; padding: 0.45rem;
-  border-radius: 8px; color: #64748b; cursor: pointer; transition: all 0.2s;
+  background: transparent; border: 1px solid #dcdfe6; padding: 0.45rem;
+  border-radius: 4px; color: #606266; cursor: pointer; transition: all 0.2s;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
-.logout-button:hover:not(:disabled) { border-color: #fca5a5; color: #ef4444; background-color: #fef2f2; }
+.logout-button:hover:not(:disabled) { border-color: #fbc4c4; color: #f56c6c; background-color: #fef0f0; }
 .logout-button:disabled { opacity: 0.6; cursor: not-allowed; }
-.logout-icon { width: 18px; height: 18px; }
+.logout-icon { width: 16px; height: 16px; }
 .spinner {
   display: inline-block; width: 14px; height: 14px;
-  border: 2px solid rgba(239, 68, 68, 0.2); border-top: 2px solid #ef4444;
+  border: 2px solid rgba(245, 108, 108, 0.2); border-top: 2px solid #f56c6c;
   border-radius: 50%; animation: spin 0.7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ===== 3. 主视口 ===== */
 .app-main {
-  flex: 1; overflow-y: auto; overflow-x: hidden; max-width: 1600px; width: 100%;
-  margin: 0 auto; padding: 1.75rem 2.5rem;
+  flex: 1; overflow-y: auto; overflow-x: hidden; max-width: 100%; width: 100%;
+  margin: 0 auto; padding: 0;
+  background: #f4f6f9;
 }
 .app-main::-webkit-scrollbar { width: 6px; }
 .app-main::-webkit-scrollbar-track { background: transparent; }
-.app-main::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-.app-main::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-.animate-content { animation: contentFadeIn 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
+.app-main::-webkit-scrollbar-thumb { background: #dcdfe6; border-radius: 3px; }
+.app-main::-webkit-scrollbar-thumb:hover { background: #c0c4cc; }
+.animate-content { animation: contentFadeIn 0.35s ease-out; }
 @keyframes contentFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
 .state-panel {
-  text-align: center; padding: 5rem 2rem; background: #ffffff; border-radius: 16px;
-  box-shadow: 0 10px 25px rgba(0, 20, 40, 0.02); border: 1px solid #e2e8f0;
+  text-align: center; padding: 5rem 2rem; background: #ffffff; border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.04); border: none; margin: 1.5rem;
 }
-.state-panel h2 { font-size: 1.35rem; font-weight: 700; color: #0f172a; margin-bottom: 0.5rem; }
-.state-panel p { font-size: 0.9rem; color: #64748b; margin-bottom: 1.5rem; }
+.state-panel h2 { font-size: 1.25rem; font-weight: 600; color: #303133; margin-bottom: 0.5rem; }
+.state-panel p { font-size: 0.9rem; color: #909399; margin-bottom: 1.5rem; }
 .primary-button {
-  background: #0f172a; border: none; padding: 0.65rem 1.5rem; border-radius: 8px;
-  font-weight: 600; font-size: 0.875rem; color: #ffffff; cursor: pointer; transition: all 0.2s;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+  background: #3e63dd; border: none; padding: 0.5rem 1.5rem; border-radius: 4px;
+  font-weight: 500; font-size: 0.875rem; color: #ffffff; cursor: pointer; transition: all 0.2s;
+  height: 36px;
 }
-.primary-button:hover { background: #1e293b; }
+.primary-button:hover { background: #5275e7; }
 
-/* ===== Toast ===== */
 .toast {
   position: fixed; top: 2rem; left: 50%; transform: translateX(-50%);
-  display: flex; align-items: center; gap: 0.75rem; padding: 0.7rem 1rem 0.7rem 1.2rem;
-  border-radius: 10px; background: #ffffff; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
-  font-size: 0.875rem; font-weight: 500; color: #0f172a; z-index: 10000;
-  border: 1px solid #f1f5f9; max-width: 90%;
+  display: flex; align-items: center; gap: 0.75rem; padding: 0.7rem 1rem;
+  border-radius: 4px; background: #ffffff; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  font-size: 0.85rem; font-weight: 500; color: #303133; z-index: 10000;
+  border: 1px solid #ebeef5; max-width: 90%;
 }
-.toast--error { border-left: 4px solid #ef4444; }
-.toast--error .toast-icon { stroke: #dc2626; flex-shrink: 0; width: 20px; height: 20px; }
-.toast--success { border-left: 4px solid #22c55e; }
-.toast--success .toast-icon { stroke: #16a34a; flex-shrink: 0; width: 20px; height: 20px; }
+.toast--error { border-left: 4px solid #f56c6c; }
+.toast--error .toast-icon { stroke: #f56c6c; flex-shrink: 0; width: 20px; height: 20px; }
+.toast--success { border-left: 4px solid #67c23a; }
+.toast--success .toast-icon { stroke: #67c23a; flex-shrink: 0; width: 20px; height: 20px; }
 .toast-close {
   display: flex; align-items: center; justify-content: center; width: 24px; height: 24px;
   border: none; background: transparent; cursor: pointer; padding: 0; margin-left: 0.5rem;
-  flex-shrink: 0; border-radius: 50%; transition: background 0.2s; color: #94a3b8;
+  flex-shrink: 0; border-radius: 50%; transition: background 0.2s; color: #c0c4cc;
 }
-.toast-close:hover { background: #f1f5f9; }
+.toast-close:hover { background: #f4f4f5; }
 .toast-close svg { width: 14px; height: 14px; }
-.toast-enter-active, .toast-leave-active { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-.toast-enter-from { opacity: 0; transform: translateX(-50%) translateY(-20px) scale(0.95); }
-.toast-enter-to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
-.toast-leave-from { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
-.toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(-20px) scale(0.95); }
+.toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
+.toast-enter-from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+.toast-enter-to { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast-leave-from { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(-20px); }
 
-/* 响应式 */
 @media (max-width: 1024px) {
   .app-header { padding: 0 1.5rem; }
-  .app-main { padding: 1.5rem; }
 }
 @media (max-width: 768px) {
   .app-sidebar { position: fixed; top: 0; bottom: 0; left: 0; transform: translateX(-100%); }
@@ -695,6 +814,6 @@ onMounted(restoreAuth);
   .app-header { padding: 0 1rem; height: 60px; }
   .header-breadcrumbs { display: none; }
   .user-info { display: none; }
-  .app-main { padding: 1rem; }
+  .state-panel { margin: 1rem; }
 }
 </style>

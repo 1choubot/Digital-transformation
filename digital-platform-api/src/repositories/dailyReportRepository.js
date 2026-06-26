@@ -331,7 +331,7 @@ export async function createDailyReport({ user, report }) {
     if (error?.code === 'ER_DUP_ENTRY') {
       throw new DailyReportError(
         DAILY_REPORT_ERROR.DUPLICATE_REPORT,
-        'Daily report already exists for this user, date, and project',
+        '当日已存在该项目的日报记录。',
         409,
         ['reportDate', 'projectId']
       );
@@ -371,7 +371,7 @@ export async function updateDailyReport({ reportId, user, report }) {
     if (error?.code === 'ER_DUP_ENTRY') {
       throw new DailyReportError(
         DAILY_REPORT_ERROR.DUPLICATE_REPORT,
-        'Daily report already exists for this user, date, and project',
+        '当日已存在该项目的日报记录。',
         409,
         ['reportDate', 'projectId']
       );

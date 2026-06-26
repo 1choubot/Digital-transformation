@@ -7,14 +7,14 @@ export const statusText = {
   not_started: '未开始',
   current: '当前阶段',
   not_submitted: '待提交',
-  submitted: '已提交审核',
-  confirmed: '审核通过',
+  submitted: '已提交',
+  confirmed: '已确认',
   returned: '已退回',
-  pending_center_manager: '待中心负责人关口审批',
-  returned_by_center_manager: '中心负责人关口审批已退回',
-  pending_general_manager: '待总经理关口审批',
-  returned_by_general_manager: '总经理关口审批已退回',
-  approved: '关口审批通过',
+  pending_center_manager: '待中心负责人审批',
+  returned_by_center_manager: '中心负责人已退回',
+  pending_general_manager: '待总经理审批',
+  returned_by_general_manager: '总经理已退回',
+  approved: '审批通过',
   cancelled: '已取消'
 };
 
@@ -46,12 +46,12 @@ export const projectModeText = {
 };
 
 export const approvalActionText = {
-  submit: '提交阶段关口审批',
-  center_manager_approve: '中心负责人关口审批通过',
-  center_manager_return: '中心负责人关口审批退回',
-  general_manager_approve: '总经理关口审批通过',
-  general_manager_return: '总经理关口审批退回',
-  resubmit: '重新提交阶段关口审批'
+  submit: '提交审批',
+  center_manager_approve: '中心负责人通过',
+  center_manager_return: '中心负责人退回',
+  general_manager_approve: '总经理通过',
+  general_manager_return: '总经理退回',
+  resubmit: '重新提交'
 };
 
 export const approvalRoleText = {
@@ -140,38 +140,18 @@ export function formatDepartments(value) {
   return formatBusinessDepartment(value);
 }
 
-export function formatUserName(user) {
+export function formatUser(user) {
   if (!user) {
     return '-';
-  }
-
-  return user.name || user.account || (user.id ? `用户ID ${user.id}` : '-');
-}
-
-export function formatUserMeta(user) {
-  if (!user) {
-    return '';
   }
 
   const parts = [
+    user.name,
     user.department ? formatBusinessDepartment(user.department) : '',
+    user.organizationRole ? formatOrganizationRole(user.organizationRole) : '',
     user.role
   ].filter(Boolean);
-  return parts.join(' · ');
-}
-
-export function formatBusinessUser(user) {
-  if (!user) {
-    return '-';
-  }
-
-  const name = formatUserName(user);
-  const meta = formatUserMeta(user);
-  return meta ? `${name}（${meta}）` : name;
-}
-
-export function formatUser(user) {
-  return formatBusinessUser(user);
+  return parts.length > 0 ? parts.join(' / ') : '-';
 }
 
 export function formatFileSize(value) {

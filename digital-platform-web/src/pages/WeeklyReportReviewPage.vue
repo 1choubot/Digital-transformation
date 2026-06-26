@@ -185,6 +185,15 @@
               <strong>{{ dimensionValue('matchScore') }}</strong>
             </div>
           </div>
+          <div v-if="score.summary || score.suggestions?.length" class="weekly-score__body">
+            <h3>AI评语</h3>
+            <p v-if="score.summary">{{ score.summary }}</p>
+            <ul v-if="score.suggestions?.length">
+              <li v-for="(suggestion, index) in score.suggestions" :key="index">
+                {{ suggestion }}
+              </li>
+            </ul>
+          </div>
         </section>
       </section>
 

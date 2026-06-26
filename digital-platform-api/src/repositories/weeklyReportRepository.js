@@ -152,6 +152,31 @@ function compareWeeklyAndDailyText(summary, dailyItem) {
   };
 }
 
+function dailyEvidenceKey(dailyItem) {
+  return `${dailyItem.reportDate}|${dailyItem.projectCode}|${dailyItem.workContent}`;
+}
+
+function chooseBestDailyEvidence(summary, dailyItems, usedDailyItems) {
+  const availableItems = dailyItems.filter((dailyItem) => !usedDailyItems.has(dailyEvidenceKey(dailyItem)));
+  if (availableItems.length === 0) {
+    return null;
+  }
+
+  const normalizedTarget = normalizeComparisonText(summary.workTarget);
+  const exactMatch = availableItems.find(
+    (dailyItem) => normalizeComparisonText(dailyItem.workContent) === normalizedTarget
+  );
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  // 同一天多条周报和多条日报时只做一对一匹配，避免日期相同导致笛卡尔展开。
+  return (
+    availableItems.find((dailyItem) => compareWeeklyAndDailyText(summary, dailyItem).matchStatus === 'matched') ||
+    availableItems[0]
+  );
+}
+
 // Convert joined weekly report owner rows into the permission model used by route guards.
 function mapWeeklyReportUserRow(row) {
   return {
@@ -488,7 +513,8 @@ function buildWeeklyComparisonRows(report, dailyEvidence) {
   const usedDailyItems = new Set();
   for (const summary of report.summaries) {
     const dailyItems = dailyByDate.get(summary.completedDate) || [];
-    if (dailyItems.length === 0) {
+    const dailyItem = chooseBestDailyEvidence(summary, dailyItems, usedDailyItems);
+    if (!dailyItem) {
       rows.push({
         date: summary.completedDate,
         weekday: weekdayLabel(summary.completedDate),
@@ -506,29 +532,27 @@ function buildWeeklyComparisonRows(report, dailyEvidence) {
       continue;
     }
 
-    for (const dailyItem of dailyItems) {
-      usedDailyItems.add(`${dailyItem.reportDate}|${dailyItem.projectCode}|${dailyItem.workContent}`);
-      const match = compareWeeklyAndDailyText(summary, dailyItem);
-      rows.push({
-        date: summary.completedDate,
-        weekday: weekdayLabel(summary.completedDate),
-        weeklyTask: summary.workTask,
-        weeklySummaryText: summary.workTarget,
-        dailyProjectName: dailyItem.projectName,
-        dailyProjectLabel: dailyItem.projectLabel,
-        dailyWorkContent: dailyItem.workContent,
-        dailyCompletionProgress: dailyItem.completionProgress,
-        // The comparison table uses the daily report date as the actual completion date.
-        dailyCompletedAt: dailyItem.reportDate,
-        weeklyCompletedDate: summary.completedDate,
-        matchStatus: match.matchStatus,
-        matchReason: match.matchReason
-      });
-    }
+    usedDailyItems.add(dailyEvidenceKey(dailyItem));
+    const match = compareWeeklyAndDailyText(summary, dailyItem);
+    rows.push({
+      date: summary.completedDate,
+      weekday: weekdayLabel(summary.completedDate),
+      weeklyTask: summary.workTask,
+      weeklySummaryText: summary.workTarget,
+      dailyProjectName: dailyItem.projectName,
+      dailyProjectLabel: dailyItem.projectLabel,
+      dailyWorkContent: dailyItem.workContent,
+      dailyCompletionProgress: dailyItem.completionProgress,
+      // The comparison table uses the daily report date as the actual completion date.
+      dailyCompletedAt: dailyItem.reportDate,
+      weeklyCompletedDate: summary.completedDate,
+      matchStatus: match.matchStatus,
+      matchReason: match.matchReason
+    });
   }
 
   for (const dailyItem of dailyEvidence) {
-    const key = `${dailyItem.reportDate}|${dailyItem.projectCode}|${dailyItem.workContent}`;
+    const key = dailyEvidenceKey(dailyItem);
     if (usedDailyItems.has(key)) {
       continue;
     }

@@ -40,6 +40,14 @@ export async function getProjectDetail(projectId, authToken = '') {
   return request(`/api/projects/${projectId}`, { authToken });
 }
 
+export async function updateProjectCode(projectId, projectCode, authToken) {
+  return request(`/api/projects/${projectId}/project-code`, {
+    method: 'PUT',
+    authToken,
+    body: JSON.stringify({ projectCode })
+  });
+}
+
 export async function getProjectStageDocumentChecklist(projectId, authToken = '') {
   return request(`/api/projects/${projectId}/stage-document-checklist`, { authToken });
 }

@@ -12,6 +12,11 @@ import {
   isValidBusinessDepartment
 } from '../../domain/organization.js';
 import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
+import {
+  getDocumentCompletionMode,
+  isReviewCompletionMode,
+  isStageDocumentComplete
+} from './shared.js';
 
 function getProjectManagerUserId(project) {
   return project?.project_manager_user_id ?? project?.projectManagerUserId ?? null;
@@ -76,7 +81,11 @@ export function isStageDocumentReviewAuthority(user, document) {
 }
 
 export function canReviewStageDocument(user, document) {
-  return getDocumentStatus(document) === DOCUMENT_STATUS.SUBMITTED && isStageDocumentReviewAuthority(user, document);
+  return (
+    getDocumentStatus(document) === DOCUMENT_STATUS.SUBMITTED &&
+    isReviewCompletionMode(getDocumentCompletionMode(document)) &&
+    isStageDocumentReviewAuthority(user, document)
+  );
 }
 
 export function canViewStageDocumentItem(user, { project, document }) {
@@ -136,7 +145,7 @@ export function canDeleteStageDocumentAttachment(user, { project = null, documen
     return false;
   }
 
-  if (getDocumentStatus(document) === DOCUMENT_STATUS.CONFIRMED) {
+  if (isStageDocumentComplete(document)) {
     return false;
   }
 

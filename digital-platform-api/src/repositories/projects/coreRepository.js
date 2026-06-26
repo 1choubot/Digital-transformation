@@ -1,5 +1,11 @@
 import { pool } from '../../db/pool.js';
-import { canBeProjectManagerUser } from '../../domain/organization.js';
+import {
+  canAdvanceProjectStage,
+  canBeProjectManagerUser,
+  isCenterManagerUser,
+  isValidBusinessDepartment
+} from '../../domain/organization.js';
+import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import { canViewCompleteProjectAudit } from '../stageDocuments/accessControl.js';
 import { initializeProjectStageDocuments } from '../stageDocuments/checklistRepository.js';
 import {
@@ -10,6 +16,7 @@ import {
 import {
   DuplicateProjectCodeError,
   ProjectAuthorizationError,
+  ProjectCodeUpdateError,
   PROJECT_MANAGER_ERROR,
   ProjectManagerUserError,
   mapProject,
@@ -148,6 +155,176 @@ export async function createProject(project, createdByUserId) {
       throw new DuplicateProjectCodeError(project.projectCode);
     }
 
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+async function selectProjectForCodeUpdate(connection, projectId, user) {
+  if (isCenterManagerUser(user) && isValidBusinessDepartment(user.department)) {
+    const [rows] = await connection.execute(
+      `SELECT
+        p.*,
+        EXISTS (
+          SELECT 1
+          FROM project_stage_documents d
+          LEFT JOIN users u
+            ON u.id = d.responsible_user_id
+          WHERE d.project_id = p.id
+            AND (
+              d.owner_department = ?
+              OR d.review_department = ?
+              OR (
+                d.owner_department IS NULL
+                AND d.review_department IS NULL
+                AND u.department = ?
+              )
+            )
+        ) AS has_department_responsible
+      FROM projects p
+      WHERE p.id = ?
+      LIMIT 1
+      FOR UPDATE`,
+      [user.department, user.department, user.department, projectId]
+    );
+
+    if (rows.length === 0) {
+      throw new ProjectNotFoundError(projectId);
+    }
+
+    return rows[0];
+  }
+
+  const [rows] = await connection.execute(
+    'SELECT *, 0 AS has_department_responsible FROM projects WHERE id = ? LIMIT 1 FOR UPDATE',
+    [projectId]
+  );
+
+  if (rows.length === 0) {
+    throw new ProjectNotFoundError(projectId);
+  }
+
+  return rows[0];
+}
+
+function assertCanUpdateProjectCode(user, projectRow) {
+  if (!canAdvanceProjectStage(user, projectRow)) {
+    throw new ProjectAuthorizationError(
+      'FORBIDDEN_OPERATION',
+      'Current user cannot update project code',
+      ['projectId']
+    );
+  }
+}
+
+async function assertProjectCodeReady(connection, projectId) {
+  const [rows] = await connection.execute(
+    `SELECT
+      id,
+      document_code,
+      document_name,
+      status,
+      completion_mode,
+      is_applicable
+    FROM project_stage_documents
+    WHERE project_id = ?
+      AND document_code IN ('1.2', '1.3')
+    FOR UPDATE`,
+    [projectId]
+  );
+  const byCode = new Map(rows.map((row) => [row.document_code, row]));
+  const initiationApproval = byCode.get('1.2');
+  const initiationNotice = byCode.get('1.3');
+  const details = [];
+
+  if (
+    !initiationApproval ||
+    initiationApproval.completion_mode !== COMPLETION_MODE.APPROVAL_REQUIRED ||
+    initiationApproval.status !== DOCUMENT_STATUS.CONFIRMED
+  ) {
+    details.push('1.2');
+  }
+
+  if (
+    !initiationNotice ||
+    initiationNotice.completion_mode !== COMPLETION_MODE.SUBMIT_ONLY ||
+    !Boolean(initiationNotice.is_applicable) ||
+    ![DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.CONFIRMED].includes(initiationNotice.status)
+  ) {
+    details.push('1.3');
+  }
+
+  if (details.length > 0) {
+    throw new ProjectCodeUpdateError(
+      'PROJECT_CODE_GATE_NOT_READY',
+      'Project code can be updated only after initiation approval and notice completion',
+      409,
+      details
+    );
+  }
+}
+
+async function assertProjectCodeUnique(connection, projectId, projectCode) {
+  const [rows] = await connection.execute(
+    `SELECT id
+    FROM projects
+    WHERE project_code = ?
+      AND id <> ?
+    LIMIT 1
+    FOR UPDATE`,
+    [projectCode, projectId]
+  );
+
+  if (rows.length > 0) {
+    throw new DuplicateProjectCodeError(projectCode);
+  }
+}
+
+export async function updateProjectCode({ projectId, projectCode, user }) {
+  const normalizedProjectCode = String(projectCode ?? '').trim();
+  if (!normalizedProjectCode) {
+    throw new ProjectCodeUpdateError(
+      'PROJECT_CODE_REQUIRED',
+      'Project code is required',
+      400,
+      ['projectCode']
+    );
+  }
+
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+    const projectRow = await selectProjectForCodeUpdate(connection, projectId, user);
+    assertCanUpdateProjectCode(user, projectRow);
+    await assertProjectCodeReady(connection, projectId);
+    await assertProjectCodeUnique(connection, projectId, normalizedProjectCode);
+
+    if (projectRow.project_code !== normalizedProjectCode) {
+      await connection.execute('UPDATE projects SET project_code = ? WHERE id = ?', [
+        normalizedProjectCode,
+        projectId
+      ]);
+      await insertOperationLog(connection, {
+        projectId,
+        actorUserId: user.id,
+        actionType: OPERATION_ACTION_TYPE.PROJECT_CODE_UPDATED,
+        targetType: OPERATION_TARGET_TYPE.PROJECT,
+        targetId: projectId,
+        summary: `更新项目编号：${normalizedProjectCode}`,
+        details: {
+          fromProjectCode: projectRow.project_code,
+          toProjectCode: normalizedProjectCode
+        }
+      });
+    }
+
+    const detail = await selectProjectDetailWithConnection(connection, projectId);
+    await connection.commit();
+    return detail;
+  } catch (error) {
+    await connection.rollback();
     throw error;
   } finally {
     connection.release();

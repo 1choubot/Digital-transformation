@@ -22,6 +22,7 @@ import {
   resubmitStageApprovalHandler,
   submitStageDocumentHandler,
   submitStageApprovalHandler,
+  updateProjectCodeHandler,
   updateStageDocumentResponsibleUserHandler,
   uploadStageDocumentAttachmentHandler
 } from './projectRouteHandlers.js';
@@ -30,6 +31,12 @@ export const projectsRouter = Router();
 
 projectsRouter.get('/', requireAuth, asyncHandler(listProjectsHandler));
 projectsRouter.post('/', requireAuth, asyncHandler(createProjectHandler));
+
+projectsRouter.put(
+  '/:projectId/project-code',
+  requireAuth,
+  asyncHandler(updateProjectCodeHandler)
+);
 
 projectsRouter.get(
   '/overview-dashboard',

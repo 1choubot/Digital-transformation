@@ -2,7 +2,7 @@
   <section class="stage-document-attachments" aria-label="资料项附件">
     <div class="stage-document-attachments__heading">
       <h4>资料附件</h4>
-      <span>上传附件只表示资料文件准备，不等于提交资料审核或资料审核通过，不自动推进阶段，也不代表文件管理平台归档。</span>
+      <span>附件保存在在线平台；上传后资料是否完成以后端返回的完成状态为准，不自动推进阶段。</span>
     </div>
 
     <div v-if="canViewAttachments" class="stage-document-attachment-upload">

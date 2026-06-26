@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
 import { closePool, pool } from '../src/db/pool.js';
 import {
   BUSINESS_DEPARTMENT,
@@ -8,15 +9,45 @@ import {
   isValidBusinessDepartment
 } from '../src/domain/organization.js';
 import {
+  COMPLETION_MODE,
   DOCUMENT_STATUS,
+  EXPECTED_COMPLETION_MODE_COUNTS,
   EXPECTED_STAGE_DOCUMENT_ITEM_COUNT,
   STAGE_DOCUMENT_TEMPLATE_VERSION,
   loadStageDocumentTemplateItems
 } from '../src/domain/stageDocumentTemplates.js';
+import { normalizeCreateProjectInput } from '../src/domain/projects.js';
 import {
   buildStageDocumentPermissions,
   canViewStageDocumentItem
 } from '../src/repositories/stageDocuments/accessControl.js';
+import {
+  DuplicateProjectCodeError,
+  ProjectCodeUpdateError,
+  ProjectStageAdvanceError,
+  advanceProjectStage,
+  createProject,
+  getProjectOverviewDashboard,
+  updateProjectCode
+} from '../src/repositories/projectRepository.js';
+import {
+  getMyWorkbench,
+  listMyStageDocumentTasks,
+  normalizeStageDocumentTaskFilters,
+  updateProjectStageDocumentStatus
+} from '../src/repositories/stageDocumentRepository.js';
+import {
+  deleteStageDocumentAttachment,
+  getStageDocumentAttachmentDownload,
+  listStageDocumentAttachments,
+  uploadStageDocumentAttachment
+} from '../src/repositories/stageDocumentAttachmentRepository.js';
+import {
+  buildStageCompletenessSummary,
+  deriveStageDocumentCompletion
+} from '../src/repositories/stageDocuments/shared.js';
+import { DOCUMENT_STATUS_ACTION } from '../src/domain/stageDocumentStatus.js';
+import { cleanupStageDocumentAttachmentFile } from '../src/storage/stageDocumentAttachmentStorage.js';
 import { isDocumentRelatedToDepartmentByOwnership } from '../../digital-platform-web/src/components/project-detail/stageDocumentViewHelpers.js';
 
 const {
@@ -55,10 +86,469 @@ function makeDocument(patch = {}) {
     reviewDepartment: RD_CENTER,
     responsibleUserId: null,
     responsibleUser: null,
+    completionMode: COMPLETION_MODE.APPROVAL_REQUIRED,
     status: DOCUMENT_STATUS.NOT_SUBMITTED,
     isApplicable: true,
     ...patch
   };
+}
+
+function mapCompletionModeCountRows(rows) {
+  const counts = Object.fromEntries(Object.values(COMPLETION_MODE).map((completionMode) => [completionMode, 0]));
+  for (const row of rows) {
+    counts[row.completionMode] = Number(row.count);
+  }
+  return counts;
+}
+
+async function selectSmokeUser(account) {
+  const [rows] = await pool.execute(
+    `SELECT
+      id,
+      account,
+      display_name,
+      department,
+      organization_role,
+      role,
+      is_enabled
+     FROM users
+     WHERE account = ?
+     LIMIT 1`,
+    [account]
+  );
+  const row = rows[0];
+  assert.ok(row, `Smoke user not found: ${account}`);
+  assert.equal(Boolean(row.is_enabled), true, `Smoke user must be enabled: ${account}`);
+
+  return {
+    id: row.id,
+    account: row.account,
+    name: row.display_name,
+    department: row.department,
+    organizationRole: row.organization_role,
+    role: row.role,
+    isEnabled: Boolean(row.is_enabled)
+  };
+}
+
+async function selectSmokeDocument(projectId, documentCode) {
+  const [rows] = await pool.execute(
+    `SELECT *
+     FROM project_stage_documents
+     WHERE project_id = ?
+       AND document_code = ?
+     LIMIT 1`,
+    [projectId, documentCode]
+  );
+  const row = rows[0];
+  assert.ok(row, `Smoke document not found: ${projectId}/${documentCode}`);
+  return row;
+}
+
+async function countSmokeProjectObjects(projectId) {
+  const [stageRows] = await pool.execute(
+    'SELECT COUNT(*) AS count FROM project_stages WHERE project_id = ?',
+    [projectId]
+  );
+  const [documentRows] = await pool.execute(
+    'SELECT COUNT(*) AS count FROM project_stage_documents WHERE project_id = ?',
+    [projectId]
+  );
+  const [attachmentRows] = await pool.execute(
+    'SELECT COUNT(*) AS count FROM project_stage_document_attachments WHERE project_id = ?',
+    [projectId]
+  );
+
+  return {
+    stages: Number(stageRows[0].count),
+    documents: Number(documentRows[0].count),
+    attachments: Number(attachmentRows[0].count)
+  };
+}
+
+async function completeInitiationGate(projectId) {
+  await pool.execute(
+    `UPDATE project_stage_documents
+     SET status = CASE document_code
+       WHEN '1.1' THEN ?
+       WHEN '1.2' THEN ?
+       WHEN '1.3' THEN ?
+       ELSE status
+     END
+     WHERE project_id = ?
+       AND document_code IN ('1.1', '1.2', '1.3')`,
+    [
+      DOCUMENT_STATUS.SUBMITTED,
+      DOCUMENT_STATUS.CONFIRMED,
+      DOCUMENT_STATUS.SUBMITTED,
+      projectId
+    ]
+  );
+}
+
+async function completeStageExcept(projectId, stageOrder, blockedDocumentCode) {
+  await pool.execute(
+    `UPDATE project_stage_documents
+     SET status = CASE
+       WHEN document_code = ? THEN ?
+       WHEN completion_mode IN (?, ?) THEN ?
+       ELSE ?
+     END,
+       is_applicable = 1
+     WHERE project_id = ?
+       AND stage_order = ?`,
+    [
+      blockedDocumentCode,
+      DOCUMENT_STATUS.NOT_SUBMITTED,
+      COMPLETION_MODE.SUBMIT_ONLY,
+      COMPLETION_MODE.CONDITIONAL_SUBMIT,
+      DOCUMENT_STATUS.SUBMITTED,
+      DOCUMENT_STATUS.CONFIRMED,
+      projectId,
+      stageOrder
+    ]
+  );
+}
+
+async function cleanupSmokeProjects(projectIds, storageKeys) {
+  for (const storageKey of storageKeys) {
+    await cleanupStageDocumentAttachmentFile(storageKey);
+  }
+
+  for (const projectId of projectIds) {
+    await pool.execute('DELETE FROM projects WHERE id = ?', [projectId]);
+  }
+}
+
+async function runProjectLifecycleSmoke() {
+  const managerUser = await selectSmokeUser('rd_manager');
+  const smokeProjectIds = [];
+  const smokeStorageKeys = [];
+  const uniqueSuffix = `${Date.now()}-${process.pid}`;
+  const duplicateProjectCode = `SMOKE-${uniqueSuffix}`;
+
+  try {
+    const createdA = await createProject(
+      {
+        projectCode: null,
+        projectName: `空编号 smoke A ${uniqueSuffix}`,
+        customerName: 'Smoke 客户',
+        projectMode: 'self_developed',
+        projectManagerUserId: managerUser.id,
+        participatingDepartments: [RD_CENTER],
+        status: 'normal',
+        plannedStartDate: null,
+        plannedEndDate: null,
+        remark: 'online-platform-internal-document-flow smoke'
+      },
+      managerUser.id
+    );
+    const projectAId = createdA.project.id;
+    smokeProjectIds.push(projectAId);
+    assert.equal(createdA.project.projectCode, null);
+
+    const createdB = await createProject(
+      {
+        projectCode: null,
+        projectName: `空编号 smoke B ${uniqueSuffix}`,
+        customerName: 'Smoke 客户',
+        projectMode: 'self_developed',
+        projectManagerUserId: managerUser.id,
+        participatingDepartments: [RD_CENTER],
+        status: 'normal',
+        plannedStartDate: null,
+        plannedEndDate: null,
+        remark: 'online-platform-internal-document-flow smoke duplicate'
+      },
+      managerUser.id
+    );
+    const projectBId = createdB.project.id;
+    smokeProjectIds.push(projectBId);
+    assert.equal(createdB.project.projectCode, null);
+
+    const [nullProjectCodeRows] = await pool.execute(
+      `SELECT COUNT(*) AS count
+       FROM projects
+       WHERE id IN (?, ?)
+         AND project_code IS NULL`,
+      [projectAId, projectBId]
+    );
+    assert.equal(Number(nullProjectCodeRows[0].count), 2);
+
+    const initialCountsA = await countSmokeProjectObjects(projectAId);
+    assert.deepEqual(initialCountsA, {
+      stages: 8,
+      documents: EXPECTED_STAGE_DOCUMENT_ITEM_COUNT,
+      attachments: 0
+    });
+
+    const attachmentDocument = await selectSmokeDocument(projectAId, '1.1');
+    await pool.execute(
+      'UPDATE project_stage_documents SET responsible_user_id = ? WHERE id = ?',
+      [managerUser.id, attachmentDocument.id]
+    );
+    const uploadedAttachment = await uploadStageDocumentAttachment({
+      projectId: projectAId,
+      documentId: attachmentDocument.id,
+      user: managerUser,
+      file: {
+        originalFileName: 'smoke.txt',
+        mimeType: 'text/plain',
+        size: 10,
+        buffer: Buffer.from('smoke-file')
+      }
+    });
+    assert.equal(uploadedAttachment.originalFileName, 'smoke.txt');
+    const [uploadedAttachmentRows] = await pool.execute(
+      'SELECT storage_key FROM project_stage_document_attachments WHERE id = ?',
+      [uploadedAttachment.id]
+    );
+    smokeStorageKeys.push(uploadedAttachmentRows[0].storage_key);
+
+    const listedAttachments = await listStageDocumentAttachments({
+      projectId: projectAId,
+      documentId: attachmentDocument.id,
+      user: managerUser
+    });
+    assert.equal(listedAttachments.length, 1);
+    const download = await getStageDocumentAttachmentDownload({
+      projectId: projectAId,
+      documentId: attachmentDocument.id,
+      attachmentId: uploadedAttachment.id,
+      user: managerUser
+    });
+    assert.equal(download.fileSize, 10);
+    await deleteStageDocumentAttachment({
+      projectId: projectAId,
+      documentId: attachmentDocument.id,
+      attachmentId: uploadedAttachment.id,
+      user: managerUser
+    });
+    const attachmentsAfterDelete = await listStageDocumentAttachments({
+      projectId: projectAId,
+      documentId: attachmentDocument.id,
+      user: managerUser
+    });
+    assert.equal(attachmentsAfterDelete.length, 0);
+
+    const submittedOnlyDocument = await updateProjectStageDocumentStatus({
+      projectId: projectAId,
+      documentId: attachmentDocument.id,
+      action: DOCUMENT_STATUS_ACTION.SUBMIT,
+      user: managerUser
+    });
+    assert.equal(submittedOnlyDocument.completionMode, COMPLETION_MODE.SUBMIT_ONLY);
+    assert.equal(submittedOnlyDocument.status, DOCUMENT_STATUS.SUBMITTED);
+    assert.equal(submittedOnlyDocument.isComplete, true);
+    assert.equal(submittedOnlyDocument.completionStatus, 'completed');
+
+    const pendingTasks = await listMyStageDocumentTasks(
+      managerUser.id,
+      normalizeStageDocumentTaskFilters({})
+    );
+    assert.equal(
+      pendingTasks.some(
+        (task) => task.projectId === projectAId && task.documentCode === submittedOnlyDocument.documentCode
+      ),
+      false
+    );
+
+    const submittedTasks = await listMyStageDocumentTasks(
+      managerUser.id,
+      normalizeStageDocumentTaskFilters({ status: DOCUMENT_STATUS.SUBMITTED })
+    );
+    const submittedOnlyTask = submittedTasks.find(
+      (task) => task.projectId === projectAId && task.documentCode === submittedOnlyDocument.documentCode
+    );
+    assert.ok(submittedOnlyTask);
+    assert.equal(submittedOnlyTask.isComplete, true);
+    assert.equal(submittedOnlyTask.completionStatus, 'completed');
+
+    const drawingReview = await selectSmokeDocument(projectAId, '4.16');
+    const submittedReview = await updateProjectStageDocumentStatus({
+      projectId: projectAId,
+      documentId: drawingReview.id,
+      action: DOCUMENT_STATUS_ACTION.SUBMIT,
+      user: managerUser
+    });
+    assert.equal(submittedReview.completionMode, COMPLETION_MODE.APPROVAL_REQUIRED);
+    assert.equal(submittedReview.status, DOCUMENT_STATUS.SUBMITTED);
+    assert.equal(submittedReview.isComplete, false);
+    assert.equal(submittedReview.completionStatus, 'pending_review');
+
+    const returnedReview = await updateProjectStageDocumentStatus({
+      projectId: projectAId,
+      documentId: drawingReview.id,
+      action: DOCUMENT_STATUS_ACTION.RETURN,
+      user: managerUser,
+      returnReason: 'smoke returned'
+    });
+    assert.equal(returnedReview.status, DOCUMENT_STATUS.RETURNED);
+    assert.equal(returnedReview.isComplete, false);
+    assert.equal(returnedReview.completionStatus, 'incomplete');
+
+    await updateProjectStageDocumentStatus({
+      projectId: projectAId,
+      documentId: drawingReview.id,
+      action: DOCUMENT_STATUS_ACTION.SUBMIT,
+      user: managerUser
+    });
+    const confirmedReview = await updateProjectStageDocumentStatus({
+      projectId: projectAId,
+      documentId: drawingReview.id,
+      action: DOCUMENT_STATUS_ACTION.CONFIRM,
+      user: managerUser
+    });
+    assert.equal(confirmedReview.status, DOCUMENT_STATUS.CONFIRMED);
+    assert.equal(confirmedReview.isComplete, true);
+    assert.equal(confirmedReview.completionStatus, 'completed');
+
+    await completeInitiationGate(projectAId);
+    await completeInitiationGate(projectBId);
+    await pool.execute(
+      `UPDATE project_stage_documents
+       SET is_applicable = 0
+       WHERE project_id = ?
+         AND document_code = '1.3'`,
+      [projectBId]
+    );
+
+    const beforeProjectCodeCountsA = await countSmokeProjectObjects(projectAId);
+    const updatedProjectCodeDetail = await updateProjectCode({
+      projectId: projectAId,
+      projectCode: duplicateProjectCode,
+      user: managerUser
+    });
+    assert.equal(updatedProjectCodeDetail.project.projectCode, duplicateProjectCode);
+    assert.deepEqual(await countSmokeProjectObjects(projectAId), beforeProjectCodeCountsA);
+
+    await assert.rejects(
+      () =>
+        updateProjectCode({
+          projectId: projectBId,
+          projectCode: `SMOKE-GATE-${uniqueSuffix}`,
+          user: managerUser
+        }),
+      (error) =>
+        error instanceof ProjectCodeUpdateError &&
+        error.code === 'PROJECT_CODE_GATE_NOT_READY' &&
+        error.details.includes('1.3')
+    );
+
+    await pool.execute(
+      `UPDATE project_stage_documents
+       SET is_applicable = 1,
+         status = ?
+       WHERE project_id = ?
+         AND document_code = '1.3'`,
+      [DOCUMENT_STATUS.SUBMITTED, projectBId]
+    );
+
+    await assert.rejects(
+      () =>
+        updateProjectCode({
+          projectId: projectBId,
+          projectCode: duplicateProjectCode,
+          user: managerUser
+      }),
+      DuplicateProjectCodeError
+    );
+
+    const beforeProjectCodeCountsB = await countSmokeProjectObjects(projectBId);
+    const updatedProjectCodeDetailB = await updateProjectCode({
+      projectId: projectBId,
+      projectCode: `SMOKE-B-${uniqueSuffix}`,
+      user: managerUser
+    });
+    assert.equal(updatedProjectCodeDetailB.project.projectCode, `SMOKE-B-${uniqueSuffix}`);
+    assert.deepEqual(await countSmokeProjectObjects(projectBId), beforeProjectCodeCountsB);
+
+    const workbenchBeforeAdvance = await getMyWorkbench(managerUser);
+    assert.equal(
+      workbenchBeforeAdvance.items.some((item) => item.type === 'stage_gate_approval'),
+      false
+    );
+    assert.equal(
+      workbenchBeforeAdvance.items.some((item) => /approval/i.test(item.targetRoute)),
+      false
+    );
+    assert.ok(
+      workbenchBeforeAdvance.items.some(
+        (item) => item.type === 'stage_advance' && item.projectId === projectBId
+      )
+    );
+
+    const advanced = await advanceProjectStage(projectAId, managerUser);
+    assert.equal(advanced.nextStage.stageOrder, 2);
+
+    await completeStageExcept(projectAId, 2, '2.6');
+    const blockedConditionalDocument = await selectSmokeDocument(projectAId, '2.6');
+    assert.equal(Boolean(blockedConditionalDocument.is_required), false);
+    assert.equal(Boolean(blockedConditionalDocument.is_applicable), true);
+    assert.equal(blockedConditionalDocument.completion_mode, COMPLETION_MODE.CONDITIONAL_SUBMIT);
+    assert.equal(blockedConditionalDocument.status, DOCUMENT_STATUS.NOT_SUBMITTED);
+
+    const workbenchWithBlockedConditional = await getMyWorkbench(managerUser);
+    assert.equal(
+      workbenchWithBlockedConditional.items.some(
+        (item) => item.type === 'stage_advance' && item.projectId === projectAId
+      ),
+      false
+    );
+    await assert.rejects(
+      () => advanceProjectStage(projectAId, managerUser),
+      (error) =>
+        error instanceof ProjectStageAdvanceError &&
+        error.code === 'PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE' &&
+        error.details.incompleteRequiredDocuments.some((document) => document.documentCode === '2.6')
+    );
+
+    const submittedConditionalDocument = await updateProjectStageDocumentStatus({
+      projectId: projectAId,
+      documentId: blockedConditionalDocument.id,
+      action: DOCUMENT_STATUS_ACTION.SUBMIT,
+      user: managerUser
+    });
+    assert.equal(submittedConditionalDocument.completionMode, COMPLETION_MODE.CONDITIONAL_SUBMIT);
+    assert.equal(submittedConditionalDocument.status, DOCUMENT_STATUS.SUBMITTED);
+    assert.equal(submittedConditionalDocument.isComplete, true);
+
+    const workbenchAfterConditionalSubmit = await getMyWorkbench(managerUser);
+    assert.ok(
+      workbenchAfterConditionalSubmit.items.some(
+        (item) => item.type === 'stage_advance' && item.projectId === projectAId
+      )
+    );
+    const advancedAfterConditionalSubmit = await advanceProjectStage(projectAId, managerUser);
+    assert.equal(advancedAfterConditionalSubmit.nextStage.stageOrder, 3);
+
+    const overview = await getProjectOverviewDashboard(managerUser, {
+      status: null,
+      currentStageOrder: null,
+      keyword: `空编号 smoke`
+    });
+    for (const overviewProject of overview.projects) {
+      if (overviewProject.projectId !== projectAId && overviewProject.projectId !== projectBId) {
+        continue;
+      }
+
+      assert.ok(overviewProject.currentStageCompletenessSummary);
+      assert.ok(
+        Object.prototype.hasOwnProperty.call(
+          overviewProject.currentStageCompletenessSummary,
+          'completedRequiredCount'
+        )
+      );
+      assert.equal(
+        overviewProject.currentStageIncompleteRequiredDocuments.every((document) =>
+          Object.prototype.hasOwnProperty.call(document, 'completionMode')
+        ),
+        true
+      );
+    }
+  } finally {
+    await cleanupSmokeProjects(smokeProjectIds, smokeStorageKeys);
+  }
 }
 
 const project = {
@@ -79,12 +569,8 @@ const generalManagerAssistant = globalUser(31, ORGANIZATION_ROLE.GENERAL_MANAGER
 const generalManager = globalUser(32, ORGANIZATION_ROLE.GENERAL_MANAGER);
 
 const items = await loadStageDocumentTemplateItems();
-const markdownItems = await loadStageDocumentTemplateItems(
-  '../docs/9.10_v20260624阶段资料模板规划_20260624.md'
-);
 assert.equal(items.length, EXPECTED_STAGE_DOCUMENT_ITEM_COUNT);
-assert.equal(markdownItems.length, EXPECTED_STAGE_DOCUMENT_ITEM_COUNT);
-assert.equal(STAGE_DOCUMENT_TEMPLATE_VERSION, 'v20260624');
+assert.equal(STAGE_DOCUMENT_TEMPLATE_VERSION, 'v20260625');
 assert.equal(EXPECTED_STAGE_DOCUMENT_ITEM_COUNT, 64);
 assert.notEqual(EXPECTED_STAGE_DOCUMENT_ITEM_COUNT, 54);
 assert.notEqual(EXPECTED_STAGE_DOCUMENT_ITEM_COUNT, 66);
@@ -94,6 +580,11 @@ for (const item of items) {
   assert.notEqual(item.templateVersion, 'v20260610');
   assert.ok(Object.hasOwn(item, 'ownerDepartment'), `${item.documentCode} missing ownerDepartment`);
   assert.ok(Object.hasOwn(item, 'reviewDepartment'), `${item.documentCode} missing reviewDepartment`);
+  assert.ok(Object.hasOwn(item, 'completionMode'), `${item.documentCode} missing completionMode`);
+  assert.ok(
+    Object.values(COMPLETION_MODE).includes(item.completionMode),
+    `${item.documentCode} invalid completionMode`
+  );
   assert.ok(
     item.ownerDepartment === null || isValidBusinessDepartment(item.ownerDepartment),
     `${item.documentCode} invalid ownerDepartment`
@@ -105,13 +596,9 @@ for (const item of items) {
 }
 
 const byCode = new Map(items.map((item) => [item.documentCode, item]));
-const markdownByCode = new Map(markdownItems.map((item) => [item.documentCode, item]));
 assert.equal(byCode.size, EXPECTED_STAGE_DOCUMENT_ITEM_COUNT);
-assert.equal(markdownByCode.size, EXPECTED_STAGE_DOCUMENT_ITEM_COUNT);
 assert.equal(byCode.has('7.P1'), false);
 assert.equal(byCode.has('8.P1'), false);
-assert.equal(markdownByCode.has('7.P1'), false);
-assert.equal(markdownByCode.has('8.P1'), false);
 assert.deepEqual(
   [...items.reduce((counts, item) => counts.set(item.stageOrder, (counts.get(item.stageOrder) || 0) + 1), new Map())]
     .sort(([stageA], [stageB]) => stageA - stageB)
@@ -119,47 +606,146 @@ assert.deepEqual(
   ['1:3', '2:15', '3:4', '4:17', '5:17', '6:2', '7:4', '8:2']
 );
 assert.deepEqual(
-  [
-    ...markdownItems.reduce(
-      (counts, item) => counts.set(item.stageOrder, (counts.get(item.stageOrder) || 0) + 1),
-      new Map()
-    )
-  ]
-    .sort(([stageA], [stageB]) => stageA - stageB)
-    .map(([stageOrder, count]) => `${stageOrder}:${count}`),
-  ['1:3', '2:15', '3:4', '4:17', '5:17', '6:2', '7:4', '8:2']
+  Object.fromEntries(
+    Object.values(COMPLETION_MODE).map((completionMode) => [
+      completionMode,
+      items.filter((item) => item.completionMode === completionMode).length
+    ])
+  ),
+  EXPECTED_COMPLETION_MODE_COUNTS
+);
+assert.equal(byCode.get('4.14').completionMode, COMPLETION_MODE.SUBMIT_ONLY);
+assert.equal(byCode.get('4.15').completionMode, COMPLETION_MODE.SUBMIT_ONLY);
+assert.equal(byCode.get('4.16').completionMode, COMPLETION_MODE.APPROVAL_REQUIRED);
+assert.equal(byCode.get('3.4').completionMode, COMPLETION_MODE.SUBMIT_ONLY);
+assert.equal(byCode.get('6.2').completionMode, COMPLETION_MODE.SUBMIT_ONLY);
+assert.equal(byCode.get('8.1').completionMode, COMPLETION_MODE.SUBMIT_ONLY);
+assert.equal(
+  normalizeCreateProjectInput({
+    projectName: '空编号项目',
+    customerName: '客户',
+    projectManagerUserId: '1'
+  }).projectCode,
+  null
+);
+assert.equal(
+  normalizeCreateProjectInput({
+    projectCode: '',
+    projectName: '空编号项目',
+    customerName: '客户',
+    projectManagerUserId: '1'
+  }).projectCode,
+  null
+);
+
+assert.deepEqual(
+  deriveStageDocumentCompletion({
+    completionMode: COMPLETION_MODE.SUBMIT_ONLY,
+    status: DOCUMENT_STATUS.SUBMITTED,
+    isApplicable: true
+  }),
+  {
+    completionMode: COMPLETION_MODE.SUBMIT_ONLY,
+    isApplicable: true,
+    isComplete: true,
+    completionStatus: 'completed'
+  }
 );
 assert.deepEqual(
-  items.filter((item) => !item.isRequired).map((item) => item.documentCode),
-  ['2.6', '2.7', '2.8', '3.4', '5.13', '5.14', '5.15', '5.16', '6.2', '8.1']
+  deriveStageDocumentCompletion({
+    completionMode: COMPLETION_MODE.APPROVAL_REQUIRED,
+    status: DOCUMENT_STATUS.SUBMITTED,
+    isApplicable: true
+  }),
+  {
+    completionMode: COMPLETION_MODE.APPROVAL_REQUIRED,
+    isApplicable: true,
+    isComplete: false,
+    completionStatus: 'pending_review'
+  }
 );
+assert.equal(
+  deriveStageDocumentCompletion({
+    completionMode: COMPLETION_MODE.APPROVAL_REQUIRED,
+    status: DOCUMENT_STATUS.RETURNED,
+    isApplicable: true
+  }).isComplete,
+  false
+);
+const conditionalSummary = buildStageCompletenessSummary([
+  {
+    id: 1,
+    documentCode: '2.6',
+    documentName: '工艺时序图',
+    isRequired: true,
+    isApplicable: false,
+    completionMode: COMPLETION_MODE.CONDITIONAL_SUBMIT,
+    status: DOCUMENT_STATUS.NOT_SUBMITTED
+  },
+  {
+    id: 2,
+    documentCode: '2.7',
+    documentName: '节拍表',
+    isRequired: false,
+    isApplicable: true,
+    completionMode: COMPLETION_MODE.CONDITIONAL_SUBMIT,
+    status: DOCUMENT_STATUS.NOT_SUBMITTED
+  },
+  {
+    id: 3,
+    documentCode: '2.8',
+    documentName: '演示动画',
+    isRequired: true,
+    isApplicable: true,
+    completionMode: COMPLETION_MODE.CONDITIONAL_SUBMIT,
+    status: DOCUMENT_STATUS.SUBMITTED
+  }
+]);
+assert.equal(conditionalSummary.requiredTotal, 2);
+assert.equal(conditionalSummary.completedRequiredCount, 1);
+assert.equal(conditionalSummary.incompleteRequiredCount, 1);
 assert.deepEqual(
-  markdownItems.filter((item) => !item.isRequired).map((item) => item.documentCode),
-  ['2.6', '2.7', '2.8', '3.4', '5.13', '5.14', '5.15', '5.16', '6.2', '8.1']
+  conditionalSummary.incompleteRequiredDocuments.map((document) => document.documentCode),
+  ['2.7']
 );
-for (const [documentCode, item] of byCode) {
-  const markdownItem = markdownByCode.get(documentCode);
-  assert.ok(markdownItem, `Markdown parser missing ${documentCode}`);
-  assert.deepEqual(
-    {
-      stageOrder: markdownItem.stageOrder,
-      documentName: markdownItem.documentName,
-      isRequired: markdownItem.isRequired,
-      ownerDepartment: markdownItem.ownerDepartment,
-      reviewDepartment: markdownItem.reviewDepartment,
-      submitMode: markdownItem.submitMode
-    },
-    {
-      stageOrder: item.stageOrder,
-      documentName: item.documentName,
-      isRequired: item.isRequired,
-      ownerDepartment: item.ownerDepartment,
-      reviewDepartment: item.reviewDepartment,
-      submitMode: item.submitMode
-    },
-    `Markdown parser mismatch for ${documentCode}`
-  );
-}
+
+const workbenchRepositorySource = await fs.readFile(
+  new URL('../src/repositories/stageDocuments/workbenchRepository.js', import.meta.url),
+  'utf8'
+);
+assert.equal(workbenchRepositorySource.includes('stage_gate_approval'), false);
+assert.equal(workbenchRepositorySource.includes('PROJECT_APPROVAL_STATUS.APPROVED'), false);
+assert.equal(workbenchRepositorySource.includes('approval_status = ?'), false);
+assert.equal(workbenchRepositorySource.includes('stageApproval'), false);
+
+const stageAdvanceRepositorySource = await fs.readFile(
+  new URL('../src/repositories/projects/stageAdvanceRepository.js', import.meta.url),
+  'utf8'
+);
+assert.equal(stageAdvanceRepositorySource.includes('PROJECT_APPROVAL_NOT_APPROVED'), false);
+assert.equal(stageAdvanceRepositorySource.includes('approval_status !=='), false);
+
+const projectDetailSource = await fs.readFile(
+  new URL('../../digital-platform-web/src/pages/ProjectDetailPage.vue', import.meta.url),
+  'utf8'
+);
+assert.equal(projectDetailSource.includes('ProjectStageApprovalPanel'), false);
+assert.equal(projectDetailSource.includes('submitStageApproval'), false);
+assert.equal(projectDetailSource.includes('stageApproval'), false);
+assert.equal(projectDetailSource.includes('approvalStatus'), false);
+
+const workbenchPageSource = await fs.readFile(
+  new URL('../../digital-platform-web/src/pages/MyStageDocumentTasksPage.vue', import.meta.url),
+  'utf8'
+);
+assert.equal(workbenchPageSource.includes('stage_gate_approval'), false);
+assert.equal(workbenchPageSource.includes('待我阶段关口审批'), false);
+
+const httpSource = await fs.readFile(
+  new URL('../../digital-platform-web/src/api/http.js', import.meta.url),
+  'utf8'
+);
+assert.equal(/PROJECT_APPROVAL_NOT_APPROVED[\s\S]*阶段关口审批未通过/.test(httpSource), false);
 assert.deepEqual(
   {
     documentName: byCode.get('2.4').documentName,
@@ -296,6 +882,17 @@ const submittedRdDocument = makeDocument({ status: DOCUMENT_STATUS.SUBMITTED });
 assert.equal(
   buildStageDocumentPermissions({ user: rdManager, project, document: submittedRdDocument }).canReviewDocument,
   true
+);
+assert.equal(
+  buildStageDocumentPermissions({
+    user: rdManager,
+    project,
+    document: makeDocument({
+      completionMode: COMPLETION_MODE.SUBMIT_ONLY,
+      status: DOCUMENT_STATUS.SUBMITTED
+    })
+  }).canReviewDocument,
+  false
 );
 
 const costEstimateDocument = makeDocument({
@@ -474,6 +1071,29 @@ assert.equal(activeTemplateRows.length, 1);
 assert.equal(activeTemplateRows[0].templateVersion, STAGE_DOCUMENT_TEMPLATE_VERSION);
 assert.equal(Number(activeTemplateRows[0].count), EXPECTED_STAGE_DOCUMENT_ITEM_COUNT);
 
+const [projectCodeColumnRows] = await pool.query(
+  `SELECT IS_NULLABLE AS isNullable
+   FROM INFORMATION_SCHEMA.COLUMNS
+   WHERE TABLE_SCHEMA = DATABASE()
+     AND TABLE_NAME = 'projects'
+     AND COLUMN_NAME = 'project_code'`
+);
+assert.equal(projectCodeColumnRows[0]?.isNullable, 'YES');
+
+const [templateCompletionRows] = await pool.query(
+  `SELECT completion_mode AS completionMode, COUNT(*) AS count
+   FROM stage_document_templates
+   WHERE template_version = ?
+     AND is_active = 1
+   GROUP BY completion_mode
+   ORDER BY completion_mode`,
+  [STAGE_DOCUMENT_TEMPLATE_VERSION]
+);
+assert.deepEqual(
+  mapCompletionModeCountRows(templateCompletionRows),
+  EXPECTED_COMPLETION_MODE_COUNTS
+);
+
 const [excludedTemplateRows] = await pool.query(
   `SELECT COUNT(*) AS count
    FROM stage_document_templates
@@ -535,6 +1155,35 @@ for (const row of projectDocumentRows) {
     `Project ${row.projectId} should have ${EXPECTED_STAGE_DOCUMENT_ITEM_COUNT} stage documents`
   );
 }
+
+const [staleProjectDocumentRows] = await pool.query(
+  `SELECT COUNT(*) AS count
+   FROM project_stage_documents
+   WHERE template_version <> ?`,
+  [STAGE_DOCUMENT_TEMPLATE_VERSION]
+);
+assert.equal(Number(staleProjectDocumentRows[0].count), 0);
+
+const [projectDocumentCompletionRows] = await pool.query(
+  `SELECT completion_mode AS completionMode, COUNT(*) AS count
+   FROM project_stage_documents
+   WHERE template_version = ?
+   GROUP BY completion_mode
+   ORDER BY completion_mode`,
+  [STAGE_DOCUMENT_TEMPLATE_VERSION]
+);
+const expectedProjectCompletionCounts = Object.fromEntries(
+  Object.entries(EXPECTED_COMPLETION_MODE_COUNTS).map(([completionMode, count]) => [
+    completionMode,
+    count * projectDocumentRows.length
+  ])
+);
+assert.deepEqual(
+  mapCompletionModeCountRows(projectDocumentCompletionRows),
+  expectedProjectCompletionCounts
+);
+
+await runProjectLifecycleSmoke();
 
 const [projectRows] = await pool.query('SELECT COUNT(*) AS count FROM projects');
 const projectCount = Number(projectRows[0].count);

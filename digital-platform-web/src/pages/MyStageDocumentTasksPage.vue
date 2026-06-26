@@ -6,7 +6,7 @@
         <h2>我的工作台</h2>
         <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
         <p class="manual-status-note">
-          工作台汇总需要当前账号处理的资料责任、资料审核、阶段关口审批和阶段推进事项。
+          工作台汇总需要当前账号处理的资料责任、资料审核和阶段推进事项。
         </p>
       </div>
       <button type="button" class="ghost-button" :disabled="loading" @click="loadWorkbench">
@@ -77,6 +77,7 @@
           <span>阶段</span>
           <span>资料项</span>
           <span>类型</span>
+          <span>完成规则</span>
           <span>状态</span>
           <span>动作</span>
           <span>更新时间</span>
@@ -85,7 +86,7 @@
 
         <article v-for="item in filteredItems" :key="itemKey(item)" class="task-table__row">
           <div class="task-cell task-cell--project">
-            <span class="mono">{{ item.projectCode }}</span>
+            <span class="mono">{{ formatProjectCode(item.projectCode) }}</span>
             <strong>{{ item.projectName }}</strong>
           </div>
           <div class="task-cell">
@@ -97,7 +98,8 @@
             <strong>{{ item.documentName || '-' }}</strong>
           </div>
           <span>{{ formatTodoType(item.type) }}</span>
-          <StatusBadge :status="item.status" />
+          <span>{{ item.completionMode ? formatCompletionMode(item.completionMode) : '-' }}</span>
+          <span>{{ item.completionStatus ? formatCompletionStatus(item.completionStatus) : formatStatus(item.status) }}</span>
           <span>{{ item.actionText || '-' }}</span>
           <time>{{ formatDateTime(item.updatedAt || item.createdAt) }}</time>
           <button type="button" class="ghost-button" @click="openTodo(item)">
@@ -113,8 +115,14 @@
 import { computed, onMounted, ref } from 'vue';
 import { getMyWorkbench } from '../api/me.js';
 import { toReadableApiError } from '../api/http.js';
-import StatusBadge from '../components/StatusBadge.vue';
-import { formatDateTime, formatUser } from '../utils/format.js';
+import {
+  formatCompletionMode,
+  formatCompletionStatus,
+  formatDateTime,
+  formatProjectCode,
+  formatStatus,
+  formatUser
+} from '../utils/format.js';
 
 const props = defineProps({
   authToken: {
@@ -136,7 +144,6 @@ const emit = defineEmits(['auth-expired']);
 const typeOptions = [
   { value: 'document_responsibility', label: '我负责的资料' },
   { value: 'document_review', label: '待我审核的资料' },
-  { value: 'stage_gate_approval', label: '待我阶段关口审批' },
   { value: 'stage_advance', label: '待我推进阶段' }
 ];
 

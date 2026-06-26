@@ -1,6 +1,6 @@
 <template>
   <section class="stage-document-card__actions" aria-label="资料项手工操作">
-    <h4>资料级审核</h4>
+    <h4>资料操作</h4>
     <div class="stage-document-actions">
       <ProjectStageDocumentResponsibility
         v-if="canManageResponsibility"
@@ -33,10 +33,10 @@
           :disabled="isActionPending(document.id, 'submit')"
           @click="$emit('submit-document', document)"
         >
-          {{ isActionPending(document.id, 'submit') ? '提交中...' : '提交资料审核' }}
+          {{ isActionPending(document.id, 'submit') ? '提交中...' : submitButtonText }}
         </button>
 
-        <template v-else-if="document.status === 'submitted' && canConfirmReturnDocument">
+        <template v-else-if="canReview(document) && canConfirmReturnDocument">
           <button
             type="button"
             class="ghost-button"
@@ -64,7 +64,7 @@
         </template>
 
         <span v-else class="stage-document-actions__empty">
-          {{ document.status === 'confirmed' ? '资料审核通过' : '暂无资料审核操作' }}
+          {{ emptyActionText }}
         </span>
 
         <div v-if="canChangeApplicability" class="stage-document-applicability-action">
@@ -89,8 +89,15 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import ProjectStageDocumentResponsibility from './ProjectStageDocumentResponsibility.vue';
-import { canSubmit, isApplicable } from './stageDocumentViewHelpers.js';
+import {
+  canReview,
+  canSubmit,
+  formatDocumentCompletionStatus,
+  getCompletionMode,
+  isApplicable
+} from './stageDocumentViewHelpers.js';
 
 defineEmits([
   'submit-document',
@@ -102,7 +109,7 @@ defineEmits([
   'clear-responsible-user'
 ]);
 
-defineProps({
+const props = defineProps({
   document: {
     type: Object,
     required: true
@@ -147,5 +154,34 @@ defineProps({
     type: Function,
     required: true
   }
+});
+
+const submitButtonText = computed(() => {
+  const completionMode = getCompletionMode(props.document);
+  if (completionMode === 'approval_required' || completionMode === 'conditional_approval') {
+    return '提交资料审核';
+  }
+
+  return props.document.status === 'returned' ? '重新提交资料' : '提交资料';
+});
+
+const emptyActionText = computed(() => {
+  if (!isApplicable(props.document)) {
+    return '条件未触发/不适用';
+  }
+
+  if (props.document.status === 'confirmed') {
+    return '资料审核通过';
+  }
+
+  if (props.document.isComplete || props.document.completionStatus === 'completed') {
+    return formatDocumentCompletionStatus(props.document);
+  }
+
+  if (props.document.completionStatus === 'pending_review') {
+    return '待资料审核';
+  }
+
+  return '暂无资料操作';
 });
 </script>

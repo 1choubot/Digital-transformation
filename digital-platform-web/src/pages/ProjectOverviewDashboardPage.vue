@@ -6,7 +6,7 @@
         <h2>项目总览</h2>
         <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
         <p class="manual-status-note">
-          齐套率基于资料级审核通过状态和人工适用性判断，不代表文件已上传，也不代表在线表单已填写。
+          齐套率基于资料 completionMode、基础状态和适用性派生完成状态计算。
         </p>
       </div>
       <button type="button" class="ghost-button" :disabled="loading" @click="loadDashboard">
@@ -100,7 +100,7 @@
         <article v-for="project in projects" :key="project.projectId" class="overview-project">
           <div class="overview-project__main">
             <div class="overview-project__identity">
-              <span class="mono">{{ project.projectCode }}</span>
+              <span class="mono">{{ formatProjectCode(project.projectCode) }}</span>
               <strong>{{ project.projectName }}</strong>
               <small>
                 {{ project.customerName }} / {{ formatProjectMode(project.projectMode) }} /
@@ -130,7 +130,7 @@
 
           <div class="overview-project__documents">
             <div>
-              <span>未完成资料级审核的适用必填资料</span>
+              <span>未按完成规则完成的适用资料</span>
               <strong>{{ project.currentStageIncompleteRequiredDocuments.length }}</strong>
             </div>
             <details v-if="project.currentStageIncompleteRequiredDocuments.length > 0">
@@ -139,12 +139,14 @@
                 <li v-for="document in project.currentStageIncompleteRequiredDocuments" :key="document.id">
                   <span class="mono">{{ document.documentCode }}</span>
                   <strong>{{ document.documentName }}</strong>
+                  <span>{{ formatCompletionMode(document.completionMode) }}</span>
+                  <span>{{ formatCompletionStatus(document.completionStatus) }}</span>
                   <StatusBadge :status="document.status" />
                 </li>
               </ul>
             </details>
             <p v-else-if="project.currentStageCompletenessSummary">
-              当前阶段适用必填资料均已通过资料级审核。
+              当前阶段适用资料均已按完成规则完成。
             </p>
             <p v-else>
               {{ formatStageIssue(project.currentStageIssue) || '当前阶段齐套摘要为空。' }}
@@ -161,7 +163,14 @@ import { computed, onMounted, ref } from 'vue';
 import { getProjectOverviewDashboard } from '../api/projects.js';
 import { toReadableApiError } from '../api/http.js';
 import StatusBadge from '../components/StatusBadge.vue';
-import { formatDate, formatProjectMode, formatUser } from '../utils/format.js';
+import {
+  formatCompletionMode,
+  formatCompletionStatus,
+  formatDate,
+  formatProjectCode,
+  formatProjectMode,
+  formatUser
+} from '../utils/format.js';
 
 const props = defineProps({
   authToken: {
@@ -252,7 +261,8 @@ function formatCompletionSummary(summaryValue) {
     return '暂无齐套摘要';
   }
 
-  return `适用必填 ${summaryValue.requiredTotal} 项，审核通过 ${summaryValue.confirmedRequiredCount} 项，未完成 ${summaryValue.incompleteRequiredCount} 项`;
+  const completed = summaryValue.completedRequiredCount ?? summaryValue.confirmedRequiredCount;
+  return `适用资料 ${summaryValue.requiredTotal} 项，已完成 ${completed} 项，未完成 ${summaryValue.incompleteRequiredCount} 项`;
 }
 
 async function loadDashboard() {

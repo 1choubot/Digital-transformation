@@ -5,10 +5,9 @@
         <span class="section-eyebrow">阶段资料清单</span>
         <h3>资料级审核状态</h3>
         <p class="manual-status-note">
-          单个资料项先完成资料级审核，审核通过后才计入阶段齐套。
-          上传附件只表示资料文件准备，不等于提交资料审核、资料审核通过或阶段关口审批通过。
-          阶段资料齐套情况基于资料审核状态和人工适用性统计，不代表文件已归档。
-          不适用是人工业务判断，用于说明该项目不需要该资料，不代表资料已提交审核、审核通过或已归档。
+          阶段资料按 completionMode 计算完成状态：提交即完成资料提交后完成，需审核资料审核通过后完成，条件资料未触发时不阻塞。
+          附件保存在在线平台，不展示文件平台归档状态。
+          不适用是人工业务判断，用于说明该项目当前不需要该资料。
           资料责任人为手工分配，不代表权限控制、个人待办或文件权限。
         </p>
       </div>
@@ -62,12 +61,12 @@
               <strong>{{ stageDocumentSummary(stage).applicableTotal }}</strong>
             </div>
             <div>
-              <span>适用必填总数</span>
+              <span>门禁资料总数</span>
               <strong>{{ stageCompleteness(stage).requiredTotal }}</strong>
             </div>
             <div>
-              <span>必填已审核通过</span>
-              <strong>{{ stageCompleteness(stage).confirmedRequiredCount }}</strong>
+              <span>适用已完成</span>
+              <strong>{{ stageCompleteness(stage).completedRequiredCount ?? stageCompleteness(stage).confirmedRequiredCount }}</strong>
             </div>
             <div>
               <span>非必填/条件性</span>
@@ -87,8 +86,8 @@
           </div>
 
           <div class="stage-document-missing">
-            <strong>推进门禁未完成的适用必填资料</strong>
-            <p>非必填/条件性资料不计入必填齐套门禁。</p>
+            <strong>推进门禁未完成的适用资料</strong>
+            <p>条件资料未触发时不计入缺失；触发后按 completionMode 判断。</p>
             <ul v-if="stageCompleteness(stage).incompleteRequiredDocuments.length > 0">
               <li
                 v-for="document in stageCompleteness(stage).incompleteRequiredDocuments"
@@ -97,10 +96,12 @@
                 <span class="mono">{{ document.documentCode }}</span>
                 <span>{{ document.documentName }}</span>
                 <span class="stage-document-pill">{{ formatApplicability(document) }}</span>
+                <span class="stage-document-pill">{{ formatDocumentCompletionMode(document) }}</span>
+                <span class="stage-document-pill">{{ formatDocumentCompletionStatus(document) }}</span>
                 <StatusBadge :status="document.status" />
               </li>
             </ul>
-            <p v-else>当前阶段适用必填资料均已通过资料级审核。</p>
+            <p v-else>当前阶段适用资料均已按完成规则完成。</p>
           </div>
 
           <div class="stage-document-missing stage-document-optional">
@@ -113,6 +114,8 @@
                 <span class="mono">{{ document.documentCode }}</span>
                 <span>{{ document.documentName }}</span>
                 <span class="stage-document-pill">{{ formatApplicability(document) }}</span>
+                <span class="stage-document-pill">{{ formatDocumentCompletionMode(document) }}</span>
+                <span class="stage-document-pill">{{ formatDocumentCompletionStatus(document) }}</span>
                 <StatusBadge :status="document.status" />
               </li>
             </ul>
@@ -136,6 +139,8 @@
               <div class="stage-document-card__badges">
                 <span class="stage-document-pill">{{ formatRequired(document.isRequired) }}</span>
                 <span class="stage-document-pill">{{ formatApplicability(document) }}</span>
+                <span class="stage-document-pill">{{ formatDocumentCompletionMode(document) }}</span>
+                <span class="stage-document-pill">{{ formatDocumentCompletionStatus(document) }}</span>
                 <StatusBadge :status="document.status" />
               </div>
             </div>
@@ -165,12 +170,12 @@
                 <dd>{{ formatSubmitMode(document.submitMode) }}</dd>
               </div>
               <div>
-                <dt>目标目录</dt>
-                <dd class="mono">{{ document.targetFolderPath || '-' }}</dd>
+                <dt>完成规则</dt>
+                <dd>{{ formatDocumentCompletionMode(document) }}</dd>
               </div>
               <div>
-                <dt>目录ID</dt>
-                <dd>{{ document.targetFolderId || '-' }}</dd>
+                <dt>完成状态</dt>
+                <dd>{{ formatDocumentCompletionStatus(document) }}</dd>
               </div>
             </dl>
 
@@ -219,6 +224,8 @@ import ProjectStageDocumentAttachments from './ProjectStageDocumentAttachments.v
 import ProjectStageDocumentTrace from './ProjectStageDocumentTrace.vue';
 import {
   formatApplicability,
+  formatDocumentCompletionMode,
+  formatDocumentCompletionStatus,
   formatDepartment,
   formatResponsibleUser,
   isApplicable,

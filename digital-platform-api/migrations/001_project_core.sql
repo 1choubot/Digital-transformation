@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS projects (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  project_code VARCHAR(64) NOT NULL,
+  project_code VARCHAR(64) NULL,
   project_name VARCHAR(255) NOT NULL,
   customer_name VARCHAR(255) NOT NULL,
   project_manager VARCHAR(128) NOT NULL,

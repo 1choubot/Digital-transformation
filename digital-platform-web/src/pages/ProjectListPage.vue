@@ -65,7 +65,7 @@
         </div>
 
         <article v-for="project in projects" :key="project.id" class="project-table__row">
-          <span class="mono">{{ project.projectCode }}</span>
+          <span class="mono">{{ formatProjectCode(project.projectCode) }}</span>
           <strong>{{ project.projectName }}</strong>
           <span>{{ project.customerName }}</span>
           <span>{{ formatProjectMode(project.projectMode) }}</span>
@@ -85,7 +85,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { getApiBaseUrlLabel, listProjects, toReadableApiError } from '../api/projects.js';
 import StatusBadge from '../components/StatusBadge.vue';
-import { formatDate, formatProjectMode, formatUser } from '../utils/format.js';
+import { formatDate, formatProjectCode, formatProjectMode, formatUser } from '../utils/format.js';
 
 const props = defineProps({
   authToken: {

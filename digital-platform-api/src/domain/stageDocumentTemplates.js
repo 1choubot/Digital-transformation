@@ -1,16 +1,31 @@
 import { readFile } from 'node:fs/promises';
 import { isValidBusinessDepartment } from './organization.js';
 import { STANDARD_PROJECT_STAGES } from './stages.js';
-import { STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260624 } from './stageDocumentTemplateItemsV20260624.js';
+import {
+  STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260625
+} from './stageDocumentTemplateItemsV20260624.js';
 
-export const STAGE_DOCUMENT_TEMPLATE_VERSION = 'v20260624';
+export const STAGE_DOCUMENT_TEMPLATE_VERSION = 'v20260625';
 export const EXPECTED_STAGE_DOCUMENT_ITEM_COUNT = 64;
+export const EXPECTED_COMPLETION_MODE_COUNTS = Object.freeze({
+  submit_only: 33,
+  approval_required: 24,
+  conditional_submit: 7,
+  conditional_approval: 0
+});
 
 export const SUBMIT_MODE = {
   ONLINE_FORM: 'online_form',
   FILE_UPLOAD: 'file_upload',
   MIXED: 'mixed',
   TBD: 'tbd'
+};
+
+export const COMPLETION_MODE = {
+  SUBMIT_ONLY: 'submit_only',
+  APPROVAL_REQUIRED: 'approval_required',
+  CONDITIONAL_SUBMIT: 'conditional_submit',
+  CONDITIONAL_APPROVAL: 'conditional_approval'
 };
 
 export const DOCUMENT_STATUS = {
@@ -33,14 +48,16 @@ const expectedStageDocumentCounts = new Map([
   [8, 2]
 ]);
 const templateOwnershipByCode = new Map(
-  STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260624.map((item) => [
+  STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260625.map((item) => [
     item.documentCode,
     {
       ownerDepartment: item.ownerDepartment,
-      reviewDepartment: item.reviewDepartment
+      reviewDepartment: item.reviewDepartment,
+      completionMode: item.completionMode
     }
   ])
 );
+const validCompletionModes = new Set(Object.values(COMPLETION_MODE));
 
 function normalizeCell(value) {
   return value.trim().replace(/^`|`$/g, '').trim();
@@ -133,12 +150,15 @@ function assertParsedItems(items) {
     const actualCount = stageCounts.get(stageOrder) || 0;
     if (actualCount !== expectedCount) {
       throw new Error(
-        `Invalid v20260624 stage document count for stage ${stageOrder}: expected ${expectedCount}, got ${actualCount}`
+        `Invalid v20260625 stage document count for stage ${stageOrder}: expected ${expectedCount}, got ${actualCount}`
       );
     }
   }
 
   const seen = new Set();
+  const completionModeCounts = new Map(
+    Object.values(COMPLETION_MODE).map((completionMode) => [completionMode, 0])
+  );
   for (const item of items) {
     if (item.templateVersion !== STAGE_DOCUMENT_TEMPLATE_VERSION) {
       throw new Error(
@@ -164,6 +184,15 @@ function assertParsedItems(items) {
     if (!item.targetFolderPath) {
       throw new Error(`Missing target folder path in stage document checklist: ${item.documentCode}`);
     }
+    if (!validCompletionModes.has(item.completionMode)) {
+      throw new Error(
+        `Invalid completionMode in stage document checklist for ${item.documentCode}: ${item.completionMode}`
+      );
+    }
+    completionModeCounts.set(
+      item.completionMode,
+      (completionModeCounts.get(item.completionMode) || 0) + 1
+    );
 
     const expectedTargetFolderPath = buildExpectedTargetFolderPath(
       {
@@ -193,6 +222,31 @@ function assertParsedItems(items) {
           `Invalid ${fieldName} in stage document checklist for ${item.documentCode}: ${item[fieldName]}`
         );
       }
+    }
+  }
+
+  for (const [completionMode, expectedCount] of Object.entries(EXPECTED_COMPLETION_MODE_COUNTS)) {
+    const actualCount = completionModeCounts.get(completionMode) || 0;
+    if (actualCount !== expectedCount) {
+      throw new Error(
+        `Invalid v20260625 completionMode count for ${completionMode}: expected ${expectedCount}, got ${actualCount}`
+      );
+    }
+  }
+
+  for (const [documentCode, expectedCompletionMode] of [
+    ['4.14', COMPLETION_MODE.SUBMIT_ONLY],
+    ['4.15', COMPLETION_MODE.SUBMIT_ONLY],
+    ['4.16', COMPLETION_MODE.APPROVAL_REQUIRED],
+    ['3.4', COMPLETION_MODE.SUBMIT_ONLY],
+    ['6.2', COMPLETION_MODE.SUBMIT_ONLY],
+    ['8.1', COMPLETION_MODE.SUBMIT_ONLY]
+  ]) {
+    const item = items.find((candidate) => candidate.documentCode === documentCode);
+    if (!item || item.completionMode !== expectedCompletionMode) {
+      throw new Error(
+        `Invalid v20260625 completionMode for ${documentCode}: expected ${expectedCompletionMode}, got ${item?.completionMode}`
+      );
     }
   }
 }
@@ -264,6 +318,7 @@ function parseLegacyStageChecklistRow(cells, currentStage, line) {
     confirmRole,
     ownerDepartment: ownership.ownerDepartment,
     reviewDepartment: ownership.reviewDepartment,
+    completionMode: ownership.completionMode,
     submitMode: mapSubmitMode(submitModeLabel),
     targetFolderPath,
     targetFolderId: null
@@ -310,6 +365,7 @@ function parseV20260624PlanningRow(cells, line) {
     confirmRole,
     ownerDepartment: normalizeDepartmentCell(ownerDepartmentCell, 'ownerDepartment', documentCode),
     reviewDepartment: normalizeDepartmentCell(reviewDepartmentCell, 'reviewDepartment', documentCode),
+    completionMode: templateOwnershipByCode.get(documentCode)?.completionMode,
     submitMode: mapSubmitMode(submitModeLabel),
     targetFolderPath: buildExpectedTargetFolderPath(stage, documentCode, documentName),
     targetFolderId: null,
@@ -347,7 +403,7 @@ export function parseStageDocumentTemplateMarkdown(markdown) {
 
 export async function loadStageDocumentTemplateItems(markdownPath) {
   if (!markdownPath) {
-    const items = cloneTemplateItems(STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260624);
+    const items = cloneTemplateItems(STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260625);
     assertParsedItems(items);
     return items;
   }

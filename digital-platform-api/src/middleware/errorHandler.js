@@ -6,6 +6,7 @@ import {
   DuplicateProjectCodeError,
   ProjectAuthorizationError,
   ProjectApprovalError,
+  ProjectCodeUpdateError,
   ProjectManagerUserError,
   ProjectNotFoundError,
   ProjectOverviewDashboardQueryError,
@@ -114,6 +115,17 @@ export function errorHandler(error, req, res, next) {
   }
 
   if (error instanceof ProjectManagerUserError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      }
+    });
+    return;
+  }
+
+  if (error instanceof ProjectCodeUpdateError) {
     res.status(error.statusCode).json({
       error: {
         code: error.code,

@@ -5,7 +5,7 @@ import {
   isValidBusinessDepartment
 } from '../../domain/organization.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
-import { PROJECT_APPROVAL_ERROR, PROJECT_APPROVAL_STATUS } from '../../domain/projectApproval.js';
+import { PROJECT_APPROVAL_ERROR } from '../../domain/projectApproval.js';
 import { STANDARD_PROJECT_STAGES, STAGE_STATUS } from '../../domain/stages.js';
 import { buildStageCompletenessSummary, mapGateDocument } from '../stageDocuments/shared.js';
 import {
@@ -148,7 +148,7 @@ async function selectProjectForUpdate(connection, projectId, user) {
 
 async function buildCurrentStageGateSummary(connection, projectId, stageOrder) {
   const [rows] = await connection.execute(
-    `SELECT id, document_code, document_name, is_required, status, is_applicable
+    `SELECT id, document_code, document_name, is_required, completion_mode, status, is_applicable
     FROM project_stage_documents
     WHERE project_id = ?
       AND stage_order = ?
@@ -178,13 +178,6 @@ export async function advanceProjectStage(projectId, user) {
 
     const stageRows = await selectProjectStagesForUpdate(connection, projectId);
     const currentStage = assertSingleCurrentStage(stageRows);
-    if (currentStage.approval_status !== PROJECT_APPROVAL_STATUS.APPROVED) {
-      throw new ProjectStageAdvanceError(
-        PROJECT_APPROVAL_ERROR.PROJECT_APPROVAL_NOT_APPROVED,
-        'Current stage approval is not approved'
-      );
-    }
-
     const gateSummary = await buildCurrentStageGateSummary(connection, projectId, currentStage.stage_order);
 
     if (gateSummary.incompleteRequiredCount > 0) {

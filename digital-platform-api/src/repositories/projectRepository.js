@@ -2,6 +2,7 @@ export {
   DuplicateProjectCodeError,
   ProjectAuthorizationError,
   ProjectApprovalError,
+  ProjectCodeUpdateError,
   ProjectNotFoundError,
   ProjectStageNotFoundError,
   ProjectManagerUserError,
@@ -15,7 +16,8 @@ export {
   createProject,
   getProjectDetail,
   listProjects,
-  projectExists
+  projectExists,
+  updateProjectCode
 } from './projects/coreRepository.js';
 export {
   getProjectOverviewDashboard,

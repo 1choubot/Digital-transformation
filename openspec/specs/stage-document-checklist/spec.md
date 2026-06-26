@@ -5,179 +5,116 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 ## Requirements
 ### Requirement: 阶段资料项模板
 
-系统 MUST 维护当前 active 阶段资料项模板，当前正式运行模板 MUST 为 `v20260624`，模板 MUST 以 `智能制造项目管理流程图20260624.pdf` 和 `docs/9.10_v20260624阶段资料模板规划_20260624.md` 为来源。
+系统 MUST 维护当前 20260625 active 阶段资料项模板，模板 MUST 以 `docs/9.11_20260625项目流程资料审批口径规划.md` 和 `docs/9.12_在线平台内部资料闭环规划_20260625.md` 为当前口径来源，并 MUST 包含 `completionMode`。
 
 #### Scenario: 模板字段完整
-
 - **WHEN** 系统保存阶段资料项模板
-- **THEN** 每个模板项必须包含阶段标识、阶段名称、资料项编号、资料项名称、是否必填、默认责任部门或责任角色、提交方式、文件管理平台目标文件夹路径 `targetFolderPath` 和可空 `targetFolderId`
+- **THEN** 每个模板项必须包含阶段标识、阶段名称、资料项编号、资料项名称、是否必填、默认责任部门或责任角色、提交方式和 `completionMode`
+- **AND** `completionMode` MUST 为 `submit_only`、`approval_required`、`conditional_submit` 或 `conditional_approval`
 
-#### Scenario: 使用标准 8 阶段
+#### Scenario: 当前模板不依赖文件平台字段
+- **WHEN** 系统初始化当前 20260625 active 阶段资料模板
+- **THEN** `targetFolderPath` 和 `targetFolderId` 不得作为当前文件平台联动必需字段
+- **AND** 如保留这些字段，只能作为未来兼容或预留字段，MUST NOT 触发文件平台联动
 
-- **WHEN** 系统初始化阶段资料项模板
-- **THEN** 模板项必须归属到 `initiation`、`solution`、`contract`、`detailedDesign`、`manufacturing`、`preAcceptance`、`finalAcceptance`、`closeout` 之一
-
-#### Scenario: 提交方式枚举
-
-- **WHEN** 系统保存资料项提交方式
-- **THEN** 提交方式必须使用在线表单、文件上传、混合或暂未确定之一
-
-#### Scenario: 不凭空补资料项
-
-- **WHEN** 系统初始化当前 active 阶段资料模板
-- **THEN** 系统不得添加 `docs/9.10_v20260624阶段资料模板规划_20260624.md` 之外的普通阶段资料项
-
-#### Scenario: 无法可靠解析资料文档
-
-- **WHEN** 实现时无法可靠解析 `docs/9.10_v20260624阶段资料模板规划_20260624.md`
-- **THEN** 必须暂停实现并说明原因，不得自行编造资料项
-
-#### Scenario: 模板版本为 v20260624
-
-- **WHEN** 系统保存当前 active 阶段资料项模板
-- **THEN** 模板版本必须使用 `v20260624`，不得继续使用旧版 `v1` 或历史模板版本作为程序运行模板版本
-
-#### Scenario: 历史模板不再作为 active 口径
-
-- **WHEN** 系统初始化阶段资料项模板
-- **THEN** 系统必须废弃历史模板运行口径，不得继续以旧版模板作为当前 active 模板依据，也不得并行初始化多套普通阶段资料模板
-
-#### Scenario: 当前资料项数量校验
-
+#### Scenario: 当前资料项数量和统计
 - **WHEN** 系统初始化或校验当前 active 阶段资料项模板
-- **THEN** `EXPECTED_STAGE_DOCUMENT_ITEM_COUNT` 必须按当前 active 模板资料项实际数量设置；当前正式运行口径为 64 项
+- **THEN** 普通资料项数量 MUST 为 64 项
+- **AND** `submit_only` 数量 MUST 为 33
+- **AND** `approval_required` 数量 MUST 为 24
+- **AND** `conditional_submit` 数量 MUST 为 7
+- **AND** `conditional_approval` 数量 MUST 为 0
 
-#### Scenario: 当前模板目标目录字段
-
-- **WHEN** 系统初始化当前 active 阶段资料模板
-- **THEN** 系统必须为每个模板项保存文件管理平台目标文件夹路径 `targetFolderPath`
-
-#### Scenario: 当前模板目录 ID 为空
-
-- **WHEN** 系统初始化当前 active 阶段资料模板
-- **THEN** 系统必须保持 `targetFolderId` 为空
+#### Scenario: 20260624 不再作为当前模板依据
+- **WHEN** 系统保存或说明当前 active 阶段资料项模板
+- **THEN** 系统 MUST NOT 将 `v20260624` 或 20260624 PDF 写作当前正式运行模板依据
 
 ### Requirement: 项目级阶段资料清单初始化
 
-系统 MUST 为项目维护项目级阶段资料清单，并 MUST 根据当前 active 阶段资料模板初始化项目资料项。
+系统 MUST 为项目维护项目级阶段资料清单，并 MUST 根据当前 20260625 active 阶段资料模板初始化 64 项项目资料项。
 
 #### Scenario: 新项目初始化资料清单
-
 - **WHEN** 项目创建成功
-- **THEN** 系统必须按 `v20260624` 阶段资料项模板为该项目生成项目级阶段资料清单
+- **THEN** 系统必须按当前 20260625 64 项阶段资料模板为该项目生成项目级阶段资料清单
 
-#### Scenario: 初始化资料项基础状态
-
+#### Scenario: 初始化资料项基础状态和适用性
 - **WHEN** 系统生成项目级资料项
 - **THEN** 每个资料项状态必须初始化为 `not_submitted`
+- **AND** 每个资料项必须初始化为适用，除非后续明确由 `isApplicable` 表达条件未触发或不适用
 
-#### Scenario: 初始化资料项适用性
-
+#### Scenario: 保存 completionMode 快照
 - **WHEN** 系统生成项目级资料项
-- **THEN** 每个资料项必须初始化为适用，并且不适用原因和不适用追溯字段必须为空
+- **THEN** 每个项目级资料项必须保存模板中的 `completionMode` 快照
 
-#### Scenario: 保存模板快照字段
-
-- **WHEN** 系统生成项目级资料项
-- **THEN** 项目级资料项必须保存当前 active 模板的资料项编号、资料项名称、是否必填、默认责任部门或责任角色、提交方式、`targetFolderPath` 和可空 `targetFolderId` 等模板快照字段
-
-#### Scenario: 当前项目资料项目录 ID 为空
-
-- **WHEN** 系统生成当前 active 模板的项目级资料项
-- **THEN** 项目级资料项必须保存 `targetFolderPath`，并保持 `targetFolderId` 为空
-
-#### Scenario: 预留后续能力字段
-
-- **WHEN** 系统保存项目级资料项
-- **THEN** 系统必须预留可支持后续文件上传、在线表单、资料齐套率和阶段推进的关联字段或扩展字段
+#### Scenario: conditional_submit 适用性表达
+- **WHEN** 项目级资料项 `completionMode = conditional_submit`
+- **THEN** 后续触发/未触发 MUST 使用现有 `isApplicable` 机制表达：`false` 表示未触发或不适用，`true` 表示已触发
 
 #### Scenario: 不兼容旧模拟项目资料
-
-- **WHEN** 系统切换为 `v20260624` 阶段资料模板
+- **WHEN** 系统切换到当前 20260625 模板
 - **THEN** 系统不得要求兼容旧模拟项目的旧资料项，也不得为旧资料项提供新旧模板映射或共存初始化逻辑
 
 ### Requirement: 资料项基础状态
 
-系统 MUST 保存和展示项目级资料项基础状态，第一版系统状态枚举只包括 `not_submitted`、`submitted`、`confirmed` 和 `returned`，并且状态变更 MUST 只能通过受控的手工状态操作接口完成。
+系统 MUST 保存项目级资料项基础状态，并 MUST 区分基础状态和业务完成状态；业务完成状态 MUST 由 `completionMode`、`status` 和 `isApplicable` 派生。
 
 #### Scenario: 基础状态枚举
-
 - **WHEN** 系统保存资料项状态
 - **THEN** 状态必须是 `not_submitted`、`submitted`、`confirmed` 或 `returned` 之一
 
-#### Scenario: 状态显示口径
+#### Scenario: submit_only submitted 派生完成
+- **WHEN** 资料项 `completionMode = submit_only`
+- **AND** 状态为 `submitted`
+- **THEN** 系统 MUST 将业务完成状态派生为 `completed` 或等价已完成状态
 
-- **WHEN** 前端展示资料项状态
-- **THEN** `not_submitted` 必须显示为“待提交”，`submitted` 必须显示为“已提交”，`confirmed` 必须显示为“已确认”，`returned` 必须显示为“已退回”
+#### Scenario: approval_required submitted 派生待审核
+- **WHEN** 资料项 `completionMode = approval_required`
+- **AND** 状态为 `submitted`
+- **THEN** 系统 MUST 将业务完成状态派生为 `pending_review` 或等价待审核状态
 
-#### Scenario: 初始化状态显示
-
-- **WHEN** 项目资料项初始化为 `not_submitted`
-- **THEN** 前端必须显示为“待提交”
-
-#### Scenario: 状态流转由专用接口控制
-
-- **WHEN** 用户需要改变资料项状态
-- **THEN** 系统必须通过资料项手工状态操作接口执行状态机校验和状态更新
+#### Scenario: returned 派生未完成
+- **WHEN** 资料项状态为 `returned`
+- **THEN** 系统 MUST 将业务完成状态派生为 `incomplete` 或等价未完成状态
 
 ### Requirement: 阶段资料清单查询接口
 
-系统 MUST 提供查询某项目阶段资料清单的后端接口，并 MUST 要求登录态，按阶段分组返回资料项、状态追溯字段、适用性追溯字段、责任人字段、责任人变更追溯字段和阶段资料齐套摘要。
+系统 MUST 提供查询某项目阶段资料清单的后端接口，并 MUST 要求登录态，按阶段分组返回资料项、状态追溯字段、适用性追溯字段、责任人字段、责任人变更追溯字段、`completionMode`、派生完成状态和阶段资料齐套摘要。
 
 #### Scenario: 查询项目阶段资料清单
-
 - **WHEN** 已登录用户请求某项目阶段资料清单
 - **THEN** 后端必须返回该项目的阶段资料清单数据
 
-#### Scenario: 查询阶段资料清单要求登录
-
-- **WHEN** 用户未携带登录态、登录态无效或登录态已过期时请求阶段资料清单
-- **THEN** 系统必须拒绝该请求，并提示需要登录
-
-#### Scenario: 阶段资料清单查询不做平台管理员校验
-
-- **WHEN** 已登录用户请求阶段资料清单
-- **THEN** 系统必须只做 `requireAuth` 和项目存在校验，不得要求 `isPlatformAdmin`，不得在本能力中实现复杂权限、角色权限或轻角色校验
-
 #### Scenario: 按阶段分组返回
-
 - **WHEN** 后端返回阶段资料清单
 - **THEN** 响应必须按 8 阶段顺序分组，每个阶段包含阶段标识、阶段名称、该阶段资料项列表和 `completenessSummary`
 
 #### Scenario: 资料项字段返回
-
 - **WHEN** 后端返回资料项列表
-- **THEN** 每个资料项必须包含资料项编号、资料项名称、是否必填、默认责任部门或责任角色、提交方式、`targetFolderPath`、可空 `targetFolderId`、基础状态、`submittedByUserId`、`submittedAt`、`confirmedByUserId`、`confirmedAt`、`returnedByUserId`、`returnedAt`、`returnReason`、`isApplicable`、`notApplicableByUserId`、`notApplicableAt`、`notApplicableReason`、`restoredApplicableByUserId`、`restoredApplicableAt`、`responsibleUserId`、`responsibleUser`、`responsibilityUpdatedByUserId` 和 `responsibilityUpdatedAt`
+- **THEN** 每个资料项必须包含资料项编号、资料项名称、是否必填、默认责任部门或责任角色、提交方式、基础状态、`completionMode`、`isComplete` 或 `completionStatus` 等派生完成状态字段、`submittedByUserId`、`submittedAt`、`confirmedByUserId`、`confirmedAt`、`returnedByUserId`、`returnedAt`、`returnReason`、`isApplicable`、适用性追溯字段、`responsibleUserId`、`responsibleUser`、`responsibilityUpdatedByUserId` 和 `responsibilityUpdatedAt`
 
-#### Scenario: 责任人安全用户字段返回
+#### Scenario: submit_only submitted 返回已完成
+- **WHEN** 后端返回 `completionMode = submit_only` 且基础状态为 `submitted` 的资料项
+- **THEN** 该资料项派生完成状态 MUST 为 `completed` 或等价已完成状态
+- **AND** `isComplete` MUST 为 true
 
-- **WHEN** 后端返回已分配责任人的资料项
-- **THEN** `responsibleUser` 必须只返回 `id`、`account`、`name`、`department`、`role`、`isEnabled` 和可空 `filePlatformUserId`，且不得包含 `isPlatformAdmin`、`is_platform_admin`、`password_hash`、`passwordHash` 或任何密码内部字段
+#### Scenario: approval_required submitted 返回待审核
+- **WHEN** 后端返回 `completionMode = approval_required` 且基础状态为 `submitted` 的资料项
+- **THEN** 该资料项派生完成状态 MUST 为 `pending_review` 或等价待审核状态
+- **AND** `isComplete` MUST 为 false
 
-#### Scenario: 未分配责任人字段为空
-
-- **WHEN** 后端返回未分配责任人的资料项
-- **THEN** `responsibleUserId` 和 `responsibleUser` 必须为空，并且不得因此阻止资料清单展示
-
-#### Scenario: 已分配责任人后来被禁用
-
-- **WHEN** 后端返回已分配责任人但该用户后来被禁用的资料项
-- **THEN** 后端必须继续返回该责任人安全用户信息，并通过 `isEnabled = false` 表示该用户当前禁用状态
+#### Scenario: returned 返回未完成
+- **WHEN** 后端返回基础状态为 `returned` 的资料项
+- **THEN** 该资料项派生完成状态 MUST 表示未完成
+- **AND** `isComplete` MUST 为 false
 
 #### Scenario: 阶段齐套摘要字段返回
-
 - **WHEN** 后端返回阶段分组数据
-- **THEN** 每个阶段的 `completenessSummary` 必须包含 `requiredTotal`、`confirmedRequiredCount`、`incompleteRequiredCount`、`completionPercent` 和 `incompleteRequiredDocuments`
+- **THEN** 每个阶段的 `completenessSummary` 必须包含 `requiredTotal`、`completedRequiredCount` 或等价已完成数量、`incompleteRequiredCount`、`completionPercent` 和 `incompleteRequiredDocuments`
+- **AND** 如果为兼容旧前端继续返回 `confirmedRequiredCount`，其含义 MUST 与按 `completionMode` 派生的已完成数量一致，不得仅统计 `status = confirmed`
 
 #### Scenario: 阶段齐套摘要缺失列表字段返回
-
 - **WHEN** 每个阶段的 `completenessSummary` 包含非空 `incompleteRequiredDocuments`
-- **THEN** `incompleteRequiredDocuments` 中的每个资料项必须至少包含 `id`、`documentCode`、`documentName` 和 `status`
-
-#### Scenario: 项目不存在
-
-- **WHEN** 请求不存在的项目阶段资料清单
-- **THEN** 后端必须返回项目不存在错误
+- **THEN** `incompleteRequiredDocuments` 中的每个资料项必须至少包含 `id`、`documentCode`、`documentName`、`status`、`completionMode` 和派生完成状态
 
 ### Requirement: 文件平台边界
 阶段资料清单能力 MUST 只保存文件平台目标路径，第一版 `targetFolderId` MUST 为空；手工状态流转、资料项适用性、阶段资料齐套摘要、项目阶段推进门禁、资料项责任人分配、阶段资料附件和项目业务操作日志不得在本变更中真实联动文件管理平台。
@@ -200,77 +137,35 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 ### Requirement: 资料项手工状态流转
 
-系统 MUST 提供项目级阶段资料项的手工状态操作接口，并 MUST 在后端统一校验状态机和资料项适用性；状态流转成功后 MUST 记录项目业务操作日志。
+系统 MUST 提供项目级阶段资料项的手工状态操作接口，并 MUST 按 `completionMode` 限定提交、确认和退回动作。
 
 #### Scenario: 标记待提交资料为已提交
-
 - **WHEN** 已登录用户将状态为 `not_submitted` 且适用的项目级资料项标记提交
-- **THEN** 系统必须将该资料项状态更新为 `submitted`，并记录 `submitted_by_user_id` 和 `submitted_at`
+- **THEN** 系统必须将该资料项状态更新为 `submitted`，并记录提交追溯字段
 
 #### Scenario: 标记已退回资料为已提交
-
 - **WHEN** 已登录用户将状态为 `returned` 且适用的项目级资料项重新标记提交
-- **THEN** 系统必须将该资料项状态更新为 `submitted`，记录新的 `submitted_by_user_id` 和 `submitted_at`，并清空 `returned_by_user_id`、`returned_at` 和 `return_reason`
+- **THEN** 系统必须将该资料项状态更新为 `submitted`，记录新的提交追溯字段，并清空退回追溯字段
 
-#### Scenario: 确认已提交资料
+#### Scenario: confirm 只适用于需要审核资料
+- **WHEN** 已登录用户确认状态为 `submitted` 的项目级资料项
+- **THEN** 系统 MUST 仅允许 `completionMode = approval_required` 或未来 `conditional_approval` 的资料执行确认
+- **AND** 系统 MUST NOT 要求 `submit_only` 资料进入确认主流程
 
-- **WHEN** 已登录用户确认状态为 `submitted` 且适用的项目级资料项
-- **THEN** 系统必须将该资料项状态更新为 `confirmed`，并记录 `confirmed_by_user_id` 和 `confirmed_at`
+#### Scenario: return 只适用于需要审核资料
+- **WHEN** 已登录用户退回状态为 `submitted` 的项目级资料项
+- **THEN** 系统 MUST 仅允许 `completionMode = approval_required` 或未来 `conditional_approval` 的资料执行退回
+- **AND** 系统 MUST NOT 将 `submit_only` 资料退回作为主流程操作
 
-#### Scenario: 退回已提交资料
+#### Scenario: submit_only submitted 不进审核待办
+- **WHEN** 资料项 `completionMode = submit_only` 且状态为 `submitted`
+- **THEN** 系统 MUST 将该资料项派生为完成
+- **AND** 系统 MUST NOT 为该资料项生成审核待办
 
-- **WHEN** 已登录用户填写非空退回原因并退回状态为 `submitted` 且适用的项目级资料项
-- **THEN** 系统必须将该资料项状态更新为 `returned`，并记录 `returned_by_user_id`、`returned_at` 和 `return_reason`
-
-#### Scenario: 不适用资料项不能状态流转
-
-- **WHEN** 已登录用户请求提交、确认或退回已标记不适用的项目级资料项
-- **THEN** 系统必须拒绝该请求，并且不得改变资料项状态、状态追溯字段或适用性字段
-
-#### Scenario: 退回原因必填
-
-- **WHEN** 已登录用户退回资料项但未提供非空退回原因
-- **THEN** 系统必须拒绝退回，并且不得改变资料项状态或追溯字段
-
-#### Scenario: 非法状态流转
-
-- **WHEN** 用户请求未被允许的资料项状态流转
-- **THEN** 系统必须拒绝该请求，并且不得改变资料项状态或追溯字段
-
-#### Scenario: 状态操作要求登录
-
-- **WHEN** 用户未携带登录态、登录态无效或登录态已过期时请求资料项状态操作
-- **THEN** 系统必须拒绝该请求，并提示需要登录
-
-#### Scenario: 状态操作不做角色权限
-
-- **WHEN** 已登录用户请求资料项状态操作
-- **THEN** 系统必须只校验登录态、状态机和资料项适用性，不得在本能力中校验复杂权限、角色权限或轻角色规则
-
-#### Scenario: 资料项必须属于当前项目
-
-- **WHEN** 用户请求操作某项目下不存在或不属于该项目的资料项
-- **THEN** 系统必须拒绝该请求，并且不得改变任何其他项目的资料项状态
-
-#### Scenario: 标记提交成功记录业务日志
-
-- **WHEN** 已登录用户成功将适用资料项标记为 `submitted`
-- **THEN** 系统必须在同一事务中记录 `action_type = document.submitted` 且 `target_type = stage_document` 的项目业务操作日志
-
-#### Scenario: 确认成功记录业务日志
-
-- **WHEN** 已登录用户成功将适用资料项确认为 `confirmed`
-- **THEN** 系统必须在同一事务中记录 `action_type = document.confirmed` 且 `target_type = stage_document` 的项目业务操作日志
-
-#### Scenario: 退回成功记录业务日志
-
-- **WHEN** 已登录用户成功将适用资料项退回为 `returned`
-- **THEN** 系统必须在同一事务中记录 `action_type = document.returned` 且 `target_type = stage_document` 的项目业务操作日志，并在 `details_json` 中包含 `returnReason`
-
-#### Scenario: 状态操作日志失败回滚状态变更
-
-- **WHEN** 资料项状态和追溯字段已经准备提交，但对应业务操作日志写入失败
-- **THEN** 系统必须回滚资料项状态流转，不得改变资料项状态或追溯字段
+#### Scenario: conditional_submit 使用 isApplicable
+- **WHEN** 资料项 `completionMode = conditional_submit`
+- **THEN** `isApplicable = false` MUST 表示未触发或不适用且不阻塞
+- **AND** `isApplicable = true` 且状态为 `submitted` MUST 派生为完成
 
 ### Requirement: 手工状态流转边界
 
@@ -293,67 +188,58 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 ### Requirement: 阶段资料齐套摘要
 
-系统 MUST 为每个阶段分组返回适用必填资料齐套摘要，并 MUST 只基于当前项目级阶段资料项、当前手工状态和人工适用性判断计算。
+系统 MUST 为每个阶段分组返回适用资料齐套摘要，并 MUST 只基于当前项目级阶段资料项、`completionMode`、基础状态和现有 `isApplicable` 适用性判断计算。
 
 #### Scenario: 返回阶段齐套摘要字段
-
 - **WHEN** 用户查询项目阶段资料清单
-- **THEN** 每个阶段分组必须返回 `completenessSummary`，包含 `requiredTotal`、`confirmedRequiredCount`、`incompleteRequiredCount`、`completionPercent` 和 `incompleteRequiredDocuments`
+- **THEN** 每个阶段分组必须返回 `completenessSummary`，包含 `requiredTotal`、`completedRequiredCount` 或等价已完成数量、`incompleteRequiredCount`、`completionPercent` 和 `incompleteRequiredDocuments`
 
-#### Scenario: 只统计适用且必填资料项
-
+#### Scenario: 只统计适用资料项
 - **WHEN** 系统计算阶段齐套摘要
-- **THEN** 系统必须只统计 `isRequired = true` 且 `isApplicable = true` 的当前项目级资料项
+- **THEN** 系统必须只统计当前项目级资料项中 `isApplicable = true` 且参与阶段推进门禁的资料项
 
-#### Scenario: 已确认适用必填资料计为完成
+#### Scenario: submit_only submitted 计为完成
+- **WHEN** 适用资料项 `completionMode = submit_only` 且状态为 `submitted`
+- **THEN** 系统必须将其计入已完成数量
 
-- **WHEN** 适用必填资料项状态为 `confirmed`
-- **THEN** 系统必须将其计入 `confirmedRequiredCount`
+#### Scenario: approval_required confirmed 计为完成
+- **WHEN** 适用资料项 `completionMode = approval_required` 且状态为 `confirmed`
+- **THEN** 系统必须将其计入已完成数量
 
-#### Scenario: 非确认适用必填资料计为未完成
+#### Scenario: approval_required submitted 计为未完成
+- **WHEN** 适用资料项 `completionMode = approval_required` 且状态为 `submitted`
+- **THEN** 系统必须将其计入 `incompleteRequiredCount`，并加入缺失或未完成资料列表
 
-- **WHEN** 适用必填资料项状态为 `not_submitted`、`submitted` 或 `returned`
-- **THEN** 系统必须将其计入 `incompleteRequiredCount`，并加入缺失必填资料列表
-
-#### Scenario: 不适用资料项不进入缺失列表
-
-- **WHEN** 必填资料项被标记为不适用
+#### Scenario: conditional_submit 未触发不进入缺失列表
+- **WHEN** 资料项 `completionMode = conditional_submit`
+- **AND** `isApplicable = false`
 - **THEN** 系统不得将该资料项计入 `requiredTotal` 或 `incompleteRequiredDocuments`
 
-#### Scenario: 缺失必填资料项最小字段
+#### Scenario: conditional_submit 触发后按提交判断
+- **WHEN** 资料项 `completionMode = conditional_submit`
+- **AND** `isApplicable = true`
+- **AND** 状态为 `submitted`
+- **THEN** 系统必须将其计入已完成数量
 
+#### Scenario: returned 计为未完成
+- **WHEN** 适用资料项状态为 `returned`
+- **THEN** 系统必须将其计入 `incompleteRequiredCount`，并加入缺失或未完成资料列表
+
+#### Scenario: 缺失资料项最小字段
 - **WHEN** `incompleteRequiredDocuments` 返回资料项
-- **THEN** 每项至少包含 `id`、`documentCode`、`documentName` 和 `status`
-
-#### Scenario: 非必需资料继续展示但不影响齐套率
-
-- **WHEN** 当前项目级资料项为非必需或建议资料
-- **THEN** 系统必须继续在资料清单中展示该资料项，但不得将其计入 `requiredTotal`、`confirmedRequiredCount`、`incompleteRequiredCount` 或阶段推进门禁
+- **THEN** 每项至少包含 `id`、`documentCode`、`documentName`、`status`、`completionMode` 和派生完成状态
 
 #### Scenario: 完成百分比计算规则
-
 - **WHEN** 系统计算 `completionPercent`
-- **THEN** 当 `requiredTotal > 0` 时必须按 `round(confirmedRequiredCount / requiredTotal * 100)` 计算，并返回 0 到 100 的整数
+- **THEN** 当 `requiredTotal > 0` 时必须按 `round(completedRequiredCount / requiredTotal * 100)` 或等价完成数量计算，并返回 0 到 100 的整数
 
-#### Scenario: 没有适用必填资料的阶段
-
+#### Scenario: 没有适用资料的阶段
 - **WHEN** 阶段 `requiredTotal = 0`
 - **THEN** 系统必须返回 `completionPercent = 100`
 
-#### Scenario: 适用性变更后摘要使用最新状态
-
-- **WHEN** 资料项被标记不适用或恢复适用后用户重新查询阶段资料清单
-- **THEN** 系统必须基于最新 `isApplicable` 状态重新计算 `completenessSummary`
-
-#### Scenario: 阶段推进读取当前阶段摘要口径
-
+#### Scenario: 阶段推进读取 completionMode 摘要口径
 - **WHEN** 系统执行阶段推进齐套门禁
-- **THEN** 系统必须使用同一当前项目级资料项齐套摘要口径判断当前阶段是否可推进
-
-#### Scenario: 齐套摘要不代表文件归档
-
-- **WHEN** 系统返回阶段齐套摘要
-- **THEN** 系统不得把该摘要表示为文件已上传、文件已归档或在线表单已提交
+- **THEN** 系统必须使用同一 `completionMode` 派生完成口径判断当前阶段是否可推进
 
 ### Requirement: 资料项适用性
 
@@ -547,87 +433,26 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 ### Requirement: 我的阶段资料任务查询接口
 
-系统 MUST 提供 `GET /api/me/stage-document-tasks`，用于已登录用户查询分配给自己的项目级阶段资料项任务。
+系统 MUST 提供 `GET /api/me/stage-document-tasks`，用于已登录用户查询分配给自己的项目级阶段资料项任务，并 MUST 使用 `completionMode` 派生完成状态过滤和展示任务。
 
-#### Scenario: 查询我的资料任务要求登录
-
-- **WHEN** 用户未携带登录态、登录态无效或登录态已过期时请求 `GET /api/me/stage-document-tasks`
-- **THEN** 系统必须拒绝该请求，并提示需要登录
-
-#### Scenario: 查询我的资料任务不要求平台管理员
-
-- **WHEN** 已登录用户请求 `GET /api/me/stage-document-tasks`
-- **THEN** 系统必须只做 `requireAuth`，不得要求 `isPlatformAdmin`，不得实现复杂权限、项目成员权限、资料权限、角色权限或轻角色校验
-
-#### Scenario: 只返回当前登录用户负责的资料项
-
-- **WHEN** 已登录用户请求我的资料任务
-- **THEN** 系统必须只返回 `responsible_user_id = 当前登录用户 id` 的项目级阶段资料项，不得允许前端通过参数查询其他用户的资料任务
-
-#### Scenario: 默认返回待办资料任务
-
+#### Scenario: 默认 pending 排除已完成 submit_only
 - **WHEN** 已登录用户未提供 `status` 筛选时请求我的资料任务
-- **THEN** 系统必须按 `status=pending` 处理，只返回状态为 `not_submitted`、`submitted` 或 `returned` 且适用的资料项
+- **THEN** 系统必须按 `status=pending` 处理，只返回当前登录用户负责、适用且未按 `completionMode` 完成的资料项
+- **AND** 系统 MUST NOT 返回 `completionMode = submit_only` 且 `status = submitted` 的已完成资料
 
-#### Scenario: 默认排除不适用资料
-
-- **WHEN** 已登录用户请求我的资料任务
-- **THEN** 系统必须默认排除 `is_applicable = 0` 的资料项，并且不得把不适用资料作为待办返回
-
-#### Scenario: 支持单一状态筛选
-
-- **WHEN** 已登录用户使用 `status=not_submitted`、`status=submitted`、`status=returned` 或 `status=confirmed` 请求我的资料任务
-- **THEN** 系统必须只返回当前登录用户负责、状态匹配且适用的资料项
-
-#### Scenario: 支持 pending 状态筛选
-
-- **WHEN** 已登录用户使用 `status=pending` 请求我的资料任务
-- **THEN** 系统必须返回当前登录用户负责、状态为 `not_submitted`、`submitted` 或 `returned` 且适用的资料项
-
-#### Scenario: 支持 all 状态筛选
-
-- **WHEN** 已登录用户使用 `status=all` 请求我的资料任务
-- **THEN** 系统必须返回当前登录用户负责、状态为 `not_submitted`、`submitted`、`returned` 或 `confirmed` 且适用的资料项
-
-#### Scenario: 非法状态筛选
-
-- **WHEN** 已登录用户使用不属于 `not_submitted`、`submitted`、`returned`、`confirmed`、`pending` 或 `all` 的 `status` 请求我的资料任务
-- **THEN** 系统必须通过统一错误处理返回 `INVALID_STAGE_DOCUMENT_TASK_STATUS` 和明确 HTTP 状态，建议为 400，并且不得回退为默认查询
-
-#### Scenario: 支持项目筛选
-
-- **WHEN** 已登录用户提供合法 `projectId` 请求我的资料任务
-- **THEN** 系统必须只返回当前登录用户负责、属于该项目且符合状态筛选和适用性口径的资料项
-
-#### Scenario: 非法项目筛选
-
-- **WHEN** 已登录用户提供非数字、空字符串、0、负数、小数或其他非正整数格式的 `projectId` 请求我的资料任务
-- **THEN** 系统必须通过统一错误处理返回 `INVALID_PROJECT_ID` 和明确 HTTP 状态，建议为 400，并且不得回退为无项目筛选查询
-
-#### Scenario: 合法项目筛选无匹配任务
-
-- **WHEN** 已登录用户提供合法正整数 `projectId`，但不存在匹配当前登录用户、适用性和状态筛选条件的资料任务
-- **THEN** 系统必须返回空列表，不得把该情况作为错误处理
-
-#### Scenario: 项目和阶段状态不参与过滤
-
-- **WHEN** 已登录用户请求我的资料任务
-- **THEN** 系统不得按项目状态、阶段状态或阶段是否当前过滤结果；只要资料项分配给当前登录用户、适用且状态符合筛选条件，就必须按查询和排序规则返回
+#### Scenario: submitted 筛选结合 completionMode
+- **WHEN** 已登录用户使用 `status=submitted` 请求我的资料任务
+- **THEN** 系统返回的任务必须包含 `completionMode` 和派生完成状态
+- **AND** `approval_required + submitted` MUST 表达为待审核
+- **AND** `submit_only + submitted` MUST 表达为已提交完成或已完成
 
 #### Scenario: 我的资料任务返回字段
-
 - **WHEN** 系统返回我的资料任务列表
-- **THEN** 每个任务必须至少包含 `documentId`、`projectId`、`projectCode`、`projectName`、`stageId`、`stageName`、`stageOrder`、`documentCode`、`documentName`、`isRequired`、`status`、`isApplicable`、`returnReason`、`submittedAt`、`confirmedAt`、`returnedAt` 和 `responsibilityUpdatedAt`
+- **THEN** 每个任务必须至少包含 `documentId`、`projectId`、`projectCode`、`projectName`、`stageId`、`stageName`、`stageOrder`、`documentCode`、`documentName`、`isRequired`、`status`、`completionMode`、`isComplete` 或 `completionStatus`、`isApplicable`、`returnReason`、`submittedAt`、`confirmedAt`、`returnedAt` 和 `responsibilityUpdatedAt`
 
-#### Scenario: 我的资料任务稳定排序
-
-- **WHEN** 系统返回我的资料任务列表
-- **THEN** 系统必须按状态优先级 `returned`、`not_submitted`、`submitted`、`confirmed` 排序；同状态下按 `responsibilityUpdatedAt` 倒序且空值排后，再按 `projectCode` 升序、`stageOrder` 升序、`documentOrder` 升序和 `documentId` 升序排序
-
-#### Scenario: 查询我的资料任务不写业务日志
-
-- **WHEN** 已登录用户查询我的资料任务
-- **THEN** 系统不得写入项目业务操作日志，不得改变资料状态、适用性、责任人、责任人追溯字段、阶段齐套摘要或阶段推进状态
+#### Scenario: 排序和筛选不混入已完成资料
+- **WHEN** 系统返回 pending 或责任人待办口径的我的资料任务
+- **THEN** 排序和筛选结果 MUST NOT 将已完成的 `submit_only + submitted` 混入责任人待办
 
 ### Requirement: 我的阶段资料任务边界
 
@@ -655,57 +480,25 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 ### Requirement: 项目总览当前阶段齐套摘要
 
-系统 MUST 允许项目总览看板按既有阶段资料清单齐套口径，查询并返回每个项目当前阶段的适用必填资料齐套摘要。
+系统 MUST 允许项目总览看板按当前 `completionMode` 阶段资料清单齐套口径，查询并返回每个项目当前阶段的适用资料齐套摘要。
 
 #### Scenario: 项目总览只统计当前阶段
-
 - **WHEN** 系统为项目总览看板计算某项目齐套摘要
 - **THEN** 系统必须只计算该项目当前阶段的资料项，不得因其他阶段资料缺失或完成而影响当前阶段摘要
 
 #### Scenario: 项目总览齐套摘要字段
-
 - **WHEN** 项目当前阶段存在资料项记录
-- **THEN** 项目总览中的 `currentStageCompletenessSummary` 必须包含 `requiredTotal`、`confirmedRequiredCount`、`incompleteRequiredCount` 和 `completionPercent`
+- **THEN** 项目总览中的 `currentStageCompletenessSummary` 必须包含 `requiredTotal`、`completedRequiredCount` 或等价已完成数量、`incompleteRequiredCount` 和 `completionPercent`
 
-#### Scenario: 项目总览只统计适用必填资料
-
+#### Scenario: 项目总览按 completionMode 计完成
 - **WHEN** 系统为项目总览计算当前阶段齐套摘要
-- **THEN** `requiredTotal` 必须只统计 `is_required = true` 且 `is_applicable = 1` 的资料项，建议资料项和不适用资料项不得计入齐套摘要计数或百分比
+- **THEN** `submit_only + submitted`、`approval_required + confirmed`、`conditional_submit + isApplicable=true + submitted` MUST 计为完成
+- **AND** `approval_required + submitted` 和 `returned` MUST 计为未完成
 
-#### Scenario: 项目总览已确认资料计为完成
-
-- **WHEN** 当前阶段适用必填资料项状态为 `confirmed`
-- **THEN** 项目总览必须将该资料项计入 `confirmedRequiredCount`
-
-#### Scenario: 项目总览未确认资料计为未完成
-
-- **WHEN** 当前阶段适用必填资料项状态为 `not_submitted`、`submitted` 或 `returned`
-- **THEN** 项目总览必须将该资料项计入 `incompleteRequiredCount`，并在 `currentStageIncompleteRequiredDocuments` 中返回该资料项
-
-#### Scenario: 项目总览不适用资料不进入缺失列表
-
-- **WHEN** 当前阶段必填资料项已标记为不适用
-- **THEN** 项目总览不得将该资料项计入 `requiredTotal`、`confirmedRequiredCount` 或 `incompleteRequiredCount`，也不得将其返回到 `currentStageIncompleteRequiredDocuments`
-
-#### Scenario: 项目总览缺失资料最小字段
-
-- **WHEN** 项目总览在 `currentStageIncompleteRequiredDocuments` 中返回缺失资料项
-- **THEN** 每个缺失资料项必须至少包含 `id`、`documentCode`、`documentName` 和 `status`
-
-#### Scenario: 项目总览 requiredTotal 为零
-
-- **WHEN** 当前阶段存在资料项记录，但适用必填资料数为 0
-- **THEN** 项目总览必须返回 `completionPercent = 100`、`confirmedRequiredCount = 0`、`incompleteRequiredCount = 0` 和空的 `currentStageIncompleteRequiredDocuments`
-
-#### Scenario: 项目总览当前阶段资料清单未初始化
-
-- **WHEN** 当前阶段没有任何 `project_stage_documents` 资料项记录
-- **THEN** 项目总览必须返回 `currentStageCompletenessSummary = null`、空的 `currentStageIncompleteRequiredDocuments` 和 `currentStageIssue = checklist_not_initialized`，不得自动初始化资料清单
-
-#### Scenario: 项目总览齐套摘要不代表文件归档
-
-- **WHEN** 系统计算或返回项目总览齐套摘要
-- **THEN** 系统必须明确该摘要基于当前手工状态和人工适用性判断，不得把 `completionPercent` 表示为文件已上传、文件已归档或在线表单已提交
+#### Scenario: 项目总览条件资料未触发不阻塞
+- **WHEN** 当前阶段资料 `completionMode = conditional_submit`
+- **AND** `isApplicable = false`
+- **THEN** 项目总览不得将该资料项计入缺失资料或阻塞项
 
 ### Requirement: 阶段资料附件模型
 系统 MUST 为项目级阶段资料项维护附件记录，附件 MUST 关联到具体 `project_stage_document`，并 MUST 保存文件展示、存储和上传追溯所需的最小字段。
@@ -972,74 +765,29 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 - **THEN** 系统不得创建消息提醒、超期提醒、截止日期、跨项目附件统计、审批流或个人待办实体
 
 ### Requirement: 阶段资料后端模块化保持行为
-系统 MUST 允许对阶段资料相关后端仓储和 helper 做模块化拆分，但拆分后 MUST 保持阶段资料清单、资料状态、适用性、齐套摘要、责任人、我的资料任务和阶段资料附件能力的对外行为不变。
+
+系统 MUST 允许对阶段资料相关后端仓储和 helper 做模块化拆分，但拆分后 MUST 保持阶段资料清单、资料状态、适用性、齐套摘要、责任人、我的资料任务和阶段资料附件能力的对外行为符合当前 `completionMode` 口径。
 
 #### Scenario: 阶段资料清单查询行为保持
 - **WHEN** 后端完成阶段资料模块拆分后，已登录用户请求某项目阶段资料清单
-- **THEN** 系统必须仍要求登录态，并按既有 8 阶段分组、资料项字段、责任人安全字段、状态追溯字段、适用性追溯字段、责任人变更追溯字段和阶段齐套摘要口径返回数据
+- **THEN** 系统必须仍要求登录态，并按既有 8 阶段分组、资料项字段、责任人安全字段、状态追溯字段、适用性追溯字段、责任人变更追溯字段、`completionMode` 和派生完成状态返回数据
 
-#### Scenario: 阶段资料初始化行为保持
-- **WHEN** 后端完成阶段资料模块拆分后，新项目创建或历史项目补初始化阶段资料清单
-- **THEN** 系统必须仍按阶段资料模板生成项目级资料项，保持资料项模板快照字段、默认状态、默认适用性、目标文件夹字段和幂等补初始化规则不变
-
-#### Scenario: 资料状态流转行为保持
-- **WHEN** 后端完成阶段资料模块拆分后，已登录用户执行资料提交、确认或退回
-- **THEN** 系统必须保持既有状态机、适用性限制、退回原因校验、资料项归属校验、追溯字段更新、错误码、HTTP 状态码和业务日志事务规则不变
-
-#### Scenario: 资料适用性行为保持
-- **WHEN** 后端完成阶段资料模块拆分后，已登录用户标记资料项不适用或恢复适用
-- **THEN** 系统必须保持既有适用性规则、原因校验、追溯字段更新、状态不自动改变、齐套摘要重新查询口径和业务日志事务规则不变
-
-#### Scenario: 阶段齐套摘要行为保持
+#### Scenario: 阶段齐套摘要行为按 completionMode
 - **WHEN** 后端完成阶段资料模块拆分后，系统计算阶段齐套摘要或阶段推进齐套门禁
-- **THEN** 系统必须仍只统计适用必填资料，`confirmed` 计为完成，`not_submitted`、`submitted` 和 `returned` 计为未完成，建议资料和不适用资料不影响计数，`requiredTotal = 0` 时 `completionPercent = 100`
-
-#### Scenario: 资料责任人行为保持
-- **WHEN** 后端完成阶段资料模块拆分后，已登录用户查询候选用户、分配责任人或清空责任人
-- **THEN** 系统必须保持既有登录要求、非平台管理员边界、启用用户候选口径、责任人安全字段、禁用责任人展示、责任人追溯字段、错误码和 `document.responsible_changed` 日志事务规则不变
-
-#### Scenario: 我的资料任务行为保持
-- **WHEN** 后端完成阶段资料模块拆分后，已登录用户请求 `GET /api/me/stage-document-tasks`
-- **THEN** 系统必须保持只查询当前登录用户负责资料项、默认 pending、状态筛选、严格 `projectId` 校验、项目/阶段状态不过滤、默认排除不适用资料、返回字段、排序和只读边界不变
-
-#### Scenario: 阶段资料附件行为保持
-- **WHEN** 后端完成阶段资料模块拆分后，已登录用户上传、查询、下载或删除阶段资料附件
-- **THEN** 系统必须保持既有附件接口路径、登录边界、ID 校验优先级、文件参数校验、单 `file` 字段策略、不适用资料项上传限制、列表字段和排序、下载错误码、软删除、业务日志事务规则和不改变资料业务状态的边界不变
-
-#### Scenario: 阶段资料数据库结构保持
-- **WHEN** 实现阶段资料后端模块拆分
-- **THEN** 系统不得新增阶段资料数据库迁移，不得修改阶段资料模板、项目级阶段资料、附件或业务日志相关表结构、字段、索引、默认值或历史数据
-
-#### Scenario: 阶段资料不新增排除能力
-- **WHEN** 实现阶段资料后端模块拆分
-- **THEN** 系统不得因本次结构治理新增文件管理平台联动、在线表单、表单草稿、表单归档文件、附件预览、版本管理、病毒扫描、消息提醒、超期提醒、项目成员权限、资料责任人权限、复杂权限或批量资料操作
+- **THEN** 系统必须按 `completionMode`、基础状态和 `isApplicable` 派生完成状态，不得退回到仅 `confirmed` 计为完成的旧口径
 
 ### Requirement: 阶段资料能力行为保持
-系统 MUST 在当前 active 资料项模板下保持资料状态、适用性、责任人、附件、我的工作台和项目总览的既有行为，模板版本切换不得改变这些能力的状态机和权限边界。
+
+系统 MUST 在当前 20260625 active 资料项模板下保持资料状态、适用性、责任人、附件、我的工作台和项目总览的既有能力边界，但 MUST 使用 `completionMode` 派生完成口径，而不是旧的 confirmed-only 口径。
 
 #### Scenario: 资料状态机保持
 - **WHEN** 已登录用户对当前项目级资料项执行提交、确认或退回
-- **THEN** 系统必须继续使用 `not_submitted`、`submitted`、`confirmed`、`returned` 状态机和既有错误口径
+- **THEN** 系统必须继续使用 `not_submitted`、`submitted`、`confirmed`、`returned` 基础状态机
+- **AND** 业务完成状态 MUST 由 `completionMode`、基础状态和 `isApplicable` 派生
 
-#### Scenario: 适用性规则保持
-- **WHEN** 已登录用户对当前项目级资料项标记不适用或恢复适用
-- **THEN** 系统必须继续保持既有适用性规则、原因校验和状态不自动改变口径
-
-#### Scenario: 责任人分配规则保持
-- **WHEN** 已登录用户为当前项目级资料项分配或清空责任人
-- **THEN** 系统必须继续保持既有候选用户、责任人安全字段、责任人追溯和责任人不代表权限的口径
-
-#### Scenario: 附件能力保持
-- **WHEN** 已登录用户对当前项目级资料项上传、查询、下载或删除附件
-- **THEN** 系统必须继续保持既有附件接口路径、文件参数校验、软删除、业务日志和不改变资料业务状态的口径
-
-#### Scenario: 我的工作台使用当前资料项
-- **WHEN** 当前登录用户查询我的资料任务
-- **THEN** 系统必须按当前项目级资料项返回任务，并保持现有状态筛选、项目筛选、排序和只读边界
-
-#### Scenario: 项目总览使用当前资料项
-- **WHEN** 当前登录用户查询项目总览看板
-- **THEN** 系统必须按当前阶段资料项计算齐套摘要和未完成适用必填资料，并保持现有筛选、排序和只读边界
+#### Scenario: 阶段齐套摘要行为按 completionMode
+- **WHEN** 系统计算阶段齐套摘要或阶段推进齐套门禁
+- **THEN** 系统必须按 `completionMode` 派生完成状态计算，不得退回到仅 `confirmed` 计为完成的旧口径
 
 ### Requirement: 资料责任人与组织角色边界
 系统 MUST 继续使用资料项级 `responsibleUserId` 表达资料责任人，并 MUST 明确资料责任人负责提交或整理资料但不代表审批权。
@@ -1084,258 +832,121 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 - **THEN** 系统不得在本 change 中新增项目参与人表、项目成员表或手工项目参与人维护入口
 
 ### Requirement: 资料确认退回审批边界
-系统 MUST 保持当前资料确认/退回能力存在，并 MUST 为后续审批权限约束保留组织角色边界。
+
+系统 MUST 保持资料确认/退回能力只用于需要审核的资料项，并 MUST 为资料级审核权限保留组织角色边界。
 
 #### Scenario: 当前状态机继续存在
 - **WHEN** 系统处理资料提交、确认或退回
-- **THEN** 系统必须继续使用 `not_submitted`、`submitted`、`confirmed`、`returned` 状态机
+- **THEN** 系统必须继续使用 `not_submitted`、`submitted`、`confirmed`、`returned` 基础状态机
 
-#### Scenario: 后续确认退回应受审批身份约束
-- **WHEN** 后续实现资料确认或退回权限约束
-- **THEN** 系统应要求中心负责人、总经理等审批身份执行，而不得仅因用户是资料责任人或项目经理就允许审批
+#### Scenario: 资料确认退回只针对需要审核资料
+- **WHEN** 用户调用资料确认或退回接口
+- **THEN** 系统 MUST 仅允许对 `completionMode = approval_required` 或未来 `conditional_approval` 且状态为 `submitted` 的资料执行
+- **AND** 系统 MUST NOT 要求 `submit_only` 资料进入确认/退回主流程
 
-#### Scenario: 总经理助理不确认退回资料
-- **WHEN** 用户 `organizationRole = general_manager_assistant`
-- **THEN** 后端必须拒绝其直接调用资料确认或退回接口，并返回稳定权限错误码 `FORBIDDEN_OPERATION` 或既有统一权限错误码
-
-#### Scenario: 系统管理员不确认退回资料
-- **WHEN** 用户 `organizationRole = system_admin`
-- **THEN** 后端必须拒绝其直接调用资料确认或退回接口，并返回稳定权限错误码 `FORBIDDEN_OPERATION` 或既有统一权限错误码
-
-#### Scenario: 中心负责人不得跨中心确认退回资料
-- **WHEN** 中心负责人直接调用非本中心相关资料确认或退回接口
-- **THEN** 后端必须拒绝该操作，并返回稳定权限错误码 `FORBIDDEN_OPERATION` 或既有统一权限错误码
-
-#### Scenario: 总经理助理不分配资料责任人
-- **WHEN** 用户 `organizationRole = general_manager_assistant` 直接调用资料责任人分配或清空接口
-- **THEN** 后端必须拒绝该操作，并返回稳定权限错误码 `FORBIDDEN_OPERATION` 或既有统一权限错误码
-
-#### Scenario: 系统管理员不分配资料责任人
-- **WHEN** 用户 `organizationRole = system_admin` 直接调用资料责任人分配或清空接口
-- **THEN** 后端必须拒绝该操作，并返回稳定权限错误码 `FORBIDDEN_OPERATION` 或既有统一权限错误码
-
-#### Scenario: 项目经理不能仅凭项目身份确认退回资料
-- **WHEN** 用户仅因是该项目项目经理而直接调用资料确认或退回接口
-- **THEN** 后端必须拒绝该操作，除非该用户同时具备中心负责人、总经理或后续审批规则允许的审批身份
-
-#### Scenario: 项目经理可分配自己负责项目的资料责任人
-- **WHEN** 用户是该项目项目经理并直接调用资料责任人分配或清空接口
-- **THEN** 后端可以允许其在责任人候选用户范围内分配或清空自己负责项目的资料责任人
-
-#### Scenario: 中心负责人只能分配本中心相关资料
-- **WHEN** 中心负责人直接调用资料责任人分配或清空接口
-- **THEN** 后端必须要求资料属于本中心相关范围，且分配目标是本中心合法候选用户或项目允许范围内用户；跨中心操作必须返回 `FORBIDDEN_OPERATION`
-
-#### Scenario: 非授权用户不得分配资料责任人
-- **WHEN** 用户不是该项目项目经理、不是中心负责人、也不是系统允许的其他角色，却直接调用资料责任人分配或清空接口
-- **THEN** 后端必须拒绝该操作，并返回稳定权限错误码 `FORBIDDEN_OPERATION` 或既有统一权限错误码
-
-#### Scenario: 不适用操作必须受审批身份约束
-- **WHEN** 用户直接调用资料标记不适用或恢复适用接口
-- **THEN** 后端必须要求用户为总经理或本中心相关资料的中心负责人；总经理助理、系统管理员、无关普通员工和跨中心中心负责人必须返回 `FORBIDDEN_OPERATION`
-
-#### Scenario: 失败权限操作不改变资料
-- **WHEN** 资料确认、退回、责任人分配、标记不适用或恢复适用因权限不足失败
-- **THEN** 系统不得改变资料状态、适用性、责任人、追溯字段、阶段状态或业务日志
-
-#### Scenario: 本 change 不实现完整审批流
-- **WHEN** 系统规划资料审批边界
-- **THEN** 本 change 不得实现阶段审批流引擎、自动通知或自动状态流转
+#### Scenario: 项目经理默认不是资料审核人
+- **WHEN** 项目经理仅因项目经理身份调用资料确认或退回接口
+- **THEN** 系统必须拒绝，除非其同时具备资料级审核规则允许的审核身份
 
 ### Requirement: 项目模式不改变阶段资料规则
+
 系统 MUST 保持自研模式和供应链/外包模式使用同一阶段资料清单、齐套摘要和附件规则。
 
-#### Scenario: 自研外包共用 v20260624 64 项资料
+#### Scenario: 自研外包共用 20260625 64 项资料
 - **WHEN** 系统初始化自研或外包项目的阶段资料
-- **THEN** 两种项目模式都必须使用 `v20260624` 的 64 项阶段资料
-
-#### Scenario: 项目模式不改变资料责任人规则
-- **WHEN** 项目为供应链/外包模式
-- **THEN** 系统仍必须由公司员工作为资料责任人负责检查、整理成公司模板并提交
+- **THEN** 两种项目模式都必须使用当前 20260625 的 64 项阶段资料
 
 #### Scenario: 项目模式不改变齐套摘要
 - **WHEN** 系统计算自研或外包项目阶段齐套摘要
-- **THEN** 系统仍必须只统计适用必填资料，并以 `confirmed` 作为完成口径
+- **THEN** 系统仍必须按 `completionMode`、基础状态和 `isApplicable` 派生完成状态
 
 #### Scenario: 项目模式不改变附件边界
 - **WHEN** 用户为自研或外包项目资料上传、查询、下载或删除附件
-- **THEN** 系统必须保持既有附件规则，且不得因项目模式联动文件管理平台
-
-#### Scenario: 附件接口受项目可见性约束
-- **WHEN** 已登录用户调用阶段资料附件上传、列表、下载或删除接口
-- **THEN** 后端必须先校验当前用户可查看该项目；无权访问该项目时必须返回 `FORBIDDEN_OPERATION` 或既有统一权限错误码
-
-#### Scenario: 附件无权上传不产生副作用
-- **WHEN** 用户对无权项目直接调用附件上传接口
-- **THEN** 系统不得读取或保存上传文件，不得新增附件记录，不得写业务日志
-
-#### Scenario: 附件无权删除不产生副作用
-- **WHEN** 用户对无权项目直接调用附件删除接口
-- **THEN** 系统不得软删除附件，不得改变附件记录，不得写业务日志
-
-### Requirement: 阶段资料与阶段审批流关系
-系统 MUST 将阶段审批提交建立在当前阶段适用必填资料齐套基础上，并 MUST 保持资料状态机与审批状态机边界清晰。
-
-#### Scenario: 必填资料未齐套不得提交阶段审批
-- **WHEN** 当前阶段存在适用必填资料状态不是 `confirmed`
-- **THEN** 系统必须拒绝提交该阶段审批，并返回 `PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE`
-
-#### Scenario: 确认资料计入审批提交条件
-- **WHEN** 当前阶段适用必填资料全部为 `confirmed`
-- **THEN** 系统可以允许有权项目经理提交阶段审批，但仍必须执行审批权限和状态机校验
-
-#### Scenario: 资料被退回后不得通过阶段审批
-- **WHEN** 当前阶段任一适用必填资料状态为 `returned`
-- **THEN** 中心负责人或总经理不得将该阶段审批通过，系统必须返回 `PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE`
-
-#### Scenario: 资料责任人提交不等于审批通过
-- **WHEN** 资料责任人将资料状态从 `not_submitted` 或 `returned` 标记为 `submitted`
-- **THEN** 系统不得因此自动确认资料、自动提交阶段审批或自动通过审批
-
-#### Scenario: 资料确认不等于阶段审批通过
-- **WHEN** 所有适用必填资料被确认
-- **THEN** 系统不得自动通过阶段审批，仍必须由项目经理提交审批并由有权审批人处理
-
-#### Scenario: 附件存在不等于资料合格
-- **WHEN** 阶段资料项存在附件
-- **THEN** 系统不得把附件存在解释为资料已确认、阶段已齐套或审批已通过
-
-#### Scenario: 适用性影响审批提交条件
-- **WHEN** 必填资料被有权用户标记为不适用
-- **THEN** 系统必须继续按既有齐套摘要口径将其排除出审批提交条件和阶段推进门禁
+- **THEN** 系统必须保持在线平台附件规则，且不得因项目模式联动文件管理平台
 
 ### Requirement: 资料确认退回与阶段审批权限关系
-系统 MUST 保持资料确认/退回能力与阶段审批流的职责边界，并 MUST 不把资料责任人或项目经理身份自动视为审批身份。
+
+系统 MUST 保持资料确认/退回能力与泛化阶段审批接口解耦；当前在线平台内部资料闭环不使用泛化阶段审批接口作为资料权限边界。
 
 #### Scenario: 资料责任人不是审批人
-- **WHEN** 用户仅因负责某资料项而调用资料确认、资料退回或阶段审批接口
-- **THEN** 系统必须按既有权限和审批规则校验，不得自动授予审批权
+- **WHEN** 用户仅因负责某资料项而调用资料确认或资料退回接口
+- **THEN** 系统必须按资料级审核权限校验，不得自动授予审核权
 
-#### Scenario: 项目经理不是资料审批人
-- **WHEN** 项目经理仅因项目经理身份调用资料确认或退回接口
-- **THEN** 系统必须拒绝，除非其同时具备中心负责人或总经理审批身份
-
-#### Scenario: 中心负责人审批本中心相关资料和节点
-- **WHEN** 中心负责人处理资料确认、退回或阶段审批
-- **THEN** 系统必须校验资料或审批节点属于其本中心相关范围
-
-#### Scenario: 总经理助理不参与资料审批
-- **WHEN** 总经理助理直接调用资料确认、资料退回、阶段审批通过或阶段审批退回接口
-- **THEN** 系统必须返回 `PROJECT_APPROVAL_FORBIDDEN`
-
-#### Scenario: 系统管理员不参与资料审批
-- **WHEN** 系统管理员直接调用资料确认、资料退回、阶段审批通过或阶段审批退回接口
-- **THEN** 系统必须返回 `PROJECT_APPROVAL_FORBIDDEN`
-
-#### Scenario: 审批失败不改变资料状态
-- **WHEN** 阶段审批因权限、状态或资料齐套校验失败
-- **THEN** 系统不得改变资料状态、适用性、责任人、附件、阶段状态或业务日志
+#### Scenario: 不引用泛化阶段审批接口作为当前边界
+- **WHEN** 系统校验资料确认或退回权限
+- **THEN** 系统 MUST NOT 要求调用或通过泛化阶段审批接口
+- **AND** 系统 MUST NOT 将阶段审批通过或退回作为资料项确认/退回的当前权限边界
 
 ### Requirement: 阶段资料审批边界
-阶段资料能力 MUST 为阶段审批流提供齐套和资料状态依据，但 MUST NOT 在资料附件、资料提交或资料责任人能力中自动驱动审批流。
 
-#### Scenario: 资料附件不触发审批流
+阶段资料能力 MUST 为资料级审核和阶段推进提供资料完成依据，但 MUST NOT 在资料附件、资料提交或资料责任人能力中自动驱动资料审核或阶段推进；当前流程无泛化阶段审批前置。
+
+#### Scenario: 资料附件不自动驱动审核或推进
 - **WHEN** 用户上传、下载或删除阶段资料附件
-- **THEN** 系统不得自动提交阶段审批、自动通过审批或自动推进阶段
+- **THEN** 系统不得自动确认资料、自动退回资料或自动推进阶段
 
-#### Scenario: 资料责任人变更不触发审批流
+#### Scenario: 资料责任人变更不自动驱动审核或推进
 - **WHEN** 项目经理或中心负责人分配或清空资料责任人
-- **THEN** 系统不得自动提交阶段审批、自动通过审批或自动推进阶段
+- **THEN** 系统不得自动确认资料、自动退回资料或自动推进阶段
 
-#### Scenario: 标记不适用不自动通过审批
+#### Scenario: 标记不适用不自动推进
 - **WHEN** 有权用户标记资料不适用后当前阶段齐套摘要变为完成
-- **THEN** 系统不得自动提交阶段审批或自动通过审批
-
-#### Scenario: 审批流不新增文件平台联动
-- **WHEN** 系统根据阶段资料状态提交或处理审批
-- **THEN** 系统不得调用文件管理平台、回填 `targetFolderId`、归档附件或判断文件平台权限
+- **THEN** 系统不得自动推进阶段
 
 ### Requirement: 资料级审核语义
 
-系统 MUST 将资料项提交、确认和退回表达为资料级审核，并 MUST 与阶段关口审批保持概念边界。
+系统 MUST 将 `approval_required` 的提交、确认和退回表达为单个资料项的资料级审核；`submit_only` 的提交或上传 MUST 表达为资料完成，不得表达为待审核。
 
-#### Scenario: 资料级审核对象是单个资料项
-
-- **WHEN** 用户提交、确认或退回资料项
+#### Scenario: approval_required 审核对象是单个资料项
+- **WHEN** 用户提交、确认或退回 `completionMode = approval_required` 的资料项
 - **THEN** 系统和页面必须将该动作表达为单个资料项的资料级审核，不得表达为整个阶段已经审批
 
-#### Scenario: 资料项状态流转
+#### Scenario: submit_only submitted 不表示待审核
+- **WHEN** 系统展示或处理 `completionMode = submit_only` 且 `status = submitted` 的资料项
+- **THEN** 系统 MUST 表达为已完成或已提交完成
+- **AND** 系统 MUST NOT 表达为待审核
 
-- **WHEN** 系统展示或处理资料项状态
-- **THEN** `not_submitted` 必须表示“待提交”，`submitted` 必须表示“已提交”，`confirmed` 必须表示“已确认”或“审核通过”，`returned` 必须表示“已退回”
-
-#### Scenario: 责任人提交资料项
-
-- **WHEN** 资料责任人完成资料准备并提交单个资料项
-- **THEN** 系统必须将资料项从可提交状态流转到 `submitted`，并等待有权审核人确认或退回
-
-#### Scenario: 审核人确认资料项
-
-- **WHEN** 有权审核人确认单个资料项
-- **THEN** 系统必须将该资料项状态流转为 `confirmed`，该动作只表示该资料项审核通过
-
-#### Scenario: 审核人退回资料项
-
-- **WHEN** 有权审核人退回单个资料项
-- **THEN** 系统必须将该资料项状态流转为 `returned` 并记录退回原因，该动作不得改变阶段关口审批状态
-
-#### Scenario: 资料项确认退回不是阶段审批
-
-- **WHEN** 用户确认或退回某个资料项
-- **THEN** 系统不得把该动作解释为阶段级审批通过、阶段级审批退回或阶段推进
+#### Scenario: 页面和系统文案不统一解释 submitted
+- **WHEN** 页面或接口展示 `status = submitted`
+- **THEN** 必须结合 `completionMode` 和派生完成状态解释，不得把所有 submitted 都解释为待审核
 
 ### Requirement: 附件准备与资料提交边界
 
-阶段资料附件 MUST 只表示资料项文件准备，不得等同于资料提交审核、资料审核通过或阶段关口审批通过。
+当前阶段阶段资料附件 MUST 保存在在线平台附件系统；附件操作不得表示文件平台归档完成，资料是否完成 MUST 以前端/后端返回的 `completionMode` 派生完成状态为准。
 
-#### Scenario: 上传附件不等于提交审核
-
+#### Scenario: 附件保存在在线平台
 - **WHEN** 责任人或有权用户上传阶段资料附件
-- **THEN** 系统不得自动将资料项状态改为 `submitted`，不得自动提交资料审核，也不得自动提交阶段关口审批
+- **THEN** 系统 MUST 保存到在线平台现有附件系统
+- **AND** 系统 MUST NOT 因附件操作调用文件管理平台归档
 
-#### Scenario: 删除附件不等于退回资料
+#### Scenario: submit_only 上传或提交可达到完成点
+- **WHEN** 资料项 `completionMode = submit_only`
+- **AND** 用户上传或提交资料
+- **THEN** 该资料是否完成 MUST 以后端返回的 `isComplete`、`completionStatus` 或等价派生完成状态为准
 
-- **WHEN** 用户删除阶段资料附件
-- **THEN** 系统不得自动将资料项状态改为 `returned`、`not_submitted` 或其他状态
-
-#### Scenario: 附件存在不等于资料合格
-
+#### Scenario: 附件存在不等于文件平台归档
 - **WHEN** 阶段资料项存在一个或多个附件
-- **THEN** 系统仍必须以资料项状态是否为 `confirmed` 判断该资料项是否计入齐套完成，不得仅凭附件存在判断资料合格
-
-#### Scenario: 页面避免误解附件动作
-
-- **WHEN** 页面展示附件上传、附件列表、下载或删除操作
-- **THEN** 页面文案必须避免让用户误解为上传文件后已提交审核、已审核通过或已满足阶段关口审批
+- **THEN** 系统不得把附件存在解释为文件平台归档完成
+- **AND** 系统不得把旧的 `confirmed` 作为所有资料合格的通用规则
 
 ### Requirement: 资料级审核与阶段关口审批关系
 
-系统 MUST 使用资料级审核结果作为阶段齐套摘要和阶段关口审批提交条件，但阶段关口审批不得替代资料级审核。
+当前 20260625 在线平台内部资料闭环 MUST 使用 `completionMode` 派生完成状态作为阶段齐套摘要和阶段推进依据，不再把资料审核结果作为泛化阶段关口审批提交条件，也不再要求“资料全部 confirmed 后提交阶段关口审批”。
 
-#### Scenario: 齐套摘要只统计已确认适用必填资料
-
+#### Scenario: 齐套摘要按 completionMode
 - **WHEN** 系统计算阶段资料齐套摘要
-- **THEN** 系统必须只将状态为 `confirmed` 的适用必填资料计入已完成，不得将 `submitted`、`not_submitted`、`returned` 或仅有附件的资料计为完成
+- **THEN** 系统 MUST 按资料项 `completionMode`、基础状态和 `isApplicable` 派生完成状态
+- **AND** 系统 MUST NOT 统一要求所有适用资料均达到 `confirmed`
 
-#### Scenario: 未确认资料阻止阶段关口审批提交
+#### Scenario: 不提交泛化阶段关口审批
+- **WHEN** 当前阶段适用资料已经按 `completionMode` 完成
+- **THEN** 系统 MUST NOT 要求用户提交泛化阶段关口审批作为推进前置
+- **AND** 系统 MUST NOT 因缺少泛化阶段关口审批通过状态而拒绝资料闭环完成
 
-- **WHEN** 当前阶段存在适用必填资料状态不是 `confirmed`
-- **THEN** 项目经理不得提交该阶段关口审批，系统必须按既有阶段审批规格返回 `PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE`
-
-#### Scenario: 资料全部确认不自动提交阶段关口审批
-
-- **WHEN** 当前阶段适用必填资料全部状态为 `confirmed`
-- **THEN** 系统不得自动提交阶段关口审批，仍必须由项目经理主动提交
-
-#### Scenario: 阶段关口审批不替代资料级审核
-
-- **WHEN** 阶段关口审批被提交、退回或通过
-- **THEN** 系统不得因此自动确认、退回或提交单个资料项
-
-#### Scenario: 页面文案避免首次审核误解
-
-- **WHEN** 页面展示阶段齐套摘要或阶段关口审批入口
-- **THEN** 页面必须避免让用户误解为“所有文件全部齐套后才第一次审核”，并应表达为“单个资料先审核，通过后进入阶段关口审批”
+#### Scenario: 资料完成不自动推进
+- **WHEN** 资料项提交、确认或按 `completionMode` 派生为完成
+- **THEN** 系统不得自动推进阶段
+- **AND** 阶段推进仍必须由具备推进权限的用户按当前阶段和标准顺序触发
 
 ### Requirement: 阶段资料清单权限过滤
 
@@ -1418,138 +1029,45 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 ### Requirement: 资料审核待办来源
 
-系统 MUST 将待当前用户审核的资料项作为工作台资料审核待办来源。
+系统 MUST 将待当前用户审核的资料项作为工作台资料审核待办来源，并 MUST 只从 `completionMode = approval_required` 且 `status = submitted` 的资料项生成 `document_review` 待办。
 
 #### Scenario: 待审核资料状态
-
-- **WHEN** 资料项适用、未删除、`status = submitted`，且当前用户符合资料审核人规则
+- **WHEN** 资料项适用、未删除、`completionMode = approval_required`、`status = submitted`，且当前用户符合资料级审核人规则
 - **THEN** 系统必须将该资料项纳入 `document_review` 待办
 
-#### Scenario: 资料责任任务来源
+#### Scenario: submit_only 不进入审核待办
+- **WHEN** 资料项 `completionMode = submit_only`
+- **THEN** 系统 MUST NOT 将该资料项纳入 `document_review` 待办
 
-- **WHEN** 资料项适用、未删除、`responsibleUserId = 当前用户 id`，且状态为 `not_submitted` 或 `returned`
-- **THEN** 系统必须将该资料项纳入 `document_responsibility` 待办
+#### Scenario: 未触发 conditional_submit 不进入审核待办
+- **WHEN** 资料项 `completionMode = conditional_submit`
+- **AND** `isApplicable = false`
+- **THEN** 系统 MUST NOT 将该资料项纳入 `document_review` 待办
 
-#### Scenario: 已提交资料不是责任人处理待办
-
-- **WHEN** 资料项 `responsibleUserId = 当前用户 id` 且状态为 `submitted`
-- **THEN** 系统不得将其计入责任人待办处理数，只能作为已提交待审核状态信息展示
-
-#### Scenario: 非待审核状态不进入审核待办
-
-- **WHEN** 资料项状态为 `not_submitted`、`returned` 或 `confirmed`
-- **THEN** 系统不得仅因用户有审核权限就将其纳入 `document_review` 待办
-
-#### Scenario: 资料审核待办只读查询
-
-- **WHEN** 系统查询资料审核待办
-- **THEN** 系统不得改变资料状态、审批状态、附件、责任人或业务日志
+#### Scenario: 审核权限按资料级规则
+- **WHEN** 系统判断中心负责人或总经理是否可审核资料
+- **THEN** 必须按资料级审核权限判断
+- **AND** 系统 MUST NOT 按泛化阶段关口审批节点生成资料审核待办
 
 ### Requirement: 阶段资料附件资料项级权限
 
-阶段资料附件接口 MUST 在项目存在和资料项存在校验后执行资料项级权限判断，不能只用项目可见性作为附件访问依据。
+阶段资料附件接口 MUST 在项目存在和资料项存在校验后执行资料项级权限判断，不能只用项目可见性作为附件访问依据，并 MUST 使用 `completionMode` 派生完成状态替代旧 confirmed-only 删除边界。
 
 #### Scenario: 附件访问不能只按项目可见性
-
 - **WHEN** 用户对某资料项调用附件列表、下载、上传或删除接口
 - **THEN** 系统必须校验当前用户是否有权访问该资料项附件，不得仅因用户可见项目就允许操作
 
-#### Scenario: 普通员工访问自己负责资料附件
-
-- **WHEN** 普通员工是资料项 `responsibleUserId`
-- **THEN** 系统可以允许其上传、查看和下载该资料项附件
-
-#### Scenario: 普通员工不能访问别人资料附件
-
-- **WHEN** 普通员工不是资料项责任人且不具备其他资料访问身份
-- **THEN** 系统必须拒绝其查看、下载、上传或删除该资料项附件，并返回 `FORBIDDEN_OPERATION`
-
-#### Scenario: 项目经理查看自己项目附件
-
-- **WHEN** 当前用户是该项目项目经理
-- **THEN** 系统可以允许其查看和下载该项目资料附件
-
-#### Scenario: 附件上传只允许资料责任人
-
-- **WHEN** 用户上传资料项附件
-- **THEN** 第一版系统必须要求该资料项 `responsibleUserId` 等于当前用户 ID；项目经理、中心负责人、总经理默认不得代替责任人上传附件
-
-#### Scenario: 上传权限不得复用宽泛提交权限
-
-- **WHEN** 系统计算 `canUploadAttachment`
-- **THEN** 系统不得直接复用现有宽泛 `canSubmitStageDocument` 或等价阶段资料提交权限；上传权限必须按资料项责任人本人单独判断
-
-#### Scenario: 审核和统筹权限不产生代上传权限
-
-- **GIVEN** 当前用户是项目经理、中心负责人或总经理
-- **AND** 当前用户不是该资料项责任人
-- **WHEN** 用户上传该资料项附件
-- **THEN** 系统必须拒绝请求并返回 `FORBIDDEN_OPERATION`
-
 #### Scenario: 项目经理删除附件边界
-
 - **WHEN** 项目经理删除自己负责项目的附件
-- **THEN** 第一版只允许其删除自己上传、当前仍有资料项附件访问权且资料尚未审核通过的附件
-
-#### Scenario: 中心负责人访问本中心资料附件
-
-- **WHEN** 当前用户是中心负责人且资料项属于本中心相关范围
-- **THEN** 系统可以允许其查看、下载和审核该资料项附件
-
-#### Scenario: 中心负责人默认不删除他人附件
-
-- **WHEN** 中心负责人审核本中心资料附件
-- **THEN** 系统默认不得允许其删除他人上传的附件，应通过退回资料让责任人处理附件问题
+- **THEN** 第一版只允许其删除自己上传、当前仍有资料项附件访问权且资料未按 `completionMode` 派生完成的附件
 
 #### Scenario: 附件删除要求当前访问权
-
 - **WHEN** 用户删除某资料项附件
-- **THEN** 系统必须同时校验当前用户不是系统管理员或总经理助理、当前用户仍有该资料项附件访问权、当前用户是该附件上传人、且资料状态不是 `confirmed`
+- **THEN** 系统必须同时校验当前用户不是系统管理员或总经理助理、当前用户仍有该资料项附件访问权、当前用户是该附件上传人、且资料未按 `completionMode` 派生完成
 
-#### Scenario: 旧责任人不能删除已失权附件
-
-- **WHEN** 用户曾是资料责任人并上传附件，但该资料项责任人后来变更为其他用户
-- **THEN** 原责任人不得仅凭 `uploadedByUserId = 当前用户 id` 删除该附件，系统必须返回 `FORBIDDEN_OPERATION`
-
-#### Scenario: 中心负责人跨中心附件访问失败
-
-- **WHEN** 中心负责人访问非本中心相关资料项附件
-- **THEN** 系统必须返回 `FORBIDDEN_OPERATION`
-
-#### Scenario: 总经理访问全部附件
-
-- **WHEN** 当前用户 `organizationRole = general_manager`
-- **THEN** 系统可以允许其查看和下载全部资料附件
-
-#### Scenario: 总经理删除附件记录日志
-
-- **WHEN** 系统允许总经理删除任意资料附件
-- **THEN** 删除成功必须写入业务日志，且失败不得改变附件记录
-
-#### Scenario: 系统管理员无默认附件访问
-
-- **WHEN** 当前用户 `organizationRole = system_admin`
-- **THEN** 系统不得仅因系统管理员身份允许其访问业务资料附件
-
-#### Scenario: 总经理助理无默认附件访问
-
-- **WHEN** 当前用户 `organizationRole = general_manager_assistant`
-- **THEN** 系统不得允许其下载、上传或删除业务资料附件
-
-#### Scenario: 无权附件上传无副作用
-
-- **WHEN** 用户无权上传某资料项附件
-- **THEN** 系统必须在解析或保存文件前拒绝请求，不得留下临时文件、不得保存上传文件、不得新增附件记录、不得写成功业务日志
-
-#### Scenario: 无权附件删除无副作用
-
-- **WHEN** 用户无权删除某资料项附件
-- **THEN** 系统不得软删除附件、不得改变附件记录、不得写成功业务日志
-
-#### Scenario: 上传附件仍不等于提交审核
-
-- **WHEN** 用户成功上传附件
-- **THEN** 系统仍不得自动提交资料审核、不得自动审核通过、不得自动提交阶段关口审批
+#### Scenario: submit_only completed 不绕过删除规则
+- **WHEN** 资料项 `completionMode = submit_only` 且 `status = submitted`
+- **THEN** 系统 MUST 将其视为已完成资料处理附件删除边界，不得因 `status != confirmed` 允许绕开删除限制
 
 ### Requirement: 阶段资料结构化归属中心
 
@@ -1712,29 +1230,24 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 ### Requirement: 阶段推进沿用资料齐套口径
 
-系统使用 `v20260624` 阶段资料模板时，阶段推进 MUST 继续沿用现有资料齐套和阶段审批口径，并 MUST NOT 因本 change 新增复杂审批流。
+系统使用当前 20260625 资料模板时，阶段推进 MUST 按 `completionMode` 派生完成口径判断当前阶段适用资料是否完成，并 MUST NOT 沿用旧的 confirmed-only 或泛化阶段审批口径。
 
-#### Scenario: 适用必填资料全部审核通过才允许推进
-
+#### Scenario: 当前阶段资料按 completionMode 完成才允许推进
 - **WHEN** 系统判断项目是否可从当前阶段推进
-- **THEN** 当前阶段适用且必填资料 MUST 全部审核通过
+- **THEN** 当前阶段适用资料 MUST 全部按各自 `completionMode` 派生为完成
 
-#### Scenario: 阶段资料汇总展示全部产出口径
+#### Scenario: 条件资料未触发不阻塞
+- **WHEN** 当前阶段条件资料 `completionMode = conditional_submit`
+- **AND** `isApplicable = false`
+- **THEN** 系统 MUST NOT 将该资料计入缺失或推进阻塞项
 
-- **WHEN** 用户查看项目详情阶段资料清单
-- **THEN** 阶段汇总 MUST 展示本阶段资料总数、适用资料总数、适用必填总数和非必填/条件性资料口径
-- **AND** 非必填/条件性资料 MUST 在阶段资料详情中显示状态和适用性
-- **AND** 非必填/条件性资料 MUST NOT 计入适用必填齐套门禁
-
-#### Scenario: 不改变阶段推进状态机
-
-- **WHEN** 系统使用 `v20260624` 阶段资料模板
-- **THEN** 系统 MUST NOT 因本规划改变现有阶段推进状态机
+#### Scenario: 条件资料触发后按 completionMode 判断
+- **WHEN** 当前阶段条件资料 `isApplicable = true`
+- **THEN** 系统 MUST 按该资料的 `completionMode` 判断是否完成
 
 #### Scenario: 不新增复杂审批流
-
-- **WHEN** 系统使用 `v20260624` 阶段资料模板
-- **THEN** 系统 MUST NOT 因本规划新增合同审批流、付款流、采购审批流、设计变更自动触发流程或资料服务器核查流程
+- **WHEN** 系统使用当前 20260625 阶段资料模板
+- **THEN** 系统 MUST NOT 因本规划新增合同审批流、付款流、采购审批流、发票审批流、设计变更自动触发流程或资料服务器核查流程
 
 ### Requirement: 模拟数据重置策略
 
@@ -1784,26 +1297,6 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 #### Scenario: 随机资料移交和资料服务器核查不进入普通模板
 - **WHEN** 业务尚未确认 `7.P1 随机资料移交` 或 `8.P1 资料服务器核查` 形成独立文件
 - **THEN** 系统不得将其计入普通阶段资料模板
-
-### Requirement: 阶段资料收集审核归档闭环
-
-系统 MUST 将阶段资料闭环表达为资料收集、资料审核、文件归档和阶段推进的顺序协作关系。
-
-#### Scenario: 责任人提交资料审核
-- **WHEN** 资料责任人完成附件上传或资料整理
-- **THEN** 系统必须允许其按资料项提交审核
-
-#### Scenario: 审核通过后进入齐套
-- **WHEN** 资料项适用、必填且审核状态为 `confirmed`
-- **THEN** 系统必须将该资料项计入阶段适用必填齐套
-
-#### Scenario: 归档不改变审核状态机
-- **WHEN** 后续文件管理平台完成资料附件归档
-- **THEN** 系统不得仅因归档成功自动改变资料审核状态、阶段审批状态或阶段推进状态
-
-#### Scenario: 阶段推进只看当前阶段门禁
-- **WHEN** 系统判断阶段推进
-- **THEN** 系统必须只基于当前阶段适用必填资料审核通过情况、阶段关口审批状态和既有推进权限判断，不得因未建复杂业务流而阻止推进
 
 ### Requirement: 20260625 阶段资料完成规则
 
@@ -1908,4 +1401,128 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 #### Scenario: 归档状态不代替完成状态
 - **WHEN** 后续文件平台联动返回资料归档状态
 - **THEN** 系统 MUST NOT 仅因文件已归档而将资料视为按 `completionMode` 完成
+
+### Requirement: 在线平台阶段资料收集审核闭环
+
+当前闭环 MUST 表达为资料收集、按 `completionMode` 提交/审核、在线平台附件保存和阶段推进；文件平台归档 MUST 暂停，不得作为资料完成或阶段推进前置。
+
+#### Scenario: 资料责任人提交资料
+- **WHEN** 资料责任人完成在线平台附件上传或资料整理
+- **THEN** 系统必须允许其按资料项和 `completionMode` 提交资料
+
+#### Scenario: completionMode 完成后进入齐套
+- **WHEN** 资料项适用且按其 `completionMode` 派生为完成
+- **THEN** 系统必须将该资料项计入阶段完成资料
+
+#### Scenario: 在线平台附件保存
+- **WHEN** 用户上传、查看、下载或删除阶段资料附件
+- **THEN** 系统 MUST 使用在线平台附件系统保存和管理附件
+- **AND** 系统 MUST NOT 因附件操作调用文件管理平台归档
+
+#### Scenario: 文件平台归档暂停
+- **WHEN** 当前在线平台内部资料闭环运行
+- **THEN** 系统 MUST NOT 要求文件平台归档作为资料完成或阶段推进前置
+
+#### Scenario: 阶段推进只看当前阶段门禁
+- **WHEN** 系统判断阶段推进
+- **THEN** 系统必须只基于当前阶段适用资料 `completionMode` 完成情况和既有推进权限判断
+- **AND** 系统 MUST NOT 依赖泛化阶段关口审批状态
+
+### Requirement: 20260625 资料模板 completionMode
+
+阶段资料模板和项目级阶段资料实例 MUST 保存 `completionMode`，并 MUST 使用 20260625 最终 64 项资料完成规则。
+
+#### Scenario: 模板包含 completionMode
+- **WHEN** 系统定义当前 20260625 阶段资料模板
+- **THEN** 每个模板项 MUST 包含 `completionMode`
+- **AND** `completionMode` MUST 为 `submit_only`、`approval_required`、`conditional_submit` 或 `conditional_approval`
+
+#### Scenario: 项目资料实例保存 completionMode
+- **WHEN** 系统初始化项目级阶段资料清单
+- **THEN** 每个项目级资料项 MUST 保存模板中的 `completionMode` 快照
+
+#### Scenario: 当前 64 项 completionMode 统计
+- **WHEN** 系统初始化或校验当前 20260625 64 项普通资料模板
+- **THEN** `submit_only` 数量 MUST 为 33
+- **AND** `approval_required` 数量 MUST 为 24
+- **AND** `conditional_submit` 数量 MUST 为 7
+- **AND** `conditional_approval` 数量 MUST 为 0
+
+#### Scenario: 图纸审查资料口径
+- **WHEN** 系统初始化或校验当前 20260625 64 项普通资料模板
+- **THEN** `4.14 产品平面图` MUST 使用 `submit_only`
+- **AND** `4.15 产品零部件清单` MUST 使用 `submit_only`
+- **AND** `4.16 图纸审查记录` MUST 使用 `approval_required`
+
+#### Scenario: 发票资料口径
+- **WHEN** 系统初始化或校验当前 20260625 64 项普通资料模板
+- **THEN** `3.4 发票（预付款）` MUST 使用 `submit_only`
+- **AND** `6.2 发票（发货款）` MUST 使用 `submit_only`
+- **AND** `8.1 发票（尾款）` MUST 使用 `submit_only`
+- **AND** 系统 MUST NOT 因发票资料新增付款流或发票审批流
+
+### Requirement: 资料状态按 completionMode 完成
+
+系统 MUST 按资料项 `completionMode` 判断资料是否完成、是否进入审核待办以及是否阻塞阶段推进。
+
+#### Scenario: submit_only 提交后完成
+- **WHEN** 资料项 `completionMode = submit_only`
+- **AND** 该资料项已提交或上传
+- **THEN** 系统 MUST 将该资料项计为完成
+- **AND** 系统 MUST NOT 为该资料项生成审核待办
+
+#### Scenario: approval_required 审核通过后完成
+- **WHEN** 资料项 `completionMode = approval_required`
+- **AND** 该资料项已确认或审批通过
+- **THEN** 系统 MUST 将该资料项计为完成
+
+#### Scenario: approval_required submitted 进入审核待办
+- **WHEN** 资料项 `completionMode = approval_required`
+- **AND** 该资料项状态为 `submitted`
+- **THEN** 系统 MUST 在具备审核权限的用户工作台中生成审核待办
+
+#### Scenario: 后端返回派生完成状态
+- **WHEN** 系统返回阶段资料项、缺失资料项或待办资料项
+- **THEN** 系统 MUST 返回 `completionMode`
+- **AND** 系统 MUST 返回 `isComplete`、`completionStatus` 或等价派生完成状态字段
+
+#### Scenario: 审核待办只包含 approval_required
+- **WHEN** 系统生成资料审核待办
+- **THEN** 待办 MUST 只包含 `completionMode = approval_required` 且状态为 `submitted` 的资料项
+- **AND** 系统 MUST NOT 将 `submit_only` 或未触发的 `conditional_submit` 资料项纳入审核待办
+
+#### Scenario: submit_only submitted 派生已完成
+- **WHEN** 资料项 `completionMode = submit_only`
+- **AND** 该资料项状态为 `submitted`
+- **THEN** 系统 MUST 返回派生完成状态为 `completed` 或等价已完成状态
+- **AND** 系统 MUST NOT 将该资料项表达为待审核
+
+#### Scenario: conditional_submit 未触发不阻塞
+- **WHEN** 资料项 `completionMode = conditional_submit`
+- **AND** `isApplicable = false`
+- **THEN** 系统 MUST 不将该资料项计入缺失资料、未完成资料或阶段推进阻塞项
+
+#### Scenario: conditional_submit 触发后提交完成
+- **WHEN** 资料项 `completionMode = conditional_submit`
+- **AND** `isApplicable = true`
+- **AND** 该资料项已提交或上传
+- **THEN** 系统 MUST 将该资料项计为完成
+
+#### Scenario: returned 仍未完成
+- **WHEN** 资料项状态为 `returned`
+- **THEN** 系统 MUST 将该资料项派生为未完成
+
+### Requirement: 在线平台附件为当前默认保存方式
+
+当前阶段阶段资料附件 MUST 保存到在线平台附件系统，并 MUST NOT 联动文件管理平台。
+
+#### Scenario: 默认在线平台附件保存
+- **WHEN** 用户上传阶段资料附件
+- **THEN** 系统 MUST 保存到在线平台现有附件记录和附件存储
+
+#### Scenario: 不生成文件平台归档状态
+- **WHEN** 系统保存、查询或展示阶段资料附件
+- **THEN** 系统 MUST NOT 创建文件平台目录映射
+- **AND** 系统 MUST NOT 设置 `not_archived`、`archived` 或 `archive_failed` 状态
+- **AND** 系统 MUST NOT 调用文件管理平台归档接口
 

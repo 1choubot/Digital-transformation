@@ -68,6 +68,16 @@ export class ProjectOverviewDashboardQueryError extends Error {
   }
 }
 
+export class ProjectCodeUpdateError extends Error {
+  constructor(code, message, statusCode = 409, details = []) {
+    super(message);
+    this.name = 'ProjectCodeUpdateError';
+    this.statusCode = statusCode;
+    this.code = code;
+    this.details = details;
+  }
+}
+
 export class ProjectManagerUserError extends Error {
   constructor(code, message, statusCode = 409, details = ['projectManagerUserId']) {
     super(message);

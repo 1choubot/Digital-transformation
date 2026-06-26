@@ -44,6 +44,21 @@ async function ensureOwnershipColumns(executor) {
   );
 }
 
+async function ensureCompletionModeColumns(executor) {
+  await ensureColumn(
+    executor,
+    'stage_document_templates',
+    'completion_mode',
+    "ALTER TABLE stage_document_templates ADD COLUMN completion_mode ENUM('submit_only', 'approval_required', 'conditional_submit', 'conditional_approval') NOT NULL DEFAULT 'approval_required' AFTER review_department"
+  );
+  await ensureColumn(
+    executor,
+    'project_stage_documents',
+    'completion_mode',
+    "ALTER TABLE project_stage_documents ADD COLUMN completion_mode ENUM('submit_only', 'approval_required', 'conditional_submit', 'conditional_approval') NOT NULL DEFAULT 'approval_required' AFTER review_department"
+  );
+}
+
 export async function ensureStageDocumentSchema(executor) {
   await executor.execute(
     `CREATE TABLE IF NOT EXISTS stage_document_templates (
@@ -60,6 +75,7 @@ export async function ensureStageDocumentSchema(executor) {
       confirm_role VARCHAR(255) NOT NULL,
       owner_department VARCHAR(64) NULL,
       review_department VARCHAR(64) NULL,
+      completion_mode ENUM('submit_only', 'approval_required', 'conditional_submit', 'conditional_approval') NOT NULL DEFAULT 'approval_required',
       submit_mode ENUM('online_form', 'file_upload', 'mixed', 'tbd') NOT NULL,
       target_folder_path VARCHAR(512) NOT NULL,
       target_folder_id VARCHAR(128) NULL,
@@ -89,6 +105,7 @@ export async function ensureStageDocumentSchema(executor) {
       confirm_role VARCHAR(255) NOT NULL,
       owner_department VARCHAR(64) NULL,
       review_department VARCHAR(64) NULL,
+      completion_mode ENUM('submit_only', 'approval_required', 'conditional_submit', 'conditional_approval') NOT NULL DEFAULT 'approval_required',
       submit_mode ENUM('online_form', 'file_upload', 'mixed', 'tbd') NOT NULL,
       target_folder_path VARCHAR(512) NOT NULL,
       target_folder_id VARCHAR(128) NULL,
@@ -168,4 +185,5 @@ export async function ensureStageDocumentSchema(executor) {
   );
 
   await ensureOwnershipColumns(executor);
+  await ensureCompletionModeColumns(executor);
 }

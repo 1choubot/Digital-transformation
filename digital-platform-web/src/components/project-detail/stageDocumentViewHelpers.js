@@ -2,12 +2,15 @@ import {
   formatDateTime,
   formatBusinessDepartment,
   formatBusinessUser,
+  formatCompletionMode,
+  formatCompletionStatus,
   formatUser
 } from '../../utils/format.js';
 
 export const operationActionText = {
   'project.created': '项目创建',
-  'document.submitted': '提交资料审核',
+  'project.code_updated': '项目编号更新',
+  'document.submitted': '提交资料',
   'document.confirmed': '资料审核通过',
   'document.returned': '退回资料审核',
   'document.marked_not_applicable': '资料标记不适用',
@@ -29,28 +32,75 @@ export function isApplicable(document) {
   return document.isApplicable !== false;
 }
 
+export function getCompletionMode(document) {
+  return document?.completionMode || document?.completion_mode || 'approval_required';
+}
+
+export function getCompletionStatus(document) {
+  if (document?.completionStatus) {
+    return document.completionStatus;
+  }
+
+  if (!isApplicable(document)) {
+    return 'not_applicable';
+  }
+
+  if (document?.status === 'returned') {
+    return 'incomplete';
+  }
+
+  const completionMode = getCompletionMode(document);
+  if (completionMode === 'submit_only' || completionMode === 'conditional_submit') {
+    return ['submitted', 'confirmed'].includes(document?.status) ? 'completed' : 'incomplete';
+  }
+
+  if (document?.status === 'confirmed') {
+    return 'completed';
+  }
+
+  return document?.status === 'submitted' ? 'pending_review' : 'incomplete';
+}
+
+export function isDocumentComplete(document) {
+  if (typeof document?.isComplete === 'boolean') {
+    return document.isComplete;
+  }
+
+  return getCompletionStatus(document) === 'completed' || getCompletionStatus(document) === 'not_applicable';
+}
+
+export function formatDocumentCompletionMode(document) {
+  return formatCompletionMode(getCompletionMode(document));
+}
+
+export function formatDocumentCompletionStatus(document) {
+  return formatCompletionStatus(getCompletionStatus(document));
+}
+
 export function buildFallbackCompletenessSummary(stage) {
-  const requiredDocuments = (stage.documents || []).filter(
-    (document) => document.isRequired && isApplicable(document)
-  );
-  const incompleteRequiredDocuments = requiredDocuments
-    .filter((document) => document.status !== 'confirmed')
+  const applicableDocuments = (stage.documents || []).filter(isApplicable);
+  const incompleteRequiredDocuments = applicableDocuments
+    .filter((document) => !isDocumentComplete(document))
     .map((document) => ({
       id: document.id,
       documentCode: document.documentCode,
       documentName: document.documentName,
-      status: document.status
+      status: document.status,
+      completionMode: getCompletionMode(document),
+      isComplete: false,
+      completionStatus: getCompletionStatus(document)
     }));
-  const requiredTotal = requiredDocuments.length;
+  const requiredTotal = applicableDocuments.length;
   const incompleteRequiredCount = incompleteRequiredDocuments.length;
-  const confirmedRequiredCount = requiredTotal - incompleteRequiredCount;
+  const completedRequiredCount = requiredTotal - incompleteRequiredCount;
 
   return {
     requiredTotal,
-    confirmedRequiredCount,
+    completedRequiredCount,
+    confirmedRequiredCount: completedRequiredCount,
     incompleteRequiredCount,
     completionPercent:
-      requiredTotal > 0 ? Math.round((confirmedRequiredCount / requiredTotal) * 100) : 100,
+      requiredTotal > 0 ? Math.round((completedRequiredCount / requiredTotal) * 100) : 100,
     incompleteRequiredDocuments
   };
 }
@@ -69,6 +119,9 @@ export function buildStageDocumentSummary(stage) {
       documentCode: document.documentCode,
       documentName: document.documentName,
       status: document.status,
+      completionMode: getCompletionMode(document),
+      isComplete: isDocumentComplete(document),
+      completionStatus: getCompletionStatus(document),
       isApplicable: isApplicable(document)
     }));
 
@@ -139,6 +192,14 @@ export function showDisabledResponsibleOption(document, responsibilityCandidates
 
 export function canSubmit(document) {
   return isApplicable(document) && (document.status === 'not_submitted' || document.status === 'returned');
+}
+
+export function canReview(document) {
+  return (
+    isApplicable(document) &&
+    getCompletionMode(document) === 'approval_required' &&
+    document.status === 'submitted'
+  );
 }
 
 export function actionKey(documentId, action) {

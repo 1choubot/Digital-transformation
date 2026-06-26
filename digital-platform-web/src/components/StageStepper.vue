@@ -11,7 +11,6 @@
         <strong>{{ stage.stageName }}</strong>
         <span class="stage-stepper__badges">
           <StatusBadge :status="stage.stageStatus" />
-          <StatusBadge :status="stage.approvalStatus || 'not_submitted'" />
         </span>
       </div>
     </li>

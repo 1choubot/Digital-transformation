@@ -1,4 +1,4 @@
-import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
+import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 
 export class StageDocumentNotFoundError extends Error {
   constructor(projectId, documentId) {
@@ -40,6 +40,97 @@ export const STAGE_DOCUMENT_TASK_ERROR = {
   INVALID_PROJECT_ID: 'INVALID_PROJECT_ID'
 };
 
+export const COMPLETION_STATUS = {
+  INCOMPLETE: 'incomplete',
+  PENDING_REVIEW: 'pending_review',
+  COMPLETED: 'completed',
+  NOT_APPLICABLE: 'not_applicable'
+};
+
+const REVIEW_COMPLETION_MODES = new Set([
+  COMPLETION_MODE.APPROVAL_REQUIRED,
+  COMPLETION_MODE.CONDITIONAL_APPROVAL
+]);
+const SUBMIT_COMPLETION_MODES = new Set([
+  COMPLETION_MODE.SUBMIT_ONLY,
+  COMPLETION_MODE.CONDITIONAL_SUBMIT
+]);
+
+export function getDocumentCompletionMode(document) {
+  return document?.completionMode ?? document?.completion_mode ?? COMPLETION_MODE.APPROVAL_REQUIRED;
+}
+
+export function isReviewCompletionMode(completionMode) {
+  return REVIEW_COMPLETION_MODES.has(completionMode);
+}
+
+export function deriveStageDocumentCompletion(document) {
+  const completionMode = getDocumentCompletionMode(document);
+  const status = document?.status ?? DOCUMENT_STATUS.NOT_SUBMITTED;
+  const isApplicableValue = document?.isApplicable ?? document?.is_applicable;
+  const isApplicable = isApplicableValue === undefined ? true : Boolean(isApplicableValue);
+
+  if (!isApplicable) {
+    return {
+      completionMode,
+      isApplicable,
+      isComplete: true,
+      completionStatus: COMPLETION_STATUS.NOT_APPLICABLE
+    };
+  }
+
+  if (status === DOCUMENT_STATUS.RETURNED) {
+    return {
+      completionMode,
+      isApplicable,
+      isComplete: false,
+      completionStatus: COMPLETION_STATUS.INCOMPLETE
+    };
+  }
+
+  if (SUBMIT_COMPLETION_MODES.has(completionMode)) {
+    const isComplete = status === DOCUMENT_STATUS.SUBMITTED || status === DOCUMENT_STATUS.CONFIRMED;
+    return {
+      completionMode,
+      isApplicable,
+      isComplete,
+      completionStatus: isComplete ? COMPLETION_STATUS.COMPLETED : COMPLETION_STATUS.INCOMPLETE
+    };
+  }
+
+  if (REVIEW_COMPLETION_MODES.has(completionMode)) {
+    if (status === DOCUMENT_STATUS.CONFIRMED) {
+      return {
+        completionMode,
+        isApplicable,
+        isComplete: true,
+        completionStatus: COMPLETION_STATUS.COMPLETED
+      };
+    }
+
+    return {
+      completionMode,
+      isApplicable,
+      isComplete: false,
+      completionStatus:
+        status === DOCUMENT_STATUS.SUBMITTED
+          ? COMPLETION_STATUS.PENDING_REVIEW
+          : COMPLETION_STATUS.INCOMPLETE
+    };
+  }
+
+  return {
+    completionMode,
+    isApplicable,
+    isComplete: false,
+    completionStatus: COMPLETION_STATUS.INCOMPLETE
+  };
+}
+
+export function isStageDocumentComplete(document) {
+  return deriveStageDocumentCompletion(document).isComplete;
+}
+
 function mapResponsibleUser(row) {
   if (row.responsible_user_id === null || row.responsible_user_id === undefined) {
     return null;
@@ -58,6 +149,8 @@ function mapResponsibleUser(row) {
 }
 
 export function mapDocument(row) {
+  const completion = deriveStageDocumentCompletion(row);
+
   return {
     id: row.id,
     projectId: row.project_id,
@@ -74,10 +167,13 @@ export function mapDocument(row) {
     confirmRole: row.confirm_role,
     ownerDepartment: row.owner_department ?? null,
     reviewDepartment: row.review_department ?? null,
+    completionMode: completion.completionMode,
     submitMode: row.submit_mode,
     targetFolderPath: row.target_folder_path,
     targetFolderId: row.target_folder_id,
     status: row.status,
+    isComplete: completion.isComplete,
+    completionStatus: completion.completionStatus,
     responsibleUserId: row.responsible_user_id,
     responsibleUser: mapResponsibleUser(row),
     responsibilityUpdatedByUserId: row.responsibility_updated_by_user_id,
@@ -99,6 +195,8 @@ export function mapDocument(row) {
 }
 
 export function mapStageDocumentTask(row) {
+  const completion = deriveStageDocumentCompletion(row);
+
   return {
     documentId: row.document_id,
     projectId: row.project_id,
@@ -113,6 +211,9 @@ export function mapStageDocumentTask(row) {
     ownerDepartment: row.owner_department ?? null,
     reviewDepartment: row.review_department ?? null,
     status: row.status,
+    completionMode: completion.completionMode,
+    isComplete: completion.isComplete,
+    completionStatus: completion.completionStatus,
     isApplicable: row.is_applicable === undefined ? true : Boolean(row.is_applicable),
     returnReason: row.return_reason,
     submittedAt: row.submitted_at,
@@ -123,35 +224,44 @@ export function mapStageDocumentTask(row) {
 }
 
 export function mapGateDocument(row) {
+  const completion = deriveStageDocumentCompletion(row);
+
   return {
     id: row.id,
     documentCode: row.document_code,
     documentName: row.document_name,
     isRequired: Boolean(row.is_required),
     isApplicable: row.is_applicable === undefined ? true : Boolean(row.is_applicable),
-    status: row.status
+    status: row.status,
+    completionMode: completion.completionMode,
+    isComplete: completion.isComplete,
+    completionStatus: completion.completionStatus
   };
 }
 
 export function buildStageCompletenessSummary(documents) {
-  const requiredDocuments = documents.filter((document) => document.isRequired && document.isApplicable !== false);
-  const incompleteRequiredDocuments = requiredDocuments
-    .filter((document) => document.status !== DOCUMENT_STATUS.CONFIRMED)
+  const applicableDocuments = documents.filter((document) => document.isApplicable !== false);
+  const incompleteRequiredDocuments = applicableDocuments
+    .filter((document) => !isStageDocumentComplete(document))
     .map((document) => ({
       id: document.id,
       documentCode: document.documentCode,
       documentName: document.documentName,
-      status: document.status
+      status: document.status,
+      completionMode: getDocumentCompletionMode(document),
+      isComplete: false,
+      completionStatus: deriveStageDocumentCompletion(document).completionStatus
     }));
-  const requiredTotal = requiredDocuments.length;
+  const requiredTotal = applicableDocuments.length;
   const incompleteRequiredCount = incompleteRequiredDocuments.length;
-  const confirmedRequiredCount = requiredTotal - incompleteRequiredCount;
+  const completedRequiredCount = requiredTotal - incompleteRequiredCount;
   const completionPercent =
-    requiredTotal > 0 ? Math.round((confirmedRequiredCount / requiredTotal) * 100) : 100;
+    requiredTotal > 0 ? Math.round((completedRequiredCount / requiredTotal) * 100) : 100;
 
   return {
     requiredTotal,
-    confirmedRequiredCount,
+    completedRequiredCount,
+    confirmedRequiredCount: completedRequiredCount,
     incompleteRequiredCount,
     completionPercent,
     incompleteRequiredDocuments

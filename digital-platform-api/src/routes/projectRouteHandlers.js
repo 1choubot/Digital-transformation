@@ -18,7 +18,8 @@ import {
   projectExists,
   resubmitStageApproval,
   returnStageApproval,
-  submitStageApproval
+  submitStageApproval,
+  updateProjectCode
 } from '../repositories/projectRepository.js';
 import {
   listProjectOperationLogs,
@@ -186,6 +187,19 @@ export async function getProjectOverviewDashboardHandler(req, res) {
 
   res.json({
     data: dashboard
+  });
+}
+
+export async function updateProjectCodeHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const detail = await updateProjectCode({
+    projectId,
+    projectCode: req.body?.projectCode ?? req.body?.project_code,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: detail
   });
 }
 

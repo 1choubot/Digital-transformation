@@ -18,7 +18,7 @@
     <form v-else class="panel form-grid" @submit.prevent="submitProject">
       <label>
         <span>项目编号</span>
-        <input v-model.trim="form.projectCode" type="text" autocomplete="off" />
+        <input v-model.trim="form.projectCode" type="text" autocomplete="off" placeholder="待立项后生成，可留空" />
       </label>
       <label>
         <span>项目名称</span>
@@ -155,7 +155,6 @@ function formatManagerCandidate(user) {
 
 function validateForm() {
   const missing = [];
-  if (!form.projectCode) missing.push('项目编号');
   if (!form.projectName) missing.push('项目名称');
   if (!form.customerName) missing.push('客户');
   if (!form.projectManagerUserId) missing.push('项目经理');

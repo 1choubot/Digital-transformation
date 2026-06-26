@@ -147,7 +147,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'VALIDATION_ERROR') {
-    return '请补充项目编号、项目名称、客户和项目经理。';
+    return '请补充项目名称、客户和项目经理。';
   }
 
   if (error.code === 'INVALID_PROJECT_MODE') {
@@ -191,7 +191,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'PROJECT_APPROVAL_NOT_APPROVED') {
-    return '当前阶段关口审批未通过，暂不能推进阶段。';
+    return '当前阶段暂不能推进。若这是旧流程兼容错误，请刷新后按当前资料完成规则重试。';
   }
 
   if (error.code === 'PROJECT_APPROVAL_FORBIDDEN') {
@@ -199,11 +199,19 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE') {
-    return '当前阶段存在未完成资料级审核的适用必填资料，不能提交或通过阶段关口审批。';
+    return '当前阶段存在未按完成规则完成的适用资料，暂不能推进阶段。';
   }
 
   if (error.code === 'PROJECT_CODE_EXISTS') {
     return `项目编号 ${error.projectCode || ''} 已存在，请更换后再提交。`.trim();
+  }
+
+  if (error.code === 'PROJECT_CODE_REQUIRED') {
+    return '请填写项目编号。';
+  }
+
+  if (error.code === 'PROJECT_CODE_GATE_NOT_READY') {
+    return '项目编号需在 1.2 项目立项审批表审核通过且 1.3 项目立项通知提交后填写。';
   }
 
   if (error.code === 'PROJECT_NOT_FOUND') {
@@ -232,6 +240,10 @@ export function toReadableApiError(error) {
 
   if (error.code === 'INVALID_DOCUMENT_STATUS_TRANSITION') {
     return '当前资料状态不允许执行该操作，请刷新清单后重试。';
+  }
+
+  if (error.code === 'DOCUMENT_REVIEW_NOT_REQUIRED') {
+    return '该资料提交后即完成，不需要执行审核通过或退回。';
   }
 
   if (error.code === 'INVALID_DOCUMENT_APPLICABILITY_TRANSITION') {
@@ -311,7 +323,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'STAGE_ADVANCE_INCOMPLETE_REQUIRED_DOCUMENTS') {
-    return '当前阶段仍有缺失的适用必填资料，不能推进阶段。';
+    return '当前阶段仍有缺失的适用资料，不能推进阶段。';
   }
 
   if (error.code === 'STAGE_ADVANCE_CHECKLIST_NOT_INITIALIZED') {

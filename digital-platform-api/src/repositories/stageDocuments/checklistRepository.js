@@ -1,5 +1,6 @@
 import { pool } from '../../db/pool.js';
 import {
+  EXPECTED_COMPLETION_MODE_COUNTS,
   DOCUMENT_STATUS,
   EXPECTED_STAGE_DOCUMENT_ITEM_COUNT,
   STAGE_DOCUMENT_TEMPLATE_VERSION
@@ -22,6 +23,19 @@ function assertTemplateRowsReady(rows) {
   if (nonEmptyFolderIds.length > 0) {
     throw new Error('Stage document templates must keep targetFolderId empty');
   }
+
+  const counts = rows.reduce(
+    (accumulator, row) => accumulator.set(row.completion_mode, (accumulator.get(row.completion_mode) || 0) + 1),
+    new Map()
+  );
+  for (const [completionMode, expectedCount] of Object.entries(EXPECTED_COMPLETION_MODE_COUNTS)) {
+    const actualCount = counts.get(completionMode) || 0;
+    if (actualCount !== expectedCount) {
+      throw new Error(
+        `Stage document templates are not ready: expected ${expectedCount} ${completionMode}, got ${actualCount}`
+      );
+    }
+  }
 }
 
 export async function upsertStageDocumentTemplates(executor, templateItems) {
@@ -31,7 +45,7 @@ export async function upsertStageDocumentTemplates(executor, templateItems) {
     );
   }
 
-  const placeholders = templateItems.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+  const placeholders = templateItems.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
   const values = templateItems.flatMap((item) => [
     item.templateVersion,
     item.stageOrder,
@@ -45,6 +59,7 @@ export async function upsertStageDocumentTemplates(executor, templateItems) {
     item.confirmRole,
     item.ownerDepartment,
     item.reviewDepartment,
+    item.completionMode,
     item.submitMode,
     item.targetFolderPath,
     item.targetFolderId,
@@ -65,6 +80,7 @@ export async function upsertStageDocumentTemplates(executor, templateItems) {
       confirm_role,
       owner_department,
       review_department,
+      completion_mode,
       submit_mode,
       target_folder_path,
       target_folder_id,
@@ -81,6 +97,7 @@ export async function upsertStageDocumentTemplates(executor, templateItems) {
       confirm_role = VALUES(confirm_role),
       owner_department = VALUES(owner_department),
       review_department = VALUES(review_department),
+      completion_mode = VALUES(completion_mode),
       submit_mode = VALUES(submit_mode),
       target_folder_path = VALUES(target_folder_path),
       target_folder_id = VALUES(target_folder_id),
@@ -95,6 +112,12 @@ export async function upsertStageDocumentTemplates(executor, templateItems) {
       AND document_code NOT IN (${templateItems.map(() => '?').join(', ')})`,
     [STAGE_DOCUMENT_TEMPLATE_VERSION, ...templateItems.map((item) => item.documentCode)]
   );
+  await executor.execute(
+    `UPDATE stage_document_templates
+    SET is_active = 0
+    WHERE template_version <> ?`,
+    [STAGE_DOCUMENT_TEMPLATE_VERSION]
+  );
 
   await backfillProjectStageDocumentOwnership(executor, templateItems);
 }
@@ -104,11 +127,19 @@ async function backfillProjectStageDocumentOwnership(executor, templateItems) {
     await executor.execute(
       `UPDATE project_stage_documents
       SET owner_department = CASE WHEN owner_department IS NULL THEN ? ELSE owner_department END,
-        review_department = CASE WHEN review_department IS NULL THEN ? ELSE review_department END
+        review_department = CASE WHEN review_department IS NULL THEN ? ELSE review_department END,
+        completion_mode = ?
       WHERE template_version = ?
         AND document_code = ?
-        AND (owner_department IS NULL OR review_department IS NULL)`,
-      [item.ownerDepartment, item.reviewDepartment, item.templateVersion, item.documentCode]
+        AND (owner_department IS NULL OR review_department IS NULL OR completion_mode <> ?)`,
+      [
+        item.ownerDepartment,
+        item.reviewDepartment,
+        item.completionMode,
+        item.templateVersion,
+        item.documentCode,
+        item.completionMode
+      ]
     );
   }
 }
@@ -133,7 +164,7 @@ export async function initializeProjectStageDocuments(executor, projectId) {
     'SELECT COUNT(*) AS count FROM project_stage_documents WHERE project_id = ?',
     [projectId]
   );
-  const placeholders = templateRows.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+  const placeholders = templateRows.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
   const values = templateRows.flatMap((template) => [
     projectId,
     template.id,
@@ -149,6 +180,7 @@ export async function initializeProjectStageDocuments(executor, projectId) {
     template.confirm_role,
     template.owner_department,
     template.review_department,
+    template.completion_mode,
     template.submit_mode,
     template.target_folder_path,
     null,
@@ -172,6 +204,7 @@ export async function initializeProjectStageDocuments(executor, projectId) {
       confirm_role,
       owner_department,
       review_department,
+      completion_mode,
       submit_mode,
       target_folder_path,
       target_folder_id,

@@ -118,6 +118,7 @@ export async function listMyStageDocumentTasks(userId, filters) {
       d.is_required,
       d.owner_department,
       d.review_department,
+      d.completion_mode,
       d.status,
       d.is_applicable,
       d.return_reason,
@@ -152,5 +153,6 @@ export async function listMyStageDocumentTasks(userId, filters) {
     params
   );
 
-  return rows.map(mapStageDocumentTask);
+  const tasks = rows.map(mapStageDocumentTask);
+  return filters.status === 'pending' ? tasks.filter((task) => !task.isComplete) : tasks;
 }

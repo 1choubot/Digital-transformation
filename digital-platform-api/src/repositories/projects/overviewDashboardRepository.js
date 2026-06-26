@@ -117,13 +117,15 @@ function mapProjectOverviewDocument(row) {
     documentName: row.document_name,
     isRequired: Boolean(row.is_required),
     isApplicable: row.is_applicable === undefined ? true : Boolean(row.is_applicable),
-    status: row.status
+    status: row.status,
+    completionMode: row.completion_mode
   };
 }
 
 function stripCompletenessSummary(summary) {
   return {
     requiredTotal: summary.requiredTotal,
+    completedRequiredCount: summary.completedRequiredCount,
     confirmedRequiredCount: summary.confirmedRequiredCount,
     incompleteRequiredCount: summary.incompleteRequiredCount,
     completionPercent: summary.completionPercent
@@ -302,6 +304,7 @@ async function selectProjectOverviewDocuments(projectIds) {
       document_name,
       is_required,
       is_applicable,
+      completion_mode,
       status
     FROM project_stage_documents
     WHERE project_id IN (${buildInClause(projectIds)})

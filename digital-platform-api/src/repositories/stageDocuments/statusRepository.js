@@ -17,6 +17,8 @@ import {
 } from '../operationLogRepository.js';
 import {
   mapDocument,
+  getDocumentCompletionMode,
+  isReviewCompletionMode,
   selectProjectStageDocument,
   selectProjectStageDocumentForUpdate
 } from './shared.js';
@@ -54,6 +56,20 @@ function assertUserCanUpdateDocumentStatus({ user, action, currentDocument, proj
         ['responsibleUserId']
       );
     }
+  }
+}
+
+function assertDocumentCompletionModeAllowsAction(action, currentDocument) {
+  if (
+    (action === DOCUMENT_STATUS_ACTION.CONFIRM || action === DOCUMENT_STATUS_ACTION.RETURN) &&
+    !isReviewCompletionMode(getDocumentCompletionMode(currentDocument))
+  ) {
+    throw new StageDocumentStatusError(
+      'DOCUMENT_REVIEW_NOT_REQUIRED',
+      'Current document does not require review',
+      409,
+      ['completionMode']
+    );
   }
 }
 
@@ -109,14 +125,18 @@ function buildStatusOperationLogPayload({ projectId, documentId, action, userId,
   };
 
   if (action === DOCUMENT_STATUS_ACTION.SUBMIT) {
+    const requiresReview = isReviewCompletionMode(getDocumentCompletionMode(currentDocument));
     return {
       projectId,
       actorUserId: userId,
       actionType: OPERATION_ACTION_TYPE.DOCUMENT_SUBMITTED,
       targetType: OPERATION_TARGET_TYPE.STAGE_DOCUMENT,
       targetId: documentId,
-      summary: `提交资料审核：${currentDocument.document_name}`,
-      details: baseDetails
+      summary: `${requiresReview ? '提交资料审核' : '提交资料'}：${currentDocument.document_name}`,
+      details: {
+        ...baseDetails,
+        completionMode: getDocumentCompletionMode(currentDocument)
+      }
     };
   }
 
@@ -153,6 +173,7 @@ export async function updateProjectStageDocumentStatus({ projectId, documentId, 
     await connection.beginTransaction();
     const currentDocument = await selectProjectStageDocumentForUpdate(connection, projectId, documentId);
     const project = await selectProjectPermissionContext(connection, projectId, user);
+    assertDocumentCompletionModeAllowsAction(action, currentDocument);
     assertUserCanUpdateDocumentStatus({ user, action, currentDocument, project });
     assertDocumentIsApplicable(
       currentDocument.is_applicable === undefined ? true : Boolean(currentDocument.is_applicable)

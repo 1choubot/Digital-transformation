@@ -53,91 +53,54 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 ### Requirement: 新建项目页
 
-前端 MUST 提供新建项目页，并 MUST 携带当前登录态调用 `POST /api/projects` 创建项目。
+前端 MUST 提供新建项目页，并 MUST 携带当前登录态调用 `POST /api/projects` 创建项目；当前 20260625 在线平台内部资料闭环中，项目编号 `projectCode` MUST NOT 作为创建必填项。
 
-#### Scenario: 提交有效项目
-
-- **WHEN** 已登录用户填写项目编号、项目名称、客户和项目经理等必需信息并提交
+#### Scenario: 提交有效项目允许空编号
+- **WHEN** 已登录用户填写项目名称、客户和项目经理等必需信息并提交
 - **THEN** 前端必须携带当前登录态调用 `POST /api/projects` 创建项目，并在成功后展示成功结果或进入项目详情
-
-#### Scenario: 未登录提交项目
-
-- **WHEN** 用户未登录或登录态失效时提交项目创建
-- **THEN** 页面必须展示需要登录的错误提示，且不得假装创建成功
+- **AND** 前端 MUST 允许创建请求不包含 `projectCode` 或 `projectCode` 为空
 
 #### Scenario: 提交缺少必填字段
-
-- **WHEN** 用户提交缺少必需字段的项目
+- **WHEN** 用户提交缺少项目名称、客户、项目经理或其他必需字段的项目
 - **THEN** 页面必须展示校验提示，且不得假装创建成功
+- **AND** 页面 MUST NOT 因项目编号为空显示必填校验错误
 
 #### Scenario: 后端返回重复项目编号
-
-- **WHEN** `POST /api/projects` 返回 `PROJECT_CODE_EXISTS`
+- **WHEN** `POST /api/projects` 或后置项目编号更新接口返回 `PROJECT_CODE_EXISTS`
 - **THEN** 页面必须展示项目编号已存在的提示
 
 #### Scenario: 新建项目不触发排除能力
-
 - **WHEN** 用户创建项目
-- **THEN** 页面不能触发在线表单、文件上传、文件下载、文件管理平台联动、复杂权限配置、日志记录、阶段推进或资料齐套率计算
+- **THEN** 页面不得触发在线表单、文件上传、文件下载、文件管理平台联动、复杂权限配置、阶段推进或资料齐套率计算
+- **AND** 页面不得直接调用日志写入接口或展示日志配置入口
+- **AND** `project.created` 创建日志由后端 `POST /api/projects` 创建事务负责，前端不得绕过项目创建接口单独写日志
 
 ### Requirement: 项目详情页
-前端 MUST 提供项目详情页，并 MUST 调用 `GET /api/projects/:projectId` 获取项目基础状态和创建人追溯字段，同时 MUST 展示该项目的阶段资料清单基础信息、状态、状态追溯字段、适用性、适用性追溯字段、责任人、责任人变更追溯字段、阶段资料附件区域、手工状态操作、适用性操作、责任人分配操作、阶段资料齐套摘要、当前阶段手工推进入口和只读业务日志区域。
 
-#### Scenario: 加载项目详情
-- **WHEN** 用户从项目列表进入某个项目详情
-- **THEN** 前端必须调用 `GET /api/projects/:projectId` 加载该项目详情
+前端 MUST 提供项目详情页，并 MUST 调用 `GET /api/projects/:projectId` 获取项目基础状态和创建人追溯字段，同时 MUST 展示该项目的阶段资料清单基础信息、`completionMode`、派生完成状态、状态追溯字段、适用性、责任人、附件区域、资料操作、阶段资料齐套摘要、当前阶段推进入口和只读业务日志区域。
 
 #### Scenario: 展示项目基础信息
 - **WHEN** 项目详情接口返回项目数据
 - **THEN** 页面必须展示项目编号、项目名称、客户、项目经理、参与部门、项目状态、计划时间、备注和创建人基础信息或创建人字段
-
-#### Scenario: 展示历史项目详情
-- **WHEN** 项目详情接口返回创建人为空的历史项目
-- **THEN** 页面必须允许创建人为空，并继续展示项目基础状态
-
-#### Scenario: 展示当前阶段
-- **WHEN** 项目详情接口返回当前阶段
-- **THEN** 页面必须突出展示当前阶段名称和状态
-
-#### Scenario: 已完成项目当前阶段为空
-- **WHEN** 项目详情接口返回项目 `status` 为 `completed` 且当前阶段为空
-- **THEN** 页面必须展示项目已完成或当前阶段为空的合理状态，并继续展示 8 阶段基础状态
-
-#### Scenario: 展示 8 阶段基础状态
-- **WHEN** 项目详情接口返回阶段列表
-- **THEN** 页面必须按阶段顺序展示全部 8 个阶段的阶段名称、阶段状态和当前阶段标记
+- **AND** 当 `projectCode` 为空时 MUST 显示 `待生成` 或等价文案
 
 #### Scenario: 展示阶段资料清单
 - **WHEN** 用户打开项目详情页
-- **THEN** 页面必须展示“阶段资料清单”区域，并按阶段展示资料项名称、是否必填、默认责任部门或责任角色、提交方式、`targetFolderPath`、可空 `targetFolderId`、基础状态、状态追溯字段、适用性、适用性追溯字段、责任人、责任人变更追溯字段、阶段资料附件区域和阶段资料齐套摘要
+- **THEN** 页面必须展示“阶段资料清单”区域，并按阶段展示资料项名称、是否必填、默认责任部门或责任角色、提交方式、基础状态、`completionMode`、派生完成状态、状态追溯字段、适用性、适用性追溯字段、责任人、责任人变更追溯字段、阶段资料附件区域和阶段资料齐套摘要
 
-#### Scenario: 加载阶段资料清单携带登录态
-- **WHEN** 用户打开项目详情页且前端加载阶段资料清单
-- **THEN** 前端必须携带当前登录态调用 `GET /api/projects/:projectId/stage-document-checklist`
+#### Scenario: 展示资料项派生完成状态
+- **WHEN** 页面展示资料项状态
+- **THEN** 页面 MUST 优先使用后端返回的 `completionStatus`、`isComplete` 或等价派生字段展示业务完成状态
+- **AND** 页面 MUST NOT 仅凭基础 `status = submitted` 将所有资料显示为待审核
 
-#### Scenario: 展示资料项状态
-- **WHEN** 页面展示资料项基础状态
-- **THEN** `not_submitted` 必须显示为“待提交”，`submitted` 必须显示为“已提交”，`confirmed` 必须显示为“已确认”，`returned` 必须显示为“已退回”
+#### Scenario: submit_only submitted 展示已完成
+- **WHEN** 资料项 `completionMode = submit_only` 且基础状态为 `submitted`
+- **THEN** 页面 MUST 展示为已完成或等价完成状态
+- **AND** 页面 MUST NOT 展示为待审核
 
-#### Scenario: 展示资料项适用性
-- **WHEN** 页面展示资料项适用性
-- **THEN** 适用资料项必须显示为“适用”，不适用资料项必须显示为“不适用”
-
-#### Scenario: 资料清单加载状态
-- **WHEN** 前端请求项目阶段资料清单
-- **THEN** 页面必须处理加载中、接口失败和空清单状态
-
-#### Scenario: 展示业务日志区域
-- **WHEN** 用户打开项目详情页
-- **THEN** 页面必须展示只读“业务日志”区域，并按项目业务日志展示要求加载和展示该项目日志
-
-#### Scenario: 项目不存在
-- **WHEN** `GET /api/projects/:projectId` 返回 `PROJECT_NOT_FOUND`
-- **THEN** 页面必须展示项目不存在的提示，并提供返回项目列表的入口
-
-#### Scenario: 详情不展示排除能力
-- **WHEN** 用户打开项目详情页
-- **THEN** 除既有手工阶段推进、既有手工资料项适用性、既有只读阶段资料齐套摘要、既有只读业务日志区域、既有手工资料项责任人分配和本变更定义的阶段资料附件上传/查看/下载/删除外，页面不能展示在线表单填写入口、文件管理平台同步动作、复杂权限控制、角色权限控制、轻角色校验、管理层看板指标、项目类型模板自动标记不适用或补初始化按钮
+#### Scenario: approval_required submitted 展示待审核
+- **WHEN** 资料项 `completionMode = approval_required` 且基础状态为 `submitted`
+- **THEN** 页面 MUST 展示为待审核或等价状态
 
 ### Requirement: Demo 使用边界
 
@@ -155,57 +118,26 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 ### Requirement: 项目详情页资料手工状态操作
 
-前端 MUST 在项目详情页阶段资料清单中提供适用资料项的手工状态操作，并 MUST 明确该操作只代表手工标记状态。
+项目详情页 MUST 按资料项 `completionMode` 展示提交、确认和退回操作，并 MUST 使用后端返回的派生完成状态刷新资料列表、齐套摘要和缺失资料列表。
 
-#### Scenario: 展示手工标记说明
+#### Scenario: submit_only 不展示确认退回
+- **WHEN** 页面展示 `completionMode = submit_only` 的资料项
+- **THEN** 页面 MUST 将主操作表达为提交、上传或完成
+- **AND** 页面 MUST NOT 展示确认、审核通过或退回操作作为主流程入口
 
-- **WHEN** 用户打开项目详情页阶段资料清单
-- **THEN** 页面必须展示可读说明，明确“手工标记状态”不代表已上传文件或已提交在线表单
+#### Scenario: approval_required submitted 展示确认退回
+- **WHEN** 页面展示 `completionMode = approval_required` 且基础状态为 `submitted` 的资料项
+- **THEN** 页面可以按当前用户资料级审核权限展示确认/审核通过和退回操作
+- **AND** 页面 MUST 表达该操作对象是单个资料项
 
-#### Scenario: 待提交适用资料可标记提交
+#### Scenario: submitted 展示按 completionMode 分流
+- **WHEN** 页面展示基础状态为 `submitted` 的资料项
+- **THEN** `submit_only` MUST 展示为已完成或等价完成状态
+- **AND** `approval_required` MUST 展示为待审核或等价状态
 
-- **WHEN** 页面展示状态为 `not_submitted` 且适用的资料项
-- **THEN** 页面必须提供“标记提交”操作，并在触发时携带当前登录态调用资料项提交状态接口
-
-#### Scenario: 已退回适用资料可重新标记提交
-
-- **WHEN** 页面展示状态为 `returned` 且适用的资料项
-- **THEN** 页面必须提供“标记提交”操作，并在触发时携带当前登录态调用资料项提交状态接口
-
-#### Scenario: 已提交适用资料可确认
-
-- **WHEN** 页面展示状态为 `submitted` 且适用的资料项
-- **THEN** 页面必须提供“确认”操作，并在触发时携带当前登录态调用资料项确认接口
-
-#### Scenario: 已提交适用资料可退回
-
-- **WHEN** 页面展示状态为 `submitted` 且适用的资料项
-- **THEN** 页面必须提供退回原因输入和“退回”操作，并在触发时携带当前登录态和非空退回原因调用资料项退回接口
-
-#### Scenario: 不适用资料不展示状态操作
-
-- **WHEN** 页面展示不适用资料项
-- **THEN** 页面不得提供标记提交、确认或退回操作
-
-#### Scenario: 前端校验退回原因
-
-- **WHEN** 用户未填写非空退回原因就触发退回操作
-- **THEN** 页面必须展示校验提示，且不得调用退回接口
-
-#### Scenario: 操作成功后刷新清单和摘要
-
-- **WHEN** 资料项手工状态操作成功
-- **THEN** 页面必须重新加载该项目阶段资料清单，并展示更新后的状态、追溯字段、阶段齐套摘要和缺失必填资料列表
-
-#### Scenario: 操作失败提示
-
-- **WHEN** 资料项手工状态操作失败
-- **THEN** 页面必须展示可读错误提示，并保留当前页面上下文
-
-#### Scenario: 已确认适用资料不提供本变更状态操作
-
-- **WHEN** 页面展示状态为 `confirmed` 且适用的资料项
-- **THEN** 页面不得提供本变更范围内的重新提交、退回或取消确认操作
+#### Scenario: 操作后刷新派生摘要
+- **WHEN** 用户完成资料提交、确认或退回操作
+- **THEN** 页面必须重新获取或刷新后端返回的 `completionMode` 派生完成状态、阶段齐套摘要和缺失资料列表
 
 ### Requirement: 项目详情页资料状态追溯展示
 
@@ -248,42 +180,21 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 ### Requirement: 项目详情页阶段资料齐套展示
 
-前端 MUST 在项目详情页阶段资料清单中展示每个阶段的只读适用必填资料齐套摘要，并 MUST 明确该摘要基于当前手工状态和人工适用性判断。
+项目详情页 MUST 按当前 20260625 `completionMode` 派生完成口径展示阶段资料齐套情况，不得把“已确认资料数”作为唯一完成口径，也不得表达为所有资料都必须 `confirmed`。
 
-#### Scenario: 展示阶段齐套摘要
+#### Scenario: 展示已完成资料数
+- **WHEN** 页面展示阶段齐套摘要
+- **THEN** 页面 MUST 展示已完成资料数、适用资料总数、未完成资料数和完成比例
+- **AND** 已完成资料数 MUST 使用后端 `completedRequiredCount` 或等价 `completionMode` 派生完成数量
 
-- **WHEN** 阶段资料清单接口返回 `completenessSummary`
-- **THEN** 页面必须在对应阶段分组上展示适用必填资料总数、已确认适用必填资料数、未完成适用必填资料数和完成百分比
+#### Scenario: 兼容 confirmedRequiredCount
+- **WHEN** 后端为兼容旧前端返回 `confirmedRequiredCount`
+- **THEN** 页面只可将其作为 `completionMode` 派生完成数量的兼容字段使用
+- **AND** 页面 MUST NOT 将其解释为仅 `status = confirmed` 的资料数量
 
-#### Scenario: 展示缺失必填资料列表
-
-- **WHEN** `incompleteRequiredDocuments` 不为空
-- **THEN** 页面必须在对应阶段分组中展示缺失适用必填资料项列表，并展示每个缺失资料项的名称和当前状态
-
-#### Scenario: 没有缺失适用必填资料
-
-- **WHEN** `incompleteRequiredDocuments` 为空
-- **THEN** 页面必须展示该阶段暂无缺失适用必填资料的可读状态
-
-#### Scenario: 不适用资料不计入齐套摘要
-
-- **WHEN** 页面展示阶段资料齐套摘要
-- **THEN** 页面文案或展示口径必须体现该摘要统计适用必填资料，且不得把不适用资料或建议资料计入完成比例
-
-#### Scenario: 手工状态操作后刷新齐套摘要
-
-- **WHEN** 资料项手工状态操作成功并重新加载阶段资料清单
-- **THEN** 页面必须使用最新接口响应刷新对应阶段的齐套摘要和缺失必填资料列表
-
-#### Scenario: 适用性操作后刷新齐套摘要
-
-- **WHEN** 资料项适用性操作成功并重新加载阶段资料清单
-- **THEN** 页面必须使用最新接口响应刷新对应阶段的齐套摘要和缺失必填资料列表
-
-#### Scenario: 齐套摘要边界说明
-
-- **WHEN** 用户查看阶段资料齐套摘要
-- **THEN** 页面必须展示可读说明，明确该齐套情况基于“当前手工状态”和人工适用性判断，不代表文件已上传或已归档
+#### Scenario: 缺失列表展示完成规则
+- **WHEN** 页面展示缺失或未完成资料列表
+- **THEN** 每项 MUST 展示或可查看 `documentCode`、`documentName`、基础 `status`、`completionMode` 和派生完成状态
 
 ### Requirement: 项目详情页资料适用性操作与展示
 
@@ -336,52 +247,20 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 ### Requirement: 项目详情页手工阶段推进
 
-前端 MUST 在项目详情页提供当前阶段的手工推进入口，并 MUST 展示阶段推进所需的当前阶段适用必填资料齐套情况。
+前端 MUST 在项目详情页提供当前阶段的手工推进入口，并 MUST 展示阶段推进所需的当前阶段适用资料按 `completionMode` 派生的完成情况。
 
-#### Scenario: 展示手工推进说明
+#### Scenario: 展示当前阶段推进说明
+- **WHEN** 项目详情页加载成功且项目存在当前阶段
+- **THEN** 页面必须展示“手工推进阶段”相关入口或说明，并明确阶段推进基于当前阶段适用资料的 `completionMode` 完成情况
 
-- **WHEN** 用户打开存在当前阶段的项目详情页
-- **THEN** 页面必须展示“手工推进阶段”相关入口或说明，并明确阶段推进基于当前手工状态和人工适用性判断，不代表文件已上传或已归档
-
-#### Scenario: 不允许选择目标阶段
-
-- **WHEN** 用户在项目详情页执行阶段推进
-- **THEN** 页面不得提供目标阶段选择、跳阶段、回退或批量推进入口，并且调用接口时不得提交任意目标阶段
-
-#### Scenario: 当前阶段未齐套提示不能推进
-
-- **WHEN** 当前阶段 `completenessSummary.incompleteRequiredCount > 0`
-- **THEN** 页面必须提示当前阶段存在缺失适用必填资料，不能推进阶段，并展示缺失适用必填资料列表
-
-#### Scenario: 当前阶段缺失列表字段展示
-
-- **WHEN** 页面展示当前阶段缺失适用必填资料列表
-- **THEN** 页面必须至少展示每个缺失资料项的资料项名称和当前状态，并能使用接口返回的 `id`、`documentCode`、`documentName` 和 `status`
-
-#### Scenario: 当前阶段齐套可触发推进
-
-- **WHEN** 当前阶段 `completenessSummary.incompleteRequiredCount = 0`
-- **THEN** 页面必须允许已登录用户触发手工阶段推进，并携带当前登录态调用 `POST /api/projects/:projectId/stages/advance`
+#### Scenario: 阶段推进不展示泛化审批门禁
+- **WHEN** 页面展示阶段推进入口或不可推进原因
+- **THEN** 页面 MUST NOT 表达为阶段推进还需要泛化阶段关口审批通过
+- **AND** 页面 MUST NOT 要求所有资料均为 `confirmed`
 
 #### Scenario: 阶段推进失败展示原因
-
-- **WHEN** 阶段推进接口返回缺失适用必填资料或其他可读错误
-- **THEN** 页面必须展示错误提示，并在有缺失列表时展示后端返回的缺失适用必填资料
-
-#### Scenario: 阶段推进成功后刷新页面数据
-
-- **WHEN** 阶段推进接口调用成功
-- **THEN** 页面必须重新加载项目详情、8 阶段状态和阶段资料清单，并展示更新后的当前阶段和阶段齐套摘要
-
-#### Scenario: 第 8 阶段推进成功后展示项目完成
-
-- **WHEN** 第 8 阶段 `closeout` 推进成功且项目不再有当前阶段
-- **THEN** 页面必须展示项目已完成或当前阶段为空的合理状态，并不得显示继续推进当前阶段的入口
-
-#### Scenario: 阶段推进不新增排除入口
-
-- **WHEN** 用户查看或操作项目详情页手工阶段推进
-- **THEN** 除项目详情页独立只读业务日志区域外，页面不得新增阶段回退、跳阶段、批量推进、审批流、管理层看板、文件上传、文件下载、文件管理平台联动、在线表单、责任人分配、个人待办、通知或复杂权限配置入口
+- **WHEN** 阶段推进接口返回缺失适用资料或其他可读错误
+- **THEN** 页面必须展示后端返回的不可推进原因，并显示包含 `completionMode` 和派生完成状态的缺失资料
 
 ### Requirement: 项目详情页业务日志展示
 
@@ -540,263 +419,73 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 ### Requirement: 我的资料任务页面
 
-前端 MUST 提供“我的资料任务”或“我的责任资料”页面，用于登录用户集中查看分配给自己的阶段资料项。
+我的资料任务页面 MUST 使用 `completionMode` 和派生完成状态展示、筛选和排序任务，默认 pending 视图不得混入已完成的 `submit_only + submitted` 资料。
 
-#### Scenario: 主导航展示我的资料任务入口
+#### Scenario: pending 排除已完成 submit_only
+- **WHEN** 用户打开我的资料任务默认 pending 视图
+- **THEN** 页面 MUST NOT 展示 `completionMode = submit_only` 且 `status = submitted` 的已完成资料作为待办
 
-- **WHEN** 用户已登录并进入数字化平台主界面
-- **THEN** 前端必须在主导航中提供“我的资料任务”或“我的责任资料”入口
+#### Scenario: 任务状态按 completionMode 展示
+- **WHEN** 页面展示基础状态为 `submitted` 的资料任务
+- **THEN** `submit_only` MUST 显示为已完成或已提交完成
+- **AND** `approval_required` MUST 显示为待审核
 
-#### Scenario: 未登录访问我的资料任务
+#### Scenario: 任务字段包含 completionMode
+- **WHEN** 页面展示资料任务列表
+- **THEN** 页面 MUST 展示或可查看 `completionMode`
+- **AND** 页面 MUST 使用后端返回的 `isComplete`、`completionStatus` 或等价字段表达业务完成状态
 
-- **WHEN** 用户未登录、登录态无效或登录态已过期时访问我的资料任务页面
-- **THEN** 前端必须按现有未登录处理跳转登录或展示需要登录的可读提示
-
-#### Scenario: 加载我的资料任务
-
-- **WHEN** 已登录用户打开我的资料任务页面
-- **THEN** 前端必须携带当前登录态调用 `GET /api/me/stage-document-tasks`，默认使用 `status=pending`
-
-#### Scenario: 展示我的资料任务列表
-
-- **WHEN** 我的资料任务接口返回任务列表
-- **THEN** 页面必须展示项目、阶段、资料编号、资料名称、必填或建议、状态、退回原因和责任更新时间
-
-#### Scenario: 展示任务状态
-
-- **WHEN** 页面展示任务状态
-- **THEN** `not_submitted` 必须显示为“待提交”，`submitted` 必须显示为“已提交”，`confirmed` 必须显示为“已确认”，`returned` 必须显示为“已退回”
-
-#### Scenario: 支持状态筛选
-
-- **WHEN** 用户在我的资料任务页面切换状态筛选
-- **THEN** 前端必须使用 `not_submitted`、`submitted`、`returned`、`confirmed`、`pending` 或 `all` 之一调用我的资料任务接口，并展示筛选后的任务列表
-
-#### Scenario: 支持项目关键字筛选
-
-- **WHEN** 用户在我的资料任务页面输入项目关键字
-- **THEN** 前端必须在当前任务列表中按 `projectCode` 或 `projectName` 进行可读筛选，并保留后端返回的任务排序
-
-#### Scenario: 任务列表加载状态
-
-- **WHEN** 前端请求我的资料任务接口
-- **THEN** 页面必须处理加载中、接口失败和空任务状态
-
-#### Scenario: 点击任务跳转项目详情
-
-- **WHEN** 用户点击某条我的资料任务
-- **THEN** 前端必须跳转到该任务对应的项目详情页；第一版可以只跳转到项目详情页，不强制定位到具体资料项
-
-#### Scenario: 展示我的资料任务边界说明
-
-- **WHEN** 用户打开我的资料任务页面
-- **THEN** 页面必须展示可读说明，明确这里展示的是分配给我的资料项，状态为手工标记状态，不代表文件已上传，也不代表在线表单已填写
-
-#### Scenario: 我的资料任务页面不提供排除能力
-
-- **WHEN** 用户查看或操作我的资料任务页面
-- **THEN** 页面不得提供文件上传、文件下载、文件管理平台联动、在线表单、消息提醒、超期提醒、截止日期、个人工作台大看板、跨项目统计、批量操作、复杂权限配置或项目成员权限入口
+#### Scenario: 排序筛选不混入完成任务
+- **WHEN** 用户筛选、排序或分页查看 pending 责任资料任务
+- **THEN** 页面 MUST 基于后端派生完成状态保持已完成 `submit_only` 不进入责任人待办
 
 ### Requirement: 项目总览页面
 
-前端 MUST 提供“项目总览”页面，用于登录用户集中查看跨项目汇总指标和项目当前阶段齐套情况。
+项目总览页面 MUST 使用当前阶段 `completionMode` 派生完成数量展示齐套率、未完成资料和我的待办资料数量，不得继续把“已确认数量”作为唯一完成口径。
 
-#### Scenario: 主导航展示项目总览入口
+#### Scenario: 当前阶段齐套率使用完成数量
+- **WHEN** 页面展示项目当前阶段齐套率
+- **THEN** 页面 MUST 使用 `completedRequiredCount` 或等价 `completionMode` 派生完成数量计算和展示
 
-- **WHEN** 用户已登录并进入数字化平台主界面
-- **THEN** 前端必须在主导航中提供“项目总览”入口
+#### Scenario: 不以已确认为唯一口径
+- **WHEN** 页面展示当前阶段资料完成摘要
+- **THEN** 页面 MUST NOT 将“已确认数量”表达为当前流程唯一完成口径
+- **AND** 页面 MUST NOT 暗示 `submit_only` 资料必须确认后才完成
 
-#### Scenario: 未登录访问项目总览
-
-- **WHEN** 用户未登录、登录态无效或登录态已过期时访问项目总览页面
-- **THEN** 前端必须按现有未登录处理跳转登录或展示需要登录的可读提示
-
-#### Scenario: 加载项目总览
-
-- **WHEN** 已登录用户打开项目总览页面
-- **THEN** 前端必须携带当前登录态调用 `GET /api/projects/overview-dashboard`
-
-#### Scenario: 展示项目总览汇总指标
-
-- **WHEN** 项目总览接口返回 `summary`
-- **THEN** 页面必须展示项目总数、进行中项目数、已完成项目数、风险/延期项目数和我的待办资料数量
-
-#### Scenario: 我的待办资料指标跳转
-
-- **WHEN** 用户点击“我的待办资料”指标
-- **THEN** 前端必须跳转到我的资料任务页面
-
-#### Scenario: 我的待办资料全局口径说明
-
-- **WHEN** 页面展示“我的待办资料”指标
-- **THEN** 页面必须说明该指标为当前登录用户全局待办资料数量，不随项目状态、当前阶段或关键字筛选变化
-
-#### Scenario: 展示项目总览列表或卡片
-
-- **WHEN** 项目总览接口返回项目列表
-- **THEN** 页面必须以列表或卡片方式展示每个项目的项目编号、项目名称、客户、项目经理、项目状态、当前阶段、当前阶段齐套率、未完成适用必填资料数量和计划时间
-
-#### Scenario: 展示当前阶段齐套率
-
-- **WHEN** 项目卡片包含 `currentStageCompletenessSummary`
-- **THEN** 页面必须展示当前阶段适用必填资料总数、已确认数量、未完成数量和完成百分比
-
-#### Scenario: 展示未完成适用必填资料
-
-- **WHEN** 项目卡片包含非空 `currentStageIncompleteRequiredDocuments`
-- **THEN** 页面必须展示或允许展开查看未完成适用必填资料清单，并展示资料编号、资料名称和状态
-
-#### Scenario: 展示无缺失资料状态
-
-- **WHEN** 项目卡片的 `currentStageIncompleteRequiredDocuments` 为空且 `currentStageCompletenessSummary` 不为空
-- **THEN** 页面必须展示当前阶段暂无未完成适用必填资料的可读状态
-
-#### Scenario: 展示当前阶段异常
-
-- **WHEN** 项目卡片包含 `currentStageIssue`
-- **THEN** 页面必须展示可读提示，说明当前阶段缺失、存在多个当前阶段或当前阶段资料清单未初始化等异常状态
-
-#### Scenario: 支持状态筛选
-
-- **WHEN** 用户在项目总览页面选择项目状态筛选
-- **THEN** 前端必须使用合法项目状态调用 `GET /api/projects/overview-dashboard`，并展示筛选后的汇总指标和项目列表
-
-#### Scenario: 支持当前阶段筛选
-
-- **WHEN** 用户在项目总览页面选择当前阶段序号筛选
-- **THEN** 前端必须使用 1 到 8 的阶段序号调用 `GET /api/projects/overview-dashboard`，并展示筛选后的汇总指标和项目列表
-
-#### Scenario: 支持关键字筛选
-
-- **WHEN** 用户在项目总览页面输入项目关键字
-- **THEN** 前端必须使用该关键字调用 `GET /api/projects/overview-dashboard`，并按后端返回结果展示项目总览
-
-#### Scenario: 筛选错误提示
-
-- **WHEN** 项目总览接口返回 `INVALID_PROJECT_STATUS_FILTER` 或 `INVALID_STAGE_ORDER`
-- **THEN** 页面必须展示可读中文错误提示，并保留当前页面上下文
-
-#### Scenario: 项目总览加载状态
-
-- **WHEN** 前端请求项目总览接口
-- **THEN** 页面必须处理加载中、接口失败和空项目列表状态
-
-#### Scenario: 点击项目跳转项目详情
-
-- **WHEN** 用户点击项目总览中的某个项目
-- **THEN** 前端必须跳转到该项目对应的项目详情页
-
-#### Scenario: 展示项目总览边界说明
-
-- **WHEN** 用户打开项目总览页面
-- **THEN** 页面必须展示可读说明，明确齐套率基于当前手工状态和人工适用性判断，不代表文件已上传，也不代表在线表单已填写
-
-#### Scenario: 项目总览页面不提供排除能力
-
-- **WHEN** 用户查看或操作项目总览页面
-- **THEN** 页面不得提供文件上传、文件下载、文件管理平台联动、在线表单、消息提醒、超期提醒、截止日期、大屏图表、复杂权限配置、项目成员权限、导出、分页或批量操作入口
+#### Scenario: 未完成资料展示 completionMode
+- **WHEN** 页面展示当前阶段未完成资料
+- **THEN** 页面 MUST 展示或可查看每项资料的 `completionMode` 和派生完成状态
 
 ### Requirement: 项目详情页模块化重构保持行为
-前端 MUST 将项目详情页拆分为职责清晰的页面模块，并 MUST 保持现有项目详情页的路由、接口调用、展示口径、交互行为、错误提示和边界说明不变；新增阶段资料附件能力后，模块化结构 MUST 继续支持附件区域在资料清单内扩展。
 
-#### Scenario: 项目详情页路由和接口保持不变
-- **WHEN** 用户访问既有项目详情页路由
-- **THEN** 前端必须仍通过既有路由进入项目详情页，并继续调用既有项目详情、阶段资料清单、责任人候选用户、阶段推进和业务日志接口；本变更新增的附件接口必须作为资料清单附件区域的独立接口使用，不得改变既有后端 API 路径、请求字段、响应字段或错误码
+项目详情页模块化重构后 MUST 保持当前 20260625 `completionMode` 行为，而不是保持旧 confirmed-only 行为；资料项操作 MUST 按 `completionMode` 分流。
 
-#### Scenario: 项目基础信息展示保持不变
-- **WHEN** 项目详情接口返回项目基础信息、阶段列表和当前阶段
-- **THEN** 页面必须继续展示项目编号、项目名称、客户、项目经理、参与部门、项目状态、计划时间、备注、创建人、当前阶段和 8 阶段基础状态，不得因组件拆分减少用户可见字段
+#### Scenario: 操作按 completionMode 展示
+- **WHEN** 项目详情页完成模块化重构或组件拆分
+- **THEN** `submit_only` 资料 MUST 展示提交/上传/完成操作，不展示确认/退回主流程
+- **AND** `approval_required` 资料 MUST 保留提交、待审核、确认/审核通过和退回修改操作
 
-#### Scenario: 阶段资料清单展示保持不变
-- **WHEN** 阶段资料清单接口返回阶段分组、资料项、齐套摘要、状态追溯、适用性追溯和责任人字段
-- **THEN** 页面必须继续展示阶段资料清单、阶段齐套摘要、缺失适用必填资料、资料项基础字段、资料状态、追溯字段、适用性、责任人和责任人变更追溯，并允许在资料项内展示本变更定义的附件区域，不得因组件拆分隐藏既有业务信息
-
-#### Scenario: 资料项操作保持不变
-- **WHEN** 用户在项目详情页操作资料项
-- **THEN** 页面必须继续提供既有标记提交、确认、退回和退回原因输入、标记不适用、恢复适用、责任人分配和清空责任人操作，并保持操作成功后的阶段资料清单、齐套摘要和业务日志刷新行为不变
-
-#### Scenario: 阶段推进保持不变
-- **WHEN** 用户查看或触发项目详情页手工阶段推进
-- **THEN** 页面必须继续展示既有阶段推进入口、当前阶段齐套门禁提示、缺失适用必填资料列表、推进成功后刷新项目详情和阶段资料清单的行为，不得新增目标阶段选择、跳阶段、回退、批量推进或审批流入口
-
-#### Scenario: 业务日志展示保持不变
-- **WHEN** 用户打开项目详情页业务日志区域
-- **THEN** 页面必须继续加载并展示项目业务日志的时间、操作人、动作类型或中文摘要、summary、加载中、失败和空状态，且业务日志区域仍为只读
-
-#### Scenario: 边界说明文案保持不变
-- **WHEN** 用户查看项目详情页阶段资料清单、齐套摘要、资料责任人、阶段资料附件或阶段推进区域
-- **THEN** 页面必须继续展示既有边界说明，明确手工状态不代表文件已上传或在线表单已填写、齐套摘要基于当前手工状态和人工适用性判断、资料责任人不代表权限控制或文件权限，并展示附件上传不等于资料确认、不自动推进阶段、不代表文件管理平台归档的说明
-
-#### Scenario: 错误提示保持不变
-- **WHEN** 项目详情、阶段资料清单、资料操作、适用性操作、责任人操作、附件操作、阶段推进或业务日志请求失败
-- **THEN** 页面必须继续展示既有可读错误提示，并保留当前页面上下文
-
-#### Scenario: 不新增排除能力
-- **WHEN** 用户查看或操作拆分后的项目详情页
-- **THEN** 页面不得因为本次附件能力或模块化结构新增文件管理平台联动、在线表单、消息提醒、超期提醒、项目成员权限、复杂权限、阶段推进规则调整、资料状态规则调整或业务日志规则调整
-
-#### Scenario: 前端模块边界可验证
-- **WHEN** 实现项目详情页模块化拆分后的附件区域
-- **THEN** 项目详情页必须继续通过前端 build 和轻量页面行为检查验证项目详情页仍可加载、阶段资料清单入口仍存在、资料操作入口仍存在、附件区域仍存在、阶段推进入口仍存在、业务日志区域仍存在
+#### Scenario: 摘要和缺失列表保持 completionMode
+- **WHEN** 模块化后的项目详情页展示阶段摘要或缺失资料
+- **THEN** 页面 MUST 继续使用后端返回的 `completionMode` 派生完成状态
+- **AND** 页面 MUST NOT 退回到所有资料都需要确认/退回的旧行为
 
 ### Requirement: 项目详情页资料附件展示与操作
-前端 MUST 在项目详情页阶段资料清单中为每个资料项提供附件区域，用于展示当前有效附件，并支持已登录用户上传、下载和删除阶段资料附件。
 
-#### Scenario: 展示资料项附件区域
-- **WHEN** 用户打开项目详情页阶段资料清单
-- **THEN** 页面必须在资料项中展示附件区域或附件入口，并能展示该资料项当前有效附件列表
+项目详情页资料附件区域 MUST 继续使用在线平台附件能力，并 MUST 以后端返回的 `completionMode` 派生完成状态判断上传或提交后的资料完成表现；附件操作不得表达为文件平台归档完成。
 
-#### Scenario: 加载附件列表
-- **WHEN** 页面需要展示某个资料项附件列表
-- **THEN** 前端必须携带当前登录态调用该资料项附件列表接口，并展示附件文件名、大小、上传人和上传时间等可读字段
+#### Scenario: 上传后完成状态以后端为准
+- **WHEN** 用户上传或提交资料附件后页面刷新资料项
+- **THEN** 页面 MUST 使用后端返回的 `isComplete`、`completionStatus` 或等价派生状态展示资料是否完成
+- **AND** 页面 MUST NOT 将“附件上传一定不等于资料完成”作为通用规则
 
-#### Scenario: 附件列表加载状态
-- **WHEN** 前端请求资料项附件列表
-- **THEN** 页面必须处理加载中、接口失败和空附件列表状态
+#### Scenario: submit_only 上传或提交可显示完成
+- **WHEN** 资料项 `completionMode = submit_only` 且上传或提交后后端返回已完成
+- **THEN** 页面 MUST 展示该资料项已完成或等价完成状态
 
-#### Scenario: 上传附件
-- **WHEN** 已登录用户在适用资料项附件区域选择文件并上传
-- **THEN** 前端必须携带当前登录态调用阶段资料附件上传接口，并在成功后刷新该资料项附件列表和业务日志
-
-#### Scenario: 不适用资料项上传提示
-- **WHEN** 页面展示不适用资料项
-- **THEN** 页面必须禁用或隐藏上传入口，并以可读方式提示“不适用资料项不能新增附件”，且不得让用户误以为不适用资料仍需要上传
-
-#### Scenario: 不适用资料项已有附件仍展示
-- **WHEN** 页面展示已标记不适用但存在未删除历史附件的资料项
-- **THEN** 页面必须继续展示这些已有附件，不得因资料项不适用而隐藏附件列表
-
-#### Scenario: 不适用资料项已有附件仍可下载
-- **WHEN** 页面展示已标记不适用但存在未删除历史附件的资料项
-- **THEN** 页面必须继续提供这些已有附件的下载入口
-
-#### Scenario: 不适用资料项已有附件仍可删除
-- **WHEN** 页面展示已标记不适用但存在未删除历史附件的资料项
-- **THEN** 页面必须继续提供这些已有附件的删除入口，并在删除成功后刷新附件列表和业务日志
-
-#### Scenario: 下载附件
-- **WHEN** 用户点击某个有效附件的下载操作
-- **THEN** 前端必须携带当前登录态调用阶段资料附件下载接口，并按浏览器下载行为处理文件
-
-#### Scenario: 删除附件
-- **WHEN** 已登录用户删除某个有效附件
-- **THEN** 前端必须携带当前登录态调用阶段资料附件删除接口，并在成功后刷新该资料项附件列表和业务日志
-
-#### Scenario: 附件操作失败提示
-- **WHEN** 附件上传、列表、下载或删除接口返回错误
-- **THEN** 页面必须展示可读错误提示，并保留当前项目详情页上下文
-
-#### Scenario: 附件操作不改变资料状态展示
-- **WHEN** 附件上传、下载或删除操作完成后页面刷新附件区域
-- **THEN** 页面不得把附件操作展示为资料已提交、已确认或阶段已推进，资料状态仍必须来自阶段资料清单接口返回的手工状态
-
-#### Scenario: 展示附件边界说明
-- **WHEN** 用户查看资料项附件区域
-- **THEN** 页面必须展示可读说明，明确附件上传只是资料项附件管理，不等于资料已确认，不自动推进阶段，不代表已经完成文件管理平台归档
-
-#### Scenario: 附件区域不提供排除能力
-- **WHEN** 用户查看或操作资料项附件区域
-- **THEN** 页面不得提供文件管理平台同步、在线表单、附件预览、断点续传、多版本管理、病毒扫描、复杂权限、项目成员权限、资料责任人权限或跨项目附件统计入口
+#### Scenario: 附件不表达文件平台归档
+- **WHEN** 页面展示附件列表、上传、下载或删除操作
+- **THEN** 页面 MUST NOT 将附件存在、附件上传成功或资料提交成功表达为文件平台归档完成
 
 ### Requirement: 用户管理组织角色前端
 前端 MUST 在用户管理页面展示和维护组织角色、部门和岗位/职务文本，并 MUST 按组织角色约束部门输入。
@@ -969,164 +658,97 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **THEN** 页面不得新增复杂 RBAC、按钮权限矩阵、部门继承权限或阶段审批流配置入口
 
 ### Requirement: 阶段审批流前端展示
-前端 MUST 在项目详情页展示阶段审批状态，并 MUST 以接口返回数据为准展示审批节点、审批状态和审批历史入口。
 
-#### Scenario: 展示阶段审批状态
-- **WHEN** 阶段数据返回阶段审批状态
-- **THEN** 页面必须在对应阶段区域展示 `not_submitted`、`pending_center_manager`、`returned_by_center_manager`、`pending_general_manager`、`returned_by_general_manager`、`approved` 或 `cancelled` 的可读文案
+当前 20260625 在线平台内部资料闭环中，前端 MUST NOT 将泛化阶段审批状态、阶段审批历史或二级阶段审批进度作为项目详情页当前阶段推进前置展示；资料级 `approval_required` 的审核状态仍 MUST 在资料项上正常展示。
 
-#### Scenario: 阶段 1 展示二级审批进度
-- **WHEN** 阶段 key 为 `initiation`
-- **THEN** 页面必须展示营销中心负责人审批和总经理审批的二级审批进度
+#### Scenario: 不展示泛化阶段审批状态作为推进条件
+- **WHEN** 页面展示项目详情、阶段列表或当前阶段推进入口
+- **THEN** 页面 MUST NOT 将阶段 `approval_status`、阶段审批状态或阶段关口审批状态展示为当前阶段推进条件
+- **AND** 页面 MUST NOT 提示必须先完成泛化阶段审批才能推进
 
-#### Scenario: 阶段 3 展示二级审批进度
-- **WHEN** 阶段 key 为 `contract`
-- **THEN** 页面必须展示营销中心负责人审批和总经理审批的二级审批进度
+#### Scenario: 不展示阶段审批历史入口
+- **WHEN** 页面展示项目详情或阶段区域
+- **THEN** 页面 MUST NOT 要求展示阶段关口审批历史入口
+- **AND** 页面 MUST NOT 要求展示审批时间、审批人、审批角色、审批动作、审批意见或审批前后状态作为当前流程必备 UI
 
-#### Scenario: 阶段 8 展示二级审批进度
-- **WHEN** 阶段 key 为 `closeout`
-- **THEN** 页面必须展示项目经理所属中心负责人审批和总经理审批的二级审批进度
+#### Scenario: 不展示二级阶段审批进度
+- **WHEN** 页面展示阶段 `initiation`、`contract` 或 `closeout`
+- **THEN** 页面 MUST NOT 展示营销中心负责人、项目经理所属中心负责人或总经理的二级阶段关口审批进度
 
-#### Scenario: 不需要总经理审批阶段不展示总经理审批入口
-- **WHEN** 阶段 key 为 `solution`、`detailedDesign`、`manufacturing`、`preAcceptance` 或 `finalAcceptance`
-- **THEN** 页面不得展示总经理审批入口
-
-#### Scenario: 展示退回原因
-- **WHEN** 审批状态为 `returned_by_center_manager` 或 `returned_by_general_manager`
-- **THEN** 页面必须展示最近一次退回原因或审批意见
-
-#### Scenario: 展示审批历史入口
-- **WHEN** 用户有权查看项目详情
-- **THEN** 页面必须提供只读审批历史查看入口，并展示审批时间、审批人、审批角色、审批动作、审批意见和审批前后状态
-
-#### Scenario: 审批历史加载失败
-- **WHEN** 审批历史接口请求失败
-- **THEN** 页面必须展示可读错误提示，并保留项目详情上下文
+#### Scenario: 资料级审核状态仍展示
+- **WHEN** 页面展示 `completionMode = approval_required` 的资料项
+- **THEN** 页面 MUST 继续按资料项显示提交、待审核、审核通过或退回修改等资料级审核状态
+- **AND** 页面 MUST NOT 将该资料级审核状态混同为阶段关口审批状态
 
 ### Requirement: 阶段审批流前端操作入口
-前端 MUST 根据当前用户组织角色、项目身份、阶段审批中心和接口返回状态展示审批操作入口，但 MUST NOT 将前端隐藏作为权限边界。
 
-#### Scenario: 项目经理看到提交审批入口
-- **WHEN** 当前用户是该项目项目经理、当前阶段适用必填资料齐套且审批状态为 `not_submitted`
-- **THEN** 页面可以展示提交审批入口
+当前 20260625 在线平台内部资料闭环中，前端 MUST NOT 提供泛化阶段审批提交、重新提交、审批通过或审批退回入口；前端只展示资料级 `approval_required` 的提交、审核通过和退回操作，并按 `completionMode` 完成情况与推进权限展示阶段推进入口。
 
-#### Scenario: 项目经理看到重新提交入口
-- **WHEN** 当前用户是该项目项目经理且审批状态为 `returned_by_center_manager` 或 `returned_by_general_manager`
-- **THEN** 页面可以展示重新提交审批入口
+#### Scenario: 不展示提交阶段审批入口
+- **WHEN** 页面展示项目详情、阶段区域或当前阶段操作区
+- **THEN** 页面 MUST NOT 展示提交阶段审批或重新提交阶段审批入口
 
-#### Scenario: 当前阶段未齐套提示不能提交审批
-- **WHEN** 当前阶段存在缺失适用必填资料
-- **THEN** 页面必须提示不能提交审批，并展示接口返回或齐套摘要中的缺失资料
+#### Scenario: 不展示阶段审批处理入口
+- **WHEN** 当前用户是中心负责人、总经理、总经理助理、系统管理员、项目经理或其他用户
+- **THEN** 页面 MUST NOT 展示阶段审批通过、阶段审批退回、中心负责人审批通过、中心负责人退回、总经理审批通过或总经理退回入口
 
-#### Scenario: 中心负责人审批入口要求中心匹配
-- **WHEN** 当前用户是中心负责人、审批状态为 `pending_center_manager` 且其部门匹配当前阶段审批中心
-- **THEN** 页面可以展示审批通过和退回入口
+#### Scenario: 只展示资料级审核入口
+- **WHEN** 资料项 `completionMode = approval_required`
+- **AND** 当前用户具备该资料项审核权限
+- **THEN** 页面可以展示资料项审核通过和退回修改入口
+- **AND** 页面 MUST 表达该操作对象是单个资料项
 
-#### Scenario: 中心负责人中心不匹配不展示审批入口
-- **WHEN** 当前用户是中心负责人但其部门不匹配当前阶段审批中心
-- **THEN** 页面不得展示中心负责人审批通过或退回入口
-
-#### Scenario: 总经理只在待总经理审批时看到入口
-- **WHEN** 当前用户是总经理且审批状态为 `pending_general_manager`
-- **THEN** 页面可以展示审批通过和退回入口
-
-#### Scenario: 总经理不处理非总经理节点
-- **WHEN** 阶段不需要总经理审批或审批状态不是 `pending_general_manager`
-- **THEN** 页面不得展示总经理审批通过或退回入口
-
-#### Scenario: 总经理助理只读查看
-- **WHEN** 当前用户 `organizationRole = general_manager_assistant`
-- **THEN** 页面不得展示提交审批、审批通过、审批退回、阶段推进或代替总经理审批入口
-
-#### Scenario: 系统管理员不显示业务审批入口
-- **WHEN** 当前用户 `organizationRole = system_admin`
-- **THEN** 页面不得展示审批通过、审批退回、阶段推进或业务审批入口
-
-#### Scenario: 项目经理不显示审批通过入口
-- **WHEN** 当前用户仅因项目经理身份打开项目详情
-- **THEN** 页面不得展示中心负责人审批通过、中心负责人退回、总经理审批通过或总经理退回入口
-
-#### Scenario: 退回必须填写原因
-- **WHEN** 用户在前端执行审批退回但未填写非空原因
-- **THEN** 页面必须展示校验提示，且不得调用退回接口
-
-#### Scenario: 审批历史入口只读
-- **WHEN** 用户查看审批历史
-- **THEN** 页面不得因查看历史而触发审批记录写入、业务日志写入、审批状态变更或阶段状态变更
-
-#### Scenario: 前端隐藏不是权限边界
-- **WHEN** 用户绕过页面直接调用审批接口
-- **THEN** 后端仍必须按 OpenSpec 权限规则拒绝越权操作；前端必须能展示 `PROJECT_APPROVAL_FORBIDDEN`
+#### Scenario: 阶段推进入口不绑定阶段审批操作
+- **WHEN** 当前阶段适用资料已经按 `completionMode` 完成
+- **AND** 当前用户具备阶段推进权限
+- **THEN** 页面可以展示阶段推进入口
+- **AND** 页面 MUST NOT 要求用户先提交或通过泛化阶段审批
 
 ### Requirement: 审批状态下的阶段推进前端
-前端 MUST 将阶段推进入口同时绑定齐套摘要、审批状态和当前用户可推进身份，并 MUST 不提供跳阶段、回退或自动流转入口。
 
-#### Scenario: 审批未通过不显示推进入口
-- **WHEN** 当前阶段审批状态不是 `approved`
-- **THEN** 页面不得展示可点击的阶段推进入口，并应提示需先完成审批
+前端 MUST 将阶段推进入口绑定当前阶段适用资料按 `completionMode` 派生的完成情况和当前用户可推进身份，并 MUST 不提供跳阶段、回退或自动流转入口。
 
-#### Scenario: 审批通过后仍展示齐套门禁
-- **WHEN** 当前阶段审批状态为 `approved`
-- **THEN** 页面仍必须展示当前阶段适用必填资料齐套情况，并在未齐套时禁止推进
+#### Scenario: 阶段审批未通过不隐藏推进入口
+- **WHEN** 当前阶段适用资料已经按 `completionMode` 完成
+- **THEN** 页面 MUST NOT 仅因当前阶段审批状态不是 `approved` 而隐藏可点击的阶段推进入口
+- **AND** 页面 MUST NOT 展示“需先完成阶段关口审批”或等价提示
 
-#### Scenario: 项目经理审批通过后可推进自己负责项目
-- **WHEN** 当前用户是该项目项目经理、当前阶段审批状态为 `approved` 且齐套门禁满足
+#### Scenario: 阶段推进仍展示资料门禁
+- **WHEN** 当前阶段存在适用资料未按 `completionMode` 完成
+- **THEN** 页面必须展示后端返回的缺失资料和派生完成状态并禁止推进
+
+#### Scenario: 有权限用户可推进
+- **WHEN** 当前用户具备项目经理、中心负责人、管理员或其他规格允许的推进身份
+- **AND** 当前阶段适用资料已经按 `completionMode` 完成
 - **THEN** 页面可以展示阶段推进入口
 
-#### Scenario: 非项目经理不显示推进入口
-- **WHEN** 当前用户不是该项目项目经理且不具备规格允许的其他推进身份
-- **THEN** 页面不得显示阶段推进入口
-
 #### Scenario: 不新增自动流转入口
-- **WHEN** 页面实现审批流展示和操作
+- **WHEN** 页面实现阶段推进展示和操作
 - **THEN** 页面不得新增自动阶段流转、跳阶段、阶段回退、批量审批、消息通知、日报周报或文件管理平台联动入口
 
 ### Requirement: 审批错误提示前端
-前端 MUST 为项目审批相关稳定错误码提供可理解的中文提示。
 
-#### Scenario: 非法审批动作提示
-- **WHEN** 后端返回 `INVALID_APPROVAL_ACTION`
-- **THEN** 页面必须提示当前审批动作无效或当前状态不允许该动作
+前端 MUST 为当前在线平台内部资料闭环的资料级审核和阶段推进错误提供可理解中文提示，但 MUST NOT 将泛化阶段审批错误作为阶段推进主路径规则。
 
-#### Scenario: 退回原因错误提示
-- **WHEN** 后端返回 `INVALID_APPROVAL_COMMENT`
-- **THEN** 页面必须提示审批意见或退回原因不能为空
-
-#### Scenario: 审批不可提交提示
-- **WHEN** 后端返回 `PROJECT_APPROVAL_NOT_SUBMITTABLE`
-- **THEN** 页面必须提示当前项目或阶段暂不能提交审批
-
-#### Scenario: 审批非待处理提示
-- **WHEN** 后端返回 `PROJECT_APPROVAL_NOT_PENDING`
-- **THEN** 页面必须提示当前审批不是待处理状态
-
-#### Scenario: 审批未通过提示
-- **WHEN** 后端返回 `PROJECT_APPROVAL_NOT_APPROVED`
-- **THEN** 页面必须提示当前阶段审批未通过，暂不能推进阶段
-
-#### Scenario: 审批无权限提示
-- **WHEN** 后端返回 `PROJECT_APPROVAL_FORBIDDEN`
-- **THEN** 页面必须提示当前用户无权执行该审批操作
-
-#### Scenario: 缺失必填资料提示
+#### Scenario: 缺失资料提示
 - **WHEN** 后端返回 `PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE`
-- **THEN** 页面必须提示当前阶段存在未完成适用必填资料，并在有缺失列表时展示缺失资料
+- **THEN** 页面必须提示当前阶段存在未按 `completionMode` 完成的适用资料
+- **AND** 页面必须在后端返回缺失列表时展示缺失资料、`completionMode` 和派生完成状态
 
-#### Scenario: 非法项目 ID 提示
-- **WHEN** 后端返回 `INVALID_PROJECT_ID`
-- **THEN** 页面必须提示项目参数无效
+#### Scenario: 阶段审批未通过旧错误兼容提示
+- **WHEN** 后端兼容旧实现返回 `PROJECT_APPROVAL_NOT_APPROVED`
+- **THEN** 页面 MAY 展示兼容性提示，说明当前阶段暂不能推进
+- **AND** 页面 MUST NOT 将该错误解释为当前 20260625 内部资料闭环必须先通过泛化阶段关口审批
+- **AND** 页面 MUST NOT 因该兼容错误在正常 UI 中展示提交阶段审批或阶段审批通过入口
 
-#### Scenario: 非法阶段 ID 提示
-- **WHEN** 后端返回 `INVALID_PROJECT_STAGE_ID`
-- **THEN** 页面必须提示阶段参数无效
+#### Scenario: 资料级审核错误提示保留
+- **WHEN** 后端返回资料级审核相关的权限、退回原因或状态错误
+- **THEN** 页面 MUST 展示可理解中文提示
+- **AND** 页面 MUST 将错误对象表达为资料项审核，而不是阶段关口审批
 
-#### Scenario: 项目不存在提示
-- **WHEN** 后端返回 `PROJECT_NOT_FOUND`
-- **THEN** 页面必须提示项目不存在
-
-#### Scenario: 阶段不存在提示
-- **WHEN** 后端返回 `PROJECT_STAGE_NOT_FOUND`
-- **THEN** 页面必须提示阶段不存在或不属于当前项目
+#### Scenario: 非法项目或阶段参数提示
+- **WHEN** 后端返回 `INVALID_PROJECT_ID`、`INVALID_PROJECT_STAGE_ID`、`PROJECT_NOT_FOUND` 或 `PROJECT_STAGE_NOT_FOUND`
+- **THEN** 页面必须展示项目或阶段参数无效、项目不存在或阶段不存在的可读提示
 
 ### Requirement: 前端项目创建权限入口
 
@@ -1188,81 +810,78 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 ### Requirement: 资料级审核与阶段关口审批前端表达
 
-前端 MUST 在项目详情页清晰区分单个资料项的资料级审核和当前阶段的阶段关口审批，并 MUST 避免让用户误解为文件全部齐套后才第一次审核。
+前端 MUST 在项目详情页清晰区分单个资料项的资料级审核和当前阶段推进；当前 20260625 内部资料闭环 MUST NOT 表达为所有资料先全部审核通过再提交泛化阶段关口审批。
 
 #### Scenario: 资料级审核命名
+- **WHEN** 页面展示 `approval_required` 资料的提交、确认或退回操作
+- **THEN** 页面文案必须表达这是资料项审核，对象是单个资料项
 
-- **WHEN** 页面展示资料提交、资料确认或资料退回操作
-- **THEN** 页面文案必须表达这是“资料审核”或“资料项审核”，对象是单个资料项
+#### Scenario: submit_only 不使用审核文案
+- **WHEN** 页面展示 `submit_only` 资料
+- **THEN** 页面 MUST 将主操作表达为提交、上传或完成
+- **AND** 页面 MUST NOT 展示提交审核、审核通过或退回入口
 
-#### Scenario: 阶段审批命名
+#### Scenario: 不展示阶段关口审批前置说明
+- **WHEN** 页面展示阶段推进入口或不可推进原因
+- **THEN** 页面必须说明阶段推进依据为当前阶段适用资料按各自 `completionMode` 完成且用户具备推进权限
+- **AND** 页面 MUST NOT 说明阶段推进需要同时满足“资料全部 confirmed”和“阶段关口审批通过”
 
-- **WHEN** 页面展示阶段审批状态、提交审批、审批通过、审批退回或审批历史
-- **THEN** 页面必须使用“阶段关口审批”或等价表达，说明对象是整个当前阶段
-
-#### Scenario: 附件上传不等于提交审核
-
-- **WHEN** 页面展示附件上传区域
-- **THEN** 页面必须避免把上传附件表述为提交审核；上传附件后仍需责任人提交资料审核
-
-#### Scenario: 资料审核通过后才能提交阶段关口审批
-
-- **WHEN** 页面展示阶段关口审批入口或不可提交原因
-- **THEN** 页面必须说明当前阶段适用必填资料需要先全部资料审核通过，即状态为 `confirmed`
-
-#### Scenario: 阶段推进说明
-
-- **WHEN** 页面展示阶段推进入口或阶段推进不可用原因
-- **THEN** 页面必须说明阶段推进需要同时满足“资料审核通过”和“阶段关口审批通过”
-
-#### Scenario: 总经理审批入口仅属于阶段关口审批
-
-- **WHEN** 页面展示总经理审批入口或二级审批进度
-- **THEN** 页面必须把该入口归入阶段关口审批，不得让用户理解为总经理在审核单个资料项
+#### Scenario: 不展示总经理阶段关口审批入口
+- **WHEN** 页面展示当前项目详情或阶段操作区
+- **THEN** 页面 MUST NOT 展示总经理阶段关口审批入口、中心负责人阶段关口审批入口或二级阶段审批进度
+- **AND** 如未来恢复泛化阶段关口审批，MUST 通过独立 change 重新定义前端入口和文案
 
 ### Requirement: 我的工作台页面
 
-前端 MUST 将当前“我的资料任务”升级或改名为“我的工作台 / 我的待办”，并 MUST 展示当前用户的资料责任、资料审核、阶段关口审批和阶段推进待办。
+前端 MUST 将当前“我的资料任务”升级或改名为“我的工作台 / 我的待办”，并 MUST 展示当前用户的资料责任待办、资料审核待办和阶段推进待办；当前 20260625 在线平台内部资料闭环 MUST NOT 展示阶段关口审批待办分类或入口。
 
 #### Scenario: 导航显示我的工作台
-
 - **WHEN** 用户已登录
 - **THEN** 主导航必须显示“我的工作台”或“我的待办”入口
 
 #### Scenario: 工作台加载待办
-
 - **WHEN** 用户打开我的工作台
 - **THEN** 前端必须携带登录态调用 `GET /api/me/workbench` 或等价工作台接口
 
 #### Scenario: 工作台展示待办分类
-
 - **WHEN** 工作台接口返回待办数据
-- **THEN** 页面必须展示我负责的资料、待我审核的资料、待我阶段关口审批和待我推进阶段等分类或筛选
+- **THEN** 页面必须展示我负责的资料、待我审核的资料和待我推进阶段等分类或筛选
+- **AND** 页面 MUST NOT 展示阶段关口审批待办分类
+- **AND** 页面 MUST NOT 展示“待我阶段关口审批”、“待阶段关口审批”或等价筛选/入口
+
+#### Scenario: 审核待办只来自 approval_required
+- **WHEN** 工作台展示待审核资料
+- **THEN** 待审核资料 MUST 只来自 `completionMode = approval_required` 且 `status = submitted` 的资料项
+- **AND** 页面 MUST NOT 将 `submit_only`、未触发的 `conditional_submit` 或泛化阶段审批事项展示为资料审核待办
+
+#### Scenario: 阶段推进待办按 completionMode 和权限
+- **WHEN** 工作台展示阶段推进待办
+- **THEN** 阶段推进待办 MUST 只按当前阶段适用资料的 `completionMode` 完成情况和当前用户推进权限展示
+- **AND** 页面 MUST NOT 因 `approval_status` 生成阶段关口审批待办
+- **AND** 页面 MUST NOT 因 `approval_status != approved` 隐藏符合资料完成和推进权限条件的阶段推进待办
 
 #### Scenario: 工作台展示摘要计数
-
 - **WHEN** 工作台接口返回摘要计数
-- **THEN** 页面必须展示总待办数量和按待办类型分组的数量
+- **THEN** 页面必须展示总待办数量和按资料责任、资料审核、阶段推进等当前待办类型分组的数量
+- **AND** 页面 MUST NOT 展示阶段关口审批待办计数
 
 #### Scenario: 工作台待办字段展示
-
 - **WHEN** 页面展示待办条目
 - **THEN** 页面必须展示项目、阶段、资料项、状态、动作文案和更新时间等必要信息
 
 #### Scenario: 点击待办进入处理位置
+- **WHEN** 用户点击资料责任或资料审核待办
+- **THEN** 页面必须进入资料项处理位置或任务视图
+- **AND** 页面 MUST NOT 进入阶段关口审批处理页
 
-- **WHEN** 用户点击工作台待办
-- **THEN** 页面必须进入该待办对应的处理位置或任务视图
+#### Scenario: 点击阶段推进待办进入推进位置
+- **WHEN** 用户点击阶段推进待办
+- **THEN** 页面必须进入阶段推进位置或对应项目详情阶段推进区域
+- **AND** 页面 MUST NOT 进入阶段关口审批提交、审批通过或审批退回页面
 
 #### Scenario: 普通员工待办不进入完整项目详情
-
 - **WHEN** 普通员工点击资料责任待办
 - **THEN** 页面必须根据 `targetRoute` 进入受限任务视图，或进入携带 `documentId` / `taskMode` 的受限详情，不得直接打开完整项目详情
-
-#### Scenario: 审核待办不依赖项目总览查找
-
-- **WHEN** 用户有待审核资料或待阶段关口审批
-- **THEN** 页面必须能从工作台直接进入处理入口，不要求用户先从项目列表或项目总览中手工查找
 
 ### Requirement: 普通员工任务视图
 
@@ -1440,67 +1059,54 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **THEN** 页面 MUST 在资料项存在 `ownerDepartment` 或 `reviewDepartment` 时只按这两个字段判断本中心相关资料
 - **AND** 仅当 `ownerDepartment` 和 `reviewDepartment` 都为空时，才 MAY 使用 `responsibleUser.department` 作为旧数据兼容判断
 
-### Requirement: 项目详情页 v20260624 阶段资料展示
-
-前端 MUST 在项目详情页按后端返回的 `v20260624` 阶段资料项动态展示阶段资料清单、齐套摘要和缺失适用必填资料，并 MUST 不写死资料名称、资料数量或旧模板版本。
-
-#### Scenario: 展示 v20260624 资料项
-- **WHEN** 阶段资料清单接口返回 `v20260624` 资料项
-- **THEN** 项目详情页必须按接口返回的阶段分组、资料项名称、是否必填、提交方式、责任中心、审核中心、责任角色、状态、适用性、责任人和附件信息展示资料项
-
-#### Scenario: 齐套摘要展示 v20260624 资料项
-- **WHEN** 阶段资料清单接口返回基于 `v20260624` 资料项计算的 `completenessSummary`
-- **THEN** 项目详情页必须展示该摘要中的适用必填资料总数、已确认数量、未完成数量和完成百分比
-
-#### Scenario: 缺失必填资料展示 v20260624 资料项
-- **WHEN** `incompleteRequiredDocuments` 返回 `v20260624` 缺失适用必填资料
-- **THEN** 项目详情页必须展示这些资料项的编号、名称、适用性和状态，不得使用旧资料名映射替代接口返回内容
-
-#### Scenario: 前端不写死旧资料名或旧数量
-- **WHEN** `v20260624` 资料项数量、资料项名称、阶段分布或必填口径变化
-- **THEN** 前端必须以接口返回数据为准动态渲染，不得依赖 54 项数量、旧资料编号范围或旧资料名称常量
-
-#### Scenario: 不兼容旧模拟项目资料展示
-- **WHEN** 旧模拟项目仍包含历史资料项或历史资料清单
-- **THEN** 前端不需要提供旧新版资料项兼容展示、旧资料名映射或旧模板回退展示
-
-#### Scenario: 不新增排除能力
-- **WHEN** 项目详情页展示 `v20260624` 资料项
-- **THEN** 页面不得因此新增日报周报、文件管理平台流程编排、消息提醒、合同审批流、采购审批流、付款流、设计变更流程引擎、跳阶段、阶段回退或模板版本切换入口
-
 ### Requirement: 简单资料闭环前端边界
 
-前端 MUST 将第一版项目详情体验表达为阶段资料收集、审核、归档状态展示和阶段推进，不得把特殊资料项展示为独立复杂流程。
+前端 MUST 将第一版项目详情体验表达为阶段资料收集、按 `completionMode` 提交/审核、在线平台附件保存和阶段推进，不得展示文件平台归档状态，不得把特殊资料项展示为独立复杂流程，也不得把泛化阶段关口审批通过表达为阶段推进前置。
+
+#### Scenario: 项目详情体验边界
+- **WHEN** 页面展示项目详情
+- **THEN** 页面 MUST 表达当前体验由阶段资料收集、资料提交/审核、在线平台附件保存和阶段推进组成
+- **AND** 页面 MUST NOT 将文件平台归档状态展示作为当前体验组成部分
+
+#### Scenario: 不展示文件平台归档状态
+- **WHEN** 页面展示阶段资料、附件区域、阶段汇总或项目详情
+- **THEN** 页面 MUST NOT 展示 `not_archived`、`archived` 或 `archive_failed`
+- **AND** 页面 MUST NOT 展示文件平台文件列表、文件平台下载入口、归档失败重试入口、文件平台目录 ID 或文件平台日志入口
 
 #### Scenario: 特殊资料项按资料项展示
 - **WHEN** 页面展示合同审核记录表、采购申请表、采购合同审核记录表、发票或设计变更资料
-- **THEN** 页面必须按普通或条件性资料项展示其适用性、责任人、附件和审核状态
+- **THEN** 页面必须按普通或条件性资料项展示其适用性、责任人、附件、`completionMode` 和资料项状态
 
 #### Scenario: 不展示复杂流程入口
 - **WHEN** 页面展示合同审核记录表、采购申请表、采购合同审核记录表、发票或设计变更资料
-- **THEN** 页面不得提供合同审批流、采购审批流、付款流、发票流转、设计变更流程引擎或额外流程状态机入口
+- **THEN** 页面不得提供合同审批流、采购审批流、付款流、发票流转、发票审批流、设计变更流程引擎或额外流程状态机入口
 
 #### Scenario: 阶段推进说明
 - **WHEN** 页面展示阶段推进入口或阶段推进不可用原因
-- **THEN** 页面必须说明阶段推进需要同时满足当前阶段适用必填资料审核通过和阶段关口审批通过
+- **THEN** 页面必须说明阶段推进需要当前阶段适用资料按 `completionMode` 完成且用户具备推进权限
+- **AND** 页面 MUST NOT 说明阶段推进还需要泛化阶段关口审批通过
+- **AND** 页面 MUST NOT 说明阶段推进需要所有资料均为 `confirmed`
 
 ### Requirement: 前端项目编号后置展示
 
-前端 MUST 在后续规划中支持项目创建时不填写项目编号，并 MUST 在项目列表、项目详情、搜索结果和待办入口中展示空项目编号的合理占位。
+前端 MUST 支持项目创建时不填写项目编号，并 MUST 在项目列表、项目详情、搜索结果和待办入口中展示空项目编号的合理占位，且 MUST 在项目详情显示或提供后置填写项目编号入口。
 
 #### Scenario: 新建项目表单不强制项目编号
 - **WHEN** 用户创建尚未立项审批通过的新项目
 - **THEN** 前端 MUST 不再强制填写项目编号
-- **AND** 前端 MUST 明确项目编号将在立项审批通过并发布项目立项通知后生成或填写
+- **AND** 前端 MUST 明确项目编号将在 `1.2 项目立项审批表` 审核通过并提交或上传 `1.3 项目立项通知` 后生成或填写
 
-#### Scenario: 项目列表展示待立项编号
+#### Scenario: 项目列表展示待生成编号
 - **WHEN** 项目列表接口返回 `projectCode` 为空
-- **THEN** 前端 MUST 展示 `待立项编号` 或等价文案，而不是展示空白、`undefined` 或错误状态
+- **THEN** 前端 MUST 展示 `待生成` 或等价文案，而不是展示空白、`undefined` 或错误状态
 
-#### Scenario: 项目详情展示编号生成节点
+#### Scenario: 项目详情显示后置填写入口
 - **WHEN** 项目详情接口返回 `projectCode` 为空
-- **THEN** 前端 MUST 展示项目尚未生成正式编号
-- **AND** 前端 MUST 将编号生成与立项审批通过及项目立项通知发布关联说明
+- **AND** `1.2 项目立项审批表` 已审核通过
+- **AND** `1.3 项目立项通知` 已提交或上传完成
+- **AND** 当前用户具备项目维护、项目经理、管理员或等价既有权限边界
+- **THEN** 项目详情 MUST 显示或提供后置填写项目编号入口
+- **AND** 该入口 MUST 提示非空项目编号必须唯一
 
 #### Scenario: 搜索兼容空项目编号
 - **WHEN** 用户在项目列表或工作台按项目名称、客户或其他字段查找项目
@@ -1508,34 +1114,142 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 ### Requirement: 20260625 阶段资料完成状态展示
 
-前端 MUST 在后续规划中根据后端返回的资料完成规则和资料状态展示更细的资料处理状态，不应继续把所有资料操作都表达为提交资料审核。
+前端 MUST 根据后端返回的资料完成规则、基础状态和派生完成状态展示资料处理状态，不得继续把所有资料操作都表达为提交资料审核。
 
 #### Scenario: 展示多种资料状态
 - **WHEN** 前端展示阶段资料列表
-- **THEN** 页面 SHOULD 能区分待提交、已完成、待确认/审批、已确认/审批通过、已退回修改、条件未触发和不适用等状态
+- **THEN** 页面 MUST 能区分待提交、已完成、待确认/审批、已确认/审批通过、已退回修改、条件未触发和不适用等状态
 
 #### Scenario: submit_only 资料不使用审核文案
 - **WHEN** 资料项 `completionMode = submit_only`
-- **THEN** 前端 SHOULD 将主要操作表达为提交、上传或标记完成
-- **AND** 前端 SHOULD NOT 将该资料项的主要按钮统一命名为 `提交资料审核`
+- **THEN** 前端 MUST 将主要操作表达为提交、上传或标记完成
+- **AND** 前端 MUST NOT 将该资料项的主要按钮统一命名为 `提交资料审核`
 
-#### Scenario: 发票资料按 submit_only 展示
-- **WHEN** 页面展示 `发票（预付款）`、`发票（发货款）` 或 `发票（尾款）`
-- **AND** 该资料项 `completionMode = submit_only`
-- **THEN** 前端 MUST 将主要操作表达为提交、上传或完成
-- **AND** 前端 MUST NOT 将该资料项展示为提交审核、付款审批、发票审批或待额外确认前置
-
-#### Scenario: approval_required 资料使用确认审批文案
+#### Scenario: approval_required submitted 展示待审核
 - **WHEN** 资料项 `completionMode = approval_required`
-- **THEN** 前端 SHOULD 展示待确认/审批、确认通过和退回修改等处理状态
+- **AND** 基础状态为 `submitted`
+- **THEN** 前端 MUST 展示待确认/审批或待审核状态
 
 #### Scenario: 条件资料展示触发状态
-- **WHEN** 资料项 `completionMode` 为 `conditional_submit` 或 `conditional_approval`
-- **THEN** 前端 SHOULD 展示条件未触发、已触发待处理或不适用状态
-- **AND** 未触发时 SHOULD 明确该资料不计入当前缺失
+- **WHEN** 资料项 `completionMode = conditional_submit`
+- **AND** `isApplicable = false`
+- **THEN** 前端 MUST 展示条件未触发或不适用状态
+- **AND** 前端 MUST 明确该资料当前不计入缺失
+
+#### Scenario: 条件资料触发后展示提交完成状态
+- **WHEN** 资料项 `completionMode = conditional_submit`
+- **AND** `isApplicable = true`
+- **THEN** 前端 MUST 按提交或上传后完成展示该资料状态
 
 #### Scenario: 阶段推进说明按完成规则表达
 - **WHEN** 前端展示阶段推进入口或不可推进原因
 - **THEN** 页面 MUST 说明阶段推进依据为当前阶段适用资料按各自完成规则完成
 - **AND** 页面 MUST NOT 表达为资料齐套后还需要额外通过泛化的阶段级审批
+
+### Requirement: 项目详情页 20260625 阶段资料展示
+
+前端 MUST 在项目详情页按后端返回的当前 20260625 阶段资料项动态展示阶段资料清单、`completionMode`、派生完成状态、齐套摘要和未完成资料，不得写死资料名称、资料数量或旧模板版本。
+
+#### Scenario: 展示当前资料项
+- **WHEN** 阶段资料清单接口返回当前 20260625 资料项
+- **THEN** 项目详情页必须按接口返回的阶段分组、资料项名称、是否必填、提交方式、责任中心、审核中心、责任角色、状态、`completionMode`、派生完成状态、适用性、责任人和附件信息展示资料项
+
+#### Scenario: 齐套摘要展示当前资料项
+- **WHEN** 阶段资料清单接口返回基于当前 20260625 资料项和 `completionMode` 计算的 `completenessSummary`
+- **THEN** 项目详情页必须展示该摘要中的适用资料总数、已完成数量、未完成数量和完成百分比
+
+#### Scenario: 缺失资料展示当前资料项
+- **WHEN** `incompleteRequiredDocuments` 返回当前 20260625 未完成资料
+- **THEN** 页面必须展示 `documentCode`、`documentName`、`status`、`completionMode` 和派生完成状态
+
+### Requirement: 前端项目编号后置体验
+
+前端 MUST 支持项目创建时不填写项目编号，并 MUST 在列表、详情、搜索结果和工作台中兼容空 `projectCode`。
+
+#### Scenario: 新建项目不强制项目编号
+- **WHEN** 用户创建尚未完成立项审批的新项目
+- **THEN** 新建项目页面 MUST 不再强制填写项目编号
+- **AND** 前端 MUST 允许提交不包含 `projectCode` 的创建请求
+
+#### Scenario: 空项目编号展示待生成
+- **WHEN** 项目列表、项目详情、搜索结果或工作台返回 `projectCode` 为空
+- **THEN** 前端 MUST 展示 `待生成` 或等价文案
+- **AND** 前端 MUST NOT 展示 `undefined`、`null`、空白错误状态或阻止进入项目详情
+
+#### Scenario: 后置填写项目编号入口
+- **WHEN** 项目尚未生成正式编号且用户具备维护项目编号权限
+- **AND** `1.2 项目立项审批表` 已审核通过
+- **AND** `1.3 项目立项通知` 已提交或上传完成
+- **THEN** 项目详情 MUST 显示或提供后置填写或更新项目编号入口
+- **AND** 该入口 MUST 表达非空项目编号必须唯一
+
+#### Scenario: 搜索筛选兼容空编号
+- **WHEN** 用户使用项目列表、搜索或工作台筛选
+- **THEN** 前端 MUST NOT 因 `projectCode` 为空隐藏项目或报错
+
+### Requirement: 前端按 completionMode 展示资料操作
+
+前端 MUST 根据后端返回的 `completionMode` 展示资料项按钮、状态和文案，不得继续把所有资料统一表达为提交审核。
+
+#### Scenario: 展示 completionMode 文案
+- **WHEN** 阶段资料列表展示资料项
+- **THEN** 前端 MUST 展示与 `completionMode` 对应的可读文案
+- **AND** `submit_only` MUST 表达为提交即完成
+- **AND** `approval_required` MUST 表达为需审核
+- **AND** `conditional_submit` MUST 表达为条件触发后提交
+
+#### Scenario: 使用派生完成状态
+- **WHEN** 阶段资料列表展示资料项
+- **THEN** 前端 MUST 使用后端返回的 `completionStatus`、`isComplete` 或等价派生完成状态展示业务完成状态
+- **AND** 前端 MUST NOT 仅凭基础 `status = submitted` 将所有资料显示为待审核
+
+#### Scenario: submit_only 不展示审核动作
+- **WHEN** 资料项 `completionMode = submit_only`
+- **THEN** 前端 MUST NOT 将主操作展示为提交审核
+- **AND** 前端 MUST NOT 展示审核通过、退回或审核待办入口
+
+#### Scenario: submit_only submitted 展示已完成
+- **WHEN** 资料项 `completionMode = submit_only`
+- **AND** 基础状态为 `submitted`
+- **THEN** 前端 MUST 展示已完成或等价完成状态
+
+#### Scenario: approval_required 展示审核流程
+- **WHEN** 资料项 `completionMode = approval_required`
+- **THEN** 前端 MUST 展示提交、待审核、审核通过和退回修改等状态或操作
+
+#### Scenario: approval_required submitted 展示待审核
+- **WHEN** 资料项 `completionMode = approval_required`
+- **AND** 基础状态为 `submitted`
+- **THEN** 前端 MUST 展示待审核或等价状态
+
+#### Scenario: conditional_submit 展示触发状态
+- **WHEN** 资料项 `completionMode = conditional_submit`
+- **AND** `isApplicable = false`
+- **THEN** 前端 MUST 展示条件未触发或不适用状态
+- **AND** 前端 MUST 表达该资料当前不计入缺失
+
+#### Scenario: returned 展示未完成
+- **WHEN** 资料项基础状态为 `returned`
+- **THEN** 前端 MUST 展示退回修改或等价未完成状态
+
+#### Scenario: 阶段汇总按 completionMode 表达缺失
+- **WHEN** 前端展示阶段资料齐套摘要或不可推进原因
+- **THEN** 前端 MUST 使用后端按 `completionMode` 计算的缺失和未完成资料
+- **AND** 前端 MUST NOT 表达为所有资料都必须审核通过
+
+### Requirement: 前端暂停文件平台归档展示
+
+当前阶段前端 MUST 不展示文件平台归档状态、文件平台文件列表、文件平台下载入口或归档重试入口。
+
+#### Scenario: 不展示归档状态
+- **WHEN** 前端展示阶段资料附件区域
+- **THEN** 前端 MUST NOT 展示 `not_archived`、`archived` 或 `archive_failed` 归档状态
+
+#### Scenario: 不展示文件平台入口
+- **WHEN** 前端展示项目详情或阶段资料清单
+- **THEN** 前端 MUST NOT 展示文件平台文件列表、文件平台下载入口、文件平台目录 ID 或归档失败重试入口
+
+#### Scenario: 附件仍可在线平台操作
+- **WHEN** 用户有权限查看、上传、下载或删除阶段资料附件
+- **THEN** 前端 MUST 继续使用在线平台附件接口完成这些操作
 

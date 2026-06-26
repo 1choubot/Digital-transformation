@@ -5,8 +5,8 @@
         <span class="section-eyebrow">阶段推进</span>
         <h3>手工推进阶段</h3>
         <p class="manual-status-note">
-          阶段推进要求当前阶段适用必填资料全部通过资料级审核，并且阶段关口审批已通过。
-          推进只改变当前阶段，不代表文件已上传或已归档。
+          阶段推进要求当前阶段适用资料按 completionMode 完成，并且当前用户具备推进权限。
+          推进只改变当前阶段，不调用文件管理平台。
         </p>
       </div>
       <button
@@ -41,18 +41,17 @@
           </div>
           <div class="stage-advance-current__badges">
             <StatusBadge :status="currentStage.stageStatus" />
-            <StatusBadge :status="currentStage.approvalStatus || 'not_submitted'" />
           </div>
         </div>
 
         <div class="stage-advance-summary">
           <div>
-            <span>适用必填总数</span>
+            <span>门禁资料总数</span>
             <strong>{{ currentStageCompleteness?.requiredTotal ?? '-' }}</strong>
           </div>
           <div>
-            <span>已审核通过适用</span>
-            <strong>{{ currentStageCompleteness?.confirmedRequiredCount ?? '-' }}</strong>
+            <span>适用已完成</span>
+            <strong>{{ currentStageCompleteness?.completedRequiredCount ?? currentStageCompleteness?.confirmedRequiredCount ?? '-' }}</strong>
           </div>
           <div>
             <span>未完成适用</span>
@@ -62,29 +61,24 @@
             <span>完成百分比</span>
             <strong>{{ currentStageCompleteness ? `${currentStageCompleteness.completionPercent}%` : '-' }}</strong>
           </div>
-          <div>
-            <span>关口审批状态</span>
-            <strong>{{ formatStatus(currentStage.approvalStatus || 'not_submitted') }}</strong>
-          </div>
         </div>
 
         <div class="stage-advance-missing">
-          <strong>当前阶段未完成资料级审核的适用必填资料</strong>
+          <strong>当前阶段未按完成规则完成的适用资料</strong>
           <ul v-if="missingDocuments.length > 0">
             <li v-for="document in missingDocuments" :key="document.id || document.documentCode">
               <span class="mono">{{ document.documentCode }}</span>
               <span>{{ document.documentName }}</span>
+              <span>{{ formatCompletionMode(document.completionMode) }}</span>
+              <span>{{ formatCompletionStatus(document.completionStatus) }}</span>
               <StatusBadge :status="document.status" />
             </li>
           </ul>
-          <p v-else>当前阶段适用必填资料均已通过资料级审核。</p>
+          <p v-else>当前阶段适用资料均已按完成规则完成。</p>
         </div>
 
-        <p v-if="currentStage && currentStage.approvalStatus !== 'approved'" class="stage-advance-blocked">
-          当前阶段关口审批未通过，不能推进。请先完成阶段关口审批。
-        </p>
-        <p v-else-if="currentStageCompleteness && !canAdvanceCurrentStage" class="stage-advance-blocked">
-          当前阶段资料级审核未齐套，不能推进。请先完成或标记不适用缺失的适用必填资料。
+        <p v-if="currentStageCompleteness && !canAdvanceCurrentStage" class="stage-advance-blocked">
+          当前阶段资料未按完成规则齐套，或当前账号无推进权限。
         </p>
         <p v-else-if="!currentStageCompleteness" class="stage-advance-blocked">
           正在读取当前阶段齐套情况，暂不能推进。
@@ -100,7 +94,7 @@
 
 <script setup>
 import StatusBadge from '../StatusBadge.vue';
-import { formatStatus } from '../../utils/format.js';
+import { formatCompletionMode, formatCompletionStatus } from '../../utils/format.js';
 
 defineEmits(['advance']);
 

@@ -473,6 +473,7 @@ p {
     minmax(190px, 1.25fr)
     72px
     88px
+    96px
     minmax(120px, 0.9fr)
     minmax(128px, 0.86fr)
     96px;
@@ -517,6 +518,18 @@ p {
 .task-cell strong {
   color: #17212f;
   font-weight: 700;
+}
+
+.inline-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 280px) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.inline-form label {
+  display: grid;
+  gap: 6px;
 }
 
 .task-cell small {

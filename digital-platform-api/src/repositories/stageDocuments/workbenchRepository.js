@@ -5,21 +5,14 @@ import {
   isGeneralManagerAssistantUser,
   isSystemAdminUser
 } from '../../domain/organization.js';
-import {
-  PROJECT_APPROVAL_STATUS,
-  canUserApproveAsCenterManager,
-  canUserApproveAsGeneralManager,
-  getStageApprovalRule
-} from '../../domain/projectApproval.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
-import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
+import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import { attachStageDocumentPermissions } from './accessControl.js';
 import { mapDocument } from './shared.js';
 
 const WORKBENCH_TODO_TYPES = [
   'document_responsibility',
   'document_review',
-  'stage_gate_approval',
   'stage_advance'
 ];
 
@@ -30,19 +23,6 @@ function mapWorkbenchProject(row) {
     participating_departments: row.participating_departments,
     status: row.project_status,
     has_department_responsible: row.has_department_responsible ?? 0
-  };
-}
-
-function mapProjectManagerUser(row) {
-  if (!row.project_manager_user_id) {
-    return null;
-  }
-
-  return {
-    id: row.project_manager_user_id,
-    department: row.project_manager_department,
-    organizationRole: row.project_manager_organization_role,
-    isEnabled: row.project_manager_is_enabled === null ? null : Boolean(row.project_manager_is_enabled)
   };
 }
 
@@ -78,6 +58,10 @@ function buildDocumentTodo({ row, user, type, actionText }) {
     documentName: row.document_name,
     ownerDepartment: row.owner_department ?? null,
     reviewDepartment: row.review_department ?? null,
+    completionMode: document.completionMode,
+    isComplete: document.isComplete,
+    completionStatus: document.completionStatus,
+    isApplicable: document.isApplicable,
     status: row.status,
     actionText,
     createdAt: row.responsibility_updated_at || row.submitted_at || row.updated_at,
@@ -102,7 +86,7 @@ function buildStageTodo({ row, type, actionText, taskMode }) {
     documentId: null,
     documentCode: null,
     documentName: null,
-    status: row.approval_status,
+    status: row.stage_status,
     actionText,
     createdAt: row.stage_updated_at || row.project_updated_at,
     updatedAt: row.stage_updated_at || row.project_updated_at,
@@ -163,7 +147,7 @@ async function selectDocumentResponsibilityTodos(user) {
       row,
       user,
       type: 'document_responsibility',
-      actionText: row.status === DOCUMENT_STATUS.RETURNED ? '修改后重新提交资料审核' : '提交资料审核'
+      actionText: row.status === DOCUMENT_STATUS.RETURNED ? '修改后重新提交资料' : '提交资料'
     })
   );
 }
@@ -202,6 +186,7 @@ async function selectDocumentReviewTodos(user) {
       AND s.stage_order = d.stage_order
     WHERE d.is_applicable = 1
       AND d.status = ?
+      AND d.completion_mode = ?
       AND (
         d.review_department = ?
         OR (
@@ -215,7 +200,7 @@ async function selectDocumentReviewTodos(user) {
       d.stage_order ASC,
       d.document_order ASC,
       d.id ASC`,
-    [DOCUMENT_STATUS.SUBMITTED, user.department, user.department]
+    [DOCUMENT_STATUS.SUBMITTED, COMPLETION_MODE.APPROVAL_REQUIRED, user.department, user.department]
   );
 
   return rows.map((row) =>
@@ -226,70 +211,6 @@ async function selectDocumentReviewTodos(user) {
       actionText: '处理资料级审核'
     })
   );
-}
-
-async function selectStageGateApprovalTodos(user) {
-  if (isGeneralManagerAssistantUser(user) || isSystemAdminUser(user)) {
-    return [];
-  }
-
-  const [rows] = await pool.execute(
-    `SELECT
-      p.id AS project_id,
-      p.project_code,
-      p.project_name,
-      p.project_manager_user_id,
-      p.participating_departments,
-      p.status AS project_status,
-      p.updated_at AS project_updated_at,
-      pm.department AS project_manager_department,
-      pm.organization_role AS project_manager_organization_role,
-      pm.is_enabled AS project_manager_is_enabled,
-      s.id AS stage_id,
-      s.stage_order,
-      s.stage_key,
-      s.stage_name,
-      s.approval_status,
-      s.updated_at AS stage_updated_at
-    FROM project_stages s
-    INNER JOIN projects p
-      ON p.id = s.project_id
-    LEFT JOIN users pm
-      ON pm.id = p.project_manager_user_id
-    WHERE s.is_current = 1
-      AND s.approval_status IN (?, ?)
-      AND p.status <> ?
-    ORDER BY
-      p.project_code ASC,
-      s.stage_order ASC,
-      s.id ASC`,
-    [
-      PROJECT_APPROVAL_STATUS.PENDING_CENTER_MANAGER,
-      PROJECT_APPROVAL_STATUS.PENDING_GENERAL_MANAGER,
-      PROJECT_STATUS.COMPLETED
-    ]
-  );
-
-  return rows
-    .filter((row) => {
-      const rule = getStageApprovalRule(row, mapProjectManagerUser(row));
-      if (row.approval_status === PROJECT_APPROVAL_STATUS.PENDING_CENTER_MANAGER) {
-        return canUserApproveAsCenterManager(user, rule);
-      }
-
-      return canUserApproveAsGeneralManager(user, rule);
-    })
-    .map((row) =>
-      buildStageTodo({
-        row,
-        type: 'stage_gate_approval',
-        actionText:
-          row.approval_status === PROJECT_APPROVAL_STATUS.PENDING_GENERAL_MANAGER
-            ? '处理总经理阶段关口审批'
-            : '处理中心负责人阶段关口审批',
-        taskMode: 'stageApproval'
-      })
-    );
 }
 
 async function selectStageAdvanceTodos(user) {
@@ -335,13 +256,12 @@ async function selectStageAdvanceTodos(user) {
       s.stage_order,
       s.stage_key,
       s.stage_name,
-      s.approval_status,
+      s.stage_status,
       s.updated_at AS stage_updated_at
     FROM project_stages s
     INNER JOIN projects p
       ON p.id = s.project_id
     WHERE s.is_current = 1
-      AND s.approval_status = ?
       AND s.stage_order < 8
       AND p.status <> ?
       AND EXISTS (
@@ -352,18 +272,38 @@ async function selectStageAdvanceTodos(user) {
       )
       AND NOT EXISTS (
         SELECT 1
-        FROM project_stage_documents incomplete_documents
-        WHERE incomplete_documents.project_id = p.id
-          AND incomplete_documents.stage_order = s.stage_order
-          AND incomplete_documents.is_required = 1
-          AND incomplete_documents.is_applicable = 1
-          AND incomplete_documents.status <> ?
+          FROM project_stage_documents incomplete_documents
+          WHERE incomplete_documents.project_id = p.id
+            AND incomplete_documents.stage_order = s.stage_order
+            AND incomplete_documents.is_applicable = 1
+            AND (
+            incomplete_documents.status = ?
+            OR (
+              incomplete_documents.completion_mode IN (?, ?)
+              AND incomplete_documents.status NOT IN (?, ?)
+            )
+            OR (
+              incomplete_documents.completion_mode IN (?, ?)
+              AND incomplete_documents.status <> ?
+            )
+          )
       )
     ORDER BY
       p.project_code ASC,
       s.stage_order ASC,
       s.id ASC`,
-    [...params, PROJECT_APPROVAL_STATUS.APPROVED, PROJECT_STATUS.COMPLETED, DOCUMENT_STATUS.CONFIRMED]
+    [
+      ...params,
+      PROJECT_STATUS.COMPLETED,
+      DOCUMENT_STATUS.RETURNED,
+      COMPLETION_MODE.SUBMIT_ONLY,
+      COMPLETION_MODE.CONDITIONAL_SUBMIT,
+      DOCUMENT_STATUS.SUBMITTED,
+      DOCUMENT_STATUS.CONFIRMED,
+      COMPLETION_MODE.APPROVAL_REQUIRED,
+      COMPLETION_MODE.CONDITIONAL_APPROVAL,
+      DOCUMENT_STATUS.CONFIRMED
+    ]
   );
 
   return rows
@@ -417,7 +357,6 @@ export async function getMyWorkbench(user) {
   const groups = await Promise.all([
     selectDocumentResponsibilityTodos(user),
     selectDocumentReviewTodos(user),
-    selectStageGateApprovalTodos(user),
     selectStageAdvanceTodos(user)
   ]);
   const items = sortWorkbenchItems(groups.flat());

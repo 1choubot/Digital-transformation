@@ -75,6 +75,23 @@ export function formatResponsibleUser(document) {
   return formatUser(document.responsibleUser);
 }
 
+// 按资料归属中心判断资料是否与某部门相关；旧数据缺归属字段时回退到责任人部门。
+export function isDocumentRelatedToDepartmentByOwnership(document, department) {
+  if (!document || !department) {
+    return false;
+  }
+
+  const ownerDepartment = document.ownerDepartment ?? document.owner_department ?? null;
+  const reviewDepartment = document.reviewDepartment ?? document.review_department ?? null;
+  if (ownerDepartment || reviewDepartment) {
+    return ownerDepartment === department || reviewDepartment === department;
+  }
+
+  const responsibleDepartment =
+    document.responsibleUser?.department ?? document.responsible_department ?? null;
+  return responsibleDepartment === department;
+}
+
 export function formatResponsibilityCandidate(user) {
   const parts = [
     user.name,

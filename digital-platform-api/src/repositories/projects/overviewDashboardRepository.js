@@ -1,6 +1,7 @@
 import { pool } from '../../db/pool.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
 import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
+import { canViewCompleteStageDocumentSet } from '../stageDocuments/accessControl.js';
 import { buildStageCompletenessSummary } from '../stageDocuments/shared.js';
 import { mapCreator } from '../userRepository.js';
 import {
@@ -145,7 +146,7 @@ function stripCompletenessSummary(summary) {
   };
 }
 
-function buildProjectOverviewCard(projectRow, stages, documents) {
+function buildProjectOverviewCard(projectRow, stages, documents, user) {
   const isCompleted = projectRow.status === PROJECT_STATUS.COMPLETED;
   const currentStages = stages.filter((stage) => Boolean(stage.is_current));
   const base = {
@@ -189,9 +190,9 @@ function buildProjectOverviewCard(projectRow, stages, documents) {
   }
 
   const currentStage = currentStages[0];
-  const currentStageDocuments = documents
-    .filter((document) => document.stage_order === currentStage.stage_order)
-    .map(mapProjectOverviewDocument);
+  const currentStageDocumentRows = documents.filter(
+    (document) => document.stage_order === currentStage.stage_order
+  );
 
   const currentStageBase = {
     ...base,
@@ -201,13 +202,18 @@ function buildProjectOverviewCard(projectRow, stages, documents) {
     currentStageStatus: currentStage.stage_status
   };
 
-  if (currentStageDocuments.length === 0) {
+  if (currentStageDocumentRows.length === 0) {
     return {
       ...currentStageBase,
       currentStageIssue: 'checklist_not_initialized'
     };
   }
 
+  if (!canViewCompleteStageDocumentSet(user, projectRow)) {
+    return currentStageBase;
+  }
+
+  const currentStageDocuments = currentStageDocumentRows.map(mapProjectOverviewDocument);
   const summary = buildStageCompletenessSummary(currentStageDocuments);
 
   return {
@@ -385,7 +391,8 @@ export async function getProjectOverviewDashboard(user, filters) {
       buildProjectOverviewCard(
         projectRow,
         stagesByProject.get(projectRow.id) || [],
-        documentsByProject.get(projectRow.id) || []
+        documentsByProject.get(projectRow.id) || [],
+        user
       )
     )
     .filter((project) => matchesCurrentStageOrderFilter(project, filters.currentStageOrder));

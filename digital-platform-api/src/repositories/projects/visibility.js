@@ -3,18 +3,14 @@ import {
   isEmployeeUser,
   isGeneralManagerAssistantUser,
   isGeneralManagerUser,
-  isSystemAdminUser,
-  isValidBusinessDepartment
+  isSystemAdminUser
 } from '../../domain/organization.js';
 
-export function buildProjectVisibilityCondition(user, projectAlias = 'p') {
-  if (isGeneralManagerUser(user) || isGeneralManagerAssistantUser(user)) {
-    return {
-      sql: '1 = 1',
-      params: []
-    };
-  }
+function isGlobalBusinessViewer(user) {
+  return isGeneralManagerUser(user) || isGeneralManagerAssistantUser(user) || isCenterManagerUser(user);
+}
 
+export function buildProjectVisibilityCondition(user, projectAlias = 'p') {
   if (isSystemAdminUser(user)) {
     return {
       sql: '1 = 0',
@@ -22,6 +18,21 @@ export function buildProjectVisibilityCondition(user, projectAlias = 'p') {
     };
   }
 
+  if (isGlobalBusinessViewer(user)) {
+    return {
+      sql: '1 = 1',
+      params: []
+    };
+  }
+
+  if (!isEmployeeUser(user)) {
+    return {
+      sql: '1 = 0',
+      params: []
+    };
+  }
+
+  const projectCreatorCondition = `${projectAlias}.created_by_user_id = ?`;
   const projectManagerCondition = `${projectAlias}.project_manager_user_id = ?`;
   const responsibleUserCondition = `EXISTS (
     SELECT 1
@@ -30,43 +41,9 @@ export function buildProjectVisibilityCondition(user, projectAlias = 'p') {
       AND visible_user_documents.responsible_user_id = ?
   )`;
 
-  if (isCenterManagerUser(user) && isValidBusinessDepartment(user.department)) {
-    return {
-      sql: `(
-        ${projectManagerCondition}
-        OR ${responsibleUserCondition}
-        OR JSON_CONTAINS(COALESCE(${projectAlias}.participating_departments, JSON_ARRAY()), JSON_QUOTE(?), '$')
-        OR EXISTS (
-          SELECT 1
-          FROM project_stage_documents visible_department_documents
-          LEFT JOIN users visible_department_users
-            ON visible_department_users.id = visible_department_documents.responsible_user_id
-          WHERE visible_department_documents.project_id = ${projectAlias}.id
-            AND (
-              visible_department_documents.owner_department = ?
-              OR visible_department_documents.review_department = ?
-              OR (
-                visible_department_documents.owner_department IS NULL
-                AND visible_department_documents.review_department IS NULL
-                AND visible_department_users.department = ?
-              )
-            )
-        )
-      )`,
-      params: [user.id, user.id, user.department, user.department, user.department, user.department]
-    };
-  }
-
-  if (isEmployeeUser(user)) {
-    return {
-      sql: `(${projectManagerCondition} OR ${responsibleUserCondition})`,
-      params: [user.id, user.id]
-    };
-  }
-
   return {
-    sql: '1 = 0',
-    params: []
+    sql: `(${projectCreatorCondition} OR ${projectManagerCondition} OR ${responsibleUserCondition})`,
+    params: [user.id, user.id, user.id]
   };
 }
 

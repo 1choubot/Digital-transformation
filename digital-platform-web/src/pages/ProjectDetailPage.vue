@@ -131,7 +131,6 @@ import {
   actionKey,
   getCompletionMode,
   getSelectedResponsibleUserId,
-  isDocumentRelatedToDepartmentByOwnership,
   stageCompleteness
 } from '../components/project-detail/stageDocumentViewHelpers.js';
 import { formatUser } from '../utils/format.js';
@@ -229,6 +228,10 @@ const isCurrentUserProjectManager = computed(() => {
   const projectManagerUserId = detail.value?.project?.projectManagerUserId;
   return Boolean(projectManagerUserId) && String(projectManagerUserId) === String(props.currentUser?.id);
 });
+const isCurrentUserProjectCreator = computed(() => {
+  const creatorUserId = detail.value?.project?.createdByUserId;
+  return Boolean(creatorUserId) && String(creatorUserId) === String(props.currentUser?.id);
+});
 const isCurrentUserGeneralManager = computed(() => currentUserOrganizationRole.value === 'general_manager');
 const isCurrentUserCenterManager = computed(() => currentUserOrganizationRole.value === 'center_manager');
 const isCurrentUserGeneralManagerAssistant = computed(
@@ -245,15 +248,7 @@ const isProjectRelatedToCurrentCenter = computed(() => {
     return false;
   }
 
-  if (projectParticipatingDepartments.value.includes(currentUserDepartment.value)) {
-    return true;
-  }
-
-  return (checklist.value?.stages || []).some((stage) =>
-    (stage.documents || []).some(
-      (document) => isDocumentRelatedToDepartmentByOwnership(document, currentUserDepartment.value)
-    )
-  );
+  return projectParticipatingDepartments.value.includes(currentUserDepartment.value);
 });
 const visibleResponsibilityCandidates = computed(() => {
   if (!isCurrentUserCenterManager.value || isCurrentUserProjectManager.value || isCurrentUserGeneralManager.value) {
@@ -269,7 +264,17 @@ const canCurrentUserAdvanceProject = computed(() => {
 
   return isCurrentUserGeneralManager.value || isCurrentUserProjectManager.value || isProjectRelatedToCurrentCenter.value;
 });
-const canViewProjectAudit = computed(() => isCurrentUserGeneralManager.value || isCurrentUserProjectManager.value);
+const canViewProjectAudit = computed(
+  () =>
+    !isCurrentUserSystemAdmin.value &&
+    (
+      isCurrentUserGeneralManager.value ||
+      isCurrentUserGeneralManagerAssistant.value ||
+      isCurrentUserCenterManager.value ||
+      isCurrentUserProjectCreator.value ||
+      isCurrentUserProjectManager.value
+    )
+);
 const allStageDocuments = computed(() =>
   (checklist.value?.stages || []).flatMap((stage) => stage.documents || [])
 );

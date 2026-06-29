@@ -141,6 +141,7 @@ async function selectAttachmentProject(executor, projectId) {
     `SELECT
       id,
       project_manager_user_id,
+      created_by_user_id,
       participating_departments
     FROM projects
     WHERE id = ?

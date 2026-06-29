@@ -4,6 +4,7 @@ import { closePool, pool } from '../src/db/pool.js';
 import {
   BUSINESS_DEPARTMENT,
   ORGANIZATION_ROLE,
+  canAdvanceProjectStage,
   canManageStageDocumentApplicability,
   canManageProjectResponsibility,
   isValidBusinessDepartment
@@ -19,6 +20,8 @@ import {
 import { normalizeCreateProjectInput } from '../src/domain/projects.js';
 import {
   buildStageDocumentPermissions,
+  canViewCompleteProjectAudit,
+  canViewProjectOperationLogs,
   canViewStageDocumentItem
 } from '../src/repositories/stageDocuments/accessControl.js';
 import {
@@ -26,10 +29,16 @@ import {
   ProjectCodeUpdateError,
   ProjectStageAdvanceError,
   advanceProjectStage,
+  assertProjectAuditViewable,
+  assertProjectViewable,
   createProject,
+  getProjectDetail,
   getProjectOverviewDashboard,
+  listStageApprovalHistory,
+  listProjects,
   updateProjectCode
 } from '../src/repositories/projectRepository.js';
+import { listProjectOperationLogs } from '../src/repositories/operationLogRepository.js';
 import {
   completeProjectStageDocumentRevision,
   getProjectStageDocumentChecklist,
@@ -130,6 +139,41 @@ async function selectSmokeUser(account) {
     organizationRole: row.organization_role,
     role: row.role,
     isEnabled: Boolean(row.is_enabled)
+  };
+}
+
+async function insertSmokeUser({ account, name, department, organizationRole, role, isPlatformAdmin = false }) {
+  const [result] = await pool.execute(
+    `INSERT INTO users (
+      account,
+      display_name,
+      department,
+      organization_role,
+      role,
+      is_enabled,
+      is_platform_admin,
+      password_hash
+    ) VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+    [
+      account,
+      name,
+      department,
+      organizationRole,
+      role,
+      isPlatformAdmin ? 1 : 0,
+      'smoke-password-hash'
+    ]
+  );
+
+  return {
+    id: result.insertId,
+    account,
+    name,
+    department,
+    organizationRole,
+    role,
+    isEnabled: true,
+    isPlatformAdmin
   };
 }
 
@@ -429,7 +473,7 @@ async function assertApprovalRevisionResubmitCycle({ projectId, sourceCode, targ
   assert.equal(buildStageCompletenessSummary([confirmedTarget]).incompleteRequiredCount, 0);
 }
 
-async function cleanupSmokeProjects(projectIds, storageKeys) {
+async function cleanupSmokeProjects(projectIds, storageKeys, userIds = []) {
   for (const storageKey of storageKeys) {
     await cleanupStageDocumentAttachmentFile(storageKey);
   }
@@ -437,16 +481,38 @@ async function cleanupSmokeProjects(projectIds, storageKeys) {
   for (const projectId of projectIds) {
     await pool.execute('DELETE FROM projects WHERE id = ?', [projectId]);
   }
+
+  for (const userId of userIds) {
+    await pool.execute('DELETE FROM users WHERE id = ?', [userId]);
+  }
 }
 
 async function runProjectLifecycleSmoke() {
   const managerUser = await selectSmokeUser('rd_manager');
   const smokeProjectIds = [];
   const smokeStorageKeys = [];
+  const smokeUserIds = [];
   const uniqueSuffix = `${Date.now()}-${process.pid}`;
   const duplicateProjectCode = `SMOKE-${uniqueSuffix}`;
 
   try {
+    const creatorUser = await insertSmokeUser({
+      account: `smoke_creator_${uniqueSuffix}`.replace(/[^a-zA-Z0-9_]/g, '_'),
+      name: 'Smoke 创建人',
+      department: MARKETING_CENTER,
+      organizationRole: ORGANIZATION_ROLE.EMPLOYEE,
+      role: 'Smoke 员工'
+    });
+    smokeUserIds.push(creatorUser.id);
+    const limitedEmployeeUser = await insertSmokeUser({
+      account: `smoke_limited_${uniqueSuffix}`.replace(/[^a-zA-Z0-9_]/g, '_'),
+      name: 'Smoke 受限员工',
+      department: OPERATIONS_CENTER,
+      organizationRole: ORGANIZATION_ROLE.EMPLOYEE,
+      role: 'Smoke 员工'
+    });
+    smokeUserIds.push(limitedEmployeeUser.id);
+
     const createdA = await createProject(
       {
         projectCode: null,
@@ -485,6 +551,56 @@ async function runProjectLifecycleSmoke() {
     smokeProjectIds.push(projectBId);
     assert.equal(createdB.project.projectCode, null);
 
+    const createdByCreator = await createProject(
+      {
+        projectCode: null,
+        projectName: `创建人可见 smoke ${uniqueSuffix}`,
+        customerName: 'Smoke 客户',
+        projectMode: 'self_developed',
+        projectManagerUserId: managerUser.id,
+        participatingDepartments: [RD_CENTER],
+        status: 'normal',
+        plannedStartDate: null,
+        plannedEndDate: null,
+        remark: 'align-project-visibility-and-audit-access smoke creator'
+      },
+      creatorUser.id
+    );
+    const creatorProjectId = createdByCreator.project.id;
+    smokeProjectIds.push(creatorProjectId);
+
+    const createdLimitedOverview = await createProject(
+      {
+        projectCode: null,
+        projectName: `受限总览 smoke ${uniqueSuffix}`,
+        customerName: 'Smoke 客户',
+        projectMode: 'self_developed',
+        projectManagerUserId: managerUser.id,
+        participatingDepartments: [RD_CENTER],
+        status: 'normal',
+        plannedStartDate: null,
+        plannedEndDate: null,
+        remark: 'align-project-visibility-and-audit-access smoke limited overview'
+      },
+      managerUser.id
+    );
+    const limitedOverviewProjectId = createdLimitedOverview.project.id;
+    smokeProjectIds.push(limitedOverviewProjectId);
+    await pool.execute(
+      `UPDATE project_stage_documents
+       SET responsible_user_id = CASE document_code
+           WHEN '1.1' THEN ?
+           WHEN '1.2' THEN ?
+           ELSE responsible_user_id
+         END,
+         status = ?,
+         is_applicable = 1,
+         revision_required = 0
+       WHERE project_id = ?
+         AND document_code IN ('1.1', '1.2')`,
+      [limitedEmployeeUser.id, managerUser.id, DOCUMENT_STATUS.NOT_SUBMITTED, limitedOverviewProjectId]
+    );
+
     const [nullProjectCodeRows] = await pool.execute(
       `SELECT COUNT(*) AS count
        FROM projects
@@ -500,6 +616,110 @@ async function runProjectLifecycleSmoke() {
       documents: EXPECTED_STAGE_DOCUMENT_ITEM_COUNT,
       attachments: 0
     });
+
+    const projectAListForCenterManager = await listProjects(departmentUser(9001, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER));
+    assert.ok(projectAListForCenterManager.some((projectItem) => projectItem.id === projectAId));
+    const projectAListForAssistant = await listProjects(globalUser(9002, ORGANIZATION_ROLE.GENERAL_MANAGER_ASSISTANT));
+    assert.ok(projectAListForAssistant.some((projectItem) => projectItem.id === projectAId));
+    const projectAListForSystemAdmin = await listProjects(globalUser(9003, ORGANIZATION_ROLE.SYSTEM_ADMIN));
+    assert.equal(projectAListForSystemAdmin.some((projectItem) => projectItem.id === projectAId), false);
+    const creatorProjectList = await listProjects(creatorUser);
+    assert.ok(creatorProjectList.some((projectItem) => projectItem.id === creatorProjectId));
+    assert.equal(creatorProjectList.some((projectItem) => projectItem.id === projectAId), false);
+
+    await assertProjectViewable(projectAId, departmentUser(9004, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER));
+    await assertProjectViewable(projectAId, globalUser(9005, ORGANIZATION_ROLE.GENERAL_MANAGER_ASSISTANT));
+    await assert.rejects(
+      () => assertProjectViewable(projectAId, globalUser(9006, ORGANIZATION_ROLE.SYSTEM_ADMIN)),
+      (error) => error.code === 'FORBIDDEN_OPERATION'
+    );
+    const centerManagerDetail = await getProjectDetail(
+      projectAId,
+      departmentUser(9007, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER)
+    );
+    assert.equal(centerManagerDetail.project.id, projectAId);
+
+    const centerManagerChecklist = await getProjectStageDocumentChecklist(
+      projectAId,
+      departmentUser(9008, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER)
+    );
+    assert.equal(
+      centerManagerChecklist.stages.reduce((sum, stage) => sum + stage.documents.length, 0),
+      EXPECTED_STAGE_DOCUMENT_ITEM_COUNT
+    );
+    const assistantChecklist = await getProjectStageDocumentChecklist(
+      projectAId,
+      globalUser(9009, ORGANIZATION_ROLE.GENERAL_MANAGER_ASSISTANT)
+    );
+    assert.equal(
+      assistantChecklist.stages.reduce((sum, stage) => sum + stage.documents.length, 0),
+      EXPECTED_STAGE_DOCUMENT_ITEM_COUNT
+    );
+    const creatorChecklist = await getProjectStageDocumentChecklist(creatorProjectId, creatorUser);
+    assert.equal(
+      creatorChecklist.stages.reduce((sum, stage) => sum + stage.documents.length, 0),
+      EXPECTED_STAGE_DOCUMENT_ITEM_COUNT
+    );
+
+    await assertProjectAuditViewable(projectAId, departmentUser(9010, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER));
+    await assertProjectAuditViewable(projectAId, globalUser(9011, ORGANIZATION_ROLE.GENERAL_MANAGER_ASSISTANT));
+    await assertProjectAuditViewable(creatorProjectId, creatorUser);
+    await listStageApprovalHistory({
+      projectId: projectAId,
+      stageId: createdA.stages[0].id,
+      user: globalUser(9050, ORGANIZATION_ROLE.GENERAL_MANAGER)
+    });
+    await listStageApprovalHistory({
+      projectId: projectAId,
+      stageId: createdA.stages[0].id,
+      user: managerUser
+    });
+    await assert.rejects(
+      () =>
+        listStageApprovalHistory({
+          projectId: projectAId,
+          stageId: createdA.stages[0].id,
+          user: globalUser(9051, ORGANIZATION_ROLE.GENERAL_MANAGER_ASSISTANT)
+        }),
+      (error) => error.code === 'FORBIDDEN_OPERATION'
+    );
+    await assert.rejects(
+      () =>
+        listStageApprovalHistory({
+          projectId: projectAId,
+          stageId: createdA.stages[0].id,
+          user: departmentUser(9052, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER)
+        }),
+      (error) => error.code === 'FORBIDDEN_OPERATION'
+    );
+    await assert.rejects(
+      () =>
+        listStageApprovalHistory({
+          projectId: creatorProjectId,
+          stageId: createdByCreator.stages[0].id,
+          user: creatorUser
+        }),
+      (error) => error.code === 'FORBIDDEN_OPERATION'
+    );
+    await assert.rejects(
+      () =>
+        listStageApprovalHistory({
+          projectId: projectAId,
+          stageId: createdA.stages[0].id,
+          user: globalUser(9053, ORGANIZATION_ROLE.SYSTEM_ADMIN)
+        }),
+      (error) => error.code === 'FORBIDDEN_OPERATION'
+    );
+    const centerManagerLogs = await listProjectOperationLogs(projectAId);
+    assert.ok(centerManagerLogs.length > 0);
+    await assert.rejects(
+      () => assertProjectAuditViewable(projectAId, departmentUser(9012, ORGANIZATION_ROLE.EMPLOYEE, MANUFACTURING_CENTER)),
+      (error) => error.code === 'FORBIDDEN_OPERATION'
+    );
+    await assert.rejects(
+      () => assertProjectAuditViewable(projectAId, globalUser(9013, ORGANIZATION_ROLE.SYSTEM_ADMIN)),
+      (error) => error.code === 'FORBIDDEN_OPERATION'
+    );
 
     const attachmentDocument = await selectSmokeDocument(projectAId, '1.1');
     await pool.execute(
@@ -523,6 +743,108 @@ async function runProjectLifecycleSmoke() {
       [uploadedAttachment.id]
     );
     smokeStorageKeys.push(uploadedAttachmentRows[0].storage_key);
+
+    const visibilityAttachmentDocument = await selectSmokeDocument(projectAId, '2.4');
+    await pool.execute(
+      'UPDATE project_stage_documents SET responsible_user_id = ?, status = ? WHERE id = ?',
+      [managerUser.id, DOCUMENT_STATUS.NOT_SUBMITTED, visibilityAttachmentDocument.id]
+    );
+    const uploadedVisibilityAttachment = await uploadStageDocumentAttachment({
+      projectId: projectAId,
+      documentId: visibilityAttachmentDocument.id,
+      user: managerUser,
+      file: {
+        originalFileName: 'visibility-smoke.txt',
+        mimeType: 'text/plain',
+        size: 16,
+        buffer: Buffer.from('visibility-smoke')
+      }
+    });
+    const [uploadedVisibilityAttachmentRows] = await pool.execute(
+      'SELECT storage_key FROM project_stage_document_attachments WHERE id = ?',
+      [uploadedVisibilityAttachment.id]
+    );
+    smokeStorageKeys.push(uploadedVisibilityAttachmentRows[0].storage_key);
+
+    const listedAttachmentsForCenterManager = await listStageDocumentAttachments({
+      projectId: projectAId,
+      documentId: visibilityAttachmentDocument.id,
+      user: departmentUser(9014, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER)
+    });
+    assert.equal(listedAttachmentsForCenterManager.length, 1);
+    assert.equal(listedAttachmentsForCenterManager[0].canDownload, true);
+    assert.equal(listedAttachmentsForCenterManager[0].canDelete, false);
+    const centerDownload = await getStageDocumentAttachmentDownload({
+      projectId: projectAId,
+      documentId: visibilityAttachmentDocument.id,
+      attachmentId: uploadedVisibilityAttachment.id,
+      user: departmentUser(9015, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER)
+    });
+    assert.equal(centerDownload.fileSize, 16);
+    const listedAttachmentsForAssistant = await listStageDocumentAttachments({
+      projectId: projectAId,
+      documentId: visibilityAttachmentDocument.id,
+      user: globalUser(9016, ORGANIZATION_ROLE.GENERAL_MANAGER_ASSISTANT)
+    });
+    assert.equal(listedAttachmentsForAssistant.length, 1);
+    assert.equal(listedAttachmentsForAssistant[0].canDownload, true);
+    assert.equal(listedAttachmentsForAssistant[0].canDelete, false);
+    await getStageDocumentAttachmentDownload({
+      projectId: projectAId,
+      documentId: visibilityAttachmentDocument.id,
+      attachmentId: uploadedVisibilityAttachment.id,
+      user: globalUser(9017, ORGANIZATION_ROLE.GENERAL_MANAGER_ASSISTANT)
+    });
+    await assert.rejects(
+      () =>
+        uploadStageDocumentAttachment({
+          projectId: projectAId,
+          documentId: visibilityAttachmentDocument.id,
+          user: globalUser(9018, ORGANIZATION_ROLE.GENERAL_MANAGER_ASSISTANT),
+          file: {
+            originalFileName: 'forbidden.txt',
+            mimeType: 'text/plain',
+            size: 9,
+            buffer: Buffer.from('forbidden')
+          }
+        }),
+      (error) => error.code === 'FORBIDDEN_OPERATION'
+    );
+    await assert.rejects(
+      () =>
+        uploadStageDocumentAttachment({
+          projectId: projectAId,
+          documentId: visibilityAttachmentDocument.id,
+          user: departmentUser(9019, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER),
+          file: {
+            originalFileName: 'forbidden.txt',
+            mimeType: 'text/plain',
+            size: 9,
+            buffer: Buffer.from('forbidden')
+          }
+        }),
+      (error) => error.code === 'FORBIDDEN_OPERATION'
+    );
+    await assert.rejects(
+      () =>
+        deleteStageDocumentAttachment({
+          projectId: projectAId,
+          documentId: visibilityAttachmentDocument.id,
+          attachmentId: uploadedVisibilityAttachment.id,
+          user: globalUser(9020, ORGANIZATION_ROLE.GENERAL_MANAGER_ASSISTANT)
+        }),
+      (error) => error.code === 'FORBIDDEN_OPERATION'
+    );
+    await assert.rejects(
+      () =>
+        deleteStageDocumentAttachment({
+          projectId: projectAId,
+          documentId: visibilityAttachmentDocument.id,
+          attachmentId: uploadedVisibilityAttachment.id,
+          user: departmentUser(9021, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER)
+        }),
+      (error) => error.code === 'FORBIDDEN_OPERATION'
+    );
 
     const listedAttachments = await listStageDocumentAttachments({
       projectId: projectAId,
@@ -1002,6 +1324,62 @@ async function runProjectLifecycleSmoke() {
       );
     }
 
+    const managerLimitedOverview = await getProjectOverviewDashboard(managerUser, {
+      status: null,
+      currentStageOrder: null,
+      keyword: `受限总览 smoke ${uniqueSuffix}`
+    });
+    const managerLimitedOverviewProject = managerLimitedOverview.projects.find(
+      (project) => project.projectId === limitedOverviewProjectId
+    );
+    assert.ok(managerLimitedOverviewProject);
+    assert.ok(managerLimitedOverviewProject.currentStageCompletenessSummary);
+    assert.ok(managerLimitedOverviewProject.currentStageIncompleteRequiredDocuments.length > 0);
+
+    const limitedOverview = await getProjectOverviewDashboard(limitedEmployeeUser, {
+      status: null,
+      currentStageOrder: null,
+      keyword: `受限总览 smoke ${uniqueSuffix}`
+    });
+    const limitedProjectOverview = limitedOverview.projects.find(
+      (project) => project.projectId === limitedOverviewProjectId
+    );
+    assert.ok(limitedProjectOverview);
+    assert.equal(limitedProjectOverview.currentStageCompletenessSummary, null);
+    assert.equal(limitedProjectOverview.currentStageIncompleteRequiredDocuments.length, 0);
+    assert.equal(
+      limitedProjectOverview.currentStageIncompleteRequiredDocuments.some(
+        (document) => document.documentCode === '1.2' || document.documentName === '项目立项审批表'
+      ),
+      false
+    );
+    assert.equal(limitedOverview.summary.myPendingStageDocumentTasks, 1);
+
+    const centerOverview = await getProjectOverviewDashboard(
+      departmentUser(9054, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER),
+      {
+        status: null,
+        currentStageOrder: null,
+        keyword: `受限总览 smoke ${uniqueSuffix}`
+      }
+    );
+    const centerLimitedOverviewProject = centerOverview.projects.find(
+      (project) => project.projectId === limitedOverviewProjectId
+    );
+    assert.ok(centerLimitedOverviewProject);
+    assert.ok(centerLimitedOverviewProject.currentStageCompletenessSummary);
+    assert.ok(centerLimitedOverviewProject.currentStageIncompleteRequiredDocuments.length > 0);
+
+    const creatorOverview = await getProjectOverviewDashboard(creatorUser, {
+      status: null,
+      currentStageOrder: null,
+      keyword: `创建人可见 smoke ${uniqueSuffix}`
+    });
+    const creatorProjectOverview = creatorOverview.projects.find((project) => project.projectId === creatorProjectId);
+    assert.ok(creatorProjectOverview);
+    assert.ok(creatorProjectOverview.currentStageCompletenessSummary);
+    assert.ok(creatorProjectOverview.currentStageIncompleteRequiredDocuments.length > 1);
+
     const [revisionLogRows] = await pool.execute(
       `SELECT action_type AS actionType, COUNT(*) AS count
        FROM business_operation_logs
@@ -1016,23 +1394,26 @@ async function runProjectLifecycleSmoke() {
     assert.ok(revisionLogCounts['document.revision_requested'] >= 5);
     assert.ok(revisionLogCounts['document.revision_completed'] >= 3);
   } finally {
-    await cleanupSmokeProjects(smokeProjectIds, smokeStorageKeys);
+    await cleanupSmokeProjects(smokeProjectIds, smokeStorageKeys, smokeUserIds);
   }
 }
 
 const project = {
   id: 1,
   project_manager_user_id: 99,
+  created_by_user_id: 98,
   participating_departments: JSON.stringify([]),
   has_department_responsible: 0
 };
 
+const projectCreator = departmentUser(98, ORGANIZATION_ROLE.EMPLOYEE, MARKETING_CENTER);
 const rdManager = departmentUser(10, ORGANIZATION_ROLE.CENTER_MANAGER, RD_CENTER);
 const manufacturingManager = departmentUser(11, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER);
 const marketingManager = departmentUser(12, ORGANIZATION_ROLE.CENTER_MANAGER, MARKETING_CENTER);
 const operationsManager = departmentUser(13, ORGANIZATION_ROLE.CENTER_MANAGER, OPERATIONS_CENTER);
 const rdEmployee = departmentUser(20, ORGANIZATION_ROLE.EMPLOYEE, RD_CENTER);
 const manufacturingEmployee = departmentUser(21, ORGANIZATION_ROLE.EMPLOYEE, MANUFACTURING_CENTER);
+const projectManager = departmentUser(99, ORGANIZATION_ROLE.EMPLOYEE, RD_CENTER);
 const systemAdmin = globalUser(30, ORGANIZATION_ROLE.SYSTEM_ADMIN);
 const generalManagerAssistant = globalUser(31, ORGANIZATION_ROLE.GENERAL_MANAGER_ASSISTANT);
 const generalManager = globalUser(32, ORGANIZATION_ROLE.GENERAL_MANAGER);
@@ -1323,8 +1704,24 @@ assert.deepEqual(
 
 const unassignedRdDocument = makeDocument();
 assert.equal(canViewStageDocumentItem(rdManager, { project, document: unassignedRdDocument }), true);
-assert.equal(canViewStageDocumentItem(manufacturingManager, { project, document: unassignedRdDocument }), false);
+assert.equal(canViewStageDocumentItem(manufacturingManager, { project, document: unassignedRdDocument }), true);
+assert.equal(canViewStageDocumentItem(generalManagerAssistant, { project, document: unassignedRdDocument }), true);
+assert.equal(canViewStageDocumentItem(projectCreator, { project, document: unassignedRdDocument }), true);
 assert.equal(canViewStageDocumentItem(rdEmployee, { project, document: unassignedRdDocument }), false);
+const crossCenterPermissions = buildStageDocumentPermissions({
+  user: manufacturingManager,
+  project,
+  document: unassignedRdDocument
+});
+assert.equal(crossCenterPermissions.canViewAttachments, true);
+assert.equal(crossCenterPermissions.canDownloadAttachment, true);
+assert.equal(crossCenterPermissions.canUploadAttachment, false);
+assert.equal(crossCenterPermissions.canDeleteAttachment, false);
+assert.equal(crossCenterPermissions.canSubmitDocument, false);
+assert.equal(crossCenterPermissions.canReviewDocument, false);
+assert.equal(crossCenterPermissions.canManageResponsibility, false);
+assert.equal(crossCenterPermissions.canChangeApplicability, false);
+assert.equal(canAdvanceProjectStage(manufacturingManager, project), false);
 assert.equal(
   canManageProjectResponsibility(rdManager, project, {
     document: unassignedRdDocument,
@@ -1516,15 +1913,64 @@ assert.equal(
   true
 );
 
-for (const user of [systemAdmin, generalManagerAssistant]) {
-  const permissions = buildStageDocumentPermissions({ user, project, document: submittedRdDocument });
-  assert.equal(permissions.canViewAttachments, false);
-  assert.equal(permissions.canUploadAttachment, false);
-  assert.equal(permissions.canDownloadAttachment, false);
-  assert.equal(permissions.canDeleteAttachment, false);
-  assert.equal(permissions.canReviewDocument, false);
-  assert.equal(permissions.canManageResponsibility, false);
-}
+const systemAdminPermissions = buildStageDocumentPermissions({
+  user: systemAdmin,
+  project,
+  document: submittedRdDocument
+});
+assert.equal(systemAdminPermissions.canViewAttachments, false);
+assert.equal(systemAdminPermissions.canUploadAttachment, false);
+assert.equal(systemAdminPermissions.canDownloadAttachment, false);
+assert.equal(systemAdminPermissions.canDeleteAttachment, false);
+assert.equal(systemAdminPermissions.canSubmitDocument, false);
+assert.equal(systemAdminPermissions.canReviewDocument, false);
+assert.equal(systemAdminPermissions.canManageResponsibility, false);
+assert.equal(systemAdminPermissions.canChangeApplicability, false);
+
+const assistantPermissions = buildStageDocumentPermissions({
+  user: generalManagerAssistant,
+  project,
+  document: submittedRdDocument
+});
+assert.equal(assistantPermissions.canViewAttachments, true);
+assert.equal(assistantPermissions.canUploadAttachment, false);
+assert.equal(assistantPermissions.canDownloadAttachment, true);
+assert.equal(assistantPermissions.canDeleteAttachment, false);
+assert.equal(assistantPermissions.canSubmitDocument, false);
+assert.equal(assistantPermissions.canReviewDocument, false);
+assert.equal(assistantPermissions.canManageResponsibility, false);
+assert.equal(assistantPermissions.canChangeApplicability, false);
+
+const creatorPermissions = buildStageDocumentPermissions({
+  user: projectCreator,
+  project,
+  document: submittedRdDocument
+});
+assert.equal(creatorPermissions.canViewAttachments, true);
+assert.equal(creatorPermissions.canUploadAttachment, false);
+assert.equal(creatorPermissions.canDownloadAttachment, true);
+assert.equal(creatorPermissions.canDeleteAttachment, false);
+assert.equal(creatorPermissions.canSubmitDocument, false);
+assert.equal(creatorPermissions.canReviewDocument, false);
+assert.equal(creatorPermissions.canManageResponsibility, false);
+assert.equal(creatorPermissions.canChangeApplicability, false);
+
+assert.equal(canViewProjectOperationLogs(generalManagerAssistant, project), true);
+assert.equal(canViewProjectOperationLogs(manufacturingManager, project), true);
+assert.equal(canViewProjectOperationLogs(projectCreator, project), true);
+assert.equal(canViewProjectOperationLogs(projectManager, project), true);
+assert.equal(canViewProjectOperationLogs(rdEmployee, project), false);
+assert.equal(canViewProjectOperationLogs(systemAdmin, project), false);
+assert.equal(canViewCompleteProjectAudit(generalManager, project), true);
+assert.equal(canViewCompleteProjectAudit(projectManager, project), true);
+assert.equal(canViewCompleteProjectAudit(generalManagerAssistant, project), false);
+assert.equal(canViewCompleteProjectAudit(manufacturingManager, project), false);
+assert.equal(canViewCompleteProjectAudit(projectCreator, project), false);
+assert.equal(canViewCompleteProjectAudit(rdEmployee, project), false);
+assert.equal(canViewCompleteProjectAudit(systemAdmin, project), false);
+assert.equal(canAdvanceProjectStage(projectCreator, project), false);
+assert.equal(canAdvanceProjectStage(generalManagerAssistant, project), false);
+assert.equal(canAdvanceProjectStage(systemAdmin, project), false);
 
 const [databaseRows] = await pool.query('SELECT DATABASE() AS currentDatabase');
 assert.equal(databaseRows[0].currentDatabase, 'digital_platform');

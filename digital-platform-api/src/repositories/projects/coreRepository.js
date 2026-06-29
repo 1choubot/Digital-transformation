@@ -6,7 +6,7 @@ import {
   isValidBusinessDepartment
 } from '../../domain/organization.js';
 import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
-import { canViewCompleteProjectAudit } from '../stageDocuments/accessControl.js';
+import { canViewProjectOperationLogs } from '../stageDocuments/accessControl.js';
 import { initializeProjectStageDocuments } from '../stageDocuments/checklistRepository.js';
 import {
   insertOperationLog,
@@ -355,6 +355,7 @@ export async function assertProjectAuditViewable(projectId, user) {
     `SELECT
       id,
       project_manager_user_id,
+      created_by_user_id,
       participating_departments
     FROM projects
     WHERE id = ?
@@ -367,10 +368,10 @@ export async function assertProjectAuditViewable(projectId, user) {
     throw new ProjectNotFoundError(projectId);
   }
 
-  if (!canViewCompleteProjectAudit(user, project)) {
+  if (!canViewProjectOperationLogs(user, project)) {
     throw new ProjectAuthorizationError(
       'FORBIDDEN_OPERATION',
-      'Current user cannot access complete project audit history',
+      'Current user cannot access project operation logs',
       ['projectId']
     );
   }

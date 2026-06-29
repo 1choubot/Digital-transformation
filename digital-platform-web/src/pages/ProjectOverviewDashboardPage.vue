@@ -130,11 +130,11 @@
 
           <div class="overview-project__documents">
             <div>
-              <span>未按完成规则完成的适用资料</span>
+              <span>可查看未完成资料</span>
               <strong>{{ project.currentStageIncompleteRequiredDocuments.length }}</strong>
             </div>
             <details v-if="project.currentStageIncompleteRequiredDocuments.length > 0">
-              <summary>查看资料清单</summary>
+              <summary>查看可见资料</summary>
               <ul>
                 <li v-for="document in project.currentStageIncompleteRequiredDocuments" :key="document.id">
                   <span class="mono">{{ document.documentCode }}</span>
@@ -149,7 +149,7 @@
               当前阶段适用资料均已按完成规则完成。
             </p>
             <p v-else>
-              {{ formatStageIssue(project.currentStageIssue) || '当前阶段齐套摘要为空。' }}
+              {{ formatStageIssue(project.currentStageIssue) || '当前账号暂无可查看的齐套明细。' }}
             </p>
           </div>
         </article>

@@ -34,7 +34,6 @@
             </svg>
             {{ exporting ? '正在导出' : '导出 Excel' }}
           </button>
-          <!-- 返回列表按钮（仅当已保存时显示） -->
           <button
             v-if="savedReport"
             type="button"
@@ -47,7 +46,7 @@
       </div>
 
       <form class="daily-form" @submit.prevent="saveDraft">
-        <!-- 筛选栏：日期 + 项目选择（下拉） -->
+        <!-- 筛选栏 -->
         <div class="daily-filters">
           <div class="filter-group">
             <span class="filter-label">报告日期</span>
@@ -141,9 +140,10 @@
                 <input
                   v-model="item.completionProgress"
                   required
-                  placeholder="如 100% / 已完成"
+                  placeholder="如 100% "
                   class="form-control"
                   :class="{ invalid: itemErrors[item.localId]?.completionProgress }"
+                  @input="validateCompletionProgressInput(item)"
                 />
                 <input
                   v-model="item.completedAt"
@@ -161,25 +161,25 @@
           </div>
         </section>
 
-        <!-- 进展照片（固定在今日和明日之间） -->
-        <section class="daily-section daily-attachments">
+        <!-- ===== 进展照片（新增粘贴监听和缩略图） ===== -->
+        <section class="daily-section daily-attachments" @paste="handlePaste">
           <div class="daily-section__heading">
             <h3>进展照片</h3>
             <label
               class="ghost-button daily-upload-button"
-              :class="{ disabled: !savedReport }"
-              :title="!savedReport ? '请先保存日报草稿' : '点击上传照片'"
+              :class="{ disabled: uploading || saving }"
+              :title="(uploading || saving) ? '上传中，请稍候' : '点击上传照片'"
             >
               <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                 <circle cx="8.5" cy="8.5" r="1.5" />
                 <polyline points="21 15 16 10 5 21" />
               </svg>
-              上传照片
+              {{ uploading ? '上传中...' : '上传照片' }}
               <input
                 type="file"
                 accept="image/*"
-                :disabled="!savedReport || uploading"
+                :disabled="uploading || saving"
                 @change="uploadAttachment"
               />
             </label>
@@ -188,7 +188,24 @@
           <div v-if="savedReport">
             <ul v-if="savedReport.attachments?.length" class="daily-attachment-list">
               <li v-for="attachment in savedReport.attachments" :key="attachment.id">
-                <span class="attachment-name">{{ attachment.originalFileName }}</span>
+                <div class="attachment-preview">
+                  <!-- 缩略图 -->
+                  <img
+                    v-if="thumbnails[attachment.id]"
+                    :src="thumbnails[attachment.id]"
+                    alt="缩略图"
+                    class="attachment-thumbnail"
+                    @error="onThumbnailError(attachment)"
+                  />
+                  <div v-else class="attachment-thumbnail-placeholder">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21 15 16 10 5 21" />
+                    </svg>
+                  </div>
+                  <span class="attachment-name">{{ attachment.originalFileName }}</span>
+                </div>
                 <div class="attachment-actions">
                   <button type="button" class="row-btn action-btn" @click="downloadAttachment(attachment)">下载</button>
                   <button type="button" class="row-btn action-btn action-btn--danger" @click="removeAttachment(attachment)">删除</button>
@@ -197,7 +214,7 @@
             </ul>
             <p v-else class="inline-muted">暂无照片。</p>
           </div>
-          <p v-else class="inline-muted inline-hint">💡 保存日报草稿后即可上传照片。</p>
+          <p v-else class="inline-muted inline-hint">💡 选择项目后可直接上传照片，系统将自动保存草稿。</p>
         </section>
 
         <!-- 明日工作计划 -->
@@ -269,7 +286,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch, onBeforeUnmount } from 'vue';
 import { OrganizationRole, ReportStatus } from '../constants/reports.js';
 import {
   createDailyReport,
@@ -327,7 +344,30 @@ const showDropdown = ref(false);
 const projectInput = ref(null);
 const itemErrors = ref({});
 
-// 用户显示名称（兼容多种字段名）
+// ===== 缩略图缓存 =====
+const thumbnails = reactive({});
+// 存储需要 revoke 的 object URL
+const objectURLs = [];
+
+function revokeObjectURL(url) {
+  if (url && url.startsWith('blob:')) {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function addObjectURL(url) {
+  if (url && url.startsWith('blob:')) {
+    objectURLs.push(url);
+  }
+}
+
+// 清理所有 object URL（组件卸载时调用）
+function clearObjectURLs() {
+  objectURLs.forEach(revokeObjectURL);
+  objectURLs.length = 0;
+}
+
+// 用户显示名称
 const currentUserDisplayName = computed(
   () => props.currentUser.displayName || props.currentUser.name || props.currentUser.account || ''
 );
@@ -342,14 +382,71 @@ const form = reactive({
 const canUseDailyReport = computed(() => props.currentUser.organizationRole === OrganizationRole.EMPLOYEE);
 const isBackfill = computed(() => form.reportDate && form.reportDate !== today);
 
-// 判断一个今日完成行是否为空（业务字段全空）
+// 判断今日完成行是否为空
 function isBlankCompletedItem(item) {
   return !String(item?.workContent || '').trim() &&
     !String(item?.completionProgress || '').trim() &&
     !String(item?.completedAt || '').trim();
 }
 
-// 提交前校验：过滤空行，高亮必填字段
+// 提交前校验
+// 完成进度必须是“数字+%”格式，例如 95%、85.5%、100%。
+function isValidCompletionProgress(value) {
+  return /^\d+(?:\.\d+)?%$/.test(String(value || '').trim());
+}
+
+// 单独更新某一行某个字段的错误状态，避免输入完成进度时覆盖其他字段校验结果。
+function setItemFieldError(localId, field, hasError) {
+  const rowErrors = { ...(itemErrors.value[localId] || {}) };
+  const nextErrors = { ...itemErrors.value };
+
+  if (hasError) {
+    rowErrors[field] = true;
+  } else {
+    delete rowErrors[field];
+  }
+
+  if (Object.keys(rowErrors).length > 0) {
+    nextErrors[localId] = rowErrors;
+  } else {
+    delete nextErrors[localId];
+  }
+
+  itemErrors.value = nextErrors;
+}
+
+// 输入时只校验非空值，空值继续交给提交必填校验处理。
+function validateCompletionProgressInput(item) {
+  const progress = String(item?.completionProgress || '').trim();
+  setItemFieldError(item.localId, 'completionProgress', Boolean(progress) && !isValidCompletionProgress(progress));
+}
+
+// 暂存和提交前都阻止保存非法完成进度，空值仍按原有提交必填规则处理。
+function validateCompletionProgressRows() {
+  const errors = {};
+
+  for (const item of form.items) {
+    const progress = String(item.completionProgress || '').trim();
+    if (progress && !isValidCompletionProgress(progress)) {
+      errors[item.localId] = {
+        ...(errors[item.localId] || {}),
+        completionProgress: true
+      };
+    }
+  }
+
+  if (Object.keys(errors).length === 0) {
+    return true;
+  }
+
+  itemErrors.value = {
+    ...itemErrors.value,
+    ...errors
+  };
+  errorMessage.value = '完成进度只能填写数字+%，例如 95%、85.5%、100%。';
+  return false;
+}
+
 function prepareSubmittedItems() {
   const nonBlankItems = form.items.filter((item) => !isBlankCompletedItem(item));
   const errors = {};
@@ -367,9 +464,10 @@ function prepareSubmittedItems() {
   }
 
   for (const item of nonBlankItems) {
+    const progress = String(item.completionProgress || '').trim();
     const rowErrors = {
       workContent: !String(item.workContent || '').trim(),
-      completionProgress: !String(item.completionProgress || '').trim(),
+      completionProgress: !progress || !isValidCompletionProgress(progress),
       completedAt: !String(item.completedAt || '').trim()
     };
     if (rowErrors.workContent || rowErrors.completionProgress || rowErrors.completedAt) {
@@ -379,7 +477,7 @@ function prepareSubmittedItems() {
 
   itemErrors.value = errors;
   if (Object.keys(errors).length > 0) {
-    errorMessage.value = '请补全高亮的今日完成情况：工作内容、完成进度、完成时间。';
+    errorMessage.value = '请补全高亮的今日完成情况：工作内容、完成进度、完成时间；完成进度只能填写数字+%，例如 95%、85.5%、100%。';
     return false;
   }
 
@@ -387,12 +485,11 @@ function prepareSubmittedItems() {
   return true;
 }
 
-// Build a local id so Vue can track unsaved dynamic rows.
+// Build a local id
 function buildLocalId() {
   return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
-// Create one blank completed-work row with default values.
 function createEmptyItem() {
   return {
     localId: buildLocalId(),
@@ -404,7 +501,6 @@ function createEmptyItem() {
   };
 }
 
-// Create one blank next-day plan row with default plannedCompleteAt.
 function createEmptyPlan() {
   return {
     localId: buildLocalId(),
@@ -416,7 +512,6 @@ function createEmptyPlan() {
   };
 }
 
-// Trigger a browser download for blob responses.
 function saveBlob(download, fallbackName) {
   const url = URL.createObjectURL(download.blob);
   const link = globalThis.document.createElement('a');
@@ -428,7 +523,6 @@ function saveBlob(download, fallbackName) {
   URL.revokeObjectURL(url);
 }
 
-// Normalize current form state into the backend contract.
 function buildPayload(status) {
   return {
     reportDate: form.reportDate,
@@ -451,7 +545,109 @@ function buildPayload(status) {
   };
 }
 
-// Copy a loaded report into the editable form.
+// ===== 缩略图加载函数 =====
+async function loadThumbnail(attachment) {
+  // 如果已有缩略图或正在加载，跳过
+  if (thumbnails[attachment.id] !== undefined) return;
+  // 如果 attachment 有 url 字段，直接使用
+  if (attachment.url) {
+    thumbnails[attachment.id] = attachment.url;
+    return;
+  }
+  // 否则通过下载接口获取 blob
+  try {
+    const { blob } = await downloadDailyReportAttachment(
+      savedReport.value.id,
+      attachment.id,
+      props.authToken
+    );
+    const url = URL.createObjectURL(blob);
+    thumbnails[attachment.id] = url;
+    addObjectURL(url); // 记录以便销毁时释放
+  } catch (error) {
+    // 加载失败，留空即可
+    console.warn('缩略图加载失败', error);
+  }
+}
+
+// 当缩略图加载出错时（如 url 失效），可尝试重新加载
+function onThumbnailError(attachment) {
+  // 若当前 thumbnails[attachment.id] 是 http 链接且失效，可尝试调用 loadThumbnail 重新获取
+  // 但为避免死循环，可简单移除该缩略图，或置为 null
+  // 这里我们简单地将该条目设为 undefined，以便用户点击下载查看原图
+  thumbnails[attachment.id] = undefined;
+}
+
+// ===== 核心上传逻辑（提取出来，供文件和粘贴使用） =====
+async function uploadFile(file) {
+  // 防重检查
+  if (uploading.value || saving.value) return;
+
+  // 自动保存草稿（如果未保存）
+  if (!savedReport.value) {
+    if (!form.projectId) {
+      errorMessage.value = '请先选择项目，才能上传照片。';
+      return;
+    }
+    uploading.value = true;
+    try {
+      await saveReport(ReportStatus.DRAFT);
+      if (!savedReport.value) {
+        uploading.value = false;
+        return;
+      }
+    } catch {
+      uploading.value = false;
+      return;
+    }
+  }
+
+  if (!savedReport.value) {
+    uploading.value = false;
+    errorMessage.value = '日报尚未创建，请稍后重试。';
+    return;
+  }
+
+  uploading.value = true;
+  errorMessage.value = '';
+  try {
+    await uploadDailyReportAttachment(savedReport.value.id, file, props.authToken);
+    const result = await getDailyReport(savedReport.value.id, props.authToken);
+    hydrateForm(result.report);
+    message.value = '照片已上传。';
+  } catch (error) {
+    if (error.code === 'UNAUTHENTICATED') {
+      emit('auth-expired');
+      return;
+    }
+    errorMessage.value = toReadableApiError(error);
+  } finally {
+    uploading.value = false;
+  }
+}
+
+// ===== 粘贴处理 =====
+async function handlePaste(event) {
+  const items = event.clipboardData?.items;
+  if (!items) return;
+
+  const files = [];
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      const file = item.getAsFile();
+      if (file) files.push(file);
+    }
+  }
+
+  if (!files.length) return;
+
+  // 逐个上传（此处串行，可改为并行但要注意并发控制）
+  for (const file of files) {
+    await uploadFile(file);
+  }
+}
+
+// ===== hydrateForm（加载报告后填充表单） =====
 function hydrateForm(report) {
   savedReport.value = report;
   itemErrors.value = {};
@@ -472,9 +668,26 @@ function hydrateForm(report) {
         responsiblePerson: plan.responsiblePerson || currentUserDisplayName.value
       }))
     : [createEmptyPlan()];
+
+  // ===== 加载缩略图 =====
+  // 清空旧缩略图（释放 object URL）
+  Object.keys(thumbnails).forEach(key => {
+    const url = thumbnails[key];
+    if (url && url.startsWith('blob:')) {
+      revokeObjectURL(url);
+    }
+    delete thumbnails[key];
+  });
+  // 重新加载所有附件的缩略图
+  if (report.attachments && report.attachments.length) {
+    report.attachments.forEach(attachment => {
+      // 异步加载，不阻塞
+      loadThumbnail(attachment);
+    });
+  }
 }
 
-// 重置表单到初始状态（清空所有内容）
+// 重置表单
 function resetForm() {
   savedReport.value = null;
   itemErrors.value = {};
@@ -483,25 +696,25 @@ function resetForm() {
   projectKeyword.value = '';
   form.items = [createEmptyItem()];
   form.plans = [createEmptyPlan()];
-  // 清空消息
   message.value = '';
   errorMessage.value = '';
-  // 更新地址栏到新建状态（不带ID）
+  // 清理缩略图
+  Object.keys(thumbnails).forEach(key => {
+    const url = thumbnails[key];
+    if (url && url.startsWith('blob:')) {
+      revokeObjectURL(url);
+    }
+    delete thumbnails[key];
+  });
   try {
     window.history.replaceState(null, '', '/daily-report');
-  } catch (e) {
-    // 忽略
-  }
+  } catch (e) {}
 }
 
-// Load an existing report when the route includes an id.
+// 加载已有报告
 async function loadReport() {
-  if (!props.reportId || !canUseDailyReport.value) {
-    return;
-  }
-
+  if (!props.reportId || !canUseDailyReport.value) return;
   errorMessage.value = '';
-
   try {
     const result = await getDailyReport(props.reportId, props.authToken);
     hydrateForm(result.report);
@@ -514,17 +727,14 @@ async function loadReport() {
   }
 }
 
-// Search projects as the user types, using the M2 real-schema endpoint.
+// 项目搜索等
 async function searchProjects(shouldOpen = false) {
   projectSearchMessage.value = '';
-
   try {
     const result = await searchDailyReportProjects(projectKeyword.value, props.authToken);
     projectOptions.value = result.projects || [];
     projectSearchMessage.value = projectOptions.value.length ? '' : '未找到可填报项目';
-    if (shouldOpen) {
-      showDropdown.value = true;
-    }
+    if (shouldOpen) showDropdown.value = true;
   } catch (error) {
     projectSearchMessage.value = toReadableApiError(error);
   }
@@ -534,7 +744,6 @@ function onInputSearch() {
   searchProjects(true);
 }
 
-// Select one active project from search results.
 function selectProject(project) {
   form.projectId = project.id;
   projectKeyword.value = `${project.projectCode} / ${project.projectName}`;
@@ -543,7 +752,6 @@ function selectProject(project) {
   projectInput.value?.blur();
 }
 
-// 清空项目选择和搜索关键词，并重新加载全部项目
 function clearProjectSelection() {
   projectKeyword.value = '';
   form.projectId = '';
@@ -553,7 +761,6 @@ function clearProjectSelection() {
   });
 }
 
-// 打开下拉
 function openDropdown() {
   if (projectOptions.value.length || projectSearchMessage.value) {
     showDropdown.value = true;
@@ -562,7 +769,6 @@ function openDropdown() {
   }
 }
 
-// 延迟关闭下拉
 let closeTimer = null;
 function closeDropdownDelayed() {
   clearTimeout(closeTimer);
@@ -571,31 +777,20 @@ function closeDropdownDelayed() {
   }, 150);
 }
 
-// Append one completed-work row.
 function addItem() {
   form.items.push(createEmptyItem());
 }
-
-// Remove one completed-work row while preserving the minimum row.
 function removeItem(index) {
-  if (form.items.length > 1) {
-    form.items.splice(index, 1);
-  }
+  if (form.items.length > 1) form.items.splice(index, 1);
 }
-
-// Append one next-day plan row.
 function addPlan() {
   form.plans.push(createEmptyPlan());
 }
-
-// Remove one next-day plan row while preserving the minimum row.
 function removePlan(index) {
-  if (form.plans.length > 1) {
-    form.plans.splice(index, 1);
-  }
+  if (form.plans.length > 1) form.plans.splice(index, 1);
 }
 
-// Save the report and keep the user on the editable page.
+// 保存报告（草稿或提交）
 async function saveReport(status) {
   saving.value = true;
   message.value = '';
@@ -603,35 +798,33 @@ async function saveReport(status) {
   itemErrors.value = {};
 
   try {
-    // 提交时执行校验
-    if (status === ReportStatus.SUBMITTED && !prepareSubmittedItems()) {
+    if (!validateCompletionProgressRows()) {
       saving.value = false;
       return;
     }
 
+    if (status === ReportStatus.SUBMITTED && !prepareSubmittedItems()) {
+      saving.value = false;
+      return;
+    }
     const payload = buildPayload(status);
     const result = savedReport.value
       ? await updateDailyReport(savedReport.value.id, payload, props.authToken)
       : await createDailyReport(payload, props.authToken);
     
-    // 如果正式提交，重置表单（清空所有内容）
     if (status === ReportStatus.SUBMITTED) {
       resetForm();
       message.value = '日报已正式提交，表单已清空，可继续填写新的日报。';
     } else {
-      // 草稿保存：保留数据并更新
       hydrateForm(result.report);
       message.value = '草稿已保存。';
     }
 
-    // 如果创建时没有 reportId 且是草稿，更新地址栏
     if (!props.reportId && result.report?.id && status === ReportStatus.DRAFT) {
       try {
         const newUrl = `/daily-report/${result.report.id}`;
         window.history.replaceState(null, '', newUrl);
-      } catch (e) {
-        // 忽略
-      }
+      } catch (e) {}
     }
   } catch (error) {
     if (error.code === 'UNAUTHENTICATED') {
@@ -644,45 +837,24 @@ async function saveReport(status) {
   }
 }
 
-// Persist the current report as a draft.
 async function saveDraft() {
   await saveReport(ReportStatus.DRAFT);
 }
-
-// Persist and mark the current report as submitted.
 async function submitReport() {
   await saveReport(ReportStatus.SUBMITTED);
 }
 
-// Upload one image attachment after a report exists.
+// 文件上传（来自 input）
 async function uploadAttachment(event) {
   const file = event.target.files?.[0];
   event.target.value = '';
-  if (!file || !savedReport.value) {
-    return;
-  }
-
-  uploading.value = true;
-  errorMessage.value = '';
-
-  try {
-    await uploadDailyReportAttachment(savedReport.value.id, file, props.authToken);
-    const result = await getDailyReport(savedReport.value.id, props.authToken);
-    hydrateForm(result.report);
-    message.value = '照片已上传。';
-  } catch (error) {
-    errorMessage.value = toReadableApiError(error);
-  } finally {
-    uploading.value = false;
-  }
+  if (!file) return;
+  await uploadFile(file);
 }
 
-// Download an uploaded image attachment.
+// 下载附件
 async function downloadAttachment(attachment) {
-  if (!savedReport.value) {
-    return;
-  }
-
+  if (!savedReport.value) return;
   try {
     const download = await downloadDailyReportAttachment(savedReport.value.id, attachment.id, props.authToken);
     saveBlob(download, attachment.originalFileName || 'attachment');
@@ -691,12 +863,9 @@ async function downloadAttachment(attachment) {
   }
 }
 
-// Delete an uploaded image attachment and refresh report details.
+// 删除附件
 async function removeAttachment(attachment) {
-  if (!savedReport.value) {
-    return;
-  }
-
+  if (!savedReport.value) return;
   try {
     await deleteDailyReportAttachment(savedReport.value.id, attachment.id, props.authToken);
     const result = await getDailyReport(savedReport.value.id, props.authToken);
@@ -707,15 +876,11 @@ async function removeAttachment(attachment) {
   }
 }
 
-// Download the Excel workbook generated from the official template.
+// 导出 Excel
 async function downloadReportExcel() {
-  if (!savedReport.value) {
-    return;
-  }
-
+  if (!savedReport.value) return;
   exporting.value = true;
   errorMessage.value = '';
-
   try {
     const download = await exportDailyReport(savedReport.value.id, props.authToken);
     saveBlob(download, `项目工作日报-${form.reportDate}.xlsx`);
@@ -726,12 +891,18 @@ async function downloadReportExcel() {
   }
 }
 
+// 生命周期
 onMounted(async () => {
   await searchProjects(false);
   await loadReport();
 });
 
 watch(() => props.reportId, loadReport);
+
+// 组件卸载时清理 object URL
+onBeforeUnmount(() => {
+  clearObjectURLs();
+});
 </script>
 
 <style scoped>
@@ -1244,6 +1415,7 @@ watch(() => props.reportId, loadReport);
   cursor: not-allowed;
 }
 
+/* ===== 附件列表与缩略图 ===== */
 .daily-attachment-list {
   list-style: none;
   padding: 0;
@@ -1263,16 +1435,50 @@ watch(() => props.reportId, loadReport);
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+.attachment-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+}
+.attachment-thumbnail {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #dcdfe6;
+  flex-shrink: 0;
+}
+.attachment-thumbnail-placeholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+  border: 1px dashed #dcdfe6;
+  background: #f5f7fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.attachment-thumbnail-placeholder svg {
+  width: 24px;
+  height: 24px;
+  stroke: #c0c4cc;
+}
 .attachment-name {
   font-size: 0.85rem;
   color: #303133;
-  font-weight: 500;
   word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .attachment-actions {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 .inline-muted {
@@ -1329,6 +1535,12 @@ watch(() => props.reportId, loadReport);
   .toolbar-actions {
     width: 100%;
     justify-content: flex-start;
+  }
+  .attachment-preview {
+    flex-wrap: wrap;
+  }
+  .attachment-name {
+    white-space: normal;
   }
 }
 </style>

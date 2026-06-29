@@ -85,6 +85,7 @@
                       list="weekly-project-options"
                       class="form-control"
                       :class="{ invalid: fieldErrors[`summaries.${index}.workTask`] }"
+                      @focus="loadProjectOptions()"
                       @input="scheduleProjectSearch(summary.workTask)"
                       placeholder="输入任务名称"
                     />
@@ -196,6 +197,7 @@
                       list="weekly-project-options"
                       class="form-control"
                       :class="{ invalid: fieldErrors[`plans.${index}.workTask`] }"
+                      @focus="loadProjectOptions()"
                       @input="scheduleProjectSearch(plan.workTask)"
                       placeholder="输入任务名称"
                     />
@@ -418,6 +420,7 @@ async function loadProjectOptions(keyword = '') {
     return;
   }
 
+  // 聚焦工作任务输入框时使用空关键词，保证每一行都能重新展示当前用户参与的完整项目列表。
   try {
     const result = await searchMyActiveProjects({ keyword, limit: 50 }, props.authToken);
     projectOptions.value = result.projects || [];

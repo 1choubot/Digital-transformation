@@ -15,10 +15,15 @@ import {
   isReviewCompletionMode,
   mapDocument
 } from './shared.js';
+import {
+  INITIATION_REVIEW_TODO_TYPE,
+  selectInitiationReviewWorkbenchTodos
+} from './initiationReviewRepository.js';
 
 const WORKBENCH_TODO_TYPES = [
   'document_responsibility',
   'document_review',
+  INITIATION_REVIEW_TODO_TYPE,
   'stage_advance'
 ];
 
@@ -223,6 +228,7 @@ async function selectDocumentReviewTodos(user) {
       ON s.project_id = d.project_id
       AND s.stage_order = d.stage_order
     WHERE d.is_applicable = 1
+      AND d.document_code <> '1.2'
       AND d.status = ?
       AND d.completion_mode = ?
       AND (
@@ -324,6 +330,28 @@ async function selectStageAdvanceTodos(user) {
             AND (
             incomplete_documents.revision_required = 1
             OR
+            (
+              incomplete_documents.document_code = '1.2'
+              AND (
+                NOT EXISTS (
+                  SELECT 1
+                  FROM project_initiation_review_nodes initiation_nodes
+                  WHERE initiation_nodes.stage_document_id = incomplete_documents.id
+                  GROUP BY initiation_nodes.stage_document_id
+                  HAVING SUM(initiation_nodes.node_status = 'approved') = 3
+                    AND COUNT(*) = 3
+                )
+                OR EXISTS (
+                  SELECT 1
+                  FROM project_stage_documents initiation_rework_target
+                  WHERE initiation_rework_target.project_id = incomplete_documents.project_id
+                    AND initiation_rework_target.document_code = '1.1'
+                    AND initiation_rework_target.revision_required = 1
+                    AND initiation_rework_target.revision_source_document_id = incomplete_documents.id
+                )
+              )
+            )
+            OR
             incomplete_documents.status = ?
             OR (
               incomplete_documents.completion_mode IN (?, ?)
@@ -404,6 +432,7 @@ export async function getMyWorkbench(user) {
   const groups = await Promise.all([
     selectDocumentResponsibilityTodos(user),
     selectDocumentReviewTodos(user),
+    selectInitiationReviewWorkbenchTodos(pool, user),
     selectStageAdvanceTodos(user)
   ]);
   const items = sortWorkbenchItems(groups.flat());

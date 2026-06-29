@@ -8,6 +8,8 @@ import {
 import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import { canViewProjectOperationLogs } from '../stageDocuments/accessControl.js';
 import { initializeProjectStageDocuments } from '../stageDocuments/checklistRepository.js';
+import { attachInitiationReviewToStageDocumentRows } from '../stageDocuments/initiationReviewRepository.js';
+import { deriveStageDocumentCompletion } from '../stageDocuments/shared.js';
 import {
   insertOperationLog,
   OPERATION_ACTION_TYPE,
@@ -226,24 +228,39 @@ async function assertProjectCodeReady(connection, projectId) {
       document_name,
       status,
       completion_mode,
-      is_applicable
+      is_applicable,
+      revision_required,
+      revision_reason,
+      revision_source_document_id,
+      revision_requested_at,
+      revision_resubmitted_at
     FROM project_stage_documents
     WHERE project_id = ?
-      AND document_code IN ('1.2', '1.3')
+      AND document_code IN ('1.1', '1.2', '1.3')
     FOR UPDATE`,
     [projectId]
   );
-  const byCode = new Map(rows.map((row) => [row.document_code, row]));
+  const rowsWithInitiationReview = await attachInitiationReviewToStageDocumentRows(connection, rows);
+  const byCode = new Map(rowsWithInitiationReview.map((row) => [row.document_code, row]));
   const initiationApproval = byCode.get('1.2');
+  const initiationRequirement = byCode.get('1.1');
   const initiationNotice = byCode.get('1.3');
   const details = [];
 
   if (
     !initiationApproval ||
     initiationApproval.completion_mode !== COMPLETION_MODE.APPROVAL_REQUIRED ||
-    initiationApproval.status !== DOCUMENT_STATUS.CONFIRMED
+    !deriveStageDocumentCompletion(initiationApproval).isComplete
   ) {
     details.push('1.2');
+  }
+
+  if (
+    initiationRequirement &&
+    Boolean(initiationRequirement.revision_required) &&
+    String(initiationRequirement.revision_source_document_id) === String(initiationApproval?.id)
+  ) {
+    details.push('1.1');
   }
 
   if (

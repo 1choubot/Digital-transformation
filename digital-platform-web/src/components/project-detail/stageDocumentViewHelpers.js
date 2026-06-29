@@ -26,6 +26,16 @@ export const operationActionText = {
   'approval.general_approved': '总经理关口审批通过',
   'approval.general_returned': '总经理关口审批退回',
   'approval.resubmitted': '重新提交阶段关口审批',
+  'initiation_review.submitted': '启动 1.2 多节点审批',
+  'initiation_review.business_approved': '商务评价审批通过',
+  'initiation_review.business_returned': '商务评价审批退回',
+  'initiation_review.technical_approved': '技术评价审批通过',
+  'initiation_review.technical_returned': '技术评价审批退回',
+  'initiation_review.general_approved': '总经理审批通过',
+  'initiation_review.general_returned': '总经理审批退回',
+  'initiation_review.general_activated': '总经理审批待办生成',
+  'initiation_review.restored': '1.2 审批节点恢复待审',
+  'initiation_review.completed': '1.2 多节点审批最终完成',
   'stage.advanced': '阶段推进',
   'project.completed': '项目完成'
 };
@@ -84,6 +94,14 @@ export function getCompletionStatus(document) {
       : 'revision_required';
   }
 
+  if (document?.documentCode === '1.2' && document?.initiationReview) {
+    if (document.initiationReview.isComplete) {
+      return 'completed';
+    }
+
+    return document.initiationReview.blockedByRework ? 'revision_required' : 'pending_review';
+  }
+
   const completionMode = getCompletionMode(document);
   if (completionMode === 'submit_only' || completionMode === 'conditional_submit') {
     return ['submitted', 'confirmed'].includes(document?.status) ? 'completed' : 'incomplete';
@@ -121,6 +139,7 @@ export function buildFallbackCompletenessSummary(stage) {
       documentCode: document.documentCode,
       documentName: document.documentName,
       status: document.status,
+      initiationReview: document.initiationReview ?? null,
       completionMode: getCompletionMode(document),
       isComplete: false,
       completionStatus: getCompletionStatus(document),

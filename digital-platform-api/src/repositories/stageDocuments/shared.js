@@ -1,4 +1,5 @@
 import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
+import { isInitiationReviewDocumentCode } from '../../domain/initiationReview.js';
 import {
   getAClassReworkCandidateCodes,
   getDesignChangeTargetDocumentCodes,
@@ -99,6 +100,7 @@ export function isRevisionResubmitted(document) {
 export function deriveStageDocumentCompletion(document) {
   const completionMode = getDocumentCompletionMode(document);
   const status = document?.status ?? DOCUMENT_STATUS.NOT_SUBMITTED;
+  const documentCode = document?.documentCode ?? document?.document_code ?? null;
   const isApplicableValue = document?.isApplicable ?? document?.is_applicable;
   const isApplicable = isApplicableValue === undefined ? true : Boolean(isApplicableValue);
 
@@ -108,6 +110,28 @@ export function deriveStageDocumentCompletion(document) {
       isApplicable,
       isComplete: true,
       completionStatus: COMPLETION_STATUS.NOT_APPLICABLE
+    };
+  }
+
+  if (isInitiationReviewDocumentCode(documentCode)) {
+    const initiationReview = document?.initiationReview ?? document?.initiation_review ?? null;
+    const isComplete = initiationReview?.isComplete === true;
+    const blockedByRework =
+      initiationReview?.blockedByRework === true ||
+      initiationReview?.reworkBlocked === true ||
+      initiationReview?.rework_blocked === true;
+
+    return {
+      completionMode,
+      isApplicable,
+      isComplete,
+      completionStatus: isComplete
+        ? COMPLETION_STATUS.COMPLETED
+        : blockedByRework
+          ? COMPLETION_STATUS.REVISION_REQUIRED
+          : [DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.CONFIRMED].includes(status)
+            ? COMPLETION_STATUS.PENDING_REVIEW
+            : COMPLETION_STATUS.INCOMPLETE
     };
   }
 
@@ -267,6 +291,7 @@ export function mapDocument(row) {
     targetFolderPath: row.target_folder_path,
     targetFolderId: row.target_folder_id,
     status: row.status,
+    initiationReview: row.initiationReview ?? row.initiation_review ?? null,
     isComplete: completion.isComplete,
     completionStatus: completion.completionStatus,
     revisionRequired,
@@ -318,6 +343,7 @@ export function mapStageDocumentTask(row) {
     ownerDepartment: row.owner_department ?? null,
     reviewDepartment: row.review_department ?? null,
     status: row.status,
+    initiationReview: row.initiationReview ?? row.initiation_review ?? null,
     completionMode: completion.completionMode,
     isComplete: completion.isComplete,
     completionStatus: completion.completionStatus,
@@ -350,6 +376,7 @@ export function mapGateDocument(row) {
     isRequired: Boolean(row.is_required),
     isApplicable: row.is_applicable === undefined ? true : Boolean(row.is_applicable),
     status: row.status,
+    initiationReview: row.initiationReview ?? row.initiation_review ?? null,
     completionMode: completion.completionMode,
     isComplete: completion.isComplete,
     completionStatus: completion.completionStatus,
@@ -373,6 +400,7 @@ export function buildStageCompletenessSummary(documents) {
       documentCode: document.documentCode,
       documentName: document.documentName,
       status: document.status,
+      initiationReview: document.initiationReview ?? document.initiation_review ?? null,
       completionMode: getDocumentCompletionMode(document),
       isComplete: false,
       completionStatus: deriveStageDocumentCompletion(document).completionStatus,

@@ -24,3 +24,9 @@ export {
   updateProjectStageDocumentStatus
 } from './stageDocuments/statusRepository.js';
 export { updateProjectStageDocumentApplicability } from './stageDocuments/applicabilityRepository.js';
+export {
+  approveInitiationReviewNode,
+  initializeInitiationReviewNodesForExistingProjects,
+  initializeInitiationReviewNodesForProject,
+  returnInitiationReviewNode
+} from './stageDocuments/initiationReviewRepository.js';

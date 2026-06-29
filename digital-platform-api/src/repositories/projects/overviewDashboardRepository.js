@@ -3,6 +3,7 @@ import { PROJECT_STATUS } from '../../domain/projects.js';
 import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import { canViewCompleteStageDocumentSet } from '../stageDocuments/accessControl.js';
 import { buildStageCompletenessSummary } from '../stageDocuments/shared.js';
+import { attachInitiationReviewToStageDocumentRows } from '../stageDocuments/initiationReviewRepository.js';
 import { mapCreator } from '../userRepository.js';
 import {
   buildInClause,
@@ -119,6 +120,7 @@ function mapProjectOverviewDocument(row) {
     isRequired: Boolean(row.is_required),
     isApplicable: row.is_applicable === undefined ? true : Boolean(row.is_applicable),
     status: row.status,
+    initiationReview: row.initiationReview ?? row.initiation_review ?? null,
     completionMode: row.completion_mode,
     revisionRequired: Boolean(row.revision_required),
     revisionReason: row.revision_reason ?? null,
@@ -380,10 +382,11 @@ export async function getProjectOverviewDashboard(user, filters) {
     countMyPendingStageDocumentTasks(user.id)
   ]);
   const projectIds = projectRows.map((project) => project.id);
-  const [stageRows, documentRows] = await Promise.all([
+  const [stageRows, rawDocumentRows] = await Promise.all([
     selectProjectOverviewStages(projectIds),
     selectProjectOverviewDocuments(projectIds)
   ]);
+  const documentRows = await attachInitiationReviewToStageDocumentRows(pool, rawDocumentRows, user);
   const stagesByProject = groupRowsBy(stageRows, 'project_id');
   const documentsByProject = groupRowsBy(documentRows, 'project_id');
   const projects = projectRows

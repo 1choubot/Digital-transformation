@@ -28,42 +28,22 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 
 ### Requirement: 项目创建
 
-系统 MUST 提供项目创建能力。项目创建必须要求当前登录用户具备创建项目权限；创建成功后必须同时完成项目主数据保存、当前登录用户创建人记录、标准 8 阶段初始化、当前 20260625 64 项项目级阶段资料清单初始化和 `project.created` 项目业务操作日志写入，并 MUST NOT 因 `projectCode` 为空拒绝创建。
-
-#### Scenario: 成功创建项目
-- **WHEN** 具备创建项目权限的已登录用户提交有效的项目创建信息
-- **THEN** 系统必须保存项目主数据、记录当前登录用户为创建人、为该项目生成标准 8 阶段记录、初始化当前 20260625 64 项项目级阶段资料清单，并在同一事务中记录 `action_type = project.created` 的项目业务操作日志
-
-#### Scenario: 创建项目允许项目编号为空
-- **WHEN** 有权限用户创建项目且项目尚未完成立项审批
-- **THEN** 系统 MUST 允许 `projectCode` 为空
-
-#### Scenario: 创建信息不完整
-- **WHEN** 具备创建项目权限的已登录用户缺少项目名称、客户、项目经理或其他必需基础信息
-- **THEN** 系统必须拒绝创建，并提示需要补充的信息
-- **AND** 系统 MUST NOT 因 `projectCode` 为空而拒绝创建
-
-#### Scenario: 创建失败无副作用
-- **WHEN** 项目创建因权限不足、字段校验失败、项目经理校验失败或其他创建前置校验失败
-- **THEN** 系统不得插入项目主数据，不得生成项目阶段，不得生成项目级阶段资料，不得写入 `project.created` 或其他成功业务日志
+系统 MUST 提供项目创建能力。项目创建必须要求当前登录用户具备创建项目权限；创建成功后必须同时完成项目主数据保存、当前登录用户创建人记录、标准 8 阶段初始化、当前 20260625 64 项项目级阶段资料清单初始化和 `project.created` 项目业务操作日志写入，并 MUST NOT 因 `projectCode` 为空拒绝创建。`1.2 项目立项审批表` 后置项目编号门禁 MUST 使用专用多节点最终通过状态，而不是普通单资料 `confirmed` 状态。
 
 #### Scenario: 后置项目编号触发点
-- **WHEN** `1.2 项目立项审批表` 已按 `approval_required` 审核通过
+
+- **WHEN** `1.2 项目立项审批表` 的商务评价审批、技术评价审批和总经理审批均最终通过
 - **AND** `1.3 项目立项通知` 已按 `submit_only` 提交或上传完成
-- **THEN** 系统 MUST 允许具备项目维护权限、项目经理权限、管理员权限或等价既有权限边界的用户填写或生成 `projectCode`
+- **AND** `1.1 项目需求表` 不存在由 `1.2` NO 触发且未清除的 `revision_required`
+- **AND** `1.2 项目立项审批表` 不存在待审、退回、未通过或其他专用多节点阻塞状态
+- **THEN** 系统 MUST 允许具备项目维护权限、项目经理权限或等价业务项目编号维护权限的用户填写或生成 `projectCode`
+- **AND** 系统 MUST NOT 将仅系统管理员身份解释为业务项目编号维护权限
 
-#### Scenario: 后置项目编号不重建对象
-- **WHEN** 项目创建后填写、生成或更新 `projectCode`
-- **THEN** 系统 MUST 只更新项目编号及必要追溯字段
-- **AND** 系统 MUST NOT 重新初始化项目阶段、阶段资料或附件
+#### Scenario: 单节点通过不得填写项目编号
 
-#### Scenario: 创建项目不触发文件平台联动
-- **WHEN** 项目创建成功
-- **THEN** 系统不能在本能力中调用文件管理平台创建目录、上传文件、下载文件、生成文件映射、同步文件平台用户、同步权限或判断下载权限
-
-#### Scenario: 创建日志失败回滚项目创建
-- **WHEN** 项目主数据、8 阶段初始化或项目级阶段资料清单初始化已经准备提交，但 `project.created` 业务操作日志写入失败
-- **THEN** 系统必须回滚项目创建事务，不得留下没有对应创建日志的新项目
+- **WHEN** `1.2 项目立项审批表` 只有商务评价、技术评价或总经理审批中的单个节点通过
+- **THEN** 系统 MUST NOT 因该单节点通过允许填写或生成 `projectCode`
+- **AND** 系统 MUST 返回可理解的门禁未满足原因
 
 ### Requirement: 标准 8 阶段初始化
 
@@ -257,65 +237,43 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 
 ### Requirement: 阶段推进齐套门禁
 
-系统 MUST 在推进当前阶段前检查当前阶段项目级阶段资料清单是否已初始化，并 MUST 只按当前阶段适用资料的 `completionMode`、基础状态、适用性和 `revision_required` 派生完成状态判断阶段推进门禁，不得统一要求所有适用资料均为 `confirmed`，也不得忽略精准返工标记。
+系统 MUST 在推进当前阶段前检查当前阶段项目级阶段资料清单是否已初始化，并 MUST 只按当前阶段适用资料的 `completionMode`、基础状态、适用性、`revision_required` 和特殊资料派生完成规则判断阶段推进门禁；`1.2 项目立项审批表` MUST 由专用多节点最终审批状态派生完成，不得只按普通单资料 `confirmed` 判断。
 
-#### Scenario: 只检查当前阶段
-- **WHEN** 已登录用户请求推进项目阶段
-- **THEN** 系统必须只检查项目当前阶段的适用资料完成情况，不得因其他阶段资料缺失而拒绝当前阶段推进
+#### Scenario: 1.2 多节点未全通过阻塞推进
 
-#### Scenario: 当前阶段资料清单必须已初始化
-- **WHEN** 当前阶段没有任何 `project_stage_documents` 资料项记录
-- **THEN** 系统必须拒绝推进，并且不得修改项目状态或任何阶段状态
+- **WHEN** 第 1 阶段包含适用的 `1.2 项目立项审批表`
+- **AND** 商务评价审批、技术评价审批或总经理审批中任一必需节点尚未通过
+- **THEN** 系统 MUST 将 `1.2` 视为未完成
+- **AND** 系统 MUST 拒绝第 1 阶段推进
 
-#### Scenario: revision_required 阻塞推进
-- **WHEN** 当前阶段存在适用资料 `revision_required = true`
-- **THEN** 系统 MUST 将该资料视为未完成或需返工
-- **AND** 系统 MUST 拒绝阶段推进，即使该资料基础状态为 `submitted` 或 `confirmed`
+#### Scenario: 1.2 单个中心负责人确认不放行
 
-#### Scenario: approval_required 重提后仍阻塞直到确认
-- **WHEN** 当前阶段存在 `completionMode = approval_required` 且 `revision_required = true` 的适用资料
-- **AND** 该资料已经返工重提并进入 `submitted`
-- **THEN** 系统 MUST 仍拒绝阶段推进
-- **AND** 直到该资料审核确认并清除 `revision_required` 后才可恢复推进判断
+- **WHEN** `1.2 项目立项审批表` 已被某个中心负责人或单个资料审核动作确认
+- **AND** `1.2` 的商务评价、技术评价和总经理审批尚未全部最终通过
+- **THEN** 系统 MUST NOT 将 `1.2` 计为阶段齐套完成
+- **AND** 系统 MUST NOT 因该单次确认允许第 1 阶段推进
 
-#### Scenario: submit_only submitted 计为完成
-- **WHEN** 当前阶段适用资料 `completionMode = submit_only`
-- **AND** 该资料基础状态为 `submitted`
-- **AND** `revision_required` 不是 true
-- **THEN** 系统 MUST 将该资料派生为已完成
+#### Scenario: 1.2 相关返工阻塞推进
 
-#### Scenario: approval_required submitted 不计为完成
-- **WHEN** 当前阶段适用资料 `completionMode = approval_required`
-- **AND** 该资料基础状态为 `submitted`
-- **THEN** 系统 MUST 将该资料派生为待审核且未完成
+- **WHEN** `1.2 项目立项审批表` 退回已触发 `1.1 项目需求表` 精准返工
+- **AND** `1.1` 存在未清除的 `revision_required`
+- **THEN** 系统 MUST 将 `1.2` 相关门禁视为未完成
+- **AND** 系统 MUST 拒绝第 1 阶段推进
+- **AND** 系统 MUST NOT 要求或依赖 `1.2 revision_required` 表达该阻塞
 
-#### Scenario: approval_required confirmed 计为完成
-- **WHEN** 当前阶段适用资料 `completionMode = approval_required`
-- **AND** 该资料基础状态为 `confirmed`
-- **AND** `revision_required` 不是 true
-- **THEN** 系统 MUST 将该资料派生为已完成
+#### Scenario: 1.2 自身状态阻塞推进
 
-#### Scenario: conditional_submit 复用适用性
-- **WHEN** 当前阶段资料 `completionMode = conditional_submit`
-- **AND** `isApplicable = false`
-- **THEN** 系统 MUST 将该资料视为未触发或不适用
-- **AND** 系统 MUST NOT 将该资料计入缺失资料或阶段推进阻塞项
+- **WHEN** `1.2 项目立项审批表` 存在待审、退回、未通过或其他专用多节点阻塞状态
+- **THEN** 系统 MUST 将 `1.2` 视为未完成
+- **AND** 系统 MUST 拒绝第 1 阶段推进
+- **AND** 系统 MUST NOT 将 `1.2` 自身作为返工目标写入 `revision_required`
 
-#### Scenario: conditional_submit 触发后提交完成
-- **WHEN** 当前阶段资料 `completionMode = conditional_submit`
-- **AND** `isApplicable = true`
-- **AND** 该资料基础状态为 `submitted`
-- **AND** `revision_required` 不是 true
-- **THEN** 系统 MUST 将该资料派生为已完成
+#### Scenario: 1.2 多节点全部通过后参与普通齐套
 
-#### Scenario: 当前阶段完成允许推进
-- **WHEN** 当前阶段适用资料均已按各自 `completionMode` 派生为已完成且均无 `revision_required`
-- **THEN** 系统必须视为当前阶段资料完成，并允许进入阶段推进状态更新
-
-#### Scenario: 返回缺失资料列表
-- **WHEN** 系统因缺失适用资料或需返工资料拒绝阶段推进
-- **THEN** 响应必须包含可读错误和缺失适用资料列表
-- **AND** 列表中每项至少包含 `id`、`documentCode`、`documentName`、`status`、`completionMode`、派生完成状态和返工标记
+- **WHEN** `1.2 项目立项审批表` 商务评价、技术评价和总经理审批均最终通过
+- **AND** `1.1` 不存在由 `1.2` NO 触发且未清除的 `revision_required`
+- **THEN** 系统 MUST 将 `1.2` 按专用派生完成规则计为已完成
+- **AND** 第 1 阶段仍 MUST 继续检查其他适用资料是否按各自 `completionMode` 完成
 
 ### Requirement: 项目总览看板查询接口
 
@@ -674,58 +632,62 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 
 ### Requirement: 我的工作台查询接口
 
-系统 MUST 提供当前登录用户的工作台查询接口，用于返回资料责任、资料审核和阶段推进相关待办，并 MUST 只基于当前登录态确定用户身份；当前内部资料闭环 MUST NOT 返回泛化阶段关口审批待办，且 MUST 将有责任人的精准返工资料纳入资料责任待办。
+系统 MUST 提供当前登录用户的工作台查询接口，用于返回资料责任、资料审核、`1.2` 专用多节点审批和阶段推进相关待办，并 MUST 只基于当前登录态确定用户身份；当前内部资料闭环 MUST NOT 返回泛化阶段关口审批待办，且 MUST 将有责任人的精准返工资料纳入资料责任待办。
 
-#### Scenario: 返回工作台待办类型
-- **WHEN** 系统返回工作台待办
-- **THEN** 每条待办的 `type` MUST 是 `document_responsibility`、`document_review` 或 `stage_advance` 之一
-- **AND** 系统 MUST NOT 返回 `stage_gate_approval`
+#### Scenario: 1.2 商务评价待办只给营销中心负责人
 
-#### Scenario: 资料责任待办包含需返工资料
-- **WHEN** 系统生成 `document_responsibility` 待办
-- **THEN** 只允许包含当前用户负责、适用且未按 `completionMode` 与 `revision_required` 派生完成的资料项
-- **AND** 系统 MUST 包含当前用户负责且 `revision_required = true` 的资料项
-- **AND** 系统 MUST NOT 包含 `completionMode = submit_only`、`status = submitted` 且 `revision_required` 不是 true 的资料项
+- **WHEN** `1.2 项目立项审批表` 进入商务评价审批节点
+- **THEN** 工作台 MUST 只向营销中心负责人返回对应待办
+- **AND** 工作台 MUST NOT 因用户是任意中心负责人而返回该待办
 
-#### Scenario: approval_required 返工重提前只进责任待办
-- **WHEN** 系统生成待办
-- **AND** 资料项 `completionMode = approval_required`
-- **AND** `revision_required = true`
-- **AND** 系统不能通过 `revision_resubmitted_at` 或等价显式字段判断该资料已返工重提
-- **THEN** 系统 MUST 将该资料作为责任人待办返回给责任人
-- **AND** 系统 MUST NOT 将该资料作为 `document_review` 返回给审核人
+#### Scenario: 1.2 技术评价待办只给研发中心负责人
 
-#### Scenario: 资料审核待办只包含 approval_required submitted
-- **WHEN** 系统生成 `document_review` 待办
-- **THEN** 普通资料只允许包含 `completionMode = approval_required`、`status = submitted`、`revision_required` 不是 true 且当前用户具备资料审核权限的资料项
-- **AND** `revision_required = true` 的资料只有在系统可通过 `revision_resubmitted_at` 或等价显式字段判断已返工重提后，才可纳入审核待办
-- **AND** 系统 MUST NOT 用 `submittedAt` 与 `revision_requested_at` 的时间比较替代显式重提标记
-- **AND** 系统 MUST NOT 仅因 `revision_required = true` 或仅因旧 `status = submitted` 将资料纳入审核待办
-- **AND** 系统 MUST NOT 将 `submit_only` 或未触发的 `conditional_submit` 资料纳入审核待办
+- **WHEN** `1.2 项目立项审批表` 进入技术评价审批节点
+- **THEN** 工作台 MUST 只向研发中心负责人返回对应待办
+- **AND** 工作台 MUST NOT 因用户是任意中心负责人而返回该待办
 
-#### Scenario: approval_required 返工重提后进入审核待办
-- **WHEN** 系统生成 `document_review` 待办
-- **AND** 资料项 `completionMode = approval_required`
-- **AND** `revision_required = true`
-- **AND** `status = submitted`
-- **AND** 系统可通过 `revision_resubmitted_at` 或等价显式字段判断该资料已返工重提
-- **THEN** 系统 MUST 将该资料返回给符合审核权限的审核人
-- **AND** 系统 MUST 保持该资料未完成，直到审核确认清除 `revision_required`
+#### Scenario: 1.2 商务技术并行待办同时出现
 
-#### Scenario: 阶段推进待办按 completionMode 返工门禁和权限
-- **WHEN** 系统生成 `stage_advance` 待办
-- **THEN** 只允许在当前阶段适用资料均按 `completionMode` 完成、没有 `revision_required` 且当前用户具备推进权限时返回
-- **AND** 系统 MUST NOT 因 `approval_status` 生成或隐藏阶段推进待办
+- **WHEN** `1.2 项目立项审批表` 基础状态达到 `submitted`
+- **OR** 既有兼容数据中的 `1.2` 基础状态为 `confirmed`
+- **THEN** 工作台 MUST 同时向营销中心负责人返回 `business_review` 待办、向研发中心负责人返回 `technical_review` 待办
+- **AND** 当营销中心负责人查询工作台时，系统 MUST 返回 `business_review` 待办
+- **AND** 当研发中心负责人查询工作台时，系统 MUST 返回 `technical_review` 待办
+- **AND** 二者 MUST NOT 互相等待或互相阻塞
 
-#### Scenario: targetRoute 不进入阶段关口审批页
-- **WHEN** 系统返回工作台待办列表
-- **THEN** 每条待办的 `targetRoute` MUST 指向资料项处理位置、受限任务视图或阶段推进位置
-- **AND** `targetRoute` MUST NOT 指向阶段关口审批处理页、阶段审批通过页或阶段审批退回页
+#### Scenario: 1.2 未提交不生成商务技术待办
 
-#### Scenario: 无责任人返工不进入个人工作台
-- **WHEN** 资料项 `revision_required = true` 且没有责任人
-- **THEN** 系统 MUST NOT 将其放入任意用户个人工作台
-- **AND** 系统 MUST 继续通过项目详情资料清单返回该资料，供项目经理或有权限负责人先分配责任人
+- **WHEN** `1.2 项目立项审批表` 基础状态为 `not_submitted`
+- **AND** `business_review`、`technical_review` 和 `general_review` 节点已预创建
+- **THEN** 工作台 MUST NOT 向营销中心负责人返回 `business_review` 待办
+- **AND** 工作台 MUST NOT 向研发中心负责人返回 `technical_review` 待办
+
+#### Scenario: 1.2 returned 重新提交前不生成商务技术待办
+
+- **WHEN** `1.2 项目立项审批表` 基础状态为 `returned`
+- **THEN** 工作台 MUST NOT 向营销中心负责人返回 `business_review` 待办
+- **AND** 工作台 MUST NOT 向研发中心负责人返回 `technical_review` 待办
+- **AND** 系统 MUST 等待普通 `1.2` 资料重新提交后再激活商务评价和技术评价审批
+- **AND** 该 `returned` 只表示历史或兼容的普通资料基础状态 `returned`
+- **AND** 系统 MUST NOT 将 `business_review`、`technical_review` 或 `general_review` 节点退回映射为普通资料基础状态 `returned`
+
+#### Scenario: 1.2 总经理审批待办后置生成
+
+- **WHEN** `1.2 项目立项审批表` 的商务评价审批和技术评价审批均已通过
+- **THEN** 工作台 MUST 生成总经理审批待办
+- **AND** 工作台 MUST 只向总经理返回对应待办
+- **AND** 工作台 MUST NOT 向总经理助理、中心负责人或项目创建人自动返回该审批待办
+
+#### Scenario: 1.2 总经理审批待办不得提前生成
+
+- **WHEN** `business_review` 或 `technical_review` 任一节点尚未 `approved`
+- **THEN** 工作台 MUST NOT 生成 `general_review` 总经理审批待办
+
+#### Scenario: 1.2 多节点审批不恢复泛化阶段关口待办
+
+- **WHEN** 系统生成 `1.2 项目立项审批表` 多节点审批待办
+- **THEN** 工作台 MUST 使用专用 `1.2` 发起/审批待办类型或等价资料专项待办
+- **AND** 工作台 MUST NOT 生成 `stage_gate_approval` 或泛化阶段关口审批待办
 
 ### Requirement: 项目基础可见与资料访问分离
 
@@ -1064,39 +1026,30 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 
 ### Requirement: 在线平台项目编号后置
 
-系统 MUST 支持项目创建初期没有正式项目编号，并 MUST 在 `1.2 项目立项审批表` 审核通过且 `1.3 项目立项通知` 提交或上传完成后填写或生成正式 `projectCode`。
-
-#### Scenario: 创建项目允许 projectCode 为空
-- **WHEN** 有权限用户创建项目且项目尚未完成立项审批
-- **THEN** 系统 MUST 允许 `projectCode` 为空
-- **AND** 系统 MUST NOT 因 `projectCode` 为空拒绝创建
-
-#### Scenario: 空项目编号仍初始化项目闭环对象
-- **WHEN** 系统创建 `projectCode` 为空的项目
-- **THEN** 系统 MUST 保存项目主数据
-- **AND** 系统 MUST 初始化标准 8 阶段
-- **AND** 系统 MUST 初始化当前 20260625 64 项项目级阶段资料清单
-- **AND** 系统 MUST 记录 `project.created` 业务操作日志
-
-#### Scenario: 非空 projectCode 唯一
-- **WHEN** 系统填写、生成或更新非空 `projectCode`
-- **THEN** 系统 MUST 校验该编号在项目主数据中唯一
-- **AND** 系统 MUST 拒绝与已有非空项目编号重复的保存请求
-
-#### Scenario: 空 projectCode 不参与唯一冲突
-- **WHEN** 多个尚未立项的项目暂未生成 `projectCode`
-- **THEN** 系统 MUST 允许这些项目同时保持空 `projectCode`
+系统 MUST 支持项目创建初期没有正式项目编号，并 MUST 在 `1.2 项目立项审批表` 多节点最终审批通过且 `1.3 项目立项通知` 提交或上传完成后填写或生成正式 `projectCode`。
 
 #### Scenario: 后置项目编号节点
-- **WHEN** `1.2 项目立项审批表` 已按 `approval_required` 审核通过
-- **AND** `1.3 项目立项通知` 已按 `submit_only` 提交或上传完成
-- **THEN** 系统 MUST 允许填写或生成 `projectCode`
-- **AND** 系统 MUST 沿用项目维护权限、项目经理、管理员或等价现有权限边界，不新增复杂权限模型
 
-#### Scenario: 后置项目编号不重建项目对象
-- **WHEN** 项目立项审批通过且项目立项通知提交后填写或生成 `projectCode`
-- **THEN** 系统 MUST 只更新项目编号及必要追溯字段
-- **AND** 系统 MUST NOT 重新初始化项目阶段、阶段资料或附件
+- **WHEN** `1.2 项目立项审批表` 商务评价审批、技术评价审批和总经理审批均最终通过
+- **AND** `1.3 项目立项通知` 已按 `submit_only` 提交或上传完成
+- **AND** `1.1 项目需求表` 不存在由 `1.2` NO 触发且未清除的 `revision_required`
+- **AND** `1.2 项目立项审批表` 不存在待审、退回、未通过或其他专用多节点阻塞状态
+- **THEN** 系统 MUST 允许填写或生成 `projectCode`
+- **AND** 系统 MUST 沿用项目维护权限、项目经理或等价业务项目编号维护权限，不新增复杂权限模型
+- **AND** 系统 MUST NOT 因当前用户仅具备系统管理员身份而允许填写或生成 `projectCode`
+
+#### Scenario: 商务或技术单独通过不生成编号
+
+- **WHEN** `1.2 项目立项审批表` 仅商务评价审批通过或仅技术评价审批通过
+- **THEN** 系统 MUST NOT 将项目编号填写门禁视为满足
+- **AND** 系统 MUST NOT 因单个节点通过提前生成正式 `projectCode`
+
+#### Scenario: 系统管理员不默认拥有项目编号填写权限
+
+- **WHEN** 当前用户仅具备系统管理员身份
+- **AND** 不具备项目维护权限、项目经理权限或等价业务项目编号维护权限
+- **THEN** 系统 MUST NOT 允许其填写或生成 `projectCode`
+- **AND** 系统 MUST NOT 将系统管理员平台维护职责解释为业务项目编号维护职责
 
 ### Requirement: 在线平台 completionMode 阶段推进
 
@@ -1216,3 +1169,106 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 #### Scenario: 工作台不发送通知
 - **WHEN** 系统生成需返工工作台数据
 - **THEN** 系统 MUST NOT 因本 change 创建推送通知、站内信、短信或邮件
+
+### Requirement: 1.2 项目立项多节点审批
+
+系统 MUST 将 `1.2 项目立项审批表` 规划为专用多节点审批资料；该能力只适用于 `1.2`，不得扩展为通用审批流引擎。
+
+#### Scenario: 1.2 必须多节点最终通过
+
+- **WHEN** 系统判断 `1.2 项目立项审批表` 是否最终完成
+- **THEN** 系统 MUST 同时要求商务评价审批通过、技术评价审批通过和总经理审批通过
+- **AND** 系统 MUST 要求 `1.1` 不存在由 `1.2` NO 触发且未清除的 `revision_required`
+- **AND** 系统 MUST 要求 `1.2` 自身不存在待审、退回、未通过或其他专用多节点阻塞状态
+
+#### Scenario: 1.2 保持在 64 项模板内
+
+- **WHEN** 系统规划或初始化 20260625 阶段资料模板
+- **THEN** `1.2 项目立项审批表` MUST 仍是 64 项普通阶段资料之一
+- **AND** `1.2` MUST 仍计入既有 `approval_required` 数量口径
+
+#### Scenario: 既有项目初始化 1.2 审批节点
+
+- **WHEN** 后续 migration 或幂等初始化逻辑处理既有项目中适用的 `1.2 项目立项审批表`
+- **THEN** 系统 MUST 创建 `business_review`、`technical_review` 和 `general_review` 三类专用审批节点
+- **AND** 当 `1.2 status = not_submitted` 时，`business_review` 和 `technical_review` MUST 等待资料提交且不得生成审批待办，`general_review` MUST 为未开始或等待前置
+- **AND** 当 `1.2 status = submitted` 时，`business_review` 和 `technical_review` MUST 初始化为待处理或可处理状态，`general_review` MUST 为未开始或等待前置
+- **AND** 当既有 `1.2 status = confirmed` 时，系统 MUST 将其作为资料已提交过的兼容输入，使 `business_review` 和 `technical_review` 初始化为待处理或可处理状态，`general_review` MUST 为未开始或等待前置
+- **AND** 当 `1.2 status = returned` 时，`business_review` 和 `technical_review` MUST 等待普通 `1.2` 资料重新提交且不得生成审批待办
+
+#### Scenario: 旧 confirmed 不得绕过多节点门禁
+
+- **WHEN** 既有项目的 `1.2 项目立项审批表` 在普通资料状态中已经是 `confirmed`
+- **AND** 专用多节点审批尚未满足 `business_review approved`、`technical_review approved` 和 `general_review approved`
+- **THEN** 系统 MUST NOT 将旧 `confirmed` 解释为 `1.2` 多节点最终通过
+- **AND** 系统 MUST NOT 因旧 `confirmed` 放行第 1 阶段推进或项目编号填写门禁
+
+#### Scenario: 商务技术并行审批
+
+- **WHEN** `1.2 项目立项审批表` 基础状态达到 `submitted`
+- **OR** 既有兼容数据中的 `1.2` 基础状态为 `confirmed`
+- **THEN** `business_review` 和 `technical_review` MUST 并行进入可处理状态
+- **AND** 系统 MUST NOT 要求商务评价先于技术评价或技术评价先于商务评价
+
+#### Scenario: 普通 1.2 资料提交激活多节点审批
+
+- **WHEN** 用户通过既有资料提交或上传入口将 `1.2 项目立项审批表` 基础状态提交为 `submitted`
+- **THEN** 系统 MUST 激活 `business_review` 和 `technical_review`
+- **AND** 系统 MUST NOT 要求前端调用单独的 `1.2` 节点提交动作
+- **AND** `general_review` MUST 继续等待商务评价和技术评价均通过
+
+#### Scenario: 审批人规则已确认
+
+- **WHEN** 系统设计 `1.2` 商务评价审批人和技术评价审批人
+- **THEN** 商务评价审批人 MUST 固定为营销中心负责人
+- **AND** 技术评价审批人 MUST 固定为研发中心负责人
+- **AND** 总经理审批人 MUST 为总经理
+
+#### Scenario: 总经理节点前置条件
+
+- **WHEN** `business_review` 和 `technical_review` 均已 `approved`
+- **THEN** 系统 MUST 生成或激活 `general_review`
+- **AND** 在二者均通过前，`general_review` MUST 保持未开始、等待前置或不可处理状态
+
+#### Scenario: 商务退回保留技术通过并失效总经理节点
+
+- **WHEN** `business_review` 被退回
+- **THEN** `business_review` MUST 进入退回阻塞状态，并在关联 `1.1` 返工清除后由后端自动回到待处理或可处理状态
+- **AND** 系统 MUST NOT 将 `1.2` 普通资料基础状态置为 `returned`
+- **AND** 已 `approved` 的 `technical_review` MUST 保留通过结果
+- **AND** 已生成或已通过的 `general_review` MUST 失效、清空或回到 `not_started`
+
+#### Scenario: 技术退回保留商务通过并失效总经理节点
+
+- **WHEN** `technical_review` 被退回
+- **THEN** `technical_review` MUST 进入退回阻塞状态，并在关联 `1.1` 返工清除后由后端自动回到待处理或可处理状态
+- **AND** 系统 MUST NOT 将 `1.2` 普通资料基础状态置为 `returned`
+- **AND** 已 `approved` 的 `business_review` MUST 保留通过结果
+- **AND** 已生成或已通过的 `general_review` MUST 失效、清空或回到 `not_started`
+
+#### Scenario: 总经理退回保留商务技术通过
+
+- **WHEN** `general_review` 被退回
+- **THEN** `general_review` MUST 进入退回阻塞状态，并在关联 `1.1` 返工清除后由后端自动回到待处理或可处理状态
+- **AND** 系统 MUST NOT 将 `1.2` 普通资料基础状态置为 `returned`
+- **AND** 已 `approved` 的 `business_review` 和 `technical_review` MUST 保留通过结果
+
+#### Scenario: 节点退回返工清除后无需普通 1.2 重新提交
+
+- **WHEN** `business_review`、`technical_review` 或 `general_review` 节点退回并触发 `1.1 revision_required`
+- **AND** `1.1 revision_required` 已清除
+- **THEN** 系统 MUST 按专用节点状态自动将被退回节点回到待审批或可处理状态
+- **AND** 系统 MUST 将该节点重新返回给对应节点审批人的待办
+- **AND** 系统 MUST NOT 要求普通 `1.2` 资料重新提交
+
+#### Scenario: 不放宽业务操作权限
+
+- **WHEN** 总经理助理、中心负责人、项目创建人或项目经理因项目查看规则能查看项目和 `1.2` 状态
+- **THEN** 系统 MUST NOT 因查看权限授予其商务评价、技术评价或总经理审批操作权限
+
+#### Scenario: 不处理文件平台和推送
+
+- **WHEN** 系统处理 `1.2` 多节点审批
+- **THEN** 系统 MUST NOT 调用文件管理平台
+- **AND** 系统 MUST NOT 因节点状态变化发送推送通知、站内信、短信或邮件
+

@@ -12,6 +12,7 @@ import {
   isValidBusinessDepartment
 } from '../../domain/organization.js';
 import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
+import { isInitiationReviewDocument } from '../../domain/initiationReview.js';
 import {
   getDocumentCompletionMode,
   isReviewCompletionMode,
@@ -108,6 +109,10 @@ export function isStageDocumentReviewAuthority(user, document) {
 }
 
 export function canReviewStageDocument(user, document) {
+  if (isInitiationReviewDocument(document)) {
+    return false;
+  }
+
   return (
     getDocumentStatus(document) === DOCUMENT_STATUS.SUBMITTED &&
     isReviewCompletionMode(getDocumentCompletionMode(document)) &&

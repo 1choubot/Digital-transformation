@@ -211,7 +211,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'PROJECT_CODE_GATE_NOT_READY') {
-    return '项目编号需在 1.2 项目立项审批表审核通过且 1.3 项目立项通知提交后填写。';
+    return '项目编号需在 1.2 多节点审批最终通过、1.3 项目立项通知提交且相关返工清除后填写。';
   }
 
   if (error.code === 'PROJECT_NOT_FOUND') {
@@ -244,6 +244,26 @@ export function toReadableApiError(error) {
 
   if (error.code === 'DOCUMENT_REVIEW_NOT_REQUIRED') {
     return '该资料提交后即完成，不需要执行审核通过或退回。';
+  }
+
+  if (error.code === 'INITIATION_REVIEW_REQUIRES_DEDICATED_ENDPOINT') {
+    return '1.2 项目立项审批表需使用专用多节点审批，不能走普通资料确认或退回。';
+  }
+
+  if (error.code === 'INITIATION_REVIEW_DOCUMENT_NOT_SUBMITTED') {
+    return '请先通过普通资料入口提交 1.2 项目立项审批表。';
+  }
+
+  if (error.code === 'INVALID_INITIATION_REVIEW_NODE_STATUS') {
+    return '当前 1.2 审批节点不是待审批状态，请刷新后重试。';
+  }
+
+  if (error.code === 'INITIATION_REVIEW_PREREQUISITE_NOT_READY') {
+    return '商务评价和技术评价均通过后，才能处理总经理审批。';
+  }
+
+  if (error.code === 'INITIATION_REVIEW_REWORK_BLOCKED') {
+    return '1.1 项目需求表返工未清除，暂不能通过被退回的 1.2 审批节点。';
   }
 
   if (error.code === 'REVISION_TARGETS_REQUIRED') {

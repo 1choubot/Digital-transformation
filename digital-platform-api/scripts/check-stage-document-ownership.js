@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { closePool, pool } from '../src/db/pool.js';
+import { ensureStageDocumentSchema } from '../src/db/stageDocumentSchema.js';
 import {
   BUSINESS_DEPARTMENT,
   ORGANIZATION_ROLE,
@@ -40,11 +41,14 @@ import {
 } from '../src/repositories/projectRepository.js';
 import { listProjectOperationLogs } from '../src/repositories/operationLogRepository.js';
 import {
+  approveInitiationReviewNode,
   completeProjectStageDocumentRevision,
   getProjectStageDocumentChecklist,
   getMyWorkbench,
+  initializeInitiationReviewNodesForExistingProjects,
   listMyStageDocumentTasks,
   normalizeStageDocumentTaskFilters,
+  returnInitiationReviewNode,
   updateProjectStageDocumentStatus
 } from '../src/repositories/stageDocumentRepository.js';
 import {
@@ -191,6 +195,33 @@ async function selectSmokeDocument(projectId, documentCode) {
   return row;
 }
 
+async function selectInitiationReviewNodes(projectId) {
+  const [rows] = await pool.execute(
+    `SELECT n.*
+     FROM project_initiation_review_nodes n
+     INNER JOIN project_stage_documents d
+       ON d.id = n.stage_document_id
+     WHERE n.project_id = ?
+       AND d.document_code = '1.2'
+     ORDER BY FIELD(n.node_key, 'business_review', 'technical_review', 'general_review')`,
+    [projectId]
+  );
+
+  return rows;
+}
+
+async function selectInitiationReviewNode(projectId, nodeKey) {
+  const node = (await selectInitiationReviewNodes(projectId)).find((candidate) => candidate.node_key === nodeKey);
+  assert.ok(node, `Initiation review node not found: ${projectId}/${nodeKey}`);
+  return node;
+}
+
+function assertInitiationNodeStatus(nodes, nodeKey, expectedStatus) {
+  const node = nodes.find((candidate) => candidate.node_key === nodeKey);
+  assert.ok(node, `Initiation review node missing: ${nodeKey}`);
+  assert.equal(node.node_status, expectedStatus, `Unexpected ${nodeKey} status`);
+}
+
 async function countSmokeProjectObjects(projectId) {
   const [stageRows] = await pool.execute(
     'SELECT COUNT(*) AS count FROM project_stages WHERE project_id = ?',
@@ -212,24 +243,52 @@ async function countSmokeProjectObjects(projectId) {
   };
 }
 
-async function completeInitiationGate(projectId) {
+async function completeInitiationGate(projectId, { submitterUser, marketingManagerUser, rdManagerUser, generalManagerUser }) {
   await pool.execute(
     `UPDATE project_stage_documents
      SET status = CASE document_code
        WHEN '1.1' THEN ?
-       WHEN '1.2' THEN ?
        WHEN '1.3' THEN ?
        ELSE status
      END
      WHERE project_id = ?
-       AND document_code IN ('1.1', '1.2', '1.3')`,
+       AND document_code IN ('1.1', '1.3')`,
     [
       DOCUMENT_STATUS.SUBMITTED,
-      DOCUMENT_STATUS.CONFIRMED,
       DOCUMENT_STATUS.SUBMITTED,
       projectId
     ]
   );
+  const initiationDocument = await selectSmokeDocument(projectId, '1.2');
+  if (initiationDocument.status !== DOCUMENT_STATUS.SUBMITTED) {
+    await updateProjectStageDocumentStatus({
+      projectId,
+      documentId: initiationDocument.id,
+      action: DOCUMENT_STATUS_ACTION.SUBMIT,
+      user: submitterUser
+    });
+  }
+  await approveInitiationReviewNode({
+    projectId,
+    documentId: initiationDocument.id,
+    nodeKey: 'business_review',
+    user: marketingManagerUser,
+    comment: 'smoke business approval'
+  });
+  await approveInitiationReviewNode({
+    projectId,
+    documentId: initiationDocument.id,
+    nodeKey: 'technical_review',
+    user: rdManagerUser,
+    comment: 'smoke technical approval'
+  });
+  await approveInitiationReviewNode({
+    projectId,
+    documentId: initiationDocument.id,
+    nodeKey: 'general_review',
+    user: generalManagerUser,
+    comment: 'smoke general approval'
+  });
 }
 
 async function completeStageExcept(projectId, stageOrder, blockedDocumentCode) {
@@ -487,6 +546,550 @@ async function cleanupSmokeProjects(projectIds, storageKeys, userIds = []) {
   }
 }
 
+async function createInitiationSmokeProject({
+  uniqueSuffix,
+  projectManagerUser,
+  createdByUserId,
+  label,
+  smokeProjectIds
+}) {
+  const created = await createProject(
+    {
+      projectCode: null,
+      projectName: `1.2 多节点 smoke ${label} ${uniqueSuffix}`,
+      customerName: 'Smoke 客户',
+      projectMode: 'self_developed',
+      projectManagerUserId: projectManagerUser.id,
+      participatingDepartments: [RD_CENTER, MARKETING_CENTER],
+      status: 'normal',
+      plannedStartDate: null,
+      plannedEndDate: null,
+      remark: 'add-initiation-multi-review-flow smoke'
+    },
+    createdByUserId
+  );
+  smokeProjectIds.push(created.project.id);
+  return created.project.id;
+}
+
+async function prepareInitiationSmokeBase(projectId, submitterUser) {
+  await pool.execute(
+    `UPDATE project_stage_documents
+     SET status = CASE document_code
+       WHEN '1.1' THEN ?
+       WHEN '1.3' THEN ?
+       ELSE status
+     END,
+       revision_required = 0,
+       revision_source_document_id = NULL,
+       revision_resubmitted_by_user_id = NULL,
+       revision_resubmitted_at = NULL,
+       is_applicable = 1
+     WHERE project_id = ?
+       AND document_code IN ('1.1', '1.3')`,
+    [DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.SUBMITTED, projectId]
+  );
+  const initiationDocument = await selectSmokeDocument(projectId, '1.2');
+  await updateProjectStageDocumentStatus({
+    projectId,
+    documentId: initiationDocument.id,
+    action: DOCUMENT_STATUS_ACTION.SUBMIT,
+    user: submitterUser
+  });
+
+  return selectSmokeDocument(projectId, '1.2');
+}
+
+async function assertNoInitiationWorkbenchTask(user, projectId, nodeKey = null) {
+  const workbench = await getMyWorkbench(user);
+  assert.equal(
+    workbench.items.some(
+      (item) =>
+        item.type === 'initiation_review' &&
+        item.projectId === projectId &&
+        (nodeKey === null || item.nodeKey === nodeKey)
+    ),
+    false
+  );
+}
+
+async function assertHasInitiationWorkbenchTask(user, projectId, nodeKey) {
+  const workbench = await getMyWorkbench(user);
+  assert.ok(
+    workbench.items.some(
+      (item) => item.type === 'initiation_review' && item.projectId === projectId && item.nodeKey === nodeKey
+    ),
+    `Expected initiation review workbench task ${projectId}/${nodeKey}`
+  );
+}
+
+async function runInitiationReviewSmoke({
+  uniqueSuffix,
+  smokeProjectIds,
+  smokeUserIds,
+  managerUser,
+  marketingManagerUser,
+  generalManagerUser,
+  systemAdminUser
+}) {
+  const projectId = await createInitiationSmokeProject({
+    uniqueSuffix,
+    projectManagerUser: managerUser,
+    createdByUserId: managerUser.id,
+    label: 'gate',
+    smokeProjectIds
+  });
+  const initiationDocument = await prepareInitiationSmokeBase(projectId, managerUser);
+  let nodes = await selectInitiationReviewNodes(projectId);
+  assert.equal(nodes.length, 3);
+  assertInitiationNodeStatus(nodes, 'business_review', 'pending');
+  assertInitiationNodeStatus(nodes, 'technical_review', 'pending');
+  assertInitiationNodeStatus(nodes, 'general_review', 'waiting_prerequisite');
+  await assertHasInitiationWorkbenchTask(marketingManagerUser, projectId, 'business_review');
+  await assertHasInitiationWorkbenchTask(managerUser, projectId, 'technical_review');
+  await assertNoInitiationWorkbenchTask(generalManagerUser, projectId, 'general_review');
+  await assertNoInitiationWorkbenchTask(
+    departmentUser(9101, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER),
+    projectId
+  );
+
+  await assert.rejects(
+    () =>
+      updateProjectStageDocumentStatus({
+        projectId,
+        documentId: initiationDocument.id,
+        action: DOCUMENT_STATUS_ACTION.CONFIRM,
+        user: marketingManagerUser
+      }),
+    (error) => error.code === 'INITIATION_REVIEW_REQUIRES_DEDICATED_ENDPOINT'
+  );
+  await assert.rejects(
+    () =>
+      updateProjectStageDocumentStatus({
+        projectId,
+        documentId: initiationDocument.id,
+        action: DOCUMENT_STATUS_ACTION.RETURN,
+        user: marketingManagerUser,
+        returnReason: 'ordinary return should fail'
+      }),
+    (error) => error.code === 'INITIATION_REVIEW_REQUIRES_DEDICATED_ENDPOINT'
+  );
+  const requirementAfterOrdinaryReturn = await selectSmokeDocument(projectId, '1.1');
+  assert.equal(Boolean(requirementAfterOrdinaryReturn.revision_required), false);
+
+  await assert.rejects(
+    () =>
+      approveInitiationReviewNode({
+        projectId,
+        documentId: initiationDocument.id,
+        nodeKey: 'business_review',
+        user: departmentUser(9102, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER)
+      }),
+    (error) => error.code === 'FORBIDDEN_OPERATION'
+  );
+
+  await approveInitiationReviewNode({
+    projectId,
+    documentId: initiationDocument.id,
+    nodeKey: 'business_review',
+    user: marketingManagerUser,
+    comment: 'business only'
+  });
+  const checklistAfterBusiness = await getProjectStageDocumentChecklist(projectId, managerUser);
+  const initiationAfterBusiness = checklistAfterBusiness.stages
+    .flatMap((stage) => stage.documents)
+    .find((document) => document.documentCode === '1.2');
+  assert.equal(initiationAfterBusiness.isComplete, false);
+  await assert.rejects(
+    () => advanceProjectStage(projectId, managerUser),
+    (error) =>
+      error instanceof ProjectStageAdvanceError &&
+      error.code === 'PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE' &&
+      error.details.incompleteRequiredDocuments.some((document) => document.documentCode === '1.2')
+  );
+  await assert.rejects(
+    () =>
+      updateProjectCode({
+        projectId,
+        projectCode: `SMOKE-INIT-SINGLE-${uniqueSuffix}`,
+        user: managerUser
+      }),
+    (error) => error instanceof ProjectCodeUpdateError && error.code === 'PROJECT_CODE_GATE_NOT_READY'
+  );
+  await assertNoInitiationWorkbenchTask(generalManagerUser, projectId, 'general_review');
+
+  await approveInitiationReviewNode({
+    projectId,
+    documentId: initiationDocument.id,
+    nodeKey: 'technical_review',
+    user: managerUser,
+    comment: 'technical approval'
+  });
+  await assertHasInitiationWorkbenchTask(generalManagerUser, projectId, 'general_review');
+  await approveInitiationReviewNode({
+    projectId,
+    documentId: initiationDocument.id,
+    nodeKey: 'general_review',
+    user: generalManagerUser,
+    comment: 'general approval'
+  });
+  const checklistAfterAll = await getProjectStageDocumentChecklist(projectId, managerUser);
+  const initiationAfterAll = checklistAfterAll.stages
+    .flatMap((stage) => stage.documents)
+    .find((document) => document.documentCode === '1.2');
+  assert.equal(initiationAfterAll.isComplete, true);
+  await pool.execute(
+    `UPDATE project_stage_documents
+     SET revision_required = 1,
+       revision_reason = ?,
+       revision_source_document_id = ?,
+       revision_requested_by_user_id = ?,
+       revision_requested_at = CURRENT_TIMESTAMP,
+       revision_resubmitted_by_user_id = NULL,
+       revision_resubmitted_at = NULL,
+       revision_completed_by_user_id = NULL,
+       revision_completed_at = NULL
+     WHERE project_id = ?
+       AND document_code = '1.1'`,
+    ['project-code gate rework smoke', initiationDocument.id, marketingManagerUser.id, projectId]
+  );
+  await assert.rejects(
+    () =>
+      updateProjectCode({
+        projectId,
+        projectCode: `SMOKE-INIT-REWORK-GATE-${uniqueSuffix}`,
+        user: managerUser
+      }),
+    (error) =>
+      error instanceof ProjectCodeUpdateError &&
+      error.code === 'PROJECT_CODE_GATE_NOT_READY' &&
+      Array.isArray(error.details) &&
+      error.details.includes('1.1')
+  );
+  await pool.execute(
+    `UPDATE project_stage_documents
+     SET revision_required = 0,
+       revision_reason = NULL,
+       revision_source_document_id = NULL,
+       revision_requested_by_user_id = NULL,
+       revision_requested_at = NULL,
+       revision_resubmitted_by_user_id = NULL,
+       revision_resubmitted_at = NULL,
+       revision_completed_by_user_id = NULL,
+       revision_completed_at = NULL
+     WHERE project_id = ?
+       AND document_code = '1.1'`,
+    [projectId]
+  );
+  await assert.rejects(
+    () =>
+      updateProjectCode({
+        projectId,
+        projectCode: `SMOKE-INIT-ADMIN-${uniqueSuffix}`,
+        user: systemAdminUser
+      }),
+    (error) => error.code === 'FORBIDDEN_OPERATION'
+  );
+  await updateProjectCode({
+    projectId,
+    projectCode: `SMOKE-INIT-${uniqueSuffix}`,
+    user: managerUser
+  });
+  await advanceProjectStage(projectId, managerUser);
+
+  const returnProjectId = await createInitiationSmokeProject({
+    uniqueSuffix,
+    projectManagerUser: managerUser,
+    createdByUserId: managerUser.id,
+    label: 'return',
+    smokeProjectIds
+  });
+  const returnInitiationDocument = await prepareInitiationSmokeBase(returnProjectId, managerUser);
+  await approveInitiationReviewNode({
+    projectId: returnProjectId,
+    documentId: returnInitiationDocument.id,
+    nodeKey: 'technical_review',
+    user: managerUser,
+    comment: 'technical retained'
+  });
+  const checklistAfterTechnicalOnly = await getProjectStageDocumentChecklist(returnProjectId, managerUser);
+  const initiationAfterTechnicalOnly = checklistAfterTechnicalOnly.stages
+    .flatMap((stage) => stage.documents)
+    .find((document) => document.documentCode === '1.2');
+  assert.equal(initiationAfterTechnicalOnly.isComplete, false);
+  await assert.rejects(
+    () => advanceProjectStage(returnProjectId, managerUser),
+    (error) =>
+      error instanceof ProjectStageAdvanceError &&
+      error.code === 'PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE' &&
+      error.details.incompleteRequiredDocuments.some((document) => document.documentCode === '1.2')
+  );
+  await assert.rejects(
+    () =>
+      updateProjectCode({
+        projectId: returnProjectId,
+        projectCode: `SMOKE-INIT-TECH-ONLY-${uniqueSuffix}`,
+        user: managerUser
+      }),
+    (error) => error instanceof ProjectCodeUpdateError && error.code === 'PROJECT_CODE_GATE_NOT_READY'
+  );
+  await assert.rejects(
+    () =>
+      returnInitiationReviewNode({
+        projectId: returnProjectId,
+        documentId: returnInitiationDocument.id,
+        nodeKey: 'business_review',
+        user: marketingManagerUser,
+        returnReason: ''
+      }),
+    (error) => error.code === 'RETURN_REASON_REQUIRED'
+  );
+  await assert.rejects(
+    () =>
+      returnInitiationReviewNode({
+        projectId: returnProjectId,
+        documentId: returnInitiationDocument.id,
+        nodeKey: 'business_review',
+        user: departmentUser(9103, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER),
+        returnReason: 'unauthorized return should fail'
+      }),
+    (error) => error.code === 'FORBIDDEN_OPERATION'
+  );
+  const returnedNodeDocument = await returnInitiationReviewNode({
+    projectId: returnProjectId,
+    documentId: returnInitiationDocument.id,
+    nodeKey: 'business_review',
+    user: marketingManagerUser,
+    returnReason: 'business return to 1.1'
+  });
+  assert.equal(returnedNodeDocument.initiationReview.blockedByRework, true);
+  assert.ok(
+    returnedNodeDocument.initiationReview.blockingReasons.some((reason) =>
+      String(reason).includes('1.1 项目需求表返工未清除')
+    )
+  );
+  const returnedRequirement = await selectSmokeDocument(returnProjectId, '1.1');
+  const returnedInitiation = await selectSmokeDocument(returnProjectId, '1.2');
+  nodes = await selectInitiationReviewNodes(returnProjectId);
+  assert.equal(Boolean(returnedRequirement.revision_required), true);
+  assert.equal(String(returnedRequirement.revision_source_document_id), String(returnInitiationDocument.id));
+  assert.equal(Boolean(returnedInitiation.revision_required), false);
+  assert.equal(returnedInitiation.status, DOCUMENT_STATUS.SUBMITTED);
+  assertInitiationNodeStatus(nodes, 'business_review', 'returned_blocked_by_rework');
+  assertInitiationNodeStatus(nodes, 'technical_review', 'approved');
+  assert.ok(['waiting_prerequisite', 'invalidated'].includes(
+    nodes.find((node) => node.node_key === 'general_review').node_status
+  ));
+  await assert.rejects(
+    () =>
+      approveInitiationReviewNode({
+        projectId: returnProjectId,
+        documentId: returnInitiationDocument.id,
+        nodeKey: 'business_review',
+        user: marketingManagerUser
+      }),
+    (error) => error.code === 'INITIATION_REVIEW_REWORK_BLOCKED' || error.code === 'INVALID_INITIATION_REVIEW_NODE_STATUS'
+  );
+  await assert.rejects(
+    () => advanceProjectStage(returnProjectId, managerUser),
+    (error) =>
+      error instanceof ProjectStageAdvanceError &&
+      error.code === 'PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE' &&
+      error.details.incompleteRequiredDocuments.some((document) => document.documentCode === '1.1')
+  );
+  await assert.rejects(
+    () =>
+      updateProjectCode({
+        projectId: returnProjectId,
+        projectCode: `SMOKE-INIT-REWORK-${uniqueSuffix}`,
+        user: managerUser
+      }),
+    (error) => error instanceof ProjectCodeUpdateError && error.code === 'PROJECT_CODE_GATE_NOT_READY'
+  );
+  await completeProjectStageDocumentRevision({
+    projectId: returnProjectId,
+    documentId: returnedRequirement.id,
+    user: managerUser
+  });
+  nodes = await selectInitiationReviewNodes(returnProjectId);
+  assertInitiationNodeStatus(nodes, 'business_review', 'pending');
+  assertInitiationNodeStatus(nodes, 'technical_review', 'approved');
+  assert.notEqual(
+    nodes.find((node) => node.node_key === 'business_review').node_status,
+    'approved'
+  );
+  await assertHasInitiationWorkbenchTask(marketingManagerUser, returnProjectId, 'business_review');
+  await approveInitiationReviewNode({
+    projectId: returnProjectId,
+    documentId: returnInitiationDocument.id,
+    nodeKey: 'business_review',
+    user: marketingManagerUser,
+    comment: 'business rerun approval'
+  });
+  await assertHasInitiationWorkbenchTask(generalManagerUser, returnProjectId, 'general_review');
+  await returnInitiationReviewNode({
+    projectId: returnProjectId,
+    documentId: returnInitiationDocument.id,
+    nodeKey: 'general_review',
+    user: generalManagerUser,
+    returnReason: 'general return preserves parallel'
+  });
+  nodes = await selectInitiationReviewNodes(returnProjectId);
+  assertInitiationNodeStatus(nodes, 'business_review', 'approved');
+  assertInitiationNodeStatus(nodes, 'technical_review', 'approved');
+  assertInitiationNodeStatus(nodes, 'general_review', 'returned_blocked_by_rework');
+
+  const technicalReturnProjectId = await createInitiationSmokeProject({
+    uniqueSuffix,
+    projectManagerUser: managerUser,
+    createdByUserId: managerUser.id,
+    label: 'technical-return',
+    smokeProjectIds
+  });
+  const technicalReturnInitiation = await prepareInitiationSmokeBase(technicalReturnProjectId, managerUser);
+  await approveInitiationReviewNode({
+    projectId: technicalReturnProjectId,
+    documentId: technicalReturnInitiation.id,
+    nodeKey: 'business_review',
+    user: marketingManagerUser,
+    comment: 'business retained'
+  });
+  await returnInitiationReviewNode({
+    projectId: technicalReturnProjectId,
+    documentId: technicalReturnInitiation.id,
+    nodeKey: 'technical_review',
+    user: managerUser,
+    returnReason: 'technical return to 1.1'
+  });
+  nodes = await selectInitiationReviewNodes(technicalReturnProjectId);
+  assertInitiationNodeStatus(nodes, 'business_review', 'approved');
+  assertInitiationNodeStatus(nodes, 'technical_review', 'returned_blocked_by_rework');
+  assert.ok(['waiting_prerequisite', 'invalidated'].includes(
+    nodes.find((node) => node.node_key === 'general_review').node_status
+  ));
+
+  const notSubmittedProjectId = await createInitiationSmokeProject({
+    uniqueSuffix,
+    projectManagerUser: managerUser,
+    createdByUserId: managerUser.id,
+    label: 'not-submitted',
+    smokeProjectIds
+  });
+  nodes = await selectInitiationReviewNodes(notSubmittedProjectId);
+  assertInitiationNodeStatus(nodes, 'business_review', 'waiting_document_submission');
+  assertInitiationNodeStatus(nodes, 'technical_review', 'waiting_document_submission');
+  await assertNoInitiationWorkbenchTask(marketingManagerUser, notSubmittedProjectId, 'business_review');
+  await assertNoInitiationWorkbenchTask(managerUser, notSubmittedProjectId, 'technical_review');
+
+  const legacyProjectId = await createInitiationSmokeProject({
+    uniqueSuffix,
+    projectManagerUser: managerUser,
+    createdByUserId: managerUser.id,
+    label: 'legacy-confirmed',
+    smokeProjectIds
+  });
+  await pool.execute(
+    `UPDATE project_stage_documents
+     SET status = ?
+     WHERE project_id = ?
+       AND document_code = '1.2'`,
+    [DOCUMENT_STATUS.CONFIRMED, legacyProjectId]
+  );
+  await pool.execute(
+    'DELETE FROM project_initiation_review_nodes WHERE project_id = ?',
+    [legacyProjectId]
+  );
+  nodes = await selectInitiationReviewNodes(legacyProjectId);
+  assert.equal(nodes.length, 0);
+  const legacyMarketingWorkbench = await getMyWorkbench(marketingManagerUser);
+  assert.ok(
+    legacyMarketingWorkbench.items.some(
+      (item) =>
+        item.type === 'initiation_review' &&
+        item.projectId === legacyProjectId &&
+        item.nodeKey === 'business_review'
+    )
+  );
+  assert.equal(
+    legacyMarketingWorkbench.items.some((item) => item.type === 'stage_gate_approval'),
+    false
+  );
+  await assertHasInitiationWorkbenchTask(managerUser, legacyProjectId, 'technical_review');
+  nodes = await selectInitiationReviewNodes(legacyProjectId);
+  assert.equal(nodes.length, 3);
+  assertInitiationNodeStatus(nodes, 'business_review', 'pending');
+  assertInitiationNodeStatus(nodes, 'technical_review', 'pending');
+  await assert.rejects(
+    () => advanceProjectStage(legacyProjectId, managerUser),
+    (error) =>
+      error instanceof ProjectStageAdvanceError &&
+      error.code === 'PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE' &&
+      error.details.incompleteRequiredDocuments.some((document) => document.documentCode === '1.2')
+  );
+  await assert.rejects(
+    () =>
+      updateProjectCode({
+        projectId: legacyProjectId,
+        projectCode: `SMOKE-INIT-LEGACY-${uniqueSuffix}`,
+        user: managerUser
+      }),
+    (error) => error instanceof ProjectCodeUpdateError && error.code === 'PROJECT_CODE_GATE_NOT_READY'
+  );
+
+  const returnedBaseProjectId = await createInitiationSmokeProject({
+    uniqueSuffix,
+    projectManagerUser: managerUser,
+    createdByUserId: managerUser.id,
+    label: 'returned-base',
+    smokeProjectIds
+  });
+  await pool.execute(
+    `UPDATE project_stage_documents
+     SET status = ?
+     WHERE project_id = ?
+       AND document_code = '1.2'`,
+    [DOCUMENT_STATUS.RETURNED, returnedBaseProjectId]
+  );
+  await pool.execute(
+    'DELETE FROM project_initiation_review_nodes WHERE project_id = ?',
+    [returnedBaseProjectId]
+  );
+  await initializeInitiationReviewNodesForExistingProjects(pool);
+  nodes = await selectInitiationReviewNodes(returnedBaseProjectId);
+  assertInitiationNodeStatus(nodes, 'business_review', 'waiting_document_submission');
+  assertInitiationNodeStatus(nodes, 'technical_review', 'waiting_document_submission');
+  await assertNoInitiationWorkbenchTask(marketingManagerUser, returnedBaseProjectId, 'business_review');
+  const returnedBaseInitiation = await selectSmokeDocument(returnedBaseProjectId, '1.2');
+  await updateProjectStageDocumentStatus({
+    projectId: returnedBaseProjectId,
+    documentId: returnedBaseInitiation.id,
+    action: DOCUMENT_STATUS_ACTION.SUBMIT,
+    user: managerUser
+  });
+  nodes = await selectInitiationReviewNodes(returnedBaseProjectId);
+  assertInitiationNodeStatus(nodes, 'business_review', 'pending');
+  assertInitiationNodeStatus(nodes, 'technical_review', 'pending');
+  await assertHasInitiationWorkbenchTask(marketingManagerUser, returnedBaseProjectId, 'business_review');
+  await assertHasInitiationWorkbenchTask(managerUser, returnedBaseProjectId, 'technical_review');
+  assert.equal(nodes.some((node) => node.node_status === 'submitted'), false);
+
+  const [logRows] = await pool.execute(
+    `SELECT action_type AS actionType, COUNT(*) AS count
+     FROM business_operation_logs
+     WHERE project_id IN (?, ?)
+       AND action_type LIKE 'initiation_review.%'
+     GROUP BY action_type`,
+    [projectId, returnProjectId]
+  );
+  const logCounts = Object.fromEntries(logRows.map((row) => [row.actionType, Number(row.count)]));
+  assert.ok(logCounts['initiation_review.submitted'] >= 2);
+  assert.ok(logCounts['initiation_review.business_approved'] >= 1);
+  assert.ok(logCounts['initiation_review.technical_approved'] >= 2);
+  assert.ok(logCounts['initiation_review.business_returned'] >= 1);
+  assert.ok(logCounts['initiation_review.general_returned'] >= 1);
+  assert.ok(logCounts['initiation_review.completed'] >= 1);
+}
+
 async function runProjectLifecycleSmoke() {
   const managerUser = await selectSmokeUser('rd_manager');
   const smokeProjectIds = [];
@@ -512,6 +1115,31 @@ async function runProjectLifecycleSmoke() {
       role: 'Smoke 员工'
     });
     smokeUserIds.push(limitedEmployeeUser.id);
+    const marketingManagerUser = await insertSmokeUser({
+      account: `smoke_marketing_manager_${uniqueSuffix}`.replace(/[^a-zA-Z0-9_]/g, '_'),
+      name: 'Smoke 营销中心负责人',
+      department: MARKETING_CENTER,
+      organizationRole: ORGANIZATION_ROLE.CENTER_MANAGER,
+      role: 'Smoke 中心负责人'
+    });
+    smokeUserIds.push(marketingManagerUser.id);
+    const generalManagerUser = await insertSmokeUser({
+      account: `smoke_general_manager_${uniqueSuffix}`.replace(/[^a-zA-Z0-9_]/g, '_'),
+      name: 'Smoke 总经理',
+      department: null,
+      organizationRole: ORGANIZATION_ROLE.GENERAL_MANAGER,
+      role: 'Smoke 总经理'
+    });
+    smokeUserIds.push(generalManagerUser.id);
+    const smokeSystemAdminUser = await insertSmokeUser({
+      account: `smoke_system_admin_${uniqueSuffix}`.replace(/[^a-zA-Z0-9_]/g, '_'),
+      name: 'Smoke 系统管理员',
+      department: null,
+      organizationRole: ORGANIZATION_ROLE.SYSTEM_ADMIN,
+      role: 'Smoke 系统管理员',
+      isPlatformAdmin: true
+    });
+    smokeUserIds.push(smokeSystemAdminUser.id);
 
     const createdA = await createProject(
       {
@@ -609,6 +1237,16 @@ async function runProjectLifecycleSmoke() {
       [projectAId, projectBId]
     );
     assert.equal(Number(nullProjectCodeRows[0].count), 2);
+
+    await runInitiationReviewSmoke({
+      uniqueSuffix,
+      smokeProjectIds,
+      smokeUserIds,
+      managerUser,
+      marketingManagerUser,
+      generalManagerUser,
+      systemAdminUser: smokeSystemAdminUser
+    });
 
     const initialCountsA = await countSmokeProjectObjects(projectAId);
     assert.deepEqual(initialCountsA, {
@@ -1069,8 +1707,18 @@ async function runProjectLifecycleSmoke() {
     assert.equal(unassignedRevisionDocument.revisionRequired, true);
     assert.equal(unassignedRevisionDocument.responsibleUserId, null);
 
-    await completeInitiationGate(projectAId);
-    await completeInitiationGate(projectBId);
+    await completeInitiationGate(projectAId, {
+      submitterUser: managerUser,
+      marketingManagerUser,
+      rdManagerUser: managerUser,
+      generalManagerUser
+    });
+    await completeInitiationGate(projectBId, {
+      submitterUser: managerUser,
+      marketingManagerUser,
+      rdManagerUser: managerUser,
+      generalManagerUser
+    });
     await pool.execute(
       `UPDATE project_stage_documents
        SET is_applicable = 0
@@ -1974,6 +2622,8 @@ assert.equal(canAdvanceProjectStage(systemAdmin, project), false);
 
 const [databaseRows] = await pool.query('SELECT DATABASE() AS currentDatabase');
 assert.equal(databaseRows[0].currentDatabase, 'digital_platform');
+await ensureStageDocumentSchema(pool);
+await initializeInitiationReviewNodesForExistingProjects(pool);
 
 const [activeTemplateRows] = await pool.query(
   `SELECT template_version AS templateVersion, COUNT(*) AS count

@@ -12,6 +12,7 @@ import {
   StageDocumentStatusError
 } from '../../domain/stageDocumentStatus.js';
 import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
+import { isInitiationReviewDocument } from '../../domain/initiationReview.js';
 import {
   DESIGN_CHANGE_SOURCE_DOCUMENT_CODE,
   DESIGN_CHANGE_TARGET_DOCUMENT_CODES,
@@ -36,6 +37,11 @@ import {
 } from './shared.js';
 import { isStageDocumentReviewAuthority } from './accessControl.js';
 import { selectProjectPermissionContext } from './permissionContext.js';
+import {
+  activateInitiationReviewNodesForDocument,
+  attachInitiationReviewToStageDocumentRows,
+  restoreInitiationReviewNodesAfterReworkCleared
+} from './initiationReviewRepository.js';
 
 function assertUserCanUpdateDocumentStatus({ user, action, currentDocument, project }) {
   if (isGeneralManagerAssistantUser(user) || isSystemAdminUser(user)) {
@@ -72,6 +78,18 @@ function assertUserCanUpdateDocumentStatus({ user, action, currentDocument, proj
 }
 
 function assertDocumentCompletionModeAllowsAction(action, currentDocument) {
+  if (
+    isInitiationReviewDocument(currentDocument) &&
+    (action === DOCUMENT_STATUS_ACTION.CONFIRM || action === DOCUMENT_STATUS_ACTION.RETURN)
+  ) {
+    throw new StageDocumentStatusError(
+      'INITIATION_REVIEW_REQUIRES_DEDICATED_ENDPOINT',
+      '1.2 initiation approval must use dedicated multi-node review endpoints',
+      409,
+      ['documentId']
+    );
+  }
+
   if (
     (action === DOCUMENT_STATUS_ACTION.CONFIRM || action === DOCUMENT_STATUS_ACTION.RETURN) &&
     !isReviewCompletionMode(getDocumentCompletionMode(currentDocument))
@@ -642,12 +660,29 @@ export async function updateProjectStageDocumentStatus({
     }
 
     await applyDocumentStatusUpdate(connection, projectId, documentId, action, user.id, transition);
+    if (action === DOCUMENT_STATUS_ACTION.SUBMIT && isInitiationReviewDocument(currentDocument)) {
+      await activateInitiationReviewNodesForDocument({
+        connection,
+        projectId,
+        document: {
+          ...currentDocument,
+          status: transition.nextStatus
+        },
+        userId: user.id
+      });
+    }
     const updatedDocument = await selectProjectStageDocument(connection, projectId, documentId);
     await insertOperationLog(
       connection,
       buildStatusOperationLogPayload({ projectId, documentId, action, userId: user.id, currentDocument, transition })
     );
     if (transition.clearRevision) {
+      await restoreInitiationReviewNodesAfterReworkCleared({
+        connection,
+        projectId,
+        targetDocument: currentDocument,
+        userId: user.id
+      });
       await insertOperationLog(
         connection,
         buildRevisionCompletedOperationLogPayload({ projectId, documentId, userId: user.id, currentDocument })
@@ -655,7 +690,12 @@ export async function updateProjectStageDocumentStatus({
     }
     await connection.commit();
 
-    return mapDocument(updatedDocument);
+    const [updatedDocumentWithInitiationReview] = await attachInitiationReviewToStageDocumentRows(
+      pool,
+      [updatedDocument],
+      user
+    );
+    return mapDocument(updatedDocumentWithInitiationReview);
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -719,6 +759,12 @@ export async function completeProjectStageDocumentRevision({ projectId, document
         AND id = ?`,
       [user.id, projectId, documentId]
     );
+    await restoreInitiationReviewNodesAfterReworkCleared({
+      connection,
+      projectId,
+      targetDocument: currentDocument,
+      userId: user.id
+    });
     await insertOperationLog(
       connection,
       buildRevisionCompletedOperationLogPayload({ projectId, documentId, userId: user.id, currentDocument })
@@ -726,7 +772,12 @@ export async function completeProjectStageDocumentRevision({ projectId, document
     const updatedDocument = await selectProjectStageDocument(connection, projectId, documentId);
     await connection.commit();
 
-    return mapDocument(updatedDocument);
+    const [updatedDocumentWithInitiationReview] = await attachInitiationReviewToStageDocumentRows(
+      pool,
+      [updatedDocument],
+      user
+    );
+    return mapDocument(updatedDocumentWithInitiationReview);
   } catch (error) {
     await connection.rollback();
     throw error;

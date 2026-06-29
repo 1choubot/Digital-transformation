@@ -87,51 +87,66 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 ### Requirement: 项目详情页
 
-前端 MUST 提供项目详情页，并 MUST 组合调用项目基础状态、阶段资料清单、附件、业务日志、总览/齐套等后端接口展示项目详情体验；`GET /api/projects/:projectId` 只用于获取项目基础状态和创建人追溯字段，不承载阶段资料清单、附件列表/下载、业务日志或齐套摘要全集。
+前端 MUST 提供项目详情页，并 MUST 组合调用项目基础状态、阶段资料清单、附件、业务日志、总览/齐套和 `1.2` 专用多节点审批等后端接口展示项目详情体验；`GET /api/projects/:projectId` 只用于获取项目基础状态和创建人追溯字段，不承载阶段资料清单、附件列表/下载、业务日志、齐套摘要全集或 `1.2` 多节点审批全集。
 
-#### Scenario: 展示项目基础信息
+#### Scenario: 展示 1.2 多节点状态
 
-- **WHEN** 项目详情接口返回项目数据
-- **THEN** 页面必须展示项目编号、项目名称、客户、项目经理、参与部门、项目状态、计划时间、备注和创建人基础信息或创建人字段
-- **AND** 当 `projectCode` 为空时 MUST 显示 `待生成` 或等价文案
+- **WHEN** 用户打开包含 `1.2 项目立项审批表` 的项目详情页
+- **THEN** 页面 MUST 展示商务评价审批、技术评价审批和总经理审批的节点状态
+- **AND** 页面 MUST 展示节点审批人或审批角色、审批意见或退回原因、审批时间
+- **AND** 页面 MUST 展示 `1.2` 整体是否最终完成
 
-#### Scenario: 全量查看角色看到完整项目详情
+#### Scenario: 商务技术并行展示
 
-- **WHEN** 总经理、总经理助理、中心负责人、项目创建人或项目经理打开其有权查看的项目详情
-- **THEN** 页面 MUST 通过阶段资料、附件、业务日志等独立接口组合展示后端允许其查看的完整阶段资料清单、阶段资料附件区域和业务日志区域
+- **WHEN** 页面展示 `1.2 项目立项审批表` 多节点审批状态
+- **THEN** 商务评价审批和技术评价审批 MUST 作为并行节点展示
+- **AND** 商务评价审批人 MUST 展示为营销中心负责人或对应后端返回用户
+- **AND** 技术评价审批人 MUST 展示为研发中心负责人或对应后端返回用户
 
-#### Scenario: 展示阶段资料清单
+#### Scenario: 总经理节点等待前置
 
-- **WHEN** 用户打开项目详情页
-- **THEN** 页面必须展示“阶段资料清单”区域，并按后端返回结果展示资料项名称、是否必填、默认责任部门或责任角色、提交方式、基础状态、`completionMode`、派生完成状态、状态追溯字段、适用性、适用性追溯字段、责任人、责任人变更追溯字段、阶段资料附件区域和阶段资料齐套摘要
+- **WHEN** `business_review` 或 `technical_review` 任一节点尚未通过
+- **THEN** 页面 MUST 将总经理审批节点展示为未开始、等待前置或不可处理
+- **AND** 页面 MUST NOT 显示总经理节点可处理待办入口
 
-#### Scenario: 员工受限详情只展示后端返回资料
+#### Scenario: 1.2 操作入口按当前节点权限展示
 
-- **WHEN** 普通员工打开仅因资料责任相关而可见的项目详情
-- **THEN** 页面 MUST 只展示后端返回的资料项，不得在前端补齐或伪造完整 64 项资料
+- **WHEN** 页面展示 `1.2 项目立项审批表` 的审批操作
+- **THEN** 页面 MUST 只在后端返回当前用户可处理对应节点时展示审批通过或退回入口
+- **AND** 页面 MUST NOT 因用户是中心负责人、总经理助理、项目创建人或项目经理且可查看项目而展示节点审批入口
 
-#### Scenario: 展示资料项派生完成状态
+#### Scenario: 普通资料提交入口启动 1.2 多节点
 
-- **WHEN** 页面展示资料项状态
-- **THEN** 页面 MUST 优先使用后端返回的 `completionStatus`、`isComplete` 或等价派生字段展示业务完成状态
-- **AND** 页面 MUST NOT 仅凭基础 `status = submitted` 将所有资料显示为待审核
+- **WHEN** `1.2 项目立项审批表` 尚未提交
+- **THEN** 页面 MUST 继续使用既有资料提交或上传入口提交 `1.2`
+- **AND** 页面 MUST NOT 新增 `1.2` 专用节点提交按钮
+- **AND** 页面 MUST 在后端返回商务评价和技术评价节点待审批后，才展示对应审批入口
 
-#### Scenario: submit_only submitted 展示已完成
+#### Scenario: 1.2 多节点不展示为泛化阶段关口
 
-- **WHEN** 资料项 `completionMode = submit_only` 且基础状态为 `submitted`
-- **THEN** 页面 MUST 展示为已完成或等价完成状态
-- **AND** 页面 MUST NOT 展示为待审核
+- **WHEN** 页面展示 `1.2 项目立项审批表` 多节点审批状态
+- **THEN** 页面 MUST 将其表达为 `1.2` 专用审批资料状态
+- **AND** 页面 MUST NOT 将其展示为泛化阶段关口审批或二级阶段审批进度
 
-#### Scenario: approval_required submitted 展示待审核
+#### Scenario: 前置节点退回后展示总经理失效
 
-- **WHEN** 资料项 `completionMode = approval_required` 且基础状态为 `submitted`
-- **THEN** 页面 MUST 展示为待审核或等价状态
+- **WHEN** `business_review` 或 `technical_review` 退回
+- **THEN** 页面 MUST 将被退回节点展示为退回、返工阻塞或后端返回的待审批状态
+- **AND** 已通过的并行另一侧节点 MUST 继续展示为已通过
+- **AND** 总经理节点 MUST 展示为失效、未开始或等待前置重新完成
 
-#### Scenario: 操作按钮仍按后端权限字段
+#### Scenario: 总经理退回后保留前置通过展示
 
-- **WHEN** 页面展示资料提交、资料审核、资料退回、精准返工、责任人分配、适用性、附件上传、附件删除、阶段推进或项目编号填写入口
-- **THEN** 页面 MUST 使用后端返回的对应权限字段或接口授权结果作为依据
-- **AND** 页面 MUST NOT 仅因用户可查看项目、资料、附件或业务日志而显示这些操作入口
+- **WHEN** `general_review` 退回
+- **THEN** 页面 MUST 将总经理节点展示为退回、返工阻塞或后端返回的待审批状态
+- **AND** 商务评价和技术评价若已通过 MUST 继续展示为已通过
+
+#### Scenario: 返工清除后不展示 1.2 重提入口
+
+- **WHEN** `1.1` 返工已清除且后端将被退回的 `1.2` 节点自动回到待审批或可审批状态
+- **THEN** 页面 MUST 按后端返回的节点状态和待办展示对应审批入口
+- **AND** 页面 MUST NOT 展示单独的 `1.2` 重提按钮
+- **AND** 页面 MUST NOT 伪造单独的 `1.2` 重提待办
 
 ### Requirement: Demo 使用边界
 
@@ -308,20 +323,19 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 ### Requirement: 项目详情页手工阶段推进
 
-前端 MUST 在项目详情页提供当前阶段的手工推进入口，并 MUST 展示阶段推进所需的当前阶段适用资料按 `completionMode` 派生的完成情况。
+前端 MUST 在项目详情页提供当前阶段的手工推进入口，并 MUST 展示阶段推进所需的当前阶段适用资料按 `completionMode`、`revision_required` 和特殊资料派生规则计算的完成情况。
 
-#### Scenario: 展示当前阶段推进说明
-- **WHEN** 项目详情页加载成功且项目存在当前阶段
-- **THEN** 页面必须展示“手工推进阶段”相关入口或说明，并明确阶段推进基于当前阶段适用资料的 `completionMode` 完成情况
+#### Scenario: 1.2 未最终通过时推进不可用
 
-#### Scenario: 阶段推进不展示泛化审批门禁
-- **WHEN** 页面展示阶段推进入口或不可推进原因
-- **THEN** 页面 MUST NOT 表达为阶段推进还需要泛化阶段关口审批通过
-- **AND** 页面 MUST NOT 要求所有资料均为 `confirmed`
+- **WHEN** 第 1 阶段的 `1.2 项目立项审批表` 尚未完成商务评价、技术评价和总经理审批的最终通过
+- **THEN** 页面 MUST 按后端门禁结果展示阶段推进不可用
+- **AND** 页面 MUST NOT 因 `1.2` 单个节点已通过或资料基础状态为 `confirmed` 就展示可推进
 
-#### Scenario: 阶段推进失败展示原因
-- **WHEN** 阶段推进接口返回缺失适用资料或其他可读错误
-- **THEN** 页面必须展示后端返回的不可推进原因，并显示包含 `completionMode` 和派生完成状态的缺失资料
+#### Scenario: 1.2 返工未清除时显示阻塞
+
+- **WHEN** `1.2` 退回触发 `1.1 项目需求表` 精准返工且 `revision_required` 未清除
+- **THEN** 页面 MUST 将相关返工展示为阶段推进阻塞原因
+- **AND** 页面 MUST NOT 将 `1.2` 显示为最终完成
 
 ### Requirement: 项目详情页业务日志展示
 
@@ -986,36 +1000,37 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 ### Requirement: 我的工作台页面
 
-前端 MUST 将当前“我的资料任务”升级或改名为“我的工作台 / 我的待办”，并 MUST 展示当前用户的资料责任待办、资料审核待办和阶段推进待办；当前 20260625 在线平台内部资料闭环 MUST NOT 展示阶段关口审批待办分类或入口，且 MUST 展示需返工资料待办。
+前端 MUST 将当前“我的资料任务”升级或改名为“我的工作台 / 我的待办”，并 MUST 展示当前用户的资料责任待办、资料审核待办、`1.2` 专用节点审批待办和阶段推进待办；当前 20260625 在线平台内部资料闭环 MUST NOT 展示泛化阶段关口审批待办分类或入口，且 MUST 展示需返工资料待办。
 
-#### Scenario: 工作台展示待办分类
-- **WHEN** 工作台接口返回待办数据
-- **THEN** 页面必须展示我负责的资料、待我审核的资料和待我推进阶段等分类或筛选
-- **AND** 页面 MUST 支持将 `revision_required = true` 的资料责任待办展示为“需返工资料”或等价文案
-- **AND** 页面 MUST NOT 展示阶段关口审批待办分类
-- **AND** 页面 MUST NOT 展示“待我阶段关口审批”、“待阶段关口审批”或等价筛选/入口
+#### Scenario: 1.2 节点审批待办按后端返回展示
 
-#### Scenario: 审核待办只来自 approval_required
-- **WHEN** 工作台展示待审核资料
-- **THEN** 普通待审核资料 MUST 只来自 `completionMode = approval_required`、`status = submitted` 且 `revision_required` 不是 true 的资料项
-- **AND** `revision_required = true` 的资料必须已返工重提，并由后端作为审核待办返回后，前端才可展示为待审核资料
-- **AND** 页面 MUST NOT 将未重新提交的 `revision_required` 资料、`submit_only`、未触发的 `conditional_submit` 或泛化阶段审批事项展示为资料审核待办
+- **WHEN** 工作台接口返回 `1.2` 商务评价、技术评价或总经理审批待办
+- **THEN** 页面 MUST 按后端返回的待办类型、节点名称、项目和资料信息展示
+- **AND** 页面 MUST 只为后端允许处理的待办展示处理入口
 
-#### Scenario: approval_required 返工重提后进入审核视图
-- **WHEN** 工作台返回 `completionMode = approval_required`、`revision_required = true`、`status = submitted` 且已返工重提的资料审核待办
-- **THEN** 页面 MUST 将其展示为待审核
-- **AND** 页面 MUST 表达审核确认后才会恢复完成
+#### Scenario: 1.2 节点审批待办归入资料审核筛选
 
-#### Scenario: 阶段推进待办按 completionMode 返工门禁和权限
-- **WHEN** 工作台展示阶段推进待办
-- **THEN** 阶段推进待办 MUST 只按当前阶段适用资料的 `completionMode` 完成情况、`revision_required` 清除情况和当前用户推进权限展示
-- **AND** 页面 MUST NOT 因 `approval_status` 生成阶段关口审批待办
-- **AND** 页面 MUST NOT 因 `approval_status != approved` 隐藏符合资料完成、返工清除和推进权限条件的阶段推进待办
+- **WHEN** 工作台接口返回后端类型为 `initiation_review` 的 `1.2` 节点审批待办
+- **THEN** 页面 MUST 将该待办归入“待我审核的资料”筛选和统计
+- **AND** 页面 MUST NOT 单独展示“待我审批 1.2”筛选项或独立分类
+- **AND** 页面 MUST 继续展示 `1.2 项目立项审批表` 资料名和商务评价审批、技术评价审批或总经理审批节点名
+- **AND** 页面 MUST NOT 因前端展示归类改变后端 `initiation_review` 待办类型或专用节点审批权限
 
-#### Scenario: 点击返工待办进入资料项
-- **WHEN** 用户点击需返工资料待办
-- **THEN** 页面 MUST 导航到对应资料项处理位置或受限资料任务视图
-- **AND** 页面 MUST NOT 进入阶段关口审批处理页
+#### Scenario: 总经理待办不提前展示
+
+- **WHEN** 商务评价审批或技术评价审批任一节点尚未通过
+- **THEN** 页面 MUST NOT 在前端补齐或伪造总经理审批待办
+- **AND** 仅当后端在二者均通过后返回总经理待办时，页面才展示该待办
+
+#### Scenario: 不给所有中心负责人补齐 1.2 待办
+
+- **WHEN** 当前用户是中心负责人但后端未返回 `1.2` 节点审批待办
+- **THEN** 页面 MUST NOT 在前端根据中心负责人身份补齐或伪造该待办
+
+#### Scenario: 不展示泛化阶段关口审批入口
+
+- **WHEN** 页面展示工作台待办
+- **THEN** 页面 MUST NOT 因 `1.2` 多节点审批新增 `stage_gate_approval` 分类或泛化阶段关口审批入口
 
 ### Requirement: 普通员工任务视图
 
@@ -1240,28 +1255,35 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 ### Requirement: 前端项目编号后置展示
 
-前端 MUST 支持项目创建时不填写项目编号，并 MUST 在项目列表、项目详情、搜索结果和待办入口中展示空项目编号的合理占位，且 MUST 在项目详情显示或提供后置填写项目编号入口。
+前端 MUST 支持项目创建时不填写项目编号，并 MUST 在项目列表、项目详情、搜索结果和待办入口中展示空项目编号的合理占位，且 MUST 在项目详情显示或提供后置填写项目编号入口；`1.2` 门禁 MUST 使用多节点最终通过状态。
 
 #### Scenario: 新建项目表单不强制项目编号
+
 - **WHEN** 用户创建尚未立项审批通过的新项目
 - **THEN** 前端 MUST 不再强制填写项目编号
-- **AND** 前端 MUST 明确项目编号将在 `1.2 项目立项审批表` 审核通过并提交或上传 `1.3 项目立项通知` 后生成或填写
-
-#### Scenario: 项目列表展示待生成编号
-- **WHEN** 项目列表接口返回 `projectCode` 为空
-- **THEN** 前端 MUST 展示 `待生成` 或等价文案，而不是展示空白、`undefined` 或错误状态
+- **AND** 前端 MUST 明确项目编号将在 `1.2 项目立项审批表` 多节点最终通过并提交或上传 `1.3 项目立项通知` 后生成或填写
 
 #### Scenario: 项目详情显示后置填写入口
+
 - **WHEN** 项目详情接口返回 `projectCode` 为空
-- **AND** `1.2 项目立项审批表` 已审核通过
+- **AND** `1.2 项目立项审批表` 商务评价、技术评价和总经理审批均最终通过
 - **AND** `1.3 项目立项通知` 已提交或上传完成
-- **AND** 当前用户具备项目维护、项目经理、管理员或等价既有权限边界
+- **AND** `1.1` 不存在由 `1.2` NO 触发且未清除的 `revision_required`
+- **AND** `1.2` 不存在待审、退回、未通过或其他专用多节点阻塞状态
+- **AND** 当前用户具备项目维护、项目经理或等价业务项目编号维护权限
 - **THEN** 项目详情 MUST 显示或提供后置填写项目编号入口
 - **AND** 该入口 MUST 提示非空项目编号必须唯一
 
-#### Scenario: 搜索兼容空项目编号
-- **WHEN** 用户在项目列表或工作台按项目名称、客户或其他字段查找项目
-- **THEN** 前端 MUST 不因项目编号为空而隐藏项目或阻止进入项目详情
+#### Scenario: 系统管理员不默认显示编号入口
+
+- **WHEN** 当前用户仅具备系统管理员身份
+- **AND** 不具备项目维护、项目经理或等价业务项目编号维护权限
+- **THEN** 页面 MUST NOT 仅因系统管理员身份显示项目编号填写入口
+
+#### Scenario: 单节点通过不显示编号入口
+
+- **WHEN** `1.2 项目立项审批表` 只有商务评价、技术评价或总经理审批中的单个节点通过
+- **THEN** 页面 MUST NOT 因该单节点通过显示项目编号填写入口
 
 ### Requirement: 20260625 阶段资料完成状态展示
 
@@ -1315,28 +1337,17 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 ### Requirement: 前端项目编号后置体验
 
-前端 MUST 支持项目创建时不填写项目编号，并 MUST 在列表、详情、搜索结果和工作台中兼容空 `projectCode`。
-
-#### Scenario: 新建项目不强制项目编号
-- **WHEN** 用户创建尚未完成立项审批的新项目
-- **THEN** 新建项目页面 MUST 不再强制填写项目编号
-- **AND** 前端 MUST 允许提交不包含 `projectCode` 的创建请求
-
-#### Scenario: 空项目编号展示待生成
-- **WHEN** 项目列表、项目详情、搜索结果或工作台返回 `projectCode` 为空
-- **THEN** 前端 MUST 展示 `待生成` 或等价文案
-- **AND** 前端 MUST NOT 展示 `undefined`、`null`、空白错误状态或阻止进入项目详情
+前端 MUST 支持项目创建时不填写项目编号，并 MUST 在列表、详情、搜索结果和工作台中兼容空 `projectCode`；后置项目编号入口 MUST 以 `1.2` 多节点最终通过作为必要前提。
 
 #### Scenario: 后置填写项目编号入口
+
 - **WHEN** 项目尚未生成正式编号且用户具备维护项目编号权限
-- **AND** `1.2 项目立项审批表` 已审核通过
+- **AND** `1.2 项目立项审批表` 商务评价、技术评价和总经理审批均最终通过
 - **AND** `1.3 项目立项通知` 已提交或上传完成
+- **AND** `1.1` 不存在由 `1.2` NO 触发且未清除的精准返工
+- **AND** `1.2` 不存在待审、退回、未通过或其他专用多节点阻塞状态
 - **THEN** 项目详情 MUST 显示或提供后置填写或更新项目编号入口
 - **AND** 该入口 MUST 表达非空项目编号必须唯一
-
-#### Scenario: 搜索筛选兼容空编号
-- **WHEN** 用户使用项目列表、搜索或工作台筛选
-- **THEN** 前端 MUST NOT 因 `projectCode` 为空隐藏项目或报错
 
 ### Requirement: 前端按 completionMode 展示资料操作
 
@@ -1419,17 +1430,39 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 ### Requirement: 精准返工前端边界
 
-前端 MUST 将精准返工限定为资料级审批 NO 后的资料返工能力。
-
-#### Scenario: 不做推送通知入口
-- **WHEN** 前端展示或处理精准返工
-- **THEN** 页面 MUST NOT 新增推送通知、站内信、短信或邮件配置入口
-
-#### Scenario: 不展示文件平台返工入口
-- **WHEN** 前端展示需返工资料
-- **THEN** 页面 MUST NOT 展示文件平台归档状态、文件平台文件列表、folder id 或归档重试入口
+前端 MUST 将精准返工限定为资料级审批 NO 后的资料返工能力；`1.2` 多节点审批必须由本专用 change 单独规划和实现，不得作为精准返工能力的隐含扩展。
 
 #### Scenario: 不解决 1.2 多节点审批
+
 - **WHEN** 前端展示 `1.2 项目立项审批表` 的退回能力
-- **THEN** 本 change MUST 只规划审批 NO 后对 `1.1` 的精准返工选择
-- **AND** 页面 MUST NOT 因本 change 新增商务评价、技术评价、总经理多节点在线审批流程 UI
+- **THEN** 精准返工能力本身仍只负责审批 NO 后对 `1.1` 的固定返工目标
+- **AND** `1.2` 的商务评价、技术评价、总经理多节点在线审批 MUST 由 `add-initiation-multi-review-flow-v1` 专用规划覆盖
+
+### Requirement: 1.2 项目立项多节点审批前端
+
+前端 MUST 为 `1.2 项目立项审批表` 提供专用多节点审批展示和操作入口，并 MUST 保持查看权限与业务操作权限分离。
+
+#### Scenario: 节点状态完整展示
+
+- **WHEN** 后端返回 `1.2` 多节点审批状态
+- **THEN** 页面 MUST 展示商务评价审批、技术评价审批、总经理审批的状态、审批人或角色、意见或退回原因和时间
+
+#### Scenario: 并行和退回状态展示
+
+- **WHEN** 后端返回 `business_review`、`technical_review` 和 `general_review` 状态
+- **THEN** 页面 MUST 表达商务评价和技术评价是并行节点
+- **AND** 页面 MUST 表达总经理节点依赖商务评价和技术评价都通过
+- **AND** 页面 MUST 表达前置节点退回会使总经理节点失效或等待前置重新完成
+
+#### Scenario: 当前用户只处理自己的节点
+
+- **WHEN** 当前用户只对某一个 `1.2` 审批节点有处理权限
+- **THEN** 页面 MUST 只展示该节点的通过/退回入口
+- **AND** 页面 MUST NOT 展示其他节点的操作入口
+
+#### Scenario: 阶段推进和项目编号提示使用后端门禁
+
+- **WHEN** 后端返回第 1 阶段推进或项目编号填写门禁未满足
+- **THEN** 页面 MUST 展示后端返回的 `1.2` 多节点未完成、`1.3` 未提交或精准返工未清除等原因
+- **AND** 页面 MUST NOT 在前端自行推断放行
+

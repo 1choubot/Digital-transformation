@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import {
   advanceProjectStageHandler,
+  approveInitiationReviewNodeHandler,
   approveStageApprovalHandler,
   confirmStageDocumentHandler,
   completeStageDocumentRevisionHandler,
@@ -19,6 +20,7 @@ import {
   markStageDocumentNotApplicableHandler,
   restoreStageDocumentApplicableHandler,
   returnStageApprovalHandler,
+  returnInitiationReviewNodeHandler,
   returnStageDocumentHandler,
   resubmitStageApprovalHandler,
   submitStageDocumentHandler,
@@ -115,6 +117,18 @@ projectsRouter.post(
   '/:projectId/stage-documents/:documentId/revision/complete',
   requireAuth,
   asyncHandler(completeStageDocumentRevisionHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/stage-documents/:documentId/initiation-review/:nodeKey/approve',
+  requireAuth,
+  asyncHandler(approveInitiationReviewNodeHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/stage-documents/:documentId/initiation-review/:nodeKey/return',
+  requireAuth,
+  asyncHandler(returnInitiationReviewNodeHandler)
 );
 
 projectsRouter.post(

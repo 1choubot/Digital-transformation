@@ -15,6 +15,10 @@ import {
   attachStageDocumentPermissions,
   filterStageDocumentsForUser
 } from './accessControl.js';
+import {
+  attachInitiationReviewToStageDocumentRows,
+  initializeInitiationReviewNodesForProject
+} from './initiationReviewRepository.js';
 
 function assertTemplateRowsReady(rows) {
   if (rows.length !== EXPECTED_STAGE_DOCUMENT_ITEM_COUNT) {
@@ -218,6 +222,7 @@ export async function initializeProjectStageDocuments(executor, projectId) {
     ON DUPLICATE KEY UPDATE id = id`,
     values
   );
+  await initializeInitiationReviewNodesForProject(executor, projectId);
   const [afterRows] = await executor.execute(
     'SELECT COUNT(*) AS count FROM project_stage_documents WHERE project_id = ?',
     [projectId]
@@ -276,8 +281,9 @@ export async function getProjectStageDocumentChecklist(projectId, user = null) {
     selectChecklistProject(projectId)
   ]);
 
+  const rowsWithInitiationReview = await attachInitiationReviewToStageDocumentRows(pool, rows, user);
   const documentsByStage = new Map(STANDARD_PROJECT_STAGES.map((stage) => [stage.stageKey, []]));
-  const mappedDocuments = rows.map(mapDocument);
+  const mappedDocuments = rowsWithInitiationReview.map(mapDocument);
   const documentsById = new Map(mappedDocuments.map((document) => [document.id, document]));
   const documentsWithRevisionSource = mappedDocuments.map((document) => {
     const sourceDocument = documentsById.get(document.revisionSourceDocumentId);

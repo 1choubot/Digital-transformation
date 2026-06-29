@@ -196,6 +196,13 @@
 
             <div class="stage-document-card__body">
               <ProjectStageDocumentTrace :document="document" />
+              <ProjectInitiationReviewPanel
+                v-if="document.initiationReview"
+                :document="document"
+                :is-action-pending="isActionPending"
+                @approve-node="$emit('approve-initiation-review-node', $event)"
+                @return-node="$emit('return-initiation-review-node', $event)"
+              />
               <ProjectStageDocumentAttachments
                 :document="document"
                 :state="getAttachmentState(document.id)"
@@ -238,6 +245,7 @@ import { formatRequired, formatSubmitMode } from '../../utils/format.js';
 import ProjectStageDocumentActions from './ProjectStageDocumentActions.vue';
 import ProjectStageDocumentAttachments from './ProjectStageDocumentAttachments.vue';
 import ProjectStageDocumentTrace from './ProjectStageDocumentTrace.vue';
+import ProjectInitiationReviewPanel from './ProjectInitiationReviewPanel.vue';
 import {
   formatApplicability,
   formatDocumentCompletionMode,
@@ -256,6 +264,8 @@ defineEmits([
   'submit-document',
   'confirm-document',
   'return-document',
+  'approve-initiation-review-node',
+  'return-initiation-review-node',
   'complete-revision-document',
   'mark-not-applicable',
   'restore-applicable',

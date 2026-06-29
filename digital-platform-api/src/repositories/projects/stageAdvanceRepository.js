@@ -8,6 +8,7 @@ import { PROJECT_STATUS } from '../../domain/projects.js';
 import { PROJECT_APPROVAL_ERROR } from '../../domain/projectApproval.js';
 import { STANDARD_PROJECT_STAGES, STAGE_STATUS } from '../../domain/stages.js';
 import { buildStageCompletenessSummary, mapGateDocument } from '../stageDocuments/shared.js';
+import { attachInitiationReviewToStageDocumentRows } from '../stageDocuments/initiationReviewRepository.js';
 import {
   insertOperationLog,
   OPERATION_ACTION_TYPE,
@@ -182,7 +183,8 @@ async function buildCurrentStageGateSummary(connection, projectId, stageOrder) {
     );
   }
 
-  return buildStageCompletenessSummary(rows.map(mapGateDocument));
+  const rowsWithInitiationReview = await attachInitiationReviewToStageDocumentRows(connection, rows);
+  return buildStageCompletenessSummary(rowsWithInitiationReview.map(mapGateDocument));
 }
 
 export async function advanceProjectStage(projectId, user) {

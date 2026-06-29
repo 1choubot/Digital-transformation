@@ -6,7 +6,7 @@
         <h2>我的工作台</h2>
         <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
         <p class="manual-status-note">
-          工作台汇总需要当前账号处理的资料责任、资料审核和阶段推进事项。
+          工作台汇总需要当前账号处理的资料责任、资料审核（含 1.2 节点审批）和阶段推进事项。
         </p>
       </div>
       <button type="button" class="ghost-button" :disabled="loading" @click="loadWorkbench">
@@ -22,7 +22,7 @@
         </div>
         <div v-for="option in typeOptions" :key="option.value">
           <span>{{ option.label }}</span>
-          <strong>{{ summary.byType?.[option.value] || 0 }}</strong>
+          <strong>{{ summaryCountForType(option.value) }}</strong>
         </div>
       </div>
 
@@ -100,7 +100,7 @@
           <span>{{ formatTodoType(item.type, item) }}</span>
           <span>{{ item.completionMode ? formatCompletionMode(item.completionMode) : '-' }}</span>
           <span>{{ item.completionStatus ? formatCompletionStatus(item.completionStatus) : formatStatus(item.status) }}</span>
-          <span>{{ item.actionText || '-' }}</span>
+          <span>{{ formatActionText(item) }}</span>
           <time>{{ formatDateTime(item.updatedAt || item.createdAt) }}</time>
           <button type="button" class="ghost-button" @click="openTodo(item)">
             处理
@@ -160,7 +160,11 @@ const summary = ref({
 const filteredItems = computed(() => {
   const keyword = projectKeyword.value.trim().toLowerCase();
   return items.value.filter((item) => {
-    if (selectedType.value !== 'all' && item.type !== selectedType.value) {
+    if (selectedType.value === 'document_review') {
+      if (!['document_review', 'initiation_review'].includes(item.type)) {
+        return false;
+      }
+    } else if (selectedType.value !== 'all' && item.type !== selectedType.value) {
       return false;
     }
 
@@ -173,16 +177,36 @@ const filteredItems = computed(() => {
   });
 });
 
+function summaryCountForType(type) {
+  if (type === 'document_review') {
+    return (summary.value.byType?.document_review || 0) + (summary.value.byType?.initiation_review || 0);
+  }
+
+  return summary.value.byType?.[type] || 0;
+}
+
 function itemKey(item) {
-  return [item.type, item.projectId, item.stageId || '', item.documentId || ''].join(':');
+  return [item.type, item.projectId, item.stageId || '', item.documentId || '', item.nodeKey || ''].join(':');
 }
 
 function formatTodoType(type, item = null) {
+  if (type === 'initiation_review') {
+    return '待我审核的资料';
+  }
+
   if (item?.revisionRequired && type === 'document_responsibility') {
     return '需返工资料';
   }
 
   return typeOptions.find((option) => option.value === type)?.label || type || '-';
+}
+
+function formatActionText(item) {
+  if (item.type === 'initiation_review') {
+    return item.nodeName || item.actionText || '-';
+  }
+
+  return item.actionText || '-';
 }
 
 function openTodo(item) {

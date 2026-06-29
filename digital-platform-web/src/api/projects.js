@@ -132,6 +132,22 @@ export async function returnStageDocument(projectId, documentId, returnReason, a
   });
 }
 
+export async function approveInitiationReviewNode(projectId, documentId, nodeKey, comment, authToken) {
+  return request(`/api/projects/${projectId}/stage-documents/${documentId}/initiation-review/${nodeKey}/approve`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ comment })
+  });
+}
+
+export async function returnInitiationReviewNode(projectId, documentId, nodeKey, returnReason, authToken) {
+  return request(`/api/projects/${projectId}/stage-documents/${documentId}/initiation-review/${nodeKey}/return`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ returnReason })
+  });
+}
+
 export async function completeStageDocumentRevision(projectId, documentId, authToken) {
   return request(`/api/projects/${projectId}/stage-documents/${documentId}/revision/complete`, {
     method: 'POST',

@@ -22,6 +22,16 @@ export const OPERATION_ACTION_TYPE = {
   APPROVAL_GENERAL_APPROVED: 'approval.general_approved',
   APPROVAL_GENERAL_RETURNED: 'approval.general_returned',
   APPROVAL_RESUBMITTED: 'approval.resubmitted',
+  INITIATION_REVIEW_SUBMITTED: 'initiation_review.submitted',
+  INITIATION_REVIEW_BUSINESS_APPROVED: 'initiation_review.business_approved',
+  INITIATION_REVIEW_BUSINESS_RETURNED: 'initiation_review.business_returned',
+  INITIATION_REVIEW_TECHNICAL_APPROVED: 'initiation_review.technical_approved',
+  INITIATION_REVIEW_TECHNICAL_RETURNED: 'initiation_review.technical_returned',
+  INITIATION_REVIEW_GENERAL_APPROVED: 'initiation_review.general_approved',
+  INITIATION_REVIEW_GENERAL_RETURNED: 'initiation_review.general_returned',
+  INITIATION_REVIEW_GENERAL_ACTIVATED: 'initiation_review.general_activated',
+  INITIATION_REVIEW_RESTORED: 'initiation_review.restored',
+  INITIATION_REVIEW_COMPLETED: 'initiation_review.completed',
   STAGE_ADVANCED: 'stage.advanced',
   PROJECT_COMPLETED: 'project.completed'
 };
@@ -30,7 +40,8 @@ export const OPERATION_TARGET_TYPE = {
   PROJECT: 'project',
   STAGE: 'stage',
   APPROVAL: 'approval',
-  STAGE_DOCUMENT: 'stage_document'
+  STAGE_DOCUMENT: 'stage_document',
+  INITIATION_REVIEW: 'initiation_review'
 };
 
 export class OperationLogLimitError extends Error {

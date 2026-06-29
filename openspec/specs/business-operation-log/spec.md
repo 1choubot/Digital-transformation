@@ -44,88 +44,67 @@ TBD - created by archiving change add-business-operation-log. Update Purpose aft
 
 ### Requirement: 业务日志动作和目标类型
 
-系统 MUST 使用稳定的 `action_type` 和 `target_type` 表示第一版业务操作日志类型，并 MUST 为精准返工请求和返工完成增加稳定日志动作。
+系统 MUST 使用稳定的 `action_type` 和 `target_type` 表示第一版业务操作日志类型，并 MUST 为精准返工请求、返工完成和 `1.2 项目立项审批表` 多节点审批增加稳定日志动作。
 
-#### Scenario: 支持项目创建动作
-- **WHEN** 项目创建成功
-- **THEN** 系统必须记录 `action_type = project.created` 且 `target_type = project` 的业务日志
+#### Scenario: 支持 1.2 多节点审批动作
 
-#### Scenario: 支持资料状态动作
-- **WHEN** 资料项手工提交、确认或退回成功
-- **THEN** 系统必须分别记录 `action_type = document.submitted`、`document.confirmed` 或 `document.returned`，且 `target_type = stage_document`
+- **WHEN** 普通 `1.2 项目立项审批表` 资料提交触发多节点激活、节点通过、节点退回、返工清除后的节点恢复或最终完成动作
+- **THEN** 系统 MUST 记录稳定 `action_type` 的项目业务操作日志
+- **AND** `target_type` SHOULD 使用 `initiation_review`、`stage_document` 或等价可区分 `1.2` 节点审批的目标类型
 
-#### Scenario: 支持精准返工请求动作
-- **WHEN** 审批资料退回并成功标记一个或多个返工目标
-- **THEN** 系统必须记录 `action_type = document.revision_requested` 且 `target_type = stage_document` 的业务日志
+#### Scenario: 支持 1.2 建议动作类型
 
-#### Scenario: A 类返工请求写日志
-- **WHEN** A 类审批资料退回并通过 `revisionTargetDocumentIds` 成功标记返工目标
-- **THEN** 系统必须为被标记目标记录 `document.revision_requested`
+- **WHEN** 系统记录 `1.2 项目立项审批表` 多节点审批日志
+- **THEN** 日志动作类型 MAY 使用 `initiation_review.submitted`
+- **AND** 日志动作类型 MAY 使用 `initiation_review.business_approved`、`initiation_review.business_returned`
+- **AND** 日志动作类型 MAY 使用 `initiation_review.technical_approved`、`initiation_review.technical_returned`
+- **AND** 日志动作类型 MAY 使用 `initiation_review.general_approved`、`initiation_review.general_returned`
+- **AND** 日志动作类型 MAY 使用 `initiation_review.completed`
 
-#### Scenario: C 类设计变更触发写日志
-- **WHEN** `5.12` 退回并通过 `designChangeTargetDocumentIds` 成功触发 `5.13-5.16` 设计变更资料
-- **THEN** 系统必须为被触发目标记录 `document.revision_requested`
+#### Scenario: initiation_review.submitted 表示普通资料提交后启动
 
-#### Scenario: 支持精准返工完成动作
-- **WHEN** 资料返工完成并成功清除 `revision_required`
-- **THEN** 系统必须记录 `action_type = document.revision_completed` 且 `target_type = stage_document` 的业务日志
+- **WHEN** 系统记录 `initiation_review.submitted`
+- **THEN** 该日志 MUST 表示普通 `1.2 项目立项审批表` 资料提交或上传后，多节点审批被启动或节点被激活
+- **AND** 该日志 MUST NOT 表示新增了独立前端节点提交按钮
+- **AND** 该日志 MUST NOT 表示独立于普通资料提交的节点提交流程
 
-#### Scenario: submit_only 和 conditional_submit 完成返工写日志
-- **WHEN** `submit_only` 或 `conditional_submit` 资料明确完成返工并清除 `revision_required`
-- **THEN** 系统必须记录 `document.revision_completed`
+#### Scenario: 1.2 节点失败不写成功日志
 
-#### Scenario: approval_required 审核确认清除返工写日志
-- **WHEN** `approval_required` 返工资料经审核确认并清除 `revision_required`
-- **THEN** 系统必须记录 `document.revision_completed`
-
-#### Scenario: 支持资料适用性动作
-- **WHEN** 资料项标记不适用或恢复适用成功
-- **THEN** 系统必须分别记录 `action_type = document.marked_not_applicable` 或 `document.restored_applicable`，且 `target_type = stage_document`
-
-#### Scenario: 支持资料责任人变更动作
-- **WHEN** 资料项责任人分配或清空成功
-- **THEN** 系统必须记录 `action_type = document.responsible_changed` 且 `target_type = stage_document` 的业务日志
-
-#### Scenario: 支持阶段推进动作
-- **WHEN** 项目阶段手工推进成功
-- **THEN** 系统必须记录 `action_type = stage.advanced` 且 `target_type = stage` 的业务日志
-
-#### Scenario: 失败操作不记录日志
-- **WHEN** 项目创建、资料状态操作、精准返工请求、精准返工完成、资料适用性操作、资料责任人分配或阶段推进失败
-- **THEN** 系统不得写入对应业务操作日志
+- **WHEN** 普通 `1.2` 资料提交触发多节点激活、节点通过、节点退回、返工清除后的节点恢复或最终完成因权限、状态、参数、返工门禁或业务校验失败
+- **THEN** 系统不得写入对应成功业务操作日志
 
 ### Requirement: 业务日志结构化详情
 
-系统 MUST 在 `details_json` 中保存第一版业务动作所需的结构化上下文，并 MUST 为精准返工日志保存来源审批资料、返工目标、原因、操作人和时间等可审计信息。
+系统 MUST 在 `details_json` 中保存第一版业务动作所需的结构化上下文，并 MUST 为精准返工日志和 `1.2` 多节点审批日志保存来源资料、审批节点、原因、操作人和时间等可审计信息。
 
-#### Scenario: 资料状态变更详情
-- **WHEN** 系统记录资料项提交、确认或退回日志
-- **THEN** `details_json` 必须至少包含 `documentId`、`documentCode`、`documentName`、`fromStatus` 和 `toStatus`
+#### Scenario: 1.2 节点审批详情
 
-#### Scenario: 资料退回详情
-- **WHEN** 系统记录 `document.returned` 日志
-- **THEN** `details_json` 必须额外包含 `returnReason`
+- **WHEN** 系统记录 `1.2 项目立项审批表` 节点审批日志
+- **THEN** `details_json` MUST 至少包含 `projectId`、`stageDocumentId`、`documentCode`、`documentName`、`nodeKey`、`nodeName`、`fromStatus`、`toStatus`、`actorUserId` 和 `operatedAt`
+- **AND** 审批通过日志 MUST 能保存审批意见或等价备注
+- **AND** 审批退回日志 MUST 保存退回原因
 
-#### Scenario: 返工请求详情
-- **WHEN** 系统记录 `document.revision_requested` 日志
-- **THEN** `details_json` MUST 至少包含来源审批资料 `sourceDocumentId`、`sourceDocumentCode`、`sourceDocumentName`、被要求返工资料 `targetDocumentId`、`targetDocumentCode`、`targetDocumentName`、`revisionReason`、`requestedByUserId` 和 `requestedAt`
-- **AND** C 类 `5.12` 设计变更触发日志 MUST 能表达请求字段来源为 `designChangeTargetDocumentIds` 或等价 C 类上下文
+#### Scenario: 前置退回导致总经理节点失效可审计
 
-#### Scenario: 多目标返工请求详情
-- **WHEN** 一次审批退回请求标记多个返工目标
-- **THEN** 系统 MAY 为每个目标资料分别写入 `document.revision_requested` 日志
-- **OR** 系统 MAY 写入一条日志并在 `details_json` 中包含 `targetDocuments` 数组
-- **AND** 无论采用哪种方式，日志 MUST 能审计每个被要求返工资料
+- **WHEN** `business_review` 或 `technical_review` 退回导致已生成或已通过的 `general_review` 失效、清空或回到未开始
+- **THEN** 对应业务日志 `details_json` MUST 能表达被失效节点、失效前状态和失效原因
 
-#### Scenario: 返工完成详情
-- **WHEN** 系统记录 `document.revision_completed` 日志
-- **THEN** `details_json` MUST 至少包含来源审批资料 `sourceDocumentId`、被返工资料 `targetDocumentId`、`targetDocumentCode`、`targetDocumentName`、`revisionReason`、`completedByUserId` 和 `completedAt`
-- **AND** 对 `approval_required` 资料，日志 MUST 能表达返工完成发生在审核确认并清除 `revision_required` 之后
+#### Scenario: 并行已通过节点保留可审计
 
-#### Scenario: 精准返工日志摘要
-- **WHEN** 系统记录 `document.revision_requested` 或 `document.revision_completed`
-- **THEN** 系统 MUST 保存可读中文 `summary`
-- **AND** 摘要应能表达来源审批资料、返工目标资料和返工原因或完成动作
+- **WHEN** `business_review` 或 `technical_review` 退回且并行另一侧已通过结果保留
+- **THEN** 对应业务日志 `details_json` MUST 能表达保留的并行节点和其审批状态
+
+#### Scenario: 总经理退回不要求前置重跑可审计
+
+- **WHEN** `general_review` 退回且 `business_review`、`technical_review` 已通过结果保留
+- **THEN** 对应业务日志 `details_json` MUST 能表达前置节点已通过结果被保留
+
+#### Scenario: 1.2 触发精准返工日志关联
+
+- **WHEN** `1.2` 节点退回触发 `1.1 项目需求表` 精准返工
+- **THEN** `1.2` 节点退回日志 MUST 能关联来源 `1.2` 审批资料
+- **AND** `document.revision_requested` 日志 MUST 能关联目标 `1.1` 返工资料
+- **AND** 两类日志 MUST 能共同审计退回原因、返工原因、操作人和时间
 
 ### Requirement: 业务日志中文摘要
 
@@ -143,32 +122,23 @@ TBD - created by archiving change add-business-operation-log. Update Purpose aft
 
 ### Requirement: 业务日志事务一致性
 
-系统 MUST 保证关键业务状态变更与对应业务操作日志在同一事务中提交。
+系统 MUST 保证关键业务状态变更与对应业务操作日志在同一事务中提交；`1.2` 多节点审批状态、精准返工字段和业务日志也 MUST 保持事务一致。
 
-#### Scenario: 项目创建日志同事务
+#### Scenario: 1.2 多节点激活和审批日志同事务
 
-- **WHEN** 已登录用户创建项目成功
-- **THEN** 项目主数据保存、8 阶段初始化、资料清单初始化和 `project.created` 日志写入必须在同一事务中提交
+- **WHEN** 普通 `1.2 项目立项审批表` 资料提交触发多节点激活、节点通过、节点退回或返工清除后的节点恢复成功
+- **THEN** 节点状态变更和对应业务日志写入 MUST 在同一事务中提交
 
-#### Scenario: 资料操作日志同事务
+#### Scenario: 1.2 退回返工日志同事务
 
-- **WHEN** 已登录用户成功变更资料项状态或适用性
-- **THEN** 资料项状态或适用性变更、追溯字段更新和业务日志写入必须在同一事务中提交
+- **WHEN** `1.2` 节点退回成功并标记 `1.1 revision_required = true`
+- **THEN** 节点退回状态、`1.1` 返工字段和 `document.revision_requested` 业务日志 MUST 在同一事务中提交
+- **AND** 任一日志写入失败 MUST 回滚节点状态和返工字段变更
 
-#### Scenario: 资料责任人日志同事务
+#### Scenario: 1.2 最终完成日志同事务
 
-- **WHEN** 已登录用户成功分配或清空资料项责任人
-- **THEN** 资料项责任人变更、责任人追溯字段更新和 `document.responsible_changed` 业务日志写入必须在同一事务中提交
-
-#### Scenario: 阶段推进日志同事务
-
-- **WHEN** 已登录用户成功推进项目阶段
-- **THEN** 阶段状态更新、项目完成状态更新和业务日志写入必须在同一事务中提交
-
-#### Scenario: 日志写入失败回滚业务变更
-
-- **WHEN** 业务动作状态变更已准备提交但业务日志写入失败
-- **THEN** 系统必须回滚该业务动作，不得出现状态已改变但缺少业务日志的结果
+- **WHEN** `1.2` 商务评价、技术评价和总经理审批均最终通过并满足无返工门禁
+- **THEN** 系统 MUST 在同一事务中记录 `initiation_review.completed` 或等价最终完成日志
 
 ### Requirement: 项目业务日志查询接口
 
@@ -432,5 +402,40 @@ TBD - created by archiving change add-business-operation-log. Update Purpose aft
 
 #### Scenario: 当前不做通知推送
 - **WHEN** 系统记录精准返工日志
+- **THEN** 系统 MUST NOT 因日志动作发送推送通知、站内信、短信或邮件
+
+### Requirement: 1.2 多节点审批业务日志
+
+系统 MUST 为 `1.2 项目立项审批表` 多节点审批提供结构化、可追溯的项目业务操作日志。
+
+#### Scenario: 商务评价日志
+
+- **WHEN** 商务评价审批通过或退回
+- **THEN** 系统 MUST 记录商务评价节点、审批动作、审批人、意见或退回原因和时间
+
+#### Scenario: 技术评价日志
+
+- **WHEN** 技术评价审批通过或退回
+- **THEN** 系统 MUST 记录技术评价节点、审批动作、审批人、意见或退回原因和时间
+
+#### Scenario: 总经理审批日志
+
+- **WHEN** 总经理审批通过或退回
+- **THEN** 系统 MUST 记录总经理审批节点、审批动作、审批人、意见或退回原因和时间
+
+#### Scenario: 总经理节点失效日志上下文
+
+- **WHEN** 商务评价或技术评价退回导致总经理节点失效
+- **THEN** 系统 MUST 通过节点退回日志或等价业务日志上下文记录总经理节点失效事实
+- **AND** 系统 MUST NOT 因记录该上下文新增复杂 action type
+
+#### Scenario: 最终完成日志
+
+- **WHEN** `1.2` 所有必需节点通过且相关返工清除
+- **THEN** 系统 MUST 记录 `1.2` 多节点审批最终完成日志
+
+#### Scenario: 不做通知推送
+
+- **WHEN** 系统记录 `1.2` 多节点审批业务日志
 - **THEN** 系统 MUST NOT 因日志动作发送推送通知、站内信、短信或邮件
 

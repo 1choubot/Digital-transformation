@@ -56,46 +56,44 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 ### Requirement: 资料项基础状态
 
-系统 MUST 保存项目级资料项基础状态，并 MUST 区分基础状态、业务完成状态和精准返工标记；业务完成状态 MUST 由 `completionMode`、`status`、`isApplicable` 和 `revision_required` 派生。
+系统 MUST 保存项目级资料项基础状态，并 MUST 区分基础状态、业务完成状态、精准返工标记和 `1.2 项目立项审批表` 专用多节点审批状态；业务完成状态 MUST 由 `completionMode`、`status`、`isApplicable`、`revision_required` 和特殊资料规则派生。
 
-#### Scenario: 基础状态枚举
-- **WHEN** 系统保存资料项状态
-- **THEN** 状态必须是 `not_submitted`、`submitted`、`confirmed` 或 `returned` 之一
+#### Scenario: 1.2 基础 confirmed 不等于最终完成
 
-#### Scenario: 返工标记独立于基础状态
-- **WHEN** 审批 NO 要求上游资料返工
-- **THEN** 系统 MUST 使用 `revision_required` 等独立返工字段标记上游资料
-- **AND** 系统 MUST NOT 复用 `returned` 改写上游资料的基础状态
-- **AND** 每次设置 `revision_required = true` 时，系统 MUST 清空 `revision_resubmitted_by_user_id` 和 `revision_resubmitted_at`
+- **WHEN** 资料项为 `1.2 项目立项审批表`
+- **AND** 该资料基础状态为 `confirmed`
+- **AND** 商务评价审批、技术评价审批或总经理审批尚未全部最终通过
+- **THEN** 系统 MUST 将该资料业务完成状态派生为未完成或待审批
+- **AND** 系统 MUST NOT 将其计入阶段齐套完成
 
-#### Scenario: revision_required 覆盖完成状态
-- **WHEN** 资料项 `revision_required = true`
-- **THEN** 系统 MUST 将业务完成状态派生为未完成或需返工
-- **AND** 即使该资料基础状态为 `submitted` 或 `confirmed` 也 MUST 阻塞阶段推进
+#### Scenario: 1.2 未提交时多节点不进入审批
 
-#### Scenario: submit_only submitted 派生完成
-- **WHEN** 资料项 `completionMode = submit_only`
-- **AND** 状态为 `submitted`
-- **AND** `revision_required` 不是 true
-- **THEN** 系统 MUST 将业务完成状态派生为 `completed` 或等价已完成状态
+- **WHEN** 资料项为 `1.2 项目立项审批表`
+- **AND** 该资料基础状态为 `not_submitted`
+- **THEN** 系统 MAY 预创建 `business_review`、`technical_review` 和 `general_review`
+- **AND** `business_review` 和 `technical_review` MUST 处于等待资料提交或不可审批状态
+- **AND** 系统 MUST NOT 将其纳入商务评价或技术评价审批待办
 
-#### Scenario: approval_required submitted 派生待审核
-- **WHEN** 资料项 `completionMode = approval_required`
-- **AND** 状态为 `submitted`
-- **AND** `revision_required` 不是 true
-- **THEN** 系统 MUST 将业务完成状态派生为 `pending_review` 或等价待审核状态
+#### Scenario: 1.2 普通提交激活商务技术节点
 
-#### Scenario: approval_required 返工重提后派生待审核
-- **WHEN** 资料项 `completionMode = approval_required`
-- **AND** `revision_required = true`
-- **AND** 状态为 `submitted`
-- **AND** 系统可通过 `revision_resubmitted_at` 或等价显式字段判断该提交是返工重提
-- **THEN** 系统 MUST 将该资料表达为待审核且仍未完成
-- **AND** 系统 MUST NOT 在审核确认前清除 `revision_required`
+- **WHEN** 资料项为 `1.2 项目立项审批表`
+- **AND** 普通资料提交或上传使其基础状态达到 `submitted`
+- **THEN** 系统 MUST 将 `business_review` 和 `technical_review` 激活为待审批或可审批状态
+- **AND** `general_review` MUST 继续保持未开始或等待前置状态
 
-#### Scenario: returned 派生未完成
-- **WHEN** 资料项状态为 `returned`
-- **THEN** 系统 MUST 将业务完成状态派生为 `incomplete` 或等价未完成状态
+#### Scenario: 1.2 returned 重新提交前不进入审批
+
+- **WHEN** 资料项为 `1.2 项目立项审批表`
+- **AND** 该资料基础状态为 `returned`
+- **THEN** 系统 MUST 等待普通 `1.2` 资料重新提交
+- **AND** 系统 MUST NOT 在重新提交前将 `business_review` 或 `technical_review` 纳入审批待办
+
+#### Scenario: 1.2 相关阻塞覆盖完成状态
+
+- **WHEN** 资料项为 `1.2 项目立项审批表`
+- **AND** `1.1 项目需求表` 存在由 `1.2` NO 触发且未清除的 `revision_required`
+- **THEN** 系统 MUST 将 `1.2` 业务完成状态派生为未完成或需返工
+- **AND** `1.2` 自身 MUST 通过节点状态、基础状态或专用多节点状态表达待审、退回或未通过，不得作为返工目标写入 `revision_required`
 
 ### Requirement: 阶段资料清单查询接口
 
@@ -155,69 +153,55 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 ### Requirement: 资料项手工状态流转
 
-系统 MUST 提供项目级阶段资料项的手工状态操作接口，并 MUST 按 `completionMode` 限定提交、确认和退回动作；审批退回 MUST 支持精准返工目标规划，不得整阶段退回或自动退回全部前置资料。
+系统 MUST 提供项目级阶段资料项的手工状态操作接口，并 MUST 按 `completionMode` 限定提交、确认和退回动作；`1.2 项目立项审批表` 的普通资料确认/退回接口不得继续承载审批，必须使用专用多节点审批状态机。
 
-#### Scenario: 标记待提交资料为已提交
-- **WHEN** 已登录用户将状态为 `not_submitted` 且适用的项目级资料项标记提交
-- **THEN** 系统必须将该资料项状态更新为 `submitted`，并记录提交追溯字段
+#### Scenario: 1.2 普通确认接口必须拒绝
 
-#### Scenario: 标记已退回资料为已提交
-- **WHEN** 已登录用户将状态为 `returned` 且适用的项目级资料项重新标记提交
-- **THEN** 系统必须将该资料项状态更新为 `submitted`，记录新的提交追溯字段，并清空退回追溯字段
+- **WHEN** 用户通过普通资料确认接口对 `1.2 项目立项审批表` 执行确认
+- **THEN** 系统 MUST 拒绝该请求
+- **AND** 系统 MUST 提示调用方使用 `1.2` 专用多节点审批能力
+- **AND** 系统 MUST NOT 将 `1.2` 派生为最终完成
 
-#### Scenario: confirm 只适用于需要审核资料
-- **WHEN** 已登录用户确认状态为 `submitted` 的项目级资料项
-- **THEN** 系统 MUST 仅允许 `completionMode = approval_required` 或未来 `conditional_approval` 的资料执行确认
-- **AND** 系统 MUST NOT 要求 `submit_only` 资料进入确认主流程
+#### Scenario: 1.2 普通退回接口必须拒绝
 
-#### Scenario: return 只适用于需要审核资料
-- **WHEN** 已登录用户退回状态为 `submitted` 的项目级资料项
-- **THEN** 系统 MUST 仅允许 `completionMode = approval_required` 或未来 `conditional_approval` 的资料执行退回
-- **AND** 系统 MUST NOT 将 `submit_only` 资料退回作为主流程操作
+- **WHEN** 用户通过普通资料退回接口对 `1.2 项目立项审批表` 执行退回
+- **THEN** 系统 MUST 拒绝该请求
+- **AND** 系统 MUST 提示调用方使用 `1.2` 专用多节点审批能力
+- **AND** 系统 MUST NOT 通过普通资料退回接口触发 `1.1 revision_required`
 
-#### Scenario: A 类退回必须选择固定候选
-- **WHEN** 用户退回 A 类审批资料
-- **THEN** 请求 MUST 携带 `returnReason` 和 `revisionTargetDocumentIds`
-- **AND** `revisionTargetDocumentIds` MUST 至少包含 1 个固定候选范围内的当前项目适用资料
+#### Scenario: 1.2 节点退回触发固定 1.1 返工
 
-#### Scenario: 非 A 类不得携带上游返工目标
-- **WHEN** 用户退回 B 类、C 类或其他非 A 类审批资料
-- **THEN** 系统 MUST 拒绝携带 `revisionTargetDocumentIds` 的请求
-- **AND** 系统 MUST 只按该审批资料自身退回处理，除 `5.12` C 类特殊规则外不得标记其他资料返工
+- **WHEN** `1.2 项目立项审批表` 的商务评价、技术评价或总经理审批节点退回
+- **THEN** 系统 MUST 要求非空退回原因
+- **AND** 系统 MUST 按 A 类精准返工规则只允许选择 `1.1 项目需求表` 作为上游返工目标
+- **AND** 系统 MUST 只将 `1.1` 标记为 `revision_required`
+- **AND** 系统 MUST NOT 将 `1.2` 自身标记为 `revision_required`
+- **AND** 系统 MUST NOT 将 `1.2` 对应的 `project_stage_documents.status` 置为 `returned`
+- **AND** 节点退回 MUST 只更新专用节点状态，例如 `returned_blocked_by_rework`，并标记 `1.1 revision_required`
+- **AND** 系统 MUST NOT 整阶段退回或自动退回全部前置资料
 
-#### Scenario: C 类使用独立设计变更字段
-- **WHEN** 用户退回 `5.12 安装调试记录（厂内）`
-- **THEN** 请求 MUST 使用 `designChangeTargetDocumentIds` 表示设计变更触发项
-- **AND** 请求 MUST NOT 使用 `revisionTargetDocumentIds`
-- **AND** `designChangeTargetDocumentIds` 不算违反非 A 类不得携带上游 `revisionTargetDocumentIds` 的规则
+#### Scenario: 1.1 返工未清除前不得通过退回节点
 
-#### Scenario: 不自动退回全部前置资料
-- **WHEN** 任一审批资料被退回
-- **THEN** 系统 MUST NOT 自动将同阶段全部前置资料置为 `returned`
-- **AND** 系统 MUST NOT 因退回动作整阶段回退
+- **WHEN** `1.2` 任一节点退回后已标记 `1.1 revision_required = true`
+- **AND** `1.1 revision_required` 尚未清除
+- **THEN** 系统 MUST 拒绝该退回节点的审批通过动作
+- **AND** 系统 MUST NOT 将 `1.2` 派生为最终完成
 
-#### Scenario: 清除返工必须显式发生
-- **WHEN** 上游 `submit_only` 或 `conditional_submit` 资料完成返工
-- **THEN** 责任人必须在具备资料权限的前提下执行明确返工完成动作，系统才可清除 `revision_required`
+#### Scenario: 1.1 返工清除后退回节点自动回到待审批
 
-#### Scenario: 审核资料返工必须重新确认
-- **WHEN** 上游 `approval_required` 资料被标记 `revision_required = true`
-- **THEN** 该资料必须执行返工重提并经审核确认后才可清除 `revision_required`
-- **AND** `3.2 销售合同` 和 `5.3 采购合同` MUST 适用该规则
+- **WHEN** `1.1 revision_required` 已清除
+- **AND** `1.2` 存在被退回节点
+- **THEN** 后端 MUST 自动将被退回节点回到待审批或可审批状态
+- **AND** 该节点 MUST 回到对应节点审批人的待办
+- **AND** 系统 MUST NOT 仅因 `1.1` 返工清除就直接将该节点视为通过
+- **AND** 第一版 MUST NOT 新增 `1.2` 重提按钮或单独重提待办
 
-#### Scenario: confirmed 返工资料仍允许重提
-- **WHEN** 上游 `approval_required` 资料基础状态已经是 `confirmed`
-- **AND** `revision_required = true`
-- **THEN** 系统 MUST 允许责任人在具备资料权限时执行返工重提
-- **AND** 重提后基础状态 MUST 进入 `submitted`
-- **AND** 重提时 MUST NOT 清除 `revision_required`
-- **AND** 重提时 MUST 设置 `revision_resubmitted_by_user_id` 和 `revision_resubmitted_at`
+#### Scenario: 重跑节点及下游重新满足后才可完成
 
-#### Scenario: 返工重提再次退回保持返工
-- **WHEN** 上游 `approval_required` 返工资料重提后再次被退回
-- **THEN** 系统 MUST 保持 `revision_required = true`
-- **AND** 系统 MUST 清空或失效本轮 `revision_resubmitted_by_user_id` 和 `revision_resubmitted_at`
-- **AND** 直到后续返工重提并审核确认通过后才可清除
+- **WHEN** 被退回节点已自动回到待审批或可审批状态
+- **AND** 该节点由对应节点审批人重新审批通过
+- **THEN** 系统 MUST 继续检查该节点下游节点是否按确认规则重新满足
+- **AND** 只有重跑节点及其下游节点均重新满足后，`1.2` 才可恢复最终完成判断
 
 ### Requirement: 手工状态流转边界
 
@@ -240,35 +224,37 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 ### Requirement: 阶段资料齐套摘要
 
-系统 MUST 为每个阶段分组返回适用资料齐套摘要，并 MUST 只基于当前项目级阶段资料项、`completionMode`、基础状态、现有 `isApplicable` 适用性和 `revision_required` 返工标记判断计算。
+系统 MUST 为每个阶段分组返回适用资料齐套摘要，并 MUST 只基于当前项目级阶段资料项、`completionMode`、基础状态、现有 `isApplicable` 适用性、`revision_required` 返工标记和特殊资料完成规则判断计算。
 
-#### Scenario: 返回阶段齐套摘要字段
-- **WHEN** 用户查询项目阶段资料清单
-- **THEN** 每个阶段分组必须返回 `completenessSummary`，包含 `requiredTotal`、`completedRequiredCount` 或等价已完成数量、`incompleteRequiredCount`、`completionPercent` 和 `incompleteRequiredDocuments`
+#### Scenario: 1.2 按多节点最终通过计入齐套
 
-#### Scenario: 只统计适用资料项
-- **WHEN** 系统计算阶段齐套摘要
-- **THEN** 系统必须只统计当前项目级资料项中 `isApplicable = true` 且参与阶段推进门禁的资料项
+- **WHEN** 系统计算第 1 阶段齐套摘要
+- **AND** 当前阶段包含适用的 `1.2 项目立项审批表`
+- **THEN** 系统 MUST 只有在 `business_review approved`、`technical_review approved`、`general_review approved` 且 `1.1` 不存在由 `1.2` NO 触发且未清除的 `revision_required` 后，才将 `1.2` 计入已完成数量
 
-#### Scenario: revision_required 计为未完成
-- **WHEN** 适用资料项 `revision_required = true`
-- **THEN** 系统 MUST 将其计入未完成数量和 `incompleteRequiredDocuments`
-- **AND** 系统 MUST 在缺失资料项中返回返工原因和来源审批资料标识或等价上下文
+#### Scenario: 1.2 未最终通过进入缺失列表
 
-#### Scenario: submit_only submitted 计为完成
-- **WHEN** 适用资料项 `completionMode = submit_only` 且状态为 `submitted`
-- **AND** `revision_required` 不是 true
-- **THEN** 系统必须将其计入已完成数量
+- **WHEN** `1.2 项目立项审批表` 未完成所有必需审批节点
+- **THEN** 系统 MUST 将 `1.2` 计入 `incompleteRequiredDocuments` 或等价未完成资料列表
+- **AND** 列表项 MUST 能表达未完成原因是 `1.2` 多节点审批未最终通过
 
-#### Scenario: approval_required confirmed 计为完成
-- **WHEN** 适用资料项 `completionMode = approval_required` 且状态为 `confirmed`
-- **AND** `revision_required` 不是 true
-- **THEN** 系统必须将其计入已完成数量
+#### Scenario: 1.2 商务技术并行未全通过不完成
 
-#### Scenario: conditional_submit 未触发不进入缺失列表
-- **WHEN** 资料项 `completionMode = conditional_submit`
-- **AND** `isApplicable = false`
-- **THEN** 系统不得将该资料项计入 `requiredTotal` 或 `incompleteRequiredDocuments`
+- **WHEN** `business_review` 或 `technical_review` 任一节点未 `approved`
+- **THEN** 系统 MUST 将 `1.2` 派生为未完成
+- **AND** 系统 MUST NOT 因另一并行节点已通过而将 `1.2` 计入齐套完成
+
+#### Scenario: 1.2 总经理未通过不完成
+
+- **WHEN** `business_review` 和 `technical_review` 均已 `approved`
+- **AND** `general_review` 尚未 `approved`
+- **THEN** 系统 MUST 将 `1.2` 派生为未完成
+
+#### Scenario: 1.2 返工未清除进入缺失列表
+
+- **WHEN** `1.2` 退回触发的 `1.1` 精准返工尚未清除
+- **THEN** 系统 MUST 将相关阻塞原因返回到第 1 阶段齐套摘要或缺失资料列表
+- **AND** 前端 MUST 能展示为需返工阻塞，而不是普通未提交
 
 ### Requirement: 资料项适用性
 
@@ -1615,32 +1601,22 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 ### Requirement: 资料状态按 completionMode 完成
 
-系统 MUST 按资料项 `completionMode`、基础状态、适用性和 `revision_required` 判断资料是否完成、是否进入审核待办以及是否阻塞阶段推进。
+系统 MUST 按资料项 `completionMode`、基础状态、适用性、`revision_required` 和特殊资料规则判断资料是否完成、是否进入审核待办以及是否阻塞阶段推进。
 
-#### Scenario: revision_required 优先判未完成
-- **WHEN** 资料项 `revision_required = true`
-- **THEN** 系统 MUST 将该资料项计为未完成或需返工
-- **AND** 系统 MUST 阻塞阶段推进
+#### Scenario: 1.2 approval_required 使用专用完成规则
 
-#### Scenario: submit_only 提交后完成
-- **WHEN** 资料项 `completionMode = submit_only`
-- **AND** 该资料项已提交或上传
-- **AND** `revision_required` 不是 true
-- **THEN** 系统 MUST 将该资料项计为完成
-- **AND** 系统 MUST NOT 为该资料项生成审核待办
+- **WHEN** 资料项为 `1.2 项目立项审批表`
+- **AND** `completionMode = approval_required`
+- **THEN** 系统 MUST 使用专用多节点审批完成规则判断其是否完成
+- **AND** 系统 MUST NOT 只按普通 `approval_required + confirmed` 规则判定完成
 
-#### Scenario: approval_required 审核通过后完成
-- **WHEN** 资料项 `completionMode = approval_required`
-- **AND** 该资料项已确认或审批通过
-- **AND** `revision_required` 不是 true
-- **THEN** 系统 MUST 将该资料项计为完成
+#### Scenario: 1.2 多节点全部通过后完成
 
-#### Scenario: approval_required 返工后重新审核
-- **WHEN** 资料项 `completionMode = approval_required`
-- **AND** `revision_required = true`
-- **THEN** 系统 MUST 要求返工重提并经审核确认后才可清除返工标记并恢复完成状态
-- **AND** 返工重提时基础状态 MUST 进入 `submitted`
-- **AND** 返工重提时 MUST NOT 清除 `revision_required`
+- **WHEN** `1.2 项目立项审批表` `business_review approved`
+- **AND** `technical_review approved`
+- **AND** `general_review approved`
+- **AND** `1.1` 不存在由 `1.2` NO 触发且未清除的 `revision_required`
+- **THEN** 系统 MUST 将 `1.2` 派生为完成
 
 ### Requirement: 在线平台附件为当前默认保存方式
 
@@ -1658,19 +1634,21 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 ### Requirement: 精准返工固定分类
 
-系统 MUST 将审批 NO 后的返工处理固定分为 A 类固定候选返工、B 类单份退回和 C 类厂内安装调试特殊处理，并 MUST 保持当前 64 项 `completionMode` 统计不变。
+系统 MUST 将审批 NO 后的返工处理固定分为 A 类固定候选返工、B 类单份退回和 C 类厂内安装调试特殊处理，并 MUST 保持当前 64 项 `completionMode` 统计不变；`1.2` 多节点审批 NO 仍复用 A 类固定候选 `1.1`。
 
-#### Scenario: 不改变 completionMode 数量
-- **WHEN** 系统实现精准返工能力
-- **THEN** `submit_only` MUST 仍为 33 项
-- **AND** `approval_required` MUST 仍为 24 项
-- **AND** `conditional_submit` MUST 仍为 7 项
-- **AND** `conditional_approval` MUST 仍为 0 项
+#### Scenario: 1.2 多节点 NO 仍只返工 1.1
 
-#### Scenario: 不整阶段退回
-- **WHEN** 审批资料 NO
-- **THEN** 系统 MUST NOT 整阶段退回
-- **AND** 系统 MUST NOT 自动退回全部前置资料
+- **WHEN** `1.2 项目立项审批表` 的商务评价、技术评价或总经理审批节点审批 NO
+- **THEN** A 类返工候选 MUST 仅为 `1.1 项目需求表`
+- **AND** 系统 MUST 只把 `1.1` 标记为 `revision_required`
+- **AND** `1.2` 自身 MUST 通过节点状态、基础状态或专用多节点状态阻塞，不得作为返工目标写 `revision_required`
+- **AND** 系统 MUST NOT 允许自由勾选第 1 阶段全部资料
+
+#### Scenario: 1.2 多节点不改变 completionMode 数量
+
+- **WHEN** 系统规划或实现 `1.2 项目立项审批表` 多节点审批
+- **THEN** `1.2` MUST 仍保留在当前 64 项普通资料模板中
+- **AND** `submit_only 33`、`approval_required 24`、`conditional_submit 7`、`conditional_approval 0` MUST 保持不变
 
 ### Requirement: A 类固定候选返工映射
 
@@ -1805,4 +1783,42 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 - **AND** 系统 MUST 保持 `revision_required = true`
 - **AND** 系统 MUST 记录 `revision_resubmitted_by_user_id` 和 `revision_resubmitted_at`
 - **AND** 系统 MUST 直到审核确认通过后才清除返工标记
+
+### Requirement: 1.2 项目立项审批表完成状态
+
+系统 MUST 为 `1.2 项目立项审批表` 提供区别于普通 `approval_required` 的派生完成状态。
+
+#### Scenario: 必需节点全部通过才完成
+
+- **WHEN** 系统派生 `1.2` 完成状态
+- **THEN** 系统 MUST 校验 `business_review approved`、`technical_review approved` 和 `general_review approved`
+- **AND** 任一节点待审、未开始、退回或未通过时，`1.2` MUST 派生为未完成
+
+#### Scenario: 前置退回后总经理失效则不完成
+
+- **WHEN** `business_review` 或 `technical_review` 退回
+- **THEN** 系统 MUST 将 `general_review` 视为失效、未开始或等待前置
+- **AND** 系统 MUST 将 `1.2` 派生为未完成
+- **AND** 已通过的并行另一侧节点 MUST 保留通过结果
+
+#### Scenario: 总经理退回后前置通过仍不完成
+
+- **WHEN** `general_review` 退回
+- **AND** `business_review` 和 `technical_review` 已通过结果保留
+- **THEN** 系统 MUST 将 `1.2` 派生为未完成
+- **AND** 直到 `general_review` 重新通过后才可恢复完成判断
+- **AND** 已通过的 `business_review` 和 `technical_review` MUST 保留通过结果
+
+#### Scenario: 返工未清除时不能完成
+
+- **WHEN** `1.2` 的所有审批节点均已通过
+- **AND** `1.1` 仍存在由 `1.2` NO 触发且未清除的 `revision_required`
+- **THEN** 系统 MUST 继续将 `1.2` 派生为未完成
+- **AND** 系统 MUST NOT 要求或依赖 `1.2 revision_required` 表达该阻塞
+
+#### Scenario: 1.3 仍按 submit_only
+
+- **WHEN** 系统判断第 1 阶段资料完成状态
+- **THEN** `1.3 项目立项通知` MUST 继续按 `submit_only` 提交或上传完成规则判断
+- **AND** 系统 MUST NOT 因 `1.2` 多节点审批改变 `1.3` 的完成规则
 

@@ -26,8 +26,10 @@ import {
   normalizeOperationLogLimit
 } from '../repositories/operationLogRepository.js';
 import {
+  approveInitiationReviewNode,
   getProjectStageDocumentChecklist,
   completeProjectStageDocumentRevision,
+  returnInitiationReviewNode,
   updateProjectStageDocumentApplicability,
   updateProjectStageDocumentResponsibleUser,
   updateProjectStageDocumentStatus
@@ -315,6 +317,42 @@ export async function completeStageDocumentRevisionHandler(req, res) {
     projectId,
     documentId,
     user: req.auth.user
+  });
+
+  res.json({
+    data: {
+      document
+    }
+  });
+}
+
+export async function approveInitiationReviewNodeHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const documentId = parseDocumentId(req.params.documentId);
+  const document = await approveInitiationReviewNode({
+    projectId,
+    documentId,
+    nodeKey: req.params.nodeKey,
+    user: req.auth.user,
+    comment: req.body?.comment
+  });
+
+  res.json({
+    data: {
+      document
+    }
+  });
+}
+
+export async function returnInitiationReviewNodeHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const documentId = parseDocumentId(req.params.documentId);
+  const document = await returnInitiationReviewNode({
+    projectId,
+    documentId,
+    nodeKey: req.params.nodeKey,
+    user: req.auth.user,
+    returnReason: req.body?.returnReason ?? req.body?.comment
   });
 
   res.json({

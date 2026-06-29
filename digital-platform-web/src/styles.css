@@ -1578,6 +1578,12 @@ p {
   color: #92400e;
 }
 
+.stage-document-pill--success {
+  border-color: rgba(22, 163, 74, 0.3);
+  background: #dcfce7;
+  color: #166534;
+}
+
 .stage-document-meta {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1614,12 +1620,14 @@ p {
 
 .stage-document-trace,
 .stage-document-attachments,
+.initiation-review-panel,
 .stage-document-card__actions {
   min-width: 0;
 }
 
 .stage-document-trace h4,
 .stage-document-attachments h4,
+.initiation-review-panel h4,
 .stage-document-card__actions h4 {
   margin: 0 0 8px;
   color: #334252;
@@ -1640,6 +1648,84 @@ p {
   border: 1px solid #dde6ee;
   border-radius: 6px;
   background: #fbfcfe;
+}
+
+.initiation-review-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #dde6ee;
+  border-radius: 6px;
+  background: #fbfcfe;
+}
+
+.initiation-review-panel__heading,
+.initiation-review-node__main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.initiation-review-panel__heading p {
+  margin: 0;
+  color: #667789;
+  font-size: 13px;
+}
+
+.initiation-review-blockers {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: #92400e;
+  font-size: 13px;
+}
+
+.initiation-review-nodes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.initiation-review-node {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #e3ebf3;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.initiation-review-node__meta {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.initiation-review-node__meta dt {
+  color: #667789;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.initiation-review-node__meta dd {
+  margin: 2px 0 0;
+  color: #334252;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.initiation-review-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.initiation-review-actions input {
+  min-width: 0;
 }
 
 .stage-document-attachments__heading {
@@ -1922,7 +2008,9 @@ p {
   }
 
   .approval-node-list,
-  .approval-stage__summary {
+  .approval-stage__summary,
+  .initiation-review-nodes,
+  .initiation-review-actions {
     grid-template-columns: 1fr;
   }
 
@@ -1945,6 +2033,7 @@ p {
   }
 
   .stage-document-card__actions,
+  .initiation-review-panel,
   .stage-document-attachments {
     grid-column: auto;
     grid-row: auto;

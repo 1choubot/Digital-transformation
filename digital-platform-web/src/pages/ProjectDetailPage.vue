@@ -87,6 +87,8 @@
         @submit-document="submitDocument"
         @confirm-document="confirmDocument"
         @return-document="returnDocument"
+        @approve-initiation-review-node="approveInitiationNode"
+        @return-initiation-review-node="returnInitiationNode"
         @complete-revision-document="completeRevisionDocument"
         @mark-not-applicable="markNotApplicable"
         @restore-applicable="restoreApplicable"
@@ -104,6 +106,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
   advanceProjectStage,
+  approveInitiationReviewNode,
   confirmStageDocument,
   completeStageDocumentRevision,
   deleteStageDocumentAttachment,
@@ -115,6 +118,7 @@ import {
   markStageDocumentNotApplicable,
   markStageDocumentSubmitted,
   restoreStageDocumentApplicable,
+  returnInitiationReviewNode,
   returnStageDocument,
   toReadableApiError,
   updateProjectCode,
@@ -286,7 +290,7 @@ const initiationNoticeDocument = computed(() =>
 const canUpdateProjectCodeByGate = computed(
   () =>
     getCompletionMode(initiationApprovalDocument.value) === 'approval_required' &&
-    initiationApprovalDocument.value?.status === 'confirmed' &&
+    initiationApprovalDocument.value?.initiationReview?.isComplete === true &&
     getCompletionMode(initiationNoticeDocument.value) === 'submit_only' &&
     initiationNoticeDocument.value?.isApplicable !== false &&
     ['submitted', 'confirmed'].includes(initiationNoticeDocument.value?.status)
@@ -514,6 +518,44 @@ async function returnDocument(payload) {
     () => {
       delete returnReasons[document.id];
     }
+  );
+}
+
+async function approveInitiationNode({ document, node, comment }) {
+  await runDocumentAction(
+    document,
+    `initiation-${node.nodeKey}-approve`,
+    () =>
+      approveInitiationReviewNode(
+        props.projectId,
+        document.id,
+        node.nodeKey,
+        comment || '',
+        props.authToken
+      ),
+    `${node.nodeName || '1.2 审批节点'}已通过。`
+  );
+}
+
+async function returnInitiationNode({ document, node, returnReason }) {
+  const reason = String(returnReason || '').trim();
+  if (!reason) {
+    actionErrorMessage.value = '请填写 1.2 审批节点退回原因。';
+    return;
+  }
+
+  await runDocumentAction(
+    document,
+    `initiation-${node.nodeKey}-return`,
+    () =>
+      returnInitiationReviewNode(
+        props.projectId,
+        document.id,
+        node.nodeKey,
+        reason,
+        props.authToken
+      ),
+    `${node.nodeName || '1.2 审批节点'}已退回，1.1 项目需求表进入返工。`
   );
 }
 

@@ -1,13 +1,6 @@
 <template>
   <section class="page-stack weekly-review-list-page animate-fadeIn">
-    <!-- 页面头部 -->
-    <div class="page-header">
-      <div class="page-header__left">
-        <span class="section-eyebrow">考评管理</span>
-        <h2 class="page-title">周报汇总及考评</h2>
-        <span class="page-subtitle">查看所有员工的周报考评情况</span>
-      </div>
-    </div>
+    <!-- 删除了 page-header 区域 -->
 
     <!-- 筛选栏 -->
     <section class="panel overview-filter-panel">
@@ -76,7 +69,7 @@
             <span>{{ overviewReferenceScoreText(row) }}</span>
             <span>{{ row.finalReviewedByName || '-' }}</span>
             <button type="button" class="row-btn action-btn" @click="navigate(`/weekly-report-review/${row.reportId}?from=overview`)">
-              详情
+              考评
             </button>
           </div>
         </div>
@@ -218,38 +211,6 @@ onMounted(() => {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-/* ===== 页面头部 ===== */
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-}
-.page-header__left {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-.section-eyebrow {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #909399;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.page-title {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #303133;
-  margin: 0;
-  line-height: 1.2;
-}
-.page-subtitle {
-  font-size: 0.85rem;
-  color: #909399;
 }
 
 /* ===== 面板 ===== */
@@ -528,14 +489,6 @@ onMounted(() => {
 @media (max-width: 900px) {
   .page-stack {
     padding: 1rem;
-  }
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .page-header__right {
-    width: 100%;
-    justify-content: flex-start;
   }
   .weekly-overview-filters {
     width: 100%;

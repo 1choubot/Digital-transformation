@@ -73,7 +73,6 @@ function mapWeeklyReportRow(row) {
     aiEvaluatedAt: dateTime(row.ai_evaluated_at),
     aiEvaluationSource: row.ai_evaluation_source,
     aiEvaluationError: row.ai_evaluation_error,
-    // Final review fields are manual evaluator decisions and must not be derived from aiScore.
     finalScore: row.final_score === null || row.final_score === undefined ? null : Number(row.final_score),
     finalGrade: row.final_grade,
     finalComment: row.final_comment,
@@ -139,7 +138,32 @@ function normalizeComparisonText(value) {
     .trim();
 }
 
+// 🔥 改进点：计算两个文本的相似度（基于词集重叠比例）
+function textSimilarity(text1, text2) {
+  const tokens1 = normalizeComparisonText(text1).split(/\s+/).filter(Boolean);
+  const tokens2 = normalizeComparisonText(text2).split(/\s+/).filter(Boolean);
+  if (tokens1.length === 0 || tokens2.length === 0) return 0;
+  const intersection = tokens1.filter(t => tokens2.includes(t));
+  const union = new Set([...tokens1, ...tokens2]);
+  return intersection.length / union.size;
+}
+
+// 🔥 改进点：综合匹配分数，考虑工作内容、目标、项目名
+function computeMatchScore(summary, dailyItem) {
+  const workContent = dailyItem.workContent || '';
+  const projectName = dailyItem.projectName || '';
+  
+  const taskScore = textSimilarity(summary.workTask, workContent);
+  const targetScore = textSimilarity(summary.workTarget, workContent);
+  const projectScore = projectName ? textSimilarity(summary.workTask, projectName) : 0;
+  
+  // 加权平均，突出任务和目标
+  return Math.max(taskScore * 0.5 + targetScore * 0.3 + projectScore * 0.2, 
+                 taskScore, targetScore, projectScore * 0.8);
+}
+
 // Return whether the weekly summary and daily item look related enough for an initial match.
+// 此函数保留用于向后兼容，但在新的匹配逻辑中不再直接使用
 function compareWeeklyAndDailyText(summary, dailyItem) {
   const weeklyText = normalizeComparisonText(`${summary.workTask} ${summary.workTarget}`);
   const dailyText = normalizeComparisonText(`${dailyItem?.projectName || ''} ${dailyItem?.workContent || ''}`);
@@ -156,6 +180,7 @@ function dailyEvidenceKey(dailyItem) {
   return `${dailyItem.reportDate}|${dailyItem.projectCode}|${dailyItem.workContent}`;
 }
 
+// 此函数已不再被新的 buildWeeklyComparisonRows 使用，但保留以防外部调用
 function chooseBestDailyEvidence(summary, dailyItems, usedDailyItems) {
   const availableItems = dailyItems.filter((dailyItem) => !usedDailyItems.has(dailyEvidenceKey(dailyItem)));
   if (availableItems.length === 0) {
@@ -170,7 +195,6 @@ function chooseBestDailyEvidence(summary, dailyItems, usedDailyItems) {
     return exactMatch;
   }
 
-  // 同一天多条周报和多条日报时只做一对一匹配，避免日期相同导致笛卡尔展开。
   return (
     availableItems.find((dailyItem) => compareWeeklyAndDailyText(summary, dailyItem).matchStatus === 'matched') ||
     availableItems[0]
@@ -500,7 +524,7 @@ export async function listWeeklyDailyEvidence({ userId, weekStart, weekEnd }, ex
   return rows.map(mapDailyEvidenceRow);
 }
 
-// Build comparison rows from an already loaded report and its submitted daily work.
+// 🔥 改进点：重写 buildWeeklyComparisonRows，使用基于相似度排序的贪心匹配
 function buildWeeklyComparisonRows(report, dailyEvidence) {
   const dailyByDate = new Map();
   for (const item of dailyEvidence) {
@@ -510,73 +534,166 @@ function buildWeeklyComparisonRows(report, dailyEvidence) {
   }
 
   const rows = [];
-  const usedDailyItems = new Set();
+  const usedDailyItems = new Set(); // 记录全局已使用的日报项（跨日期去重，但实际不同日期不会重复）
+
+  // 按日期分组周报总结
+  const summariesByDate = new Map();
   for (const summary of report.summaries) {
-    const dailyItems = dailyByDate.get(summary.completedDate) || [];
-    const dailyItem = chooseBestDailyEvidence(summary, dailyItems, usedDailyItems);
-    if (!dailyItem) {
-      rows.push({
-        date: summary.completedDate,
-        weekday: weekdayLabel(summary.completedDate),
-        weeklyTask: summary.workTask,
-        weeklySummaryText: summary.workTarget,
-        dailyProjectName: null,
-        dailyProjectLabel: null,
-        dailyWorkContent: null,
-        dailyCompletionProgress: null,
-        dailyCompletedAt: null,
-        weeklyCompletedDate: summary.completedDate,
-        matchStatus: 'weekly_only',
-        matchReason: '该日期有周报总结但没有已提交日报'
-      });
+    const date = summary.completedDate;
+    if (!date) continue;
+    const list = summariesByDate.get(date) || [];
+    list.push(summary);
+    summariesByDate.set(date, list);
+  }
+
+  // 遍历每个日期
+  for (const [date, summaries] of summariesByDate) {
+    const dailyItems = dailyByDate.get(date) || [];
+    if (dailyItems.length === 0) {
+      // 该日期有周报但无日报 -> 全部为 weekly_only
+      for (const summary of summaries) {
+        rows.push({
+          date,
+          weekday: weekdayLabel(date),
+          weeklyTask: summary.workTask,
+          weeklySummaryText: summary.workTarget,
+          dailyProjectName: null,
+          dailyProjectLabel: null,
+          dailyWorkContent: null,
+          dailyCompletionProgress: null,
+          dailyCompletedAt: null,
+          weeklyCompletedDate: date,
+          matchStatus: 'weekly_only',
+          matchReason: '该日期有周报总结但没有已提交日报'
+        });
+      }
       continue;
     }
 
-    usedDailyItems.add(dailyEvidenceKey(dailyItem));
-    const match = compareWeeklyAndDailyText(summary, dailyItem);
-    rows.push({
-      date: summary.completedDate,
-      weekday: weekdayLabel(summary.completedDate),
-      weeklyTask: summary.workTask,
-      weeklySummaryText: summary.workTarget,
-      dailyProjectName: dailyItem.projectName,
-      dailyProjectLabel: dailyItem.projectLabel,
-      dailyWorkContent: dailyItem.workContent,
-      dailyCompletionProgress: dailyItem.completionProgress,
-      // The comparison table uses the daily report date as the actual completion date.
-      dailyCompletedAt: dailyItem.reportDate,
-      weeklyCompletedDate: summary.completedDate,
-      matchStatus: match.matchStatus,
-      matchReason: match.matchReason
-    });
-  }
-
-  for (const dailyItem of dailyEvidence) {
-    const key = dailyEvidenceKey(dailyItem);
-    if (usedDailyItems.has(key)) {
+    // 如果该日期没有任何周报总结，则所有日报为 daily_only（由后续逻辑处理）
+    if (summaries.length === 0) {
+      for (const dailyItem of dailyItems) {
+        const key = dailyEvidenceKey(dailyItem);
+        if (!usedDailyItems.has(key)) {
+          rows.push({
+            date: dailyItem.reportDate,
+            weekday: weekdayLabel(dailyItem.reportDate),
+            weeklyTask: null,
+            weeklySummaryText: null,
+            dailyProjectName: dailyItem.projectName,
+            dailyProjectLabel: dailyItem.projectLabel,
+            dailyWorkContent: dailyItem.workContent,
+            dailyCompletionProgress: dailyItem.completionProgress,
+            dailyCompletedAt: dailyItem.reportDate,
+            weeklyCompletedDate: null,
+            matchStatus: 'daily_only',
+            matchReason: '该日期有已提交日报但没有对应周报总结'
+          });
+          usedDailyItems.add(key);
+        }
+      }
       continue;
     }
 
-    rows.push({
-      date: dailyItem.reportDate,
-      weekday: weekdayLabel(dailyItem.reportDate),
-      weeklyTask: null,
-      weeklySummaryText: null,
-      dailyProjectName: dailyItem.projectName,
-      dailyProjectLabel: dailyItem.projectLabel,
-      dailyWorkContent: dailyItem.workContent,
-      dailyCompletionProgress: dailyItem.completionProgress,
-      // The comparison table uses the daily report date as the actual completion date.
-      dailyCompletedAt: dailyItem.reportDate,
-      weeklyCompletedDate: null,
-      matchStatus: 'daily_only',
-      matchReason: '该日期有已提交日报但没有对应周报总结'
-    });
+    // 计算所有 summary 与 dailyItem 的匹配分数矩阵
+    const scores = summaries.map((s) => dailyItems.map((d) => computeMatchScore(s, d)));
+
+    // 生成所有可能的配对 (summaryIdx, dailyIdx) 并按分数降序排序
+    const pairs = [];
+    for (let i = 0; i < summaries.length; i++) {
+      for (let j = 0; j < dailyItems.length; j++) {
+        pairs.push({ summaryIdx: i, dailyIdx: j, score: scores[i][j] });
+      }
+    }
+    pairs.sort((a, b) => b.score - a.score);
+
+    const matchedSummary = new Set();
+    const matchedDaily = new Set();
+
+    // 贪心匹配：按分数从高到低，若双方都未匹配则配对
+    for (const pair of pairs) {
+      if (!matchedSummary.has(pair.summaryIdx) && !matchedDaily.has(pair.dailyIdx)) {
+        matchedSummary.add(pair.summaryIdx);
+        matchedDaily.add(pair.dailyIdx);
+        const summary = summaries[pair.summaryIdx];
+        const dailyItem = dailyItems[pair.dailyIdx];
+        const key = dailyEvidenceKey(dailyItem);
+        usedDailyItems.add(key);
+
+        // 判断是否匹配（分数阈值0.3，可根据实际调整）
+        const isMatched = pair.score >= 0.3;
+        rows.push({
+          date: summary.completedDate,
+          weekday: weekdayLabel(summary.completedDate),
+          weeklyTask: summary.workTask,
+          weeklySummaryText: summary.workTarget,
+          dailyProjectName: dailyItem.projectName,
+          dailyProjectLabel: dailyItem.projectLabel,
+          dailyWorkContent: dailyItem.workContent,
+          dailyCompletionProgress: dailyItem.completionProgress,
+          dailyCompletedAt: dailyItem.reportDate,
+          weeklyCompletedDate: summary.completedDate,
+          matchStatus: isMatched ? 'matched' : 'unmatched',
+          matchReason: isMatched ? '周报总结与日报内容存在关键词匹配' : '未发现明显关键词匹配'
+        });
+      }
+    }
+
+    // 处理未匹配的周报总结（weekly_only）
+    for (let i = 0; i < summaries.length; i++) {
+      if (!matchedSummary.has(i)) {
+        const summary = summaries[i];
+        rows.push({
+          date: summary.completedDate,
+          weekday: weekdayLabel(summary.completedDate),
+          weeklyTask: summary.workTask,
+          weeklySummaryText: summary.workTarget,
+          dailyProjectName: null,
+          dailyProjectLabel: null,
+          dailyWorkContent: null,
+          dailyCompletionProgress: null,
+          dailyCompletedAt: null,
+          weeklyCompletedDate: summary.completedDate,
+          matchStatus: 'weekly_only',
+          matchReason: '该日期有周报总结但没有已提交日报'
+        });
+      }
+    }
+
+    // 处理未匹配的日报项（daily_only）
+    for (let j = 0; j < dailyItems.length; j++) {
+      if (!matchedDaily.has(j)) {
+        const dailyItem = dailyItems[j];
+        const key = dailyEvidenceKey(dailyItem);
+        // 如果该日报已被其他日期的周报使用（理论上不可能，因为日期不同），但以防万一
+        if (!usedDailyItems.has(key)) {
+          rows.push({
+            date: dailyItem.reportDate,
+            weekday: weekdayLabel(dailyItem.reportDate),
+            weeklyTask: null,
+            weeklySummaryText: null,
+            dailyProjectName: dailyItem.projectName,
+            dailyProjectLabel: dailyItem.projectLabel,
+            dailyWorkContent: dailyItem.workContent,
+            dailyCompletionProgress: dailyItem.completionProgress,
+            dailyCompletedAt: dailyItem.reportDate,
+            weeklyCompletedDate: null,
+            matchStatus: 'daily_only',
+            matchReason: '该日期有已提交日报但没有对应周报总结'
+          });
+          usedDailyItems.add(key);
+        }
+      }
+    }
   }
 
-  return {
-    rows: rows.sort((left, right) => String(left.date).localeCompare(String(right.date)))
-  };
+  // 处理那些没有周报总结的日期（即日报存在但无周报的日期已经在上面处理过了）
+  // 但可能存在某些日期有日报且没有周报，但在循环中已经处理了（因为 summariesByDate 没有该日期，但 dailyByDate 有）
+  // 上面已经通过 summariesByDate 遍历，并处理了 summaries.length === 0 的情况，所以这里无需再额外处理。
+
+  // 按日期排序
+  rows.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  return { rows };
 }
 
 // Build weekly-vs-daily comparison rows from weekly summaries and submitted daily work.

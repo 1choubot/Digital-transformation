@@ -86,7 +86,7 @@
                       class="form-control"
                       :class="{ invalid: fieldErrors[`summaries.${index}.workTask`] }"
                       @input="scheduleProjectSearch(summary.workTask)"
-                      placeholder="输入任务名称"
+                      placeholder="输入或选择项目名称"
                     />
                     <small v-if="fieldErrors[`summaries.${index}.workTask`]" class="field-error">
                       {{ fieldErrors[`summaries.${index}.workTask`] }}
@@ -197,7 +197,7 @@
                       class="form-control"
                       :class="{ invalid: fieldErrors[`plans.${index}.workTask`] }"
                       @input="scheduleProjectSearch(plan.workTask)"
-                      placeholder="输入任务名称"
+                      placeholder="输入或选择项目名称"
                     />
                     <small v-if="fieldErrors[`plans.${index}.workTask`]" class="field-error">
                       {{ fieldErrors[`plans.${index}.workTask`] }}

@@ -134,6 +134,14 @@ export function getDocumentResponsibleDepartment(document) {
   return document?.responsible_department ?? document?.responsibleUser?.department ?? null;
 }
 
+export function getDocumentOwnerDepartment(document) {
+  return document?.owner_department ?? document?.ownerDepartment ?? null;
+}
+
+export function getDocumentReviewDepartment(document) {
+  return document?.review_department ?? document?.reviewDepartment ?? null;
+}
+
 export function isStageDocumentRelatedToDepartment({ project, document, department }) {
   if (!isValidBusinessDepartment(department)) {
     return false;

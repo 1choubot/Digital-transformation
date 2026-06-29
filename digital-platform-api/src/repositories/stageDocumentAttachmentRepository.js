@@ -7,6 +7,13 @@ import { pool } from '../db/pool.js';
 import { ProjectNotFoundError } from './projectRepository.js';
 import { StageDocumentNotFoundError } from './stageDocumentRepository.js';
 import {
+  buildAttachmentPermissions,
+  canDeleteStageDocumentAttachment,
+  canDownloadStageDocumentAttachment,
+  canUploadStageDocumentAttachment,
+  canViewStageDocumentAttachments
+} from './stageDocuments/accessControl.js';
+import {
   STAGE_DOCUMENT_ATTACHMENT_MAX_FILE_SIZE,
   assertStageDocumentAttachmentFileReadable,
   cleanupStageDocumentAttachmentFile,
@@ -54,7 +61,7 @@ function mapUploadedByUser(row) {
   };
 }
 
-function mapAttachment(row) {
+function mapAttachment(row, permissions = {}) {
   return {
     id: row.id,
     originalFileName: row.original_file_name,
@@ -62,7 +69,9 @@ function mapAttachment(row) {
     fileSize: Number(row.file_size),
     uploadedByUserId: row.uploaded_by_user_id,
     uploadedAt: row.uploaded_at,
-    uploadedByUser: mapUploadedByUser(row)
+    uploadedByUser: mapUploadedByUser(row),
+    permissions,
+    ...permissions
   };
 }
 
@@ -127,12 +136,39 @@ async function assertProjectExists(executor, projectId) {
   }
 }
 
+async function selectAttachmentProject(executor, projectId) {
+  const [rows] = await executor.execute(
+    `SELECT
+      id,
+      project_manager_user_id,
+      created_by_user_id,
+      participating_departments
+    FROM projects
+    WHERE id = ?
+    LIMIT 1`,
+    [projectId]
+  );
+
+  if (rows.length === 0) {
+    throw new ProjectNotFoundError(projectId);
+  }
+
+  return rows[0];
+}
+
 async function selectStageDocument(executor, projectId, documentId, { forUpdate = false } = {}) {
   const [rows] = await executor.execute(
-    `SELECT *
-    FROM project_stage_documents
-    WHERE project_id = ?
-      AND id = ?
+    `SELECT
+      d.*,
+      u.department AS responsible_department,
+      u.organization_role AS responsible_organization_role,
+      u.role AS responsible_role,
+      u.is_enabled AS responsible_is_enabled
+    FROM project_stage_documents d
+    LEFT JOIN users u
+      ON u.id = d.responsible_user_id
+    WHERE d.project_id = ?
+      AND d.id = ?
     LIMIT 1${forUpdate ? ' FOR UPDATE' : ''}`,
     [projectId, documentId]
   );
@@ -142,6 +178,39 @@ async function selectStageDocument(executor, projectId, documentId, { forUpdate 
   }
 
   return rows[0];
+}
+
+function throwForbiddenAttachmentOperation(details = ['documentId']) {
+  throw new StageDocumentAttachmentError(
+    'FORBIDDEN_OPERATION',
+    'Current user cannot access this stage document attachment',
+    403,
+    details
+  );
+}
+
+function assertCanViewAttachments({ user, project, document }) {
+  if (!canViewStageDocumentAttachments(user, { project, document })) {
+    throwForbiddenAttachmentOperation(['documentId']);
+  }
+}
+
+function assertCanDownloadAttachment({ user, project, document }) {
+  if (!canDownloadStageDocumentAttachment(user, { project, document })) {
+    throwForbiddenAttachmentOperation(['documentId']);
+  }
+}
+
+function assertCanUploadAttachment({ user, document }) {
+  if (!canUploadStageDocumentAttachment(user, { document })) {
+    throwForbiddenAttachmentOperation(['documentId']);
+  }
+}
+
+function assertCanDeleteAttachment({ user, project, document, attachment }) {
+  if (!canDeleteStageDocumentAttachment(user, { project, document, attachment })) {
+    throwForbiddenAttachmentOperation(['attachmentId']);
+  }
 }
 
 async function selectAttachment(executor, projectId, documentId, attachmentId, { forUpdate = false } = {}) {
@@ -220,15 +289,17 @@ function buildAttachmentDeleteLog({ projectId, userId, document, attachment }) {
   };
 }
 
-export async function assertStageDocumentAttachmentUploadTarget({ projectId, documentId }) {
-  await assertProjectExists(pool, projectId);
+export async function assertStageDocumentAttachmentUploadTarget({ projectId, documentId, user }) {
+  const project = await selectAttachmentProject(pool, projectId);
   const document = await selectStageDocument(pool, projectId, documentId);
   assertDocumentApplicable(document);
+  assertCanUploadAttachment({ user, document });
 }
 
-export async function listStageDocumentAttachments({ projectId, documentId }) {
-  await assertProjectExists(pool, projectId);
-  await selectStageDocument(pool, projectId, documentId);
+export async function listStageDocumentAttachments({ projectId, documentId, user }) {
+  const project = await selectAttachmentProject(pool, projectId);
+  const document = await selectStageDocument(pool, projectId, documentId);
+  assertCanViewAttachments({ user, project, document });
 
   const [rows] = await pool.execute(
     `SELECT
@@ -250,10 +321,12 @@ export async function listStageDocumentAttachments({ projectId, documentId }) {
     [projectId, documentId]
   );
 
-  return rows.map(mapAttachment);
+  return rows.map((row) =>
+    mapAttachment(row, buildAttachmentPermissions({ user, project, document, attachment: row }))
+  );
 }
 
-export async function uploadStageDocumentAttachment({ projectId, documentId, userId, file }) {
+export async function uploadStageDocumentAttachment({ projectId, documentId, user, file }) {
   const uploadFile = normalizeUploadFile(file);
 
   const storageKey = createStageDocumentAttachmentStorageKey({ projectId, documentId });
@@ -263,9 +336,10 @@ export async function uploadStageDocumentAttachment({ projectId, documentId, use
 
   try {
     await connection.beginTransaction();
-    await assertProjectExists(connection, projectId);
+    const project = await selectAttachmentProject(connection, projectId);
     const document = await selectStageDocument(connection, projectId, documentId, { forUpdate: true });
     assertDocumentApplicable(document);
+    assertCanUploadAttachment({ user, document });
 
     const stored = await writeStageDocumentAttachmentFile(storageKey, uploadFile.buffer);
     fileWritten = true;
@@ -296,19 +370,22 @@ export async function uploadStageDocumentAttachment({ projectId, documentId, use
         storageKey,
         uploadFile.mimeType,
         uploadFile.size,
-        userId
+        user.id
       ]
     );
 
     const attachmentRow = await selectAttachmentWithUploader(connection, result.insertId);
     await insertOperationLog(
       connection,
-      buildAttachmentUploadLog({ projectId, userId, document, attachment: attachmentRow })
+      buildAttachmentUploadLog({ projectId, userId: user.id, document, attachment: attachmentRow })
     );
     await connection.commit();
     committed = true;
 
-    return mapAttachment(attachmentRow);
+    return mapAttachment(
+      attachmentRow,
+      buildAttachmentPermissions({ user, project, document, attachment: attachmentRow })
+    );
   } catch (error) {
     if (!committed) {
       await connection.rollback();
@@ -324,9 +401,10 @@ export async function uploadStageDocumentAttachment({ projectId, documentId, use
   }
 }
 
-export async function getStageDocumentAttachmentDownload({ projectId, documentId, attachmentId }) {
-  await assertProjectExists(pool, projectId);
-  await selectStageDocument(pool, projectId, documentId);
+export async function getStageDocumentAttachmentDownload({ projectId, documentId, attachmentId, user }) {
+  const project = await selectAttachmentProject(pool, projectId);
+  const document = await selectStageDocument(pool, projectId, documentId);
+  assertCanDownloadAttachment({ user, project, document });
   const attachment = await selectAttachment(pool, projectId, documentId, attachmentId);
 
   try {
@@ -348,15 +426,16 @@ export async function getStageDocumentAttachmentDownload({ projectId, documentId
   }
 }
 
-export async function deleteStageDocumentAttachment({ projectId, documentId, attachmentId, userId }) {
+export async function deleteStageDocumentAttachment({ projectId, documentId, attachmentId, user }) {
   let committed = false;
   const connection = await pool.getConnection();
 
   try {
     await connection.beginTransaction();
-    await assertProjectExists(connection, projectId);
+    const project = await selectAttachmentProject(connection, projectId);
     const document = await selectStageDocument(connection, projectId, documentId, { forUpdate: true });
     const attachment = await selectAttachment(connection, projectId, documentId, attachmentId, { forUpdate: true });
+    assertCanDeleteAttachment({ user, project, document, attachment });
 
     await connection.execute(
       `UPDATE project_stage_document_attachments
@@ -364,12 +443,12 @@ export async function deleteStageDocumentAttachment({ projectId, documentId, att
         deleted_at = CURRENT_TIMESTAMP
       WHERE id = ?
         AND deleted_at IS NULL`,
-      [userId, attachmentId]
+      [user.id, attachmentId]
     );
 
     await insertOperationLog(
       connection,
-      buildAttachmentDeleteLog({ projectId, userId, document, attachment })
+      buildAttachmentDeleteLog({ projectId, userId: user.id, document, attachment })
     );
     await connection.commit();
     committed = true;

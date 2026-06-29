@@ -1,38 +1,5 @@
 <template>
   <section class="page-stack weekly-review-page animate-fadeIn">
-    <!-- 页面头部 -->
-    <div class="page-header">
-      <div class="page-header__left">
-        <span class="section-eyebrow">周报详情</span>
-        <h2 class="page-title">{{ targetTitle }}</h2>
-        <span class="page-user">{{ targetUserName }} / {{ targetDepartment }}</span>
-      </div>
-      <div class="page-header__right">
-        <!-- 动态返回路径 -->
-        <button type="button" class="ghost-button" @click="navigate(returnPath)">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="19" y1="12" x2="5" y2="12" />
-            <polyline points="12 19 5 12 12 5" />
-          </svg>
-          返回列表
-        </button>
-        <button
-          v-if="canExportOwnReport"
-          type="button"
-          class="ghost-button"
-          :disabled="exporting"
-          @click="downloadReportExcel"
-        >
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-          {{ exporting ? '正在导出' : '导出 Excel' }}
-        </button>
-      </div>
-    </div>
-
     <!-- 加载状态 -->
     <section v-if="loading" class="state-panel panel">
       <div class="loading-spinner"></div>
@@ -50,15 +17,42 @@
     </section>
 
     <template v-else-if="report">
-      <!-- 周报摘要信息 -->
+      <!-- 周报摘要信息（修改后：包含被考评人 + 操作按钮） -->
       <section class="panel weekly-review-summary">
         <div class="panel-toolbar">
           <div class="toolbar-info">
+            <!-- 🔥 修改点：被考评人放在第一排最前面 -->
+            <span class="evaluatee-name">被考评人：{{ targetUserName }}</span>
+            <span class="divider">|</span>
             <strong class="toolbar-title">{{ report.weekStart }} 至 {{ report.weekEnd }}</strong>
             <span class="status-badge" :class="statusClass(report.status)">
               {{ statusLabel(report.status) }}
             </span>
             <span class="toolbar-subtitle">最终评分：{{ finalScoreText }}</span>
+          </div>
+          <!-- 操作按钮移到这里 -->
+          <div class="toolbar-actions">
+            <button type="button" class="ghost-button" @click="navigate(returnPath)">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="19" y1="12" x2="5" y2="12" />
+                <polyline points="12 19 5 12 12 5" />
+              </svg>
+              返回列表
+            </button>
+            <button
+              v-if="canExportOwnReport"
+              type="button"
+              class="ghost-button"
+              :disabled="exporting"
+              @click="downloadReportExcel"
+            >
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              {{ exporting ? '正在导出' : '导出 Excel' }}
+            </button>
           </div>
         </div>
         <div class="panel-body">
@@ -377,7 +371,6 @@ const props = defineProps({
     type: Function,
     required: true
   },
-  // 新增：接收 route 对象以读取查询参数
   route: {
     type: Object,
     required: true
@@ -413,11 +406,17 @@ const finalReviewForm = reactive({
 const finalGradeOptions = ['A', 'B', 'C', 'D', 'E'];
 
 const score = computed(() => report.value?.aiScore || null);
-const targetTitle = computed(() => (isCenterManagerTarget.value ? '中心负责人周报' : '员工周报'));
 const targetUserName = computed(() => targetUser.value?.displayName || targetUser.value?.account || '-');
 const targetDepartment = computed(() => formatBusinessDepartment(targetUser.value?.department));
 const isEmployeeTarget = computed(() => targetUser.value?.organizationRole === OrganizationRole.EMPLOYEE);
 const isCenterManagerTarget = computed(() => targetUser.value?.organizationRole === OrganizationRole.CENTER_MANAGER);
+
+// 页面标题显示“被考评人：xxx”（已移至摘要面板，此处保留以备他用）
+const pageTitleDisplay = computed(() => {
+  const name = targetUserName.value || '用户';
+  return `被考评人：${name}`;
+});
+
 const showEmployeeReviewTools = computed(
   () => props.currentUser.organizationRole === OrganizationRole.CENTER_MANAGER && isEmployeeTarget.value
 );
@@ -650,44 +649,6 @@ onMounted(loadReport);
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ===== 页面头部 ===== */
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-}
-.page-header__left {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-.page-header__right {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-.section-eyebrow {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #909399;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.page-title {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #303133;
-  margin: 0;
-  line-height: 1.2;
-}
-.page-user {
-  font-size: 0.85rem;
-  color: #909399;
-}
-
 /* ===== 面板 ===== */
 .panel {
   background: #ffffff;
@@ -722,6 +683,17 @@ onMounted(loadReport);
 .toolbar-subtitle {
   font-size: 0.8rem;
   color: #909399;
+}
+
+/* 🔥 新增：被考评人样式 */
+.evaluatee-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #303133;
+}
+.divider {
+  color: #dcdfe6;
+  font-weight: 300;
 }
 
 /* ===== 按钮基础 ===== */
@@ -1198,17 +1170,13 @@ onMounted(loadReport);
   .page-stack {
     padding: 1rem;
   }
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .page-header__right {
-    width: 100%;
-    justify-content: flex-start;
-  }
   .panel-toolbar {
     flex-direction: column;
     align-items: flex-start;
+  }
+  .toolbar-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
   .weekly-review-meta {
     flex-direction: column;

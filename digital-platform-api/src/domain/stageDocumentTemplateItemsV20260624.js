@@ -8,11 +8,61 @@ const {
   RD_CENTER
 } = BUSINESS_DEPARTMENT;
 
-const TEMPLATE_VERSION = 'v20260624';
+const TEMPLATE_VERSION = 'v20260625';
 const SUBMIT_MODE = {
   FILE_UPLOAD: 'file_upload',
   MIXED: 'mixed'
 };
+const COMPLETION_MODE = {
+  SUBMIT_ONLY: 'submit_only',
+  APPROVAL_REQUIRED: 'approval_required',
+  CONDITIONAL_SUBMIT: 'conditional_submit'
+};
+
+const SUBMIT_ONLY_DOCUMENT_CODES = new Set([
+  '1.1',
+  '1.3',
+  '2.1',
+  '2.4',
+  '2.5',
+  '2.9',
+  '2.10',
+  '2.11',
+  '3.4',
+  '4.1',
+  '4.2',
+  '4.3',
+  '4.4',
+  '4.5',
+  '4.6',
+  '4.7',
+  '4.8',
+  '4.9',
+  '4.10',
+  '4.11',
+  '4.14',
+  '4.15',
+  '5.2',
+  '5.5',
+  '5.6',
+  '5.7',
+  '5.8',
+  '5.10',
+  '5.11',
+  '6.2',
+  '7.1',
+  '8.1',
+  '8.2'
+]);
+const CONDITIONAL_SUBMIT_DOCUMENT_CODES = new Set([
+  '2.6',
+  '2.7',
+  '2.8',
+  '5.13',
+  '5.14',
+  '5.15',
+  '5.16'
+]);
 
 const stageByOrder = new Map(STANDARD_PROJECT_STAGES.map((stage) => [stage.stageOrder, stage]));
 
@@ -36,8 +86,13 @@ function documentItem({
   const [stageNumber, documentOrder] = documentCode.split('.').map((part) => Number.parseInt(part, 10));
   const stage = stageByOrder.get(stageNumber);
   if (!stage || !Number.isSafeInteger(documentOrder)) {
-    throw new Error(`Invalid v20260624 document code: ${documentCode}`);
+    throw new Error(`Invalid v20260625 document code: ${documentCode}`);
   }
+  const completionMode = CONDITIONAL_SUBMIT_DOCUMENT_CODES.has(documentCode)
+    ? COMPLETION_MODE.CONDITIONAL_SUBMIT
+    : SUBMIT_ONLY_DOCUMENT_CODES.has(documentCode)
+      ? COMPLETION_MODE.SUBMIT_ONLY
+      : COMPLETION_MODE.APPROVAL_REQUIRED;
 
   return Object.freeze({
     templateVersion: TEMPLATE_VERSION,
@@ -52,6 +107,7 @@ function documentItem({
     confirmRole,
     ownerDepartment,
     reviewDepartment,
+    completionMode,
     submitMode,
     targetFolderPath: buildTargetFolderPath(stage, documentCode, documentName),
     targetFolderId: null,
@@ -60,7 +116,7 @@ function documentItem({
   });
 }
 
-export const STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260624 = Object.freeze([
+export const STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260625 = Object.freeze([
   documentItem({
     documentCode: '1.1',
     documentName: '项目需求表',
@@ -686,3 +742,5 @@ export const STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260624 = Object.freeze([
     notes: 'ownerDepartment/reviewDepartment 待业务确认。'
   })
 ]);
+
+export const STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260624 = STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260625;

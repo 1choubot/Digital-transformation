@@ -12,33 +12,29 @@
     </section>
 
     <template v-else>
-      <!-- 筛选面板 -->
+      <!-- 筛选面板（新布局） -->
       <section class="panel daily-filter-panel">
         <form class="daily-filters" @submit.prevent="loadReports">
-          <div class="filter-group">
-            <span class="filter-label">开始日期</span>
-            <div class="input-wrapper">
-              <input v-model="filters.dateFrom" type="date" />
-            </div>
+          <span class="filter-text">查询从</span>
+          <div class="filter-group filter-group--inline">
+            <input v-model="filters.dateFrom" type="date" class="filter-input" />
           </div>
 
-          <div class="filter-group">
-            <span class="filter-label">结束日期</span>
-            <div class="input-wrapper">
-              <input v-model="filters.dateTo" type="date" />
-            </div>
+          <span class="filter-text">到</span>
+          <div class="filter-group filter-group--inline">
+            <input v-model="filters.dateTo" type="date" class="filter-input" />
           </div>
 
-          <div class="filter-group">
-            <span class="filter-label">状态</span>
-            <div class="select-wrapper">
-              <select v-model="filters.status">
-                <option value="">全部</option>
-                <option :value="ReportStatus.DRAFT">草稿</option>
-                <option :value="ReportStatus.SUBMITTED">已提交</option>
-              </select>
-            </div>
+          <span class="filter-text">状态</span>
+          <div class="filter-group filter-group--inline">
+            <select v-model="filters.status" class="filter-select">
+              <option value="">全部</option>
+              <option :value="ReportStatus.DRAFT">草稿</option>
+              <option :value="ReportStatus.SUBMITTED">已提交</option>
+            </select>
           </div>
+
+          <span class="filter-text">的日报</span>
 
           <div class="filter-actions">
             <button type="submit" class="primary-button apply-btn" :disabled="loading">
@@ -373,94 +369,57 @@ onMounted(loadReports);
   box-shadow: 0 1px 4px rgba(0, 21, 41, 0.04);
 }
 
-/* ===== 筛选面板 ===== */
+/* ===== 筛选面板（新布局） ===== */
 .daily-filter-panel {
-  padding: 1.25rem 1.5rem;
+  padding: 0.75rem 1.5rem;
 }
 .daily-filters {
   display: flex;
-  gap: 1.5rem;
-  align-items: flex-end;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
 }
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+.filter-text {
+  font-size: 0.9rem;
+  color: #303133;
+  white-space: nowrap;
 }
-.filter-label {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: #606266;
+.filter-group--inline {
+  display: inline-flex;
+  align-items: center;
 }
-.input-wrapper {
-  position: relative;
-  border-radius: 4px;
+.filter-input,
+.filter-select {
+  height: 32px;
+  padding: 0 0.6rem;
   border: 1px solid #dcdfe6;
+  border-radius: 4px;
   background: #ffffff;
-  transition: border-color 0.2s ease;
-  overflow: hidden;
-}
-.input-wrapper:focus-within {
-  border-color: #3e63dd;
-}
-.input-wrapper input {
-  width: 100%;
-  padding: 0.5rem 1rem;
-  border: none;
-  background: transparent;
   font-size: 0.9rem;
   color: #303133;
   outline: none;
-  height: 36px;
-}
-.input-wrapper input[type="date"] {
-  cursor: pointer;
-}
-.select-wrapper {
-  position: relative;
-  border-radius: 4px;
-  border: 1px solid #dcdfe6;
-  background: #ffffff;
   transition: border-color 0.2s ease;
-  min-width: 150px;
 }
-.select-wrapper:focus-within {
-  border-color: #3e63dd;
+.filter-input {
+  width: 140px;
 }
-.select-wrapper select {
-  width: 100%;
-  padding: 0.5rem 2.5rem 0.5rem 1rem;
-  border: none;
-  background: transparent;
-  font-size: 0.9rem;
-  color: #303133;
-  outline: none;
-  appearance: none;
+.filter-select {
+  width: 110px;
+  appearance: auto;
   cursor: pointer;
-  height: 36px;
 }
-.select-wrapper::after {
-  content: '';
-  position: absolute;
-  right: 1.2rem;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 0;
-  height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-top: 5px solid #c0c4cc;
-  pointer-events: none;
+.filter-input:focus,
+.filter-select:focus {
+  border-color: #3e63dd;
 }
 .filter-actions {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  margin-left: auto;
+  margin-left: 0.25rem;
 }
 .apply-btn {
-  min-width: 100px;
+  min-width: 90px;
 }
 
 /* ===== 状态面板 ===== */
@@ -766,6 +725,18 @@ onMounted(loadReports);
   .daily-filters {
     flex-direction: column;
     align-items: stretch;
+    gap: 0.5rem;
+  }
+  .filter-text {
+    display: none; /* 移动端隐藏文字，直接用标签占位 */
+  }
+  .filter-group--inline {
+    width: 100%;
+  }
+  .filter-input,
+  .filter-select {
+    width: 100%;
+    box-sizing: border-box;
   }
   .filter-actions {
     margin-left: 0;

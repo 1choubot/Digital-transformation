@@ -18,5 +18,14 @@ export {
   normalizeStageDocumentTaskFilters
 } from './stageDocuments/taskRepository.js';
 export { updateProjectStageDocumentResponsibleUser } from './stageDocuments/responsibilityRepository.js';
-export { updateProjectStageDocumentStatus } from './stageDocuments/statusRepository.js';
+export {
+  completeProjectStageDocumentRevision,
+  updateProjectStageDocumentStatus
+} from './stageDocuments/statusRepository.js';
 export { updateProjectStageDocumentApplicability } from './stageDocuments/applicabilityRepository.js';
+export {
+  approveInitiationReviewNode,
+  initializeInitiationReviewNodesForExistingProjects,
+  initializeInitiationReviewNodesForProject,
+  returnInitiationReviewNode
+} from './stageDocuments/initiationReviewRepository.js';

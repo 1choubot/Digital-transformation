@@ -214,6 +214,14 @@ export function toReadableApiError(error) {
     return `项目编号 ${error.projectCode || ''} 已存在，请更换后再提交。`.trim();
   }
 
+  if (error.code === 'PROJECT_CODE_REQUIRED') {
+    return '请填写项目编号。';
+  }
+
+  if (error.code === 'PROJECT_CODE_GATE_NOT_READY') {
+    return '项目编号需在 1.2 多节点审批最终通过、1.3 项目立项通知提交且相关返工清除后填写。';
+  }
+
   if (error.code === 'PROJECT_NOT_FOUND') {
     return '项目不存在或已被删除。';
   }
@@ -240,6 +248,70 @@ export function toReadableApiError(error) {
 
   if (error.code === 'INVALID_DOCUMENT_STATUS_TRANSITION') {
     return '当前资料状态不允许执行该操作，请刷新清单后重试。';
+  }
+
+  if (error.code === 'DOCUMENT_REVIEW_NOT_REQUIRED') {
+    return '该资料提交后即完成，不需要执行审核通过或退回。';
+  }
+
+  if (error.code === 'INITIATION_REVIEW_REQUIRES_DEDICATED_ENDPOINT') {
+    return '1.2 项目立项审批表需使用专用多节点审批，不能走普通资料确认或退回。';
+  }
+
+  if (error.code === 'INITIATION_REVIEW_DOCUMENT_NOT_SUBMITTED') {
+    return '请先通过普通资料入口提交 1.2 项目立项审批表。';
+  }
+
+  if (error.code === 'INVALID_INITIATION_REVIEW_NODE_STATUS') {
+    return '当前 1.2 审批节点不是待审批状态，请刷新后重试。';
+  }
+
+  if (error.code === 'INITIATION_REVIEW_PREREQUISITE_NOT_READY') {
+    return '商务评价和技术评价均通过后，才能处理总经理审批。';
+  }
+
+  if (error.code === 'INITIATION_REVIEW_REWORK_BLOCKED') {
+    return '1.1 项目需求表返工未清除，暂不能通过被退回的 1.2 审批节点。';
+  }
+
+  if (error.code === 'REVISION_TARGETS_REQUIRED') {
+    return '请至少选择 1 个需返工资料。';
+  }
+
+  if (error.code === 'DESIGN_CHANGE_TARGETS_REQUIRED') {
+    return '请至少选择 1 个设计变更资料。';
+  }
+
+  if (error.code === 'INVALID_REVISION_TARGETS') {
+    return '返工资料选择不在固定候选范围内，请刷新后重试。';
+  }
+
+  if (error.code === 'INVALID_DESIGN_CHANGE_TARGETS') {
+    return '设计变更资料只能选择 5.13 到 5.16，请刷新后重试。';
+  }
+
+  if (error.code === 'REVISION_TARGET_NOT_APPLICABLE') {
+    return '条件未触发或不适用的资料不能作为本次返工目标。';
+  }
+
+  if (error.code === 'REVISION_TARGETS_NOT_ALLOWED') {
+    return '当前资料退回不允许携带上游返工目标。';
+  }
+
+  if (error.code === 'REVISION_RESUBMIT_REQUIRED') {
+    return '该资料需先返工重提后才能审核通过或退回。';
+  }
+
+  if (error.code === 'REVISION_NOT_REQUIRED') {
+    return '该资料当前没有需返工标记。';
+  }
+
+  if (error.code === 'REVISION_COMPLETION_NOT_ALLOWED') {
+    return '该资料需返工重提并审核确认后完成，不能直接清除返工。';
+  }
+
+  if (error.code === 'REVISION_COMPLETION_NOT_READY') {
+    return '请先提交或上传返工后的资料，再完成返工。';
   }
 
   if (error.code === 'INVALID_DOCUMENT_APPLICABILITY_TRANSITION') {
@@ -419,7 +491,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'CENTER_SCOPE_FORBIDDEN') {
-    return '当前账号不能查看其他中心的中心周报汇总。';
+    return '当前账号不能查看其他中心的中心周报。';
   }
 
   if (error.code === 'WEEKLY_REST_MODE_MANAGER_REQUIRED') {

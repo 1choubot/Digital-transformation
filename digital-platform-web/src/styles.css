@@ -1892,6 +1892,18 @@ p {
   padding: 0 9px;
 }
 
+.stage-document-pill--warning {
+  border-color: rgba(217, 119, 6, 0.32);
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.stage-document-pill--success {
+  border-color: rgba(22, 163, 74, 0.3);
+  background: #dcfce7;
+  color: #166534;
+}
+
 .stage-document-meta {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

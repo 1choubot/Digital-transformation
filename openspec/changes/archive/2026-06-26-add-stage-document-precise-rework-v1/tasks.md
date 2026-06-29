@@ -1,0 +1,66 @@
+## 1. Planning / Review Tasks
+
+- [x] 1.1 Confirm `online-platform-internal-document-flow-v1` is archived and current formal specs contain the 20260625 online-platform internal document-flow baseline.
+- [x] 1.2 Add `docs/9.13_审批不通过精准返工规划_20260626.md`.
+- [x] 1.3 Create proposal for `add-stage-document-precise-rework-v1`.
+- [x] 1.4 Create design for fixed A/B/C rework mapping, `revision_required`, clearing rules, workbench, and logs.
+- [x] 1.5 Add stage-document-checklist spec delta with MODIFIED and ADDED requirements.
+- [x] 1.6 Add project-core spec delta for stage gate, workbench, and overview behavior.
+- [x] 1.7 Add project-core-frontend spec delta for return modal, candidate selector, revision display, and workbench display.
+- [x] 1.8 Add business-operation-log spec delta for `document.revision_requested` and `document.revision_completed`.
+- [x] 1.9 Add technical-architecture spec delta preserving online-platform-only and no workflow-engine boundaries.
+- [x] 1.10 Run OpenSpec validation for this change and all specs.
+- [x] 1.11 Review follow-up: distinguish A-class `revisionTargetDocumentIds` from C-class `designChangeTargetDocumentIds`, clarify `approval_required + revision_required` resubmit/review behavior, and extend log/test planning.
+- [x] 1.12 Review follow-up: tighten `document_review` eligibility so un-resubmitted `revision_required` approval documents stay in responsibility todos, and make C-class `designChangeTargetDocumentIds` mandatory/limited in proposal and specs.
+- [x] 1.13 Review follow-up: tighten confirm/return API eligibility so `approval_required + revision_required` documents reject direct review before rework resubmit.
+
+## 2. Future Implementation Tasks
+
+- [x] 2.1 Migration/schema: add `revision_required`, `revision_reason`, `revision_source_document_id`, `revision_requested_by_user_id`, `revision_requested_at`, `revision_resubmitted_by_user_id`, `revision_resubmitted_at`, `revision_completed_by_user_id`, and `revision_completed_at` to project stage documents.
+- [x] 2.2 Backend mapping: encode fixed A-class candidate ranges and B/C classification.
+- [x] 2.3 Backend return action: extend approval-required document return request to accept `returnReason` and, only for A class, `revisionTargetDocumentIds`.
+- [x] 2.4 Backend revision target validation: reject A-class return without candidates, reject non-candidates, reject condition-untriggered targets, reject `2.12` / `2.13` selecting `2.2` / `2.3`, and reject upstream targets on non-A-class returns.
+- [x] 2.5 Backend C-class handling: when `5.12` is returned, allow selected `5.13-5.16` and set both `isApplicable=true` and `revision_required=true`.
+- [x] 2.5a Backend C-class request contract: use `designChangeTargetDocumentIds` for `5.12`, require at least one target, reject anything outside `5.13-5.16`, and do not treat this as invalid non-A-class `revisionTargetDocumentIds`.
+- [x] 2.6 Backend B-class handling: keep `2.2`, `2.3`, `2.14`, `2.15`, `3.1`, `3.2`, `5.1`, `5.3`, `7.4`, and other non-mapped approval documents as current-document-only returns.
+- [x] 2.7 Backend document responses: include revision fields and available rework candidates when querying approval documents.
+- [x] 2.8 Backend stage gate integration: make `revision_required=true` count as incomplete even when base status is `submitted` or `confirmed`.
+- [x] 2.9 Backend overview/my tasks: include revision-derived incomplete status and avoid counting revision-required documents as completed.
+- [x] 2.10 Backend workbench integration: include `revision_required=true` documents in responsible-user workbench and keep unassigned rework visible in project detail.
+- [x] 2.11 Backend revision completion action: add explicit clear action for `submit_only` / `conditional_submit` after authorized rework upload/modify.
+- [x] 2.12 Backend approval rework completion: require `approval_required` rework targets, especially `3.2` and `5.3`, to be resubmitted and confirmed before clearing `revision_required`.
+- [x] 2.12a Backend approval rework resubmit: allow `approval_required + revision_required` documents to be resubmitted even when their base status is already `confirmed`; set status to `submitted`, keep `revision_required=true`, and enter review only after the rework resubmit.
+- [x] 2.12b Backend approval rework return loop: if a rework-resubmitted `approval_required` document is returned again, keep `revision_required=true` until a later resubmit is confirmed.
+- [x] 2.13 Business log: write `document.revision_requested` and `document.revision_completed` with source document, target document, reason, actor, and time.
+- [x] 2.13a Business log: write `document.revision_requested` for both A-class `revisionTargetDocumentIds` and C-class `designChangeTargetDocumentIds`; write `document.revision_completed` when submit-only/conditional-submit completion clears rework or approval-required confirmation clears rework.
+- [x] 2.14 Frontend return modal / candidate selector: show fixed A-class candidates with document code, name, responsible user, current status, completion rule, and applicability.
+- [x] 2.15 Frontend validation: prevent A-class return submission until at least one candidate is selected; keep B/C return UI limited to allowed options.
+- [x] 2.15a Frontend C-class selector: show `5.13-5.16` design-change trigger options for `5.12`, submit them as `designChangeTargetDocumentIds`, and require at least one selected target.
+- [x] 2.16 Frontend revision_required display: show "需返工" on target document cards and show "需返工但未分配责任人" when no responsible user exists.
+- [x] 2.16a Frontend approval rework resubmit: show a "返工重提" action for `approval_required + revision_required`, never show a direct clear action, and show the item as pending review after resubmit until confirmation.
+- [x] 2.17 Frontend workbench display: show "需返工资料" tasks and navigate to the target document.
+- [x] 2.18 Tests/smoke: verify `revision_required` blocks stage advancement even when the document is `submitted` or `confirmed`, and clearing it releases the gate.
+- [x] 2.19 Tests/smoke: verify A-class return without selected candidates is rejected.
+- [x] 2.20 Tests/smoke: verify non-candidate document IDs are rejected.
+- [x] 2.21 Tests/smoke: verify `2.12` / `2.13` cannot select `2.2` / `2.3`.
+- [x] 2.22 Tests/smoke: verify `5.12` can trigger selected `5.13-5.16`, setting both `isApplicable=true` and `revision_required=true`.
+- [x] 2.23 Tests/smoke: verify `3.2` / `5.3` as rework targets require resubmit and confirmation before `revision_required` clears.
+- [x] 2.24 Tests/smoke: verify unassigned rework documents remain visible in project detail.
+- [x] 2.25 Tests/smoke: verify workbench can load revision-required documents.
+- [x] 2.26 Tests/smoke: extend `check-stage-document-ownership.js` or an equivalent smoke check to cover A/B/C rules, workbench, gate blocking, clearing, and logs.
+- [x] 2.27 Tests/smoke: verify `5.12` without selected design-change targets is rejected.
+- [x] 2.28 Tests/smoke: verify `5.12` selecting anything outside `5.13-5.16` is rejected.
+- [x] 2.29 Tests/smoke: verify legal `5.12` design-change selection sets each target to both `isApplicable=true` and `revision_required=true`.
+- [x] 2.30 Tests/smoke: verify `3.2` / `5.3` can perform rework resubmit from `confirmed + revision_required`.
+- [x] 2.31 Tests/smoke: verify `3.2` / `5.3` do not enter review todo before rework resubmit.
+- [x] 2.32 Tests/smoke: verify `3.2` / `5.3` enter review todo after rework resubmit.
+- [x] 2.33 Tests/smoke: verify review confirmation clears `revision_required` and releases the stage gate.
+- [x] 2.34 Tests/smoke: verify `revision_required=true` blocks stage advancement even when the base status is `submitted` or `confirmed`.
+- [x] 2.35 Tests/smoke: verify `approval_required + revision_required=true` with old `submitted` state is rejected when directly confirmed before rework resubmit.
+- [x] 2.36 Tests/smoke: verify after rework resubmit, confirmation is allowed and clears `revision_required`.
+- [x] 2.37 Validation: run API check/test, web build, and OpenSpec validate before implementation review.
+- [x] 2.38 Backend explicit revision resubmit marker: use `revision_resubmitted_by_user_id` and `revision_resubmitted_at` for all resubmit eligibility checks instead of comparing `submitted_at` with `revision_requested_at`.
+- [x] 2.39 Backend rework marker lifecycle: clear `revision_resubmitted_by_user_id` / `revision_resubmitted_at` whenever A-class or C-class marks `revision_required = true`, set them on approval rework resubmit, and clear them when a resubmitted revision is returned again.
+- [x] 2.40 Frontend fallback: use explicit `revisionResubmittedAt` / `revision_resubmitted_at` for rework-resubmit display and review eligibility fallback.
+- [x] 2.41 Tests/smoke: verify old submitted revision-required documents with no explicit resubmit marker do not enter review, direct confirm returns `REVISION_RESUBMIT_REQUIRED`, resubmit enters review, confirmation clears the gate, and a second return invalidates the marker.
+- [x] 2.42 Review follow-up: split frontend submit success messages for approval rework resubmit versus submit-only rework submit, and label submit-mode rework action as submitting rework material.

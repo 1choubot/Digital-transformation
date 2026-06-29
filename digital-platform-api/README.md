@@ -15,28 +15,28 @@
 - 用户组织角色和部门枚举：`organizationRole` 区分总经理、系统管理员、总经理助理、中心负责人、员工；`role` 保留为岗位/职务文本
 - `system_admin` 必须对应 `isPlatformAdmin = true`；初始化账号默认保存/恢复为启用系统管理员和平台管理员
 - 用户管理操作至少保留一个同时满足 `isEnabled = true`、`organizationRole = system_admin`、`isPlatformAdmin = true` 的账号
-- 项目创建要求登录，并记录 `createdByUserId`
-- 项目模式：`self_developed` 自研模式、`outsourced` 供应链/外包模式，两者共用同一 8 阶段和 54 项资料
+- 项目创建要求登录，并记录 `createdByUserId`；项目编号 `projectCode` 可为空，第一版仅允许总经理和中心负责人创建项目，员工、总经理助理和系统管理员创建会返回 `FORBIDDEN_OPERATION`
+- 项目模式：`self_developed` 自研模式、`outsourced` 供应链/外包模式，两者共用同一 8 阶段和 20260625 版 64 项资料
 - 项目经理用户关联：项目创建以 `projectManagerUserId` 为准，响应返回 `projectManagerUser`；旧 `projectManager` 文本仅为展示兼容
 - 项目列表和详情返回创建人追溯字段、项目模式和项目经理用户字段，兼容历史项目创建人或项目经理用户为空
-- 阶段资料项模板和项目级阶段资料清单；20260610 正式资料清单文档是业务依据，后端运行使用内置 `v20260610` 模板快照
-- 项目创建后自动初始化标准 8 阶段和 20260610 版 54 项阶段资料清单
-- 当前开发库项目可通过后端命令按 20260610 版资料清单补齐资料项；旧 48 项模板已废弃，不做旧模拟数据兼容或历史迁移
+- 阶段资料项模板和项目级阶段资料清单；20260625 流程和 `docs/9.11` / `docs/9.12` 是当前业务依据，后端运行使用内置 20260625 64 项模板快照并写入 `completionMode`
+- 项目创建后自动初始化标准 8 阶段和 20260625 版 64 项阶段资料清单
+- 当前开发库项目可通过后端命令按 20260625 版资料清单重置并补齐资料项；旧 48 项、`v20260610` 54 项和 20260624 旧口径不做兼容迁移
 - `GET /api/projects/:projectId/stage-document-checklist` 按 8 阶段分组查询资料清单
-- 资料项手工状态流转：标记提交、确认、退回，并记录提交/确认/退回追溯字段
+- 资料项手工状态流转按 `completionMode` 分流：`submit_only` 提交/上传后派生完成；`approval_required` 提交后待审核、审核通过后完成；`conditional_submit` 复用 `isApplicable` 表达未触发/已触发
 - 资料项手工适用性标记：标记不适用、恢复适用，并记录不适用/恢复适用追溯字段
-- 阶段资料清单查询返回基于当前手工状态和人工适用性判断的阶段必填资料齐套摘要
+- 阶段资料清单查询返回基于 `completionMode` 派生完成状态和人工适用性判断的阶段适用门禁资料齐套摘要
 - 阶段资料项责任人手工分配：候选用户仅包含启用的中心负责人或员工；项目经理、总经理以及本中心相关资料的中心负责人可按第一版权限边界分配/清空责任人
-- 阶段资料附件：资料项附件上传、列表、下载和软删除，上传/删除写入业务日志
-- 我的资料任务查询：登录用户可集中查看分配给自己的适用阶段资料项
-- 项目总览看板：登录用户可只读查看跨项目汇总指标、当前阶段齐套摘要和未完成适用必填资料
-- 阶段级项目审批流：每个项目阶段保存唯一当前审批状态，项目经理提交/重新提交，匹配中心负责人审批，阶段 1、3、8 还需总经理审批
-- 项目阶段手工推进接口：项目经理可在自己负责项目齐套后推进；本中心相关项目的中心负责人或总经理也可推进；总经理助理、系统管理员和普通非项目经理员工会被拒绝
-- 项目维度业务操作日志：记录项目创建、资料状态流转、资料适用性变更、资料责任人变更、阶段审批、阶段推进和项目完成等成功业务动作
+- 阶段资料附件：资料项附件上传、列表、下载和软删除均按资料项级权限判断，上传/删除写入业务日志；当前阶段附件保存在在线平台，不调用文件管理平台，不产生归档状态
+- 我的工作台查询：登录用户可集中查看资料责任、资料审核和阶段推进三类待办；不返回 `stage_gate_approval`
+- 项目总览看板：登录用户可只读查看跨项目汇总指标、当前阶段齐套摘要和未完成适用资料
+- 项目编号后置填写：`1.2 项目立项审批表` 审核通过且 `1.3 项目立项通知` 提交/上传后，允许按既有权限填写或更新非空唯一项目编号
+- 项目阶段手工推进接口：项目经理可在自己负责项目当前阶段适用资料按 `completionMode` 完成后推进；本中心相关项目的中心负责人或总经理也可推进；不要求阶段关口审批 `approved`
+- 项目维度业务操作日志：记录项目创建、资料提交/完成、资料级审核状态流转、资料适用性变更、资料责任人变更、阶段推进和项目完成等成功业务动作
 
 不包含日报周报、文件管理平台联动、自动通知、复杂 RBAC、项目成员表、技术负责人表、项目参与人表、完整审批流引擎、项目级审批单、审批节点配置器、项目类型模板、自动批量标记不适用、阶段回退、跳阶段、批量推进、在线表单填写、表单草稿、表单生成归档文件、文件管理平台上传/下载、附件预览、断点续传、多版本管理、病毒扫描、对象存储、全局审计日志、系统配置日志、登录日志、用户管理操作日志、文件平台日志、文件下载日志、管理层大屏图表、日志筛选导出、复杂分页、日志权限矩阵、基于文件上传/归档状态的齐套率、阶段推进操作人完整日志、复杂菜单权限、文件平台用户同步、权限同步、下载权限判断、部门权限继承、SSO 或细粒度按钮权限，也不读取、共用或迁移文件管理平台数据库。
 
-后端项目和阶段资料仓储按能力拆分为更小模块。`src/repositories/projectRepository.js` 和 `src/repositories/stageDocumentRepository.js` 保留为兼容出口；项目基础、阶段推进、项目总览、阶段资料清单、状态流转、适用性、责任人和我的资料任务等实现位于对应子模块中。该拆分仅调整代码结构，不改变 API、数据库、权限、错误码或用户可见业务行为。
+后端项目和阶段资料仓储按能力拆分为更小模块。`src/repositories/projectRepository.js` 和 `src/repositories/stageDocumentRepository.js` 保留为兼容出口；项目基础、阶段推进、项目总览、阶段资料清单、状态流转、适用性、责任人、我的工作台和资料项级附件权限等实现位于对应子模块中。该拆分仅调整代码结构，不改变 API、数据库、权限、错误码或用户可见业务行为。
 
 ## Setup
 
@@ -64,15 +64,15 @@ migrations/001_project_core.sql
 npm run init-auth
 ```
 
-5. 初始化 20260610 版阶段资料清单模板，并按新版资料项补齐当前开发库项目：
+5. 初始化 20260625 版阶段资料清单模板，并按 64 项 `completionMode` 资料项补齐当前开发库项目：
 
 ```bash
 npm run init-stage-documents
 ```
 
-该命令会创建阶段资料模板表和项目级资料清单表。`docs/9.2_阶段资料清单与责任角色表_20260610.md` 是正式业务依据文档；后端运行和 `npm run init-stage-documents` 使用内置 `v20260610` 模板快照，不依赖部署包包含 `docs` 目录或固定 md 路径。该快照共 54 项。旧 48 项模板已废弃，当前开发阶段不做旧模拟项目数据兼容、历史项目迁移或新旧模板共存。重复执行不会为已有项目重复生成同一资料项。
+该命令会创建阶段资料模板表和项目级资料清单表。20260625 流程、`docs/9.11_20260625项目流程资料审批口径规划.md` 和 `docs/9.12_在线平台内部资料闭环规划_20260625.md` 是当前模板规划依据；后端运行和 `npm run init-stage-documents` 使用内置 20260625 模板快照，不依赖部署包包含 `docs` 目录或固定 md 路径。该快照共 64 项，并校验 `submit_only 33`、`approval_required 24`、`conditional_submit 7`、`conditional_approval 0`。旧 48 项模板、`v20260610` 54 项模板和 20260624 旧口径已废弃，当前模拟数据不做旧资料兼容迁移。重复执行不会为已有项目重复生成同一资料项。
 
-如果正式资料清单发生变更，必须同步更新内置模板快照、`EXPECTED_STAGE_DOCUMENT_ITEM_COUNT` 和模板解析/初始化验证用例。
+如果正式资料清单发生变更，必须同步更新内置模板快照、`EXPECTED_STAGE_DOCUMENT_ITEM_COUNT` 和模板初始化验证用例。
 
 6. 现有环境如已执行过 `003_stage_document_checklist.sql`，需要继续在 MySQL 中执行资料状态流转迁移：
 
@@ -136,9 +136,34 @@ migrations/010_organization_roles_project_governance.sql
 migrations/011_project_stage_approval_workflow.sql
 ```
 
-该迁移会为 `project_stages` 增加 `approval_status`，默认 `not_submitted`；并创建 `project_stage_approval_history` 表保存阶段级审批历史。第一版审批历史的 `stage_id` 必须非空，审批历史按 `created_at ASC, id ASC` 查询。迁移不修改 8 阶段定义或 20260610 版 54 项资料模板。
+该迁移会为 `project_stages` 增加 `approval_status`，默认 `not_submitted`；并创建 `project_stage_approval_history` 表保存阶段级审批历史。第一版审批历史的 `stage_id` 必须非空，审批历史按 `created_at ASC, id ASC` 查询。迁移不修改 8 阶段定义或阶段资料模板版本。
 
-14. 启动服务：
+14. 现有环境如已执行过 `011_project_stage_approval_workflow.sql`，需要继续在 MySQL 中执行阶段资料归属中心迁移：
+
+```bash
+migrations/012_stage_document_ownership_departments.sql
+```
+
+该迁移只为阶段资料模板和项目级阶段资料快照新增 `owner_department`、`review_department` 列。执行后需要重新运行：
+
+```bash
+npm run init-stage-documents
+```
+
+原因是项目资料的 `owner_department` / `review_department` 写入依赖 `npm run init-stage-documents` 中的模板 upsert/backfill 逻辑；仅执行 012 只会新增空列，不会自动补齐既有项目资料归属中心。
+
+15. 当前模拟库切换到 20260625 64 项 `completionMode` 模板时，先执行本 change 迁移，再按当前模板重置和初始化：
+
+```bash
+npm run migrate-online-platform-internal-flow
+npm run reset-stage-documents-v20260625
+npm run init-stage-documents
+npm run check
+```
+
+`migrate-online-platform-internal-flow` 会补齐 nullable `project_code` 和 `completion_mode` 字段。`reset-stage-documents-v20260625` 会确认当前连接库是 `digital_platform`，然后清理旧项目阶段资料快照、阶段资料附件记录、附件物理文件、阶段资料/阶段推进相关业务日志和旧模板，并将项目状态重置为 `normal`、第 1 阶段重置为 current、其他阶段重置为 not_started。附件物理文件清理使用 `STAGE_DOCUMENT_ATTACHMENT_STORAGE_DIR` 指定的目录；未配置时清理默认的 `storage/stage-document-attachments`。reset 会清空该目录，且仅面向当前模拟数据；正式或非模拟环境不得执行。该步骤不做旧模板到 20260625 的兼容迁移，也不保留旧项目资料。
+
+16. 启动服务：
 
 ```bash
 npm run dev
@@ -200,7 +225,7 @@ Authorization: Bearer <token>
 
 所有用户管理维护接口必须携带登录态，并要求当前用户同时满足 `organizationRole = system_admin` 和 `isPlatformAdmin = true`。系统管理员只默认管理账号、组织和基础配置，不扩展为项目审批、资料审批、阶段推进、文件权限或复杂 RBAC。中心负责人管理本中心员工的用户维护能力本 change 暂不实现，仍作为后续单独能力处理。
 
-用户管理响应使用安全用户模型，包含 `id`、`account`、`name`、`department`、`organizationRole`、`role`、`isEnabled`、`isPlatformAdmin`、`filePlatformUserId`，不返回 `password_hash`、`passwordHash` 或其他密码内部字段。新增和编辑请求使用 `displayName`，数据库字段仍为 `display_name`，响应字段为 `name`。`role` 是岗位/职务展示文本，不是组织角色。
+用户管理响应使用安全用户模型，包含 `id`、`account`、`name`、`department`、`organizationRole`、`role`、`isEnabled`、`isPlatformAdmin`、`filePlatformUserId`，不返回 `password_hash`、`passwordHash` 或其他密码内部字段。新增和编辑请求使用 `displayName`，数据库字段仍为 `display_name`，响应字段为 `name`。`role` 是岗位/职务展示文本，不是组织角色。`organizationRole` 是系统权限角色；普通业务页面应以姓名作为主文本、部门和岗位作为辅助文本，组织角色只用于用户管理、权限说明或必要的审批角色上下文。
 
 组织角色枚举为 `general_manager`、`system_admin`、`general_manager_assistant`、`center_manager`、`employee`。业务部门枚举为 `operations_center`、`marketing_center`、`manufacturing_center`、`rd_center`。总经理、系统管理员、总经理助理的 `department` 必须为空；中心负责人和员工必须隶属于四个业务部门之一。`system_admin` 必须同时 `isPlatformAdmin = true`，且 `isPlatformAdmin = true` 只能用于系统管理员组织角色。
 
@@ -304,7 +329,7 @@ Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-  "projectCode": "KRF26001",
+  "projectCode": null,
   "projectName": "示例项目",
   "customerName": "示例客户",
   "projectMode": "self_developed",
@@ -318,7 +343,11 @@ Content-Type: application/json
 
 成功后返回项目主数据和初始化后的 8 个阶段。创建人由后端根据登录态写入 `createdByUserId`，不会信任前端提交的创建人字段。创建成功后会在同一事务中写入 `project.created` 项目业务操作日志；如果业务日志写入失败，项目创建会整体回滚。
 
-`projectMode` 只允许 `self_developed` 或 `outsourced`，非法值返回 `INVALID_PROJECT_MODE`。两种模式共用同一 8 阶段和 20260610 版 54 项资料，不改变资料状态机、适用性、附件规则或阶段推进门禁。
+`projectCode` 创建时允许省略、传 `null` 或传空字符串，后端会保存为空。正式项目编号在 `1.2 项目立项审批表` 已按 `approval_required` 审核通过，且 `1.3 项目立项通知` 已按 `submit_only` 提交或上传后填写或生成；非空编号必须唯一，多个空编号允许共存。
+
+创建项目是业务权限操作，第一版仅允许 `organizationRole = general_manager` 或 `center_manager`。`employee`、`general_manager_assistant` 和 `system_admin` 直接调用会返回 `FORBIDDEN_OPERATION`，HTTP 403；失败时不得插入项目、阶段、阶段资料或成功业务日志。
+
+`projectMode` 只允许 `self_developed` 或 `outsourced`，非法值返回 `INVALID_PROJECT_MODE`。两种模式共用同一 8 阶段和 20260625 版 64 项资料，不改变 `completionMode`、适用性、附件规则或阶段推进门禁。
 
 `participatingDepartments` 是四个业务部门稳定枚举数组，只允许 `operations_center`、`marketing_center`、`manufacturing_center`、`rd_center`。空值或空数组表示未配置参与部门，重复值会去重；中文部门名、未知值、非数组非空值返回 `INVALID_PARTICIPATING_DEPARTMENT`，HTTP 状态为 400。该字段不是中文展示文本，中心负责人项目可见范围会使用该枚举数组或本中心责任人资料判断本中心相关项目。
 
@@ -330,7 +359,7 @@ Content-Type: application/json
 GET /api/projects
 ```
 
-该接口必须携带登录态，只做 `requireAuth`，并按当前用户过滤可见项目。总经理和总经理助理可查看全部项目；系统管理员不因系统管理身份自动获得业务项目查看权限；项目经理可查看自己负责项目；资料责任人可查看自己至少负责一项资料的项目；中心负责人可查看本中心相关项目；普通员工只能查看自己负责资料或自己作为项目经理的项目。返回项目编号、项目名称、客户、项目模式、项目经理用户、项目经理展示文本、状态、计划时间、当前阶段和创建人追溯字段。
+该接口必须携带登录态，只做 `requireAuth`，并按当前用户过滤可见项目。总经理和总经理助理可查看全部项目；系统管理员不因系统管理身份自动获得业务项目查看权限；项目经理可查看自己负责项目；资料责任人可查看自己至少负责一项资料的项目；中心负责人可查看本中心相关项目；普通员工只能查看自己负责资料或自己作为项目经理的项目。返回项目编号、项目名称、客户、项目模式、项目经理用户、项目经理展示文本、状态、计划时间、当前阶段和创建人追溯字段；`projectCode` 可为空，前端应显示“待生成”或等价文案。
 
 ### Project Overview Dashboard
 
@@ -341,15 +370,15 @@ Authorization: Bearer <token>
 
 查询项目总览看板。该接口必须携带登录态，只做 `requireAuth`，不要求 `requirePlatformAdmin`，并按当前用户过滤可见项目；可见范围与项目列表一致。路由为 `/api/projects` 下的静态路由，必须先于 `/:projectId` 动态项目详情路由注册，避免 `overview-dashboard` 被当作项目 ID。
 
-响应顶层包含 `summary` 和 `projects`。`summary` 包含 `totalProjects`、`activeProjects`、`completedProjects`、`riskProjects` 和 `myPendingStageDocumentTasks`。前三个项目数量和 `riskProjects` 基于当前项目筛选后的结果统计，`riskProjects` 统计 `status = risk` 或 `status = delayed` 的项目；`myPendingStageDocumentTasks` 使用当前登录用户 ID，按 `responsible_user_id = 当前用户 id`、`is_applicable = 1`、`status in not_submitted, submitted, returned` 统计当前用户全局待办资料数量，不受 `status`、`currentStageOrder` 或 `keyword` 项目总览筛选影响。
+响应顶层包含 `summary` 和 `projects`。`summary` 包含 `totalProjects`、`activeProjects`、`completedProjects`、`riskProjects` 和 `myPendingStageDocumentTasks`。前三个项目数量和 `riskProjects` 基于当前项目筛选后的结果统计，`riskProjects` 统计 `status = risk` 或 `status = delayed` 的项目；`myPendingStageDocumentTasks` 使用当前登录用户 ID，按资料责任人、`is_applicable = 1` 和 `completionMode` 派生完成状态统计当前用户全局待处理资料数量，已完成的 `submit_only + submitted` 不计入责任人处理数。
 
 `projects` 每项至少包含 `projectId`、`projectCode`、`projectName`、`customerName`、`projectMode`、`projectManagerUserId`、`projectManagerUser`、`projectManager`、`status`、`currentStageId`、`currentStageName`、`currentStageOrder`、`currentStageStatus`、`currentStageCompletenessSummary`、`currentStageIncompleteRequiredDocuments`、`currentStageIssue`、`createdBy`、`plannedStartDate` 和 `plannedEndDate`。已完成项目允许当前阶段字段和齐套摘要为空；未完成项目缺失当前阶段时返回 `currentStageIssue = missing_current_stage`，存在多个当前阶段时返回 `multiple_current_stages`。当前阶段存在但该阶段没有任何项目级资料项记录时，返回 `currentStageCompletenessSummary = null`、`currentStageIncompleteRequiredDocuments = []` 和 `currentStageIssue = checklist_not_initialized`，接口不会自动初始化资料清单，也不会修复异常阶段数据。
 
-当前阶段齐套摘要复用阶段资料清单口径，只统计当前阶段 `isRequired = true` 且 `isApplicable = true` 的资料项；`confirmed` 计为已完成，`not_submitted`、`submitted` 和 `returned` 计为未完成；建议资料项和不适用资料项不计入 `requiredTotal`，也不进入 `currentStageIncompleteRequiredDocuments`。`requiredTotal = 0` 时 `completionPercent = 100`。缺失资料项至少返回 `id`、`documentCode`、`documentName` 和 `status`。
+当前阶段齐套摘要复用阶段资料清单口径，统计当前阶段所有 `isApplicable = true` 且参与推进门禁的适用资料项。完成状态按 `completionMode` 派生：`submit_only + submitted`、`approval_required + confirmed`、`conditional_submit + isApplicable=true + submitted` 计为完成；`approval_required + submitted`、`returned` 和其他未达到完成点的适用资料计为未完成；`conditional_submit + isApplicable=false` 不计入缺失或阻塞项。`requiredTotal` 字段名为兼容旧前端保留，当前语义是适用门禁资料总数。缺失资料项至少返回 `id`、`documentCode`、`documentName`、`status`、`completionMode` 和派生完成状态。
 
 筛选参数均为可选。`status` 只能是 `normal`、`risk`、`paused`、`delayed` 或 `completed`，非法值、空字符串或多值返回 `INVALID_PROJECT_STATUS_FILTER`，HTTP 状态为 400。`currentStageOrder` 必须是 1 到 8 的整数，非数字、空字符串、0、负数、小数、超过 8 或混合格式返回 `INVALID_STAGE_ORDER`，HTTP 状态为 400。`keyword` trim 后为空等同未提供，非空时按 `projectCode`、`projectName` 或 `customerName` 模糊筛选。合法筛选无匹配项目时返回空项目列表。
 
-第一版不分页，项目列表按 `projectCode ASC, projectId ASC` 稳定排序。该接口是只读查询，不写业务操作日志，不改变项目状态、阶段状态、资料状态、适用性、责任人、齐套摘要或阶段推进状态。齐套率基于当前手工状态和人工适用性判断，不代表文件已上传、文件已归档或在线表单已填写；本能力不做文件平台联动、在线表单、消息提醒、超期提醒、大屏图表、导出或批量操作。
+第一版不分页，项目列表按 `projectCode ASC, projectId ASC` 稳定排序，并兼容空项目编号。该接口是只读查询，不写业务操作日志，不改变项目状态、阶段状态、资料状态、适用性、责任人、齐套摘要或阶段推进状态。齐套率基于 `completionMode` 派生完成状态和人工适用性判断，不代表文件平台归档；本能力不做文件平台联动、在线表单、消息提醒、超期提醒、大屏图表、导出或批量操作。
 
 ### Project Detail
 
@@ -357,11 +386,11 @@ Authorization: Bearer <token>
 GET /api/projects/{projectId}
 ```
 
-该接口必须携带登录态，只做 `requireAuth`，并按当前用户校验项目可见性。无权访问具体项目时返回 `FORBIDDEN_OPERATION`，不伪装成项目不存在；项目确实不存在时仍返回 `PROJECT_NOT_FOUND`。返回项目基础信息、全部 8 个阶段、当前阶段和创建人追溯字段。每个阶段返回 `approvalStatus`，第一版取值为 `not_submitted`、`pending_center_manager`、`returned_by_center_manager`、`pending_general_manager`、`returned_by_general_manager`、`approved` 或 `cancelled`。第 8 阶段推进完成后，项目 `status` 为 `completed`，当前阶段为空。
+该接口必须携带登录态，只做 `requireAuth`，并按当前用户校验项目可见性。无权访问具体项目时返回 `FORBIDDEN_OPERATION`，不伪装成项目不存在；项目确实不存在时仍返回 `PROJECT_NOT_FOUND`。返回项目基础信息、全部 8 个阶段、当前阶段和创建人追溯字段；`projectCode` 可为空。当前 20260625 内部资料闭环不使用 `approvalStatus` 作为阶段推进门禁。第 8 阶段推进完成后，项目 `status` 为 `completed`，当前阶段为空。
 
-### Stage Approval Workflow
+### Legacy Stage Approval Workflow
 
-第一版只做阶段级审批，不做独立项目级审批、项目级审批单或可空 `stageId`。每个项目阶段只有一个当前审批状态，状态保存在 `project_stages.approval_status`；审批历史只是流水，不作为当前状态来源。退回后重新提交复用同一阶段审批状态。
+这些阶段级审批接口属于旧实现兼容能力。当前 20260625 在线平台内部资料闭环不再把泛化阶段关口审批作为项目推进前置，也不要求 `project_stages.approval_status = approved` 后才能推进。资料级 `approval_required` 审核仍通过阶段资料接口处理。
 
 固定接口：
 
@@ -374,15 +403,7 @@ GET /api/projects/{projectId}/stages/{stageId}/approval/history
 Authorization: Bearer <token>
 ```
 
-`projectId` 和 `stageId` 必须是严格正整数；非法项目 ID 返回 `INVALID_PROJECT_ID`，非法阶段 ID 返回 `INVALID_PROJECT_STAGE_ID`，项目不存在返回 `PROJECT_NOT_FOUND`，阶段不存在或不属于该项目返回 `PROJECT_STAGE_NOT_FOUND`。
-
-审批节点固定为 8 阶段规则：阶段 1 立项和阶段 3 合同签订由营销中心负责人审批后进入总经理审批；阶段 2 方案设计和阶段 4 详细设计由研发中心负责人审批后直接通过；阶段 5 生产制作、阶段 6 预验收、阶段 7 终验收由制造中心负责人审批后直接通过；阶段 8 结题由项目经理所属中心负责人审批后进入总经理审批。阶段 8 如果项目经理没有有效业务部门，提交审批返回 `PROJECT_APPROVAL_NOT_SUBMITTABLE`。
-
-项目经理只能提交或重新提交自己负责项目的当前阶段审批，不能替代中心负责人或总经理审批。中心负责人只能处理匹配本中心审批节点的 `pending_center_manager`；总经理只能处理阶段 1、阶段 3、阶段 8 的 `pending_general_manager`；总经理助理、系统管理员、员工和仅因项目经理身份访问项目的用户调用审批通过或退回会返回 `PROJECT_APPROVAL_FORBIDDEN`。
-
-提交或重新提交前必须重新校验当前阶段适用必填资料全部 `confirmed`。审批通过前也会重新校验齐套；缺失适用必填资料返回 `PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE`。当前审批状态不能提交或重新提交返回 `PROJECT_APPROVAL_NOT_SUBMITTABLE`；当前审批状态不是待审批返回 `PROJECT_APPROVAL_NOT_PENDING`；退回原因为空或超过限制返回 `INVALID_APPROVAL_COMMENT`。
-
-审批成功动作会在同一事务中更新审批状态、写入 `project_stage_approval_history`，并写入项目业务日志。审批历史查询只读，按 `createdAt ASC, id ASC` 返回；没有审批历史时返回空列表，不写业务日志，也不改变项目、阶段、资料或审批状态。
+如果后端为了历史数据仍保留这些接口，`PROJECT_APPROVAL_NOT_APPROVED`、`PROJECT_APPROVAL_NOT_SUBMITTABLE`、`PROJECT_APPROVAL_NOT_PENDING`、`PROJECT_APPROVAL_FORBIDDEN` 等错误码只作为兼容提示；当前正常流程和前端主入口不得引导用户提交、通过或退回阶段关口审批。
 
 ### Advance Current Project Stage
 
@@ -398,15 +419,16 @@ Content-Type: application/json
 
 接口不接收、不信任目标阶段、目标阶段顺序或目标阶段标识。服务端只根据当前阶段自动推进到下一顺序阶段，不支持跳阶段、回退、批量推进或自由指定阶段。
 
-推进前检查当前阶段审批状态和适用必填资料齐套门禁。当前阶段审批状态必须是 `approved`，否则返回 `PROJECT_APPROVAL_NOT_APPROVED`。当前阶段必须已经存在项目级阶段资料项记录；如果当前阶段没有任何资料项记录，系统会认为阶段资料清单尚未初始化并拒绝推进。当前开发库项目可先执行新版资料清单初始化命令；旧模拟项目资料不做兼容迁移。
+推进前检查当前阶段适用资料 `completionMode` 齐套门禁，不检查泛化阶段关口审批状态。当前阶段必须已经存在项目级阶段资料项记录；如果当前阶段没有任何资料项记录，系统会认为阶段资料清单尚未初始化并拒绝推进。当前开发库项目可先执行 20260625 资料清单初始化命令；旧模拟项目资料不做兼容迁移。
 
-- 只统计 `isRequired = true` 且 `isApplicable = true` 的资料项
-- `confirmed` 计为完成
-- `not_submitted`、`submitted` 和 `returned` 计为未完成
-- 建议资料项和不适用资料项不计入门禁
-- 只有当前阶段资料项记录存在、但适用必填资料数为 0 时，`requiredTotal = 0` 才视为齐套
+- 统计当前阶段所有 `isApplicable = true` 且参与推进门禁的适用资料项
+- `submit_only + submitted` 计为完成
+- `approval_required + confirmed` 计为完成，`approval_required + submitted` 计为待审核且未完成
+- `conditional_submit + isApplicable=false` 不计入缺失或阻塞项，`isApplicable=true` 后提交/上传才完成
+- `returned` 始终计为未完成
+- 只有当前阶段资料项记录存在、但适用门禁资料数为 0 时，`requiredTotal = 0` 才视为齐套
 - `incompleteRequiredCount = 0` 时允许推进
-- `incompleteRequiredCount > 0` 时拒绝推进，并返回缺失适用必填资料列表，每项至少包含 `id`、`documentCode`、`documentName` 和 `status`
+- `incompleteRequiredCount > 0` 时拒绝推进，并返回缺失适用资料列表，每项至少包含 `id`、`documentCode`、`documentName`、`status`、`completionMode` 和派生完成状态
 
 推进成功后在事务中更新阶段状态。非第 8 阶段时，当前阶段更新为 `completed`、`isCurrent = false` 并记录 `completedAt`，下一阶段必须存在、顺序为当前阶段加一、`stageStatus = not_started`、`isCurrent = false`，然后更新为 `current`、`isCurrent = true` 并记录 `startedAt`。第 8 阶段 `closeout` 推进成功后，项目 `status` 更新为 `completed`，且不再有当前阶段。
 
@@ -414,7 +436,7 @@ Content-Type: application/json
 
 只要项目 `status = completed`，接口必须拒绝继续推进；即使异常数据中仍存在当前阶段，也不得修改项目状态或任何阶段状态。阶段推进失败时事务回滚，不改变项目状态或任何阶段状态。
 
-齐套门禁只基于当前手工状态和人工适用性判断，不代表文件已上传、文件已归档或在线表单已提交。
+齐套门禁只基于当前资料状态、`completionMode` 和人工适用性判断，不代表文件平台归档或在线表单已提交。
 
 ### Stage Document Checklist
 
@@ -422,11 +444,11 @@ Content-Type: application/json
 GET /api/projects/{projectId}/stage-document-checklist
 ```
 
-按 8 阶段顺序分组返回项目阶段资料清单。项目流程以 `智能制造项目管理流程图20260610.pdf` 和 `docs/9.7_智能制造项目整体推进流程_20260610.md` 为依据；`docs/9.2_阶段资料清单与责任角色表_20260610.md` 是 20260610 版资料清单正式业务依据文档。后端运行使用内置 `v20260610` 模板快照，新建项目初始化 54 项资料项，不在运行时依赖 docs 目录或 md 路径。旧 48 项模板已废弃，当前开发阶段不做旧模拟项目数据兼容、历史项目迁移或新旧模板共存。
+按 8 阶段顺序分组返回项目阶段资料清单，并按当前用户资料项权限过滤。项目流程以 20260625 流程、`docs/9.11_20260625项目流程资料审批口径规划.md` 和 `docs/9.12_在线平台内部资料闭环规划_20260625.md` 为当前模板依据。后端运行使用内置 20260625 64 项模板快照，新建项目初始化 64 项资料项，不在运行时依赖 docs 目录或 md 路径。`7.P1 随机资料移交` 和 `8.P1 资料服务器核查` 不纳入普通阶段资料模板；旧 48 项模板、`v20260610` 54 项模板和 20260624 旧口径已废弃，当前模拟数据不做旧项目资料兼容迁移。
 
 该接口必须携带登录态，只做 `requireAuth`，不使用 `requirePlatformAdmin`，并按当前用户校验项目可见性；无权访问具体项目时返回 `FORBIDDEN_OPERATION`。该限制用于保护清单中返回的资料责任人信息，避免未登录用户或无关用户绕过项目详情接口读取 `responsibleUser`。
 
-每个资料项包含资料编号、资料项名称、是否必填、默认责任角色、确认角色、提交方式、`targetFolderPath`、`targetFolderId`、基础状态和适用性。`targetFolderPath` 来自 20260610 正式资料清单的“文件平台目标目录”字段，`targetFolderId` 保持为空；本 change 不做文件管理平台真实联动，后续联动时再回填目录 ID。
+每个资料项包含资料编号、资料项名称、是否必填、默认责任角色、确认角色、`ownerDepartment`、`reviewDepartment`、提交方式、`completionMode`、基础状态、派生完成状态和适用性。当前阶段不做文件管理平台真实联动，不要求 `targetFolderPath`、`targetFolderId` 或 folder mapping；如兼容返回这些字段，也不得触发文件平台调用。响应同时返回 `permissions`，包含 `canViewAttachments`、`canUploadAttachment`、`canDownloadAttachment`、`canDeleteAttachment`、`canSubmitDocument`、`canReviewDocument` 等后端计算的资料项权限字段。
 
 查询结果同时返回资料项状态追溯字段：`submittedByUserId`、`submittedAt`、`confirmedByUserId`、`confirmedAt`、`returnedByUserId`、`returnedAt` 和 `returnReason`。
 
@@ -436,23 +458,24 @@ GET /api/projects/{projectId}/stage-document-checklist
 
 `responsibleUser` 只包含 `id`、`account`、`name`、`department`、`organizationRole`、`role`、`isEnabled` 和可空 `filePlatformUserId`，不得包含 `isPlatformAdmin`、`is_platform_admin`、`password_hash`、`passwordHash` 或任何密码内部字段。
 
-每个阶段分组同时包含 `completenessSummary`，表示基于当前手工状态和人工适用性判断的阶段必填资料齐套摘要。字段包括：
+每个阶段分组同时包含 `completenessSummary`，表示基于 `completionMode` 派生完成状态和人工适用性判断的阶段适用门禁资料齐套摘要。字段包括：
 
-- `requiredTotal`: 该阶段适用必填资料项总数，只统计 `isRequired = true` 且 `isApplicable = true`
-- `confirmedRequiredCount`: 状态为 `confirmed` 的适用必填资料项数量
-- `incompleteRequiredCount`: 状态为 `not_submitted`、`submitted` 或 `returned` 的适用必填资料项数量
-- `completionPercent`: 当 `requiredTotal > 0` 时按 `round(confirmedRequiredCount / requiredTotal * 100)` 计算；当 `requiredTotal = 0` 时返回 `100`；第一版使用 0 到 100 的整数百分比
-- `incompleteRequiredDocuments`: 未完成适用必填资料项列表，每项至少包含 `id`、`documentCode`、`documentName` 和 `status`
+- `requiredTotal`: 兼容字段名，当前语义为该阶段适用门禁资料总数，统计 `isApplicable = true` 且参与推进门禁的资料项
+- `completedRequiredCount`: 按 `completionMode` 派生为已完成的适用门禁资料数量
+- `confirmedRequiredCount`: 兼容字段；如返回，其含义等同 `completedRequiredCount`，不得只统计 `status = confirmed`
+- `incompleteRequiredCount`: 未按 `completionMode` 完成的适用门禁资料数量
+- `completionPercent`: 当 `requiredTotal > 0` 时按 `round(completedRequiredCount / requiredTotal * 100)` 计算；当 `requiredTotal = 0` 时返回 `100`；第一版使用 0 到 100 的整数百分比
+- `incompleteRequiredDocuments`: 未完成适用资料项列表，每项至少包含 `id`、`documentCode`、`documentName`、`status`、`completionMode` 和派生完成状态
 
-建议资料项和不适用资料项不计入 `completenessSummary` 的计数或百分比，但仍继续在资料清单中展示。该摘要只基于当前手工状态和人工适用性判断，不代表文件已上传、文件已归档或在线表单已提交。
+`conditional_submit + isApplicable=false` 不计入 `completenessSummary` 的计数或百分比，但仍继续在资料清单中展示为未触发/不适用。该摘要只基于当前资料状态、完成规则和人工适用性判断，不代表文件平台归档或在线表单已提交。
 
 ### Stage Document Attachments
 
-阶段资料附件接口均必须携带登录态，只做 `requireAuth`，不要求 `requirePlatformAdmin`，并先按当前用户校验项目可见性。无权访问该项目时返回 `FORBIDDEN_OPERATION`，不得上传文件、不得新增附件记录、不得软删除附件、不得写业务日志。附件只属于数字化平台内部资料项附件管理，不调用文件管理平台，不回填 `targetFolderId`，不判断文件平台权限。
+阶段资料附件接口均必须携带登录态，只做 `requireAuth`，不要求 `requirePlatformAdmin`，并先按当前用户校验项目可见性，再按资料项级权限校验附件列表、下载、上传和删除。无权访问该项目或资料项附件时返回 `FORBIDDEN_OPERATION`，不得上传文件、不得新增附件记录、不得软删除附件、不得写成功业务日志。附件只属于数字化平台内部资料项附件管理，不调用文件管理平台，不回填 `targetFolderId`，不判断文件平台权限。
 
 ID 参数必须严格为正整数。非法 `projectId` 返回 `INVALID_PROJECT_ID`，非法 `documentId` 返回 `INVALID_STAGE_DOCUMENT_ID`，非法 `attachmentId` 返回 `INVALID_ATTACHMENT_ID`。未登录时优先返回未登录错误；ID 格式校验优先于查库。合法项目不存在返回 `PROJECT_NOT_FOUND`，合法资料项不存在或不属于项目返回 `STAGE_DOCUMENT_NOT_FOUND`，合法附件不存在、已删除或不属于资料项返回 `ATTACHMENT_NOT_FOUND`。
 
-上传接口使用 `multipart/form-data`，第一版只接受一个名为 `file` 的文件字段，多个 `file` 字段直接拒绝，避免一次请求对应多份附件的语义歧义。单文件大小上限固定为 50MB，0 字节文件会被拒绝。缺失 `file` 字段、文件字段名不是 `file`、缺少文件名、清理路径后的文件名为空、文件名超过 255 字符、MIME 类型超过 255 字符、0 字节、超过 50MB、multipart 解析失败或其他文件参数非法均统一返回 `INVALID_ATTACHMENT_FILE`；MIME 类型为空时按 `application/octet-stream` 保存。不适用资料项拒绝新增上传并返回 `STAGE_DOCUMENT_NOT_APPLICABLE`；资料项被标记不适用前已有且未删除的附件仍可列表展示、下载和删除。
+上传接口使用 `multipart/form-data`，第一版只接受一个名为 `file` 的文件字段，多个 `file` 字段直接拒绝，避免一次请求对应多份附件的语义歧义。单文件大小上限固定为 50MB，0 字节文件会被拒绝。缺失 `file` 字段、文件字段名不是 `file`、缺少文件名、清理路径后的文件名为空、文件名超过 255 字符、MIME 类型超过 255 字符、0 字节、超过 50MB、multipart 解析失败或其他文件参数非法均统一返回 `INVALID_ATTACHMENT_FILE`；MIME 类型为空时按 `application/octet-stream` 保存。不适用资料项拒绝新增上传并返回 `STAGE_DOCUMENT_NOT_APPLICABLE`。第一版附件上传只允许该资料项 `responsibleUserId = 当前用户 id`，`canUploadAttachment` 不复用宽泛 `canSubmitStageDocument`；项目经理、中心负责人和总经理可以按权限查看、下载、审核或退回，但默认不能代上传。资料项被标记不适用前已有且未删除的附件仍可按权限列表展示、下载和删除。
 
 ```http
 POST /api/projects/{projectId}/stage-documents/{documentId}/attachments
@@ -469,7 +492,7 @@ GET /api/projects/{projectId}/stage-documents/{documentId}/attachments
 Authorization: Bearer <token>
 ```
 
-返回当前未删除附件，按 `uploadedAt DESC, id DESC` 排序。每项包含 `id`、`originalFileName`、`mimeType`、`fileSize`、`uploadedByUserId`、`uploadedAt` 和 `uploadedByUser`；`uploadedByUser` 至少包含 `id`、`account` 和 `name`。响应不返回 `passwordHash`、`password_hash`、`isPlatformAdmin`、`is_platform_admin`、后端绝对路径、内部存储目录、临时文件路径、`storageKey` 或 `storedFileName`。
+返回当前未删除且当前用户有权查看的附件，按 `uploadedAt DESC, id DESC` 排序。每项包含 `id`、`originalFileName`、`mimeType`、`fileSize`、`uploadedByUserId`、`uploadedAt`、`uploadedByUser` 和附件操作权限；`uploadedByUser` 至少包含 `id`、`account` 和 `name`。响应不返回 `passwordHash`、`password_hash`、`isPlatformAdmin`、`is_platform_admin`、后端绝对路径、内部存储目录、临时文件路径、`storageKey` 或 `storedFileName`。
 
 ```http
 GET /api/projects/{projectId}/stage-documents/{documentId}/attachments/{attachmentId}/download
@@ -483,11 +506,22 @@ DELETE /api/projects/{projectId}/stage-documents/{documentId}/attachments/{attac
 Authorization: Bearer <token>
 ```
 
-删除使用软删除，写入 `deletedByUserId` 和 `deletedAt`，删除后列表不再返回该附件。删除成功会在同一事务中写入 `document.attachment_deleted` 项目业务日志；删除失败不写日志。
+删除使用软删除，写入 `deletedByUserId` 和 `deletedAt`，删除后列表不再返回该附件。删除必须同时满足：当前用户不是系统管理员或总经理助理、当前用户当前仍有该资料项附件访问权、当前用户是该附件上传人、资料未按 `completionMode` 派生完成。如果资料责任人已变更，旧责任人不能仅凭历史上传人身份删除当前无权附件。删除成功会在同一事务中写入 `document.attachment_deleted` 项目业务日志；删除失败不写日志。
 
-附件上传、下载和删除均不改变资料 `status`、状态追溯字段、适用性、适用性追溯字段、阶段齐套摘要计算口径或项目阶段推进状态。上传附件不等于资料已提交或已确认，不自动推进阶段，也不代表已经完成文件管理平台归档。
+附件上传、下载和删除均不改变资料 `status`、状态追溯字段、适用性、适用性追溯字段、阶段齐套摘要计算口径或项目阶段推进状态。上传附件不自动推进阶段，也不代表已经完成文件管理平台归档；资料是否完成以后端返回的 `completionMode` 派生完成状态为准。
 
-### My Stage Document Tasks
+### My Workbench
+
+```http
+GET /api/me/workbench
+Authorization: Bearer <token>
+```
+
+查询当前登录用户的我的工作台。接口只使用当前登录态用户，不接收也不信任前端传入的用户 ID、责任人 ID、审核人 ID 或审批人 ID。响应包含 `summary` 和 `items`；`summary.byType` 只按 `document_responsibility`、`document_review`、`stage_advance` 统计数量，`summary.total` 为总待办数；当前阶段不返回 `stage_gate_approval`。
+
+`document_responsibility` 只包含当前用户负责、适用且未按 `completionMode` 派生完成的资料项；`submit_only + submitted` 不计入责任人待办。`document_review` 只包含 `completionMode = approval_required` 且 `status = submitted` 并且当前用户具备资料级审核权限的资料项；项目经理不因项目经理身份获得资料级审核待办，总经理不默认接收全部资料审核待办。`stage_advance` 只包含当前阶段适用资料已按 `completionMode` 完成、项目未完成、非第 8 阶段且当前用户有推进权限的阶段；不因 `approval_status` 生成或隐藏。
+
+每条待办至少包含 `type`、项目、阶段、可空资料项、`status`、`actionText`、`createdAt` 或 `updatedAt`、`targetRoute`。资料类待办同时返回后端计算的资料项权限字段，前端不得用 `organizationRole` 硬猜按钮权限。普通员工资料待办的 `targetRoute` 会进入携带 `taskMode` 和 `documentId` 的受限项目详情。
 
 ```http
 GET /api/me/stage-document-tasks?status=pending&projectId=123
@@ -496,15 +530,15 @@ Authorization: Bearer <token>
 
 查询当前登录用户负责的阶段资料项任务。该接口必须携带登录态，只做 `requireAuth`，不要求 `requirePlatformAdmin`，不引入复杂权限、项目成员权限、资料权限、角色权限或轻角色校验；服务端只使用当前登录态中的用户 ID，不接收或信任前端传入责任人 ID。
 
-接口只返回 `responsible_user_id = 当前登录用户 id` 且 `is_applicable = 1` 的资料项。默认 `status=pending`，包含 `not_submitted`、`submitted` 和 `returned`；也支持 `status=not_submitted`、`status=submitted`、`status=returned`、`status=confirmed`、`status=pending` 和 `status=all`。非法 `status` 返回 `INVALID_STAGE_DOCUMENT_TASK_STATUS`，HTTP 状态为 400。
+接口只返回 `responsible_user_id = 当前登录用户 id` 且 `is_applicable = 1` 的资料项。默认 `status=pending`，只包含未按 `completionMode` 派生完成的责任资料；也支持 `status=not_submitted`、`status=submitted`、`status=returned`、`status=confirmed`、`status=pending` 和 `status=all`。`status=submitted` 需要结合 `completionMode` 解读：`submit_only + submitted` 是已完成，`approval_required + submitted` 是待审核。非法 `status` 返回 `INVALID_STAGE_DOCUMENT_TASK_STATUS`，HTTP 状态为 400。
 
 `projectId` 为可选筛选参数；如果提供，必须是严格正整数，非数字、空字符串、0、负数、小数或 `1abc` 这类混合格式会返回 `INVALID_PROJECT_ID`，HTTP 状态为 400。合法 `projectId` 只作为过滤条件使用，不额外校验项目是否存在；没有匹配任务时返回空列表。
 
 第一版不按项目状态、阶段状态或阶段是否当前过滤任务。只要资料项分配给当前登录用户、适用且状态符合筛选条件，就会进入结果；已完成项目或非当前阶段中的匹配资料项也按同一规则返回。
 
-返回字段至少包含 `documentId`、`projectId`、`projectCode`、`projectName`、`stageId`、`stageName`、`stageOrder`、`documentCode`、`documentName`、`isRequired`、`status`、`isApplicable`、`returnReason`、`submittedAt`、`confirmedAt`、`returnedAt` 和 `responsibilityUpdatedAt`。
+返回字段至少包含 `documentId`、`projectId`、`projectCode`、`projectName`、`stageId`、`stageName`、`stageOrder`、`documentCode`、`documentName`、`isRequired`、`status`、`completionMode`、`isComplete` 或 `completionStatus`、`isApplicable`、`returnReason`、`submittedAt`、`confirmedAt`、`returnedAt` 和 `responsibilityUpdatedAt`。
 
-排序固定在后端：先按状态优先级 `returned`、`not_submitted`、`submitted`、`confirmed`，同状态下按 `responsibilityUpdatedAt DESC` 且空值排后，再按 `projectCode ASC`、`stageOrder ASC`、`documentOrder ASC`、`documentId ASC` 稳定排序。
+排序固定在后端：先按派生完成状态和基础状态排序，避免已完成的 `submit_only + submitted` 混入 pending；同状态下按 `responsibilityUpdatedAt DESC` 且空值排后，再按 `projectCode ASC`、`stageOrder ASC`、`documentOrder ASC`、`documentId ASC` 稳定排序。
 
 该接口是只读查询，不写项目业务操作日志，不改变资料状态、适用性、责任人、责任人追溯、齐套摘要、项目阶段或阶段推进状态。资料状态仍为手工标记状态，不代表文件已上传、文件已归档或在线表单已填写。
 
@@ -530,9 +564,9 @@ Content-Type: application/json
 {}
 ```
 
-手工将资料项确认通过。仅允许 `submitted` 流转为 `confirmed`。该接口只记录确认人和确认时间，不推进阶段、不生成管理层看板，也不基于文件上传或归档状态计算齐套率；阶段必填资料齐套摘要由清单查询接口基于当前手工状态只读返回。确认成功后会在同一事务中写入 `document.confirmed` 项目业务操作日志。
+手工将需审核资料项确认通过。仅允许 `completionMode = approval_required` 或未来 `conditional_approval` 且状态为 `submitted` 的资料流转为 `confirmed`。该接口只记录确认人和确认时间，不推进阶段、不生成管理层看板，也不基于文件上传或归档状态计算齐套率；阶段资料齐套摘要由清单查询接口基于 `completionMode` 派生完成状态只读返回。确认成功后会在同一事务中写入 `document.confirmed` 项目业务操作日志。
 
-确认资料第一版仅允许总经理或本中心相关资料的中心负责人等审批身份执行。跨中心中心负责人、总经理助理、系统管理员、普通员工以及仅因项目经理身份访问项目的用户直接调用会返回 `FORBIDDEN_OPERATION`。
+确认资料第一版仅允许资料责任人所属部门的中心负责人执行。跨中心中心负责人、总经理、总经理助理、系统管理员、普通员工以及仅因项目经理身份访问项目的用户直接调用会返回 `FORBIDDEN_OPERATION`。
 
 ### Return Stage Document
 
@@ -548,7 +582,7 @@ Content-Type: application/json
 
 手工退回资料项。仅允许 `submitted` 流转为 `returned`，`returnReason` 必填且不能为空。该接口只记录退回人、退回时间和退回原因，不创建个人待办、不发送通知、不分配责任人。退回成功后会在同一事务中写入 `document.returned` 项目业务操作日志，`detailsJson` 包含 `returnReason`。
 
-退回资料第一版仅允许总经理或本中心相关资料的中心负责人等审批身份执行。跨中心中心负责人、总经理助理、系统管理员、普通员工以及仅因项目经理身份访问项目的用户直接调用会返回 `FORBIDDEN_OPERATION`。
+退回资料第一版仅允许资料责任人所属部门的中心负责人执行。跨中心中心负责人、总经理、总经理助理、系统管理员、普通员工以及仅因项目经理身份访问项目的用户直接调用会返回 `FORBIDDEN_OPERATION`。
 
 ### Mark Stage Document Not Applicable
 
@@ -621,7 +655,7 @@ GET /api/projects/{projectId}/operation-logs
 Authorization: Bearer <token>
 ```
 
-查询项目维度业务操作日志。该接口必须携带登录态，只做 `requireAuth`，并按当前用户校验项目可见性；无权访问具体项目时返回 `FORBIDDEN_OPERATION`。该接口不做复杂权限、日志权限矩阵或轻角色配置。
+查询项目维度业务操作日志。该接口必须携带登录态，只做 `requireAuth`，并按当前用户校验完整项目审计权限；第一版仅项目经理可查看自己负责项目的完整业务日志，总经理可查看全部项目完整业务日志。普通员工仅因负责资料项可见项目时不得读取整项目业务日志，直接调用返回 `FORBIDDEN_OPERATION`。该接口不做复杂权限、日志权限矩阵或轻角色配置。
 
 返回该项目最近业务日志，按 `createdAt DESC, id DESC` 稳定倒序排列。第一版固定最大返回 100 条，并支持受限 `limit` 参数；非法 `limit` 会返回稳定校验错误，不允许一次性返回无限数据。
 
@@ -638,6 +672,6 @@ Authorization: Bearer <token>
 - `detailsJson`
 - `createdAt`
 
-第一版记录的 `actionType` 包括 `project.created`、`document.submitted`、`document.confirmed`、`document.returned`、`document.marked_not_applicable`、`document.restored_applicable`、`document.responsible_changed`、`document.attachment_uploaded`、`document.attachment_deleted`、`approval.submitted`、`approval.center_approved`、`approval.center_returned`、`approval.general_approved`、`approval.general_returned`、`approval.resubmitted`、`stage.advanced` 和 `project.completed`。所有日志必须归属于项目，操作人来自当前登录态，不信任前端提交的操作人。
+第一版当前流程记录的 `actionType` 包括 `project.created`、`document.submitted`、`document.confirmed`、`document.returned`、`document.marked_not_applicable`、`document.restored_applicable`、`document.responsible_changed`、`document.attachment_uploaded`、`document.attachment_deleted`、`stage.advanced` 和 `project.completed`。历史库或 legacy 阶段审批兼容能力可能保留 `approval.*` 日志类型，但当前 20260625 内部资料闭环不以阶段关口审批日志作为推进前置。所有日志必须归属于项目，操作人来自当前登录态，不信任前端提交的操作人。
 
-业务日志写入与项目创建、资料状态/适用性操作、阶段审批、阶段推进等业务状态变更在同一事务中提交；日志写入失败时业务状态变更回滚。审批成功动作的审批状态、审批历史和业务日志必须同事务提交。失败操作和审批历史查询不记录成功日志。历史补初始化、模板初始化、系统脚本动作和本能力上线前已发生的业务动作不补写历史日志。
+业务日志写入与项目创建、资料状态/适用性操作、阶段推进等业务状态变更在同一事务中提交；日志写入失败时业务状态变更回滚。失败操作和历史兼容审批查询不记录成功日志。历史补初始化、模板初始化、系统脚本动作和本能力上线前已发生的业务动作不补写历史日志。

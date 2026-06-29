@@ -3,8 +3,10 @@ import { requireAuth, requireReportProjectSearchUser } from '../middleware/auth.
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import {
   advanceProjectStageHandler,
+  approveInitiationReviewNodeHandler,
   approveStageApprovalHandler,
   confirmStageDocumentHandler,
+  completeStageDocumentRevisionHandler,
   createProjectHandler,
   deleteStageDocumentAttachmentHandler,
   downloadStageDocumentAttachmentHandler,
@@ -19,10 +21,12 @@ import {
   markStageDocumentNotApplicableHandler,
   restoreStageDocumentApplicableHandler,
   returnStageApprovalHandler,
+  returnInitiationReviewNodeHandler,
   returnStageDocumentHandler,
   resubmitStageApprovalHandler,
   submitStageDocumentHandler,
   submitStageApprovalHandler,
+  updateProjectCodeHandler,
   updateStageDocumentResponsibleUserHandler,
   uploadStageDocumentAttachmentHandler
 } from './projectRouteHandlers.js';
@@ -32,6 +36,12 @@ export const projectsRouter = Router();
 projectsRouter.get('/', requireAuth, asyncHandler(listProjectsHandler));
 projectsRouter.get('/my-active', requireAuth, requireReportProjectSearchUser, asyncHandler(listMyActiveProjectsHandler));
 projectsRouter.post('/', requireAuth, asyncHandler(createProjectHandler));
+
+projectsRouter.put(
+  '/:projectId/project-code',
+  requireAuth,
+  asyncHandler(updateProjectCodeHandler)
+);
 
 projectsRouter.get(
   '/overview-dashboard',
@@ -103,6 +113,24 @@ projectsRouter.post(
   '/:projectId/stage-documents/:documentId/return',
   requireAuth,
   asyncHandler(returnStageDocumentHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/stage-documents/:documentId/revision/complete',
+  requireAuth,
+  asyncHandler(completeStageDocumentRevisionHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/stage-documents/:documentId/initiation-review/:nodeKey/approve',
+  requireAuth,
+  asyncHandler(approveInitiationReviewNodeHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/stage-documents/:documentId/initiation-review/:nodeKey/return',
+  requireAuth,
+  asyncHandler(returnInitiationReviewNodeHandler)
 );
 
 projectsRouter.post(

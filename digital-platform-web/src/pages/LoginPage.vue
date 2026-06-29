@@ -248,9 +248,10 @@ onUnmounted(() => {
   padding-left: 0.5rem;
 }
 
+/* 聚焦时改为品牌蓝 */
 .input-wrapper:focus-within {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: #3e63dd;
+  box-shadow: 0 0 0 3px rgba(62, 99, 221, 0.1);
 }
 
 .input-icon {
@@ -264,8 +265,9 @@ onUnmounted(() => {
   z-index: 1;
 }
 
+/* 聚焦图标改为品牌蓝 */
 .input-wrapper:focus-within .input-icon {
-  stroke: #2563eb;
+  stroke: #3e63dd;
 }
 
 .input-wrapper input {
@@ -294,7 +296,7 @@ onUnmounted(() => {
 }
 
 .input-wrapper input::selection {
-  background: rgba(37, 99, 235, 0.15);
+  background: rgba(62, 99, 221, 0.15);
   color: #0f172a;
 }
 
@@ -304,11 +306,12 @@ onUnmounted(() => {
   font-size: 0.9rem;
 }
 
+/* 按钮主色改为品牌蓝 */
 .primary-button {
   width: 100%;
   padding: 0.7rem 0;
   margin-top: 0.5rem;
-  background: #0f172a;
+  background: #3e63dd;
   color: white;
   font-size: 0.95rem;
   font-weight: 500;
@@ -316,7 +319,7 @@ onUnmounted(() => {
   border-radius: 10px;
   cursor: pointer;
   transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+  box-shadow: 0 1px 3px rgba(62, 99, 221, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -326,8 +329,8 @@ onUnmounted(() => {
 }
 
 .primary-button:hover:not(:disabled) {
-  background: #1e293b;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+  background: #5275e7;
+  box-shadow: 0 4px 12px rgba(62, 99, 221, 0.25);
   transform: translateY(-1px);
 }
 
@@ -336,10 +339,11 @@ onUnmounted(() => {
 }
 
 .primary-button:disabled {
-  opacity: 0.6;
+  background: #a0cfff;
+  opacity: 1;
   cursor: not-allowed;
   box-shadow: none;
-  background: #475569;
+  transform: none;
 }
 
 .spinner {

@@ -1,5 +1,5 @@
 import { pool } from '../../db/pool.js';
-import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
+import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import {
   mapStageDocumentTask,
   STAGE_DOCUMENT_TASK_ERROR,
@@ -98,6 +98,29 @@ export function normalizeStageDocumentTaskFilters(query = {}) {
 export async function listMyStageDocumentTasks(userId, filters) {
   const params = [userId, ...filters.statuses];
   const projectFilter = filters.projectId === null ? '' : 'AND d.project_id = ?';
+  const statusFilter =
+    filters.status === 'pending'
+      ? `AND (
+          (
+            d.status IN (${filters.statuses.map(() => '?').join(', ')})
+            OR d.revision_required = 1
+          )
+          AND NOT (
+            d.revision_required = 1
+            AND d.completion_mode IN (?, ?)
+            AND d.status = ?
+            AND d.revision_resubmitted_at IS NOT NULL
+          )
+        )`
+      : `AND d.status IN (${filters.statuses.map(() => '?').join(', ')})`;
+
+  if (filters.status === 'pending') {
+    params.push(
+      COMPLETION_MODE.APPROVAL_REQUIRED,
+      COMPLETION_MODE.CONDITIONAL_APPROVAL,
+      DOCUMENT_STATUS.SUBMITTED
+    );
+  }
 
   if (filters.projectId !== null) {
     params.push(filters.projectId);
@@ -116,9 +139,21 @@ export async function listMyStageDocumentTasks(userId, filters) {
       d.document_code,
       d.document_name,
       d.is_required,
+      d.owner_department,
+      d.review_department,
+      d.completion_mode,
       d.status,
       d.is_applicable,
       d.return_reason,
+      d.revision_required,
+      d.revision_reason,
+      d.revision_source_document_id,
+      source.document_code AS revision_source_document_code,
+      source.document_name AS revision_source_document_name,
+      d.revision_requested_at,
+      d.revision_resubmitted_by_user_id,
+      d.revision_resubmitted_at,
+      d.revision_completed_at,
       d.submitted_at,
       d.confirmed_at,
       d.returned_at,
@@ -126,11 +161,13 @@ export async function listMyStageDocumentTasks(userId, filters) {
     FROM project_stage_documents d
     INNER JOIN projects p
       ON p.id = d.project_id
+    LEFT JOIN project_stage_documents source
+      ON source.id = d.revision_source_document_id
     LEFT JOIN project_stages s
       ON s.project_id = d.project_id
       AND s.stage_order = d.stage_order
     WHERE d.responsible_user_id = ?
-      AND d.status IN (${filters.statuses.map(() => '?').join(', ')})
+      ${statusFilter}
       AND d.is_applicable = 1
       ${projectFilter}
     ORDER BY
@@ -150,5 +187,6 @@ export async function listMyStageDocumentTasks(userId, filters) {
     params
   );
 
-  return rows.map(mapStageDocumentTask);
+  const tasks = rows.map(mapStageDocumentTask);
+  return filters.status === 'pending' ? tasks.filter((task) => !task.isComplete) : tasks;
 }

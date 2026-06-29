@@ -5,61 +5,45 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 ## Requirements
 ### Requirement: 项目主数据
 
-系统 MUST 以数字化管理平台保存项目主数据。项目主数据至少包括项目编号、项目名称、客户、项目经理、参与部门、项目状态、计划开始时间、计划完成时间、备注和可空 `createdByUserId`。
+系统 MUST 以数字化管理平台保存项目主数据。项目主数据至少包括可空项目编号、项目名称、客户、项目经理、参与部门、项目状态、计划开始时间、计划完成时间、备注和可空 `createdByUserId`；非空项目编号 MUST 唯一，多个空项目编号 MUST 允许共存。
 
-#### Scenario: 创建项目主数据
+#### Scenario: 创建项目主数据允许空编号
+- **WHEN** 已登录且有权限用户提交项目名称、客户和项目经理等创建项目所需基础信息
+- **THEN** 系统 MUST 在数字化管理平台创建项目主数据记录
+- **AND** 系统 MUST 允许 `projectCode` 为空
+- **AND** 系统 MUST 记录 `createdByUserId`
 
-- **WHEN** 已登录用户提交项目编号、项目名称、客户和项目经理等创建项目所需基础信息
-- **THEN** 系统必须在数字化管理平台创建项目主数据记录，并记录 `createdByUserId`
+#### Scenario: 非空项目编号唯一
+- **WHEN** 用户填写、生成或更新非空项目编号
+- **THEN** 系统 MUST 校验该项目编号唯一
+- **AND** 系统 MUST 拒绝与已有非空项目编号重复的保存请求
 
-#### Scenario: 历史项目创建人可为空
-
-- **WHEN** 系统读取本变更之前已创建且没有创建人记录的项目
-- **THEN** 系统必须允许 `createdByUserId` 为空，并不得因此阻止项目列表或项目详情读取
-
-#### Scenario: 项目编号唯一
-
-- **WHEN** 用户使用已经存在的项目编号创建项目
-- **THEN** 系统必须拒绝创建，并提示项目编号已存在
+#### Scenario: 空项目编号不冲突
+- **WHEN** 多个项目尚未生成项目编号
+- **THEN** 系统 MUST 允许这些项目同时保持空 `projectCode`
 
 #### Scenario: 项目初始状态
-
 - **WHEN** 项目创建成功
 - **THEN** 系统必须将项目状态初始化为正常，除非创建请求明确提供其他允许的基础状态
 
 ### Requirement: 项目创建
 
-系统 MUST 提供项目创建能力。项目创建成功后必须同时完成项目主数据保存、当前登录用户创建人记录、标准 8 阶段初始化、项目级阶段资料清单初始化和 `project.created` 项目业务操作日志写入。
+系统 MUST 提供项目创建能力。项目创建必须要求当前登录用户具备创建项目权限；创建成功后必须同时完成项目主数据保存、当前登录用户创建人记录、标准 8 阶段初始化、当前 20260625 64 项项目级阶段资料清单初始化和 `project.created` 项目业务操作日志写入，并 MUST NOT 因 `projectCode` 为空拒绝创建。`1.2 项目立项审批表` 后置项目编号门禁 MUST 使用专用多节点最终通过状态，而不是普通单资料 `confirmed` 状态。
 
-#### Scenario: 成功创建项目
+#### Scenario: 后置项目编号触发点
 
-- **WHEN** 已登录用户提交有效的项目创建信息
-- **THEN** 系统必须保存项目主数据、记录当前登录用户为创建人、为该项目生成标准 8 阶段记录、初始化项目级阶段资料清单，并在同一事务中记录 `action_type = project.created` 的项目业务操作日志
+- **WHEN** `1.2 项目立项审批表` 的商务评价审批、技术评价审批和总经理审批均最终通过
+- **AND** `1.3 项目立项通知` 已按 `submit_only` 提交或上传完成
+- **AND** `1.1 项目需求表` 不存在由 `1.2` NO 触发且未清除的 `revision_required`
+- **AND** `1.2 项目立项审批表` 不存在待审、退回、未通过或其他专用多节点阻塞状态
+- **THEN** 系统 MUST 允许具备项目维护权限、项目经理权限或等价业务项目编号维护权限的用户填写或生成 `projectCode`
+- **AND** 系统 MUST NOT 将仅系统管理员身份解释为业务项目编号维护权限
 
-#### Scenario: 未登录不能创建项目
+#### Scenario: 单节点通过不得填写项目编号
 
-- **WHEN** 用户未携带登录态、登录态无效或登录态已过期时提交项目创建请求
-- **THEN** 系统必须拒绝创建，并返回需要登录的错误
-
-#### Scenario: 创建信息不完整
-
-- **WHEN** 已登录用户缺少项目编号、项目名称、客户或项目经理等必需基础信息
-- **THEN** 系统必须拒绝创建，并提示需要补充的信息
-
-#### Scenario: 创建人来自当前登录态
-
-- **WHEN** 已登录用户创建项目
-- **THEN** 系统必须根据当前登录态识别创建人，不得信任前端提交的创建人字段
-
-#### Scenario: 创建项目不触发文件平台联动
-
-- **WHEN** 项目创建成功
-- **THEN** 系统不能在本能力中调用文件管理平台创建目录、上传文件、下载文件、生成文件映射、同步文件平台用户、同步权限或判断下载权限
-
-#### Scenario: 创建日志失败回滚项目创建
-
-- **WHEN** 项目主数据、8 阶段初始化或项目级阶段资料清单初始化已经准备提交，但 `project.created` 业务操作日志写入失败
-- **THEN** 系统必须回滚项目创建事务，不得留下没有对应创建日志的新项目
+- **WHEN** `1.2 项目立项审批表` 只有商务评价、技术评价或总经理审批中的单个节点通过
+- **THEN** 系统 MUST NOT 因该单节点通过允许填写或生成 `projectCode`
+- **AND** 系统 MUST 返回可理解的门禁未满足原因
 
 ### Requirement: 标准 8 阶段初始化
 
@@ -92,12 +76,23 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 
 ### Requirement: 项目列表
 
-系统 MUST 提供项目列表，用于查看项目基础信息、项目状态、当前阶段和创建人追溯字段；当项目已完成且不再有当前阶段时，当前阶段字段 MUST 允许为空。
+系统 MUST 提供项目列表，用于查看当前用户有权查看的项目基础信息、项目状态、当前阶段和创建人追溯字段；当项目已完成且不再有当前阶段时，当前阶段字段 MUST 允许为空。
 
 #### Scenario: 查看项目列表
 
 - **WHEN** 用户打开项目列表
-- **THEN** 系统必须展示项目编号、项目名称、客户、项目经理、项目状态、当前阶段、计划开始时间、计划完成时间和创建人基础信息或创建人字段
+- **THEN** 系统必须按“项目可见范围”过滤后展示项目编号、项目名称、客户、项目经理、项目状态、当前阶段、计划开始时间、计划完成时间和创建人基础信息或创建人字段
+
+#### Scenario: 管理层项目列表全量查看
+
+- **WHEN** 总经理、总经理助理或中心负责人打开项目列表
+- **THEN** 系统 MUST 返回全部业务项目的列表项
+- **AND** 系统 MUST NOT 因返回列表项而授予任何项目内业务操作权限
+
+#### Scenario: 创建人项目列表查看自己创建项目
+
+- **WHEN** 当前用户是某项目 `createdByUserId`
+- **THEN** 系统 MUST 允许该用户在项目列表中看到该项目
 
 #### Scenario: 已完成项目当前阶段为空
 
@@ -107,11 +102,11 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 #### Scenario: 历史项目列表创建人为空
 
 - **WHEN** 项目列表包含 `createdByUserId` 为空的历史项目
-- **THEN** 系统必须允许创建人基础信息为空，并继续返回该项目
+- **THEN** 系统必须允许创建人基础信息为空，并继续按项目可见范围判断是否返回该项目
 
 #### Scenario: 从列表进入项目详情
 
-- **WHEN** 用户在项目列表中选择某个项目
+- **WHEN** 用户在项目列表中选择某个可见项目
 - **THEN** 系统必须打开该项目的项目详情基础状态页
 
 #### Scenario: 列表不展示看板指标
@@ -121,32 +116,40 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 
 ### Requirement: 项目详情基础状态
 
-系统 MUST 提供项目详情基础状态，用于查看项目主数据、标准 8 阶段、当前阶段和创建人追溯字段；当项目已完成且不再有当前阶段时，当前阶段字段 MUST 允许为空。
+系统 MUST 提供项目详情基础状态，用于有项目查看权的用户查看项目主数据、标准 8 阶段、当前阶段和创建人追溯字段；当项目已完成且不再有当前阶段时，当前阶段字段 MUST 允许为空。
 
 #### Scenario: 查看项目基础信息
 
-- **WHEN** 用户打开项目详情
+- **WHEN** 有项目查看权的用户打开项目详情
 - **THEN** 系统必须展示项目编号、项目名称、客户、项目经理、参与部门、项目状态、计划时间、备注和创建人基础信息或创建人字段
 
 #### Scenario: 查看历史项目详情
 
-- **WHEN** 用户打开 `createdByUserId` 为空的历史项目详情
+- **WHEN** 有项目查看权的用户打开 `createdByUserId` 为空的历史项目详情
 - **THEN** 系统必须允许创建人基础信息为空，并继续展示项目基础状态
 
 #### Scenario: 查看 8 阶段基础进度
 
-- **WHEN** 用户打开项目详情
+- **WHEN** 有项目查看权的用户打开项目详情
 - **THEN** 系统必须展示该项目的全部 8 个阶段、阶段顺序、阶段名称、阶段状态和当前阶段标记
 
 #### Scenario: 已完成项目没有当前阶段
 
-- **WHEN** 用户打开 `status` 为 `completed` 且所有 8 个阶段均已完成的项目详情
+- **WHEN** 有项目查看权的用户打开 `status` 为 `completed` 且所有 8 个阶段均已完成的项目详情
 - **THEN** 系统必须允许当前阶段为空，并继续展示项目基础状态和 8 阶段完成状态
 
-#### Scenario: 详情页不展示资料和文件能力
+#### Scenario: 项目详情查看不放宽操作权限
 
-- **WHEN** 用户打开项目详情基础状态页
-- **THEN** 系统不能在本能力中展示在线表单、文件上传、文件下载、文件平台同步状态、业务日志、资料齐套率或阶段资料清单
+- **WHEN** 用户因总经理、总经理助理、中心负责人、项目创建人或项目经理身份获得项目详情查看权
+- **THEN** 系统 MUST NOT 因该查看权授予阶段推进、项目编号填写、责任人分配、适用性变更、资料提交、资料审核、资料退回或精准返工退回权限
+
+#### Scenario: 项目基础状态接口职责边界
+
+- **WHEN** 有项目查看权的用户请求 `GET /api/projects/:projectId`
+- **THEN** 该接口 MUST 只承载项目主数据、标准 8 阶段基础状态、当前阶段和创建人追溯字段
+- **AND** 阶段资料清单、附件列表/下载、业务日志、齐套摘要 MUST 由阶段资料、附件、日志、总览/齐套等独立接口承载，供项目详情页组合展示
+- **AND** 该接口 MUST NOT 展示或依赖文件平台同步状态
+- **AND** 系统 MUST NOT 因项目详情基础状态接口恢复文件平台联动
 
 ### Requirement: 项目阶段手工推进
 
@@ -234,126 +237,92 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 
 ### Requirement: 阶段推进齐套门禁
 
-系统 MUST 在推进当前阶段前检查当前阶段项目级阶段资料清单是否已初始化和适用必填资料齐套情况，只有当前阶段资料项记录存在且没有缺失适用必填资料时才允许推进。
+系统 MUST 在推进当前阶段前检查当前阶段项目级阶段资料清单是否已初始化，并 MUST 只按当前阶段适用资料的 `completionMode`、基础状态、适用性、`revision_required` 和特殊资料派生完成规则判断阶段推进门禁；`1.2 项目立项审批表` MUST 由专用多节点最终审批状态派生完成，不得只按普通单资料 `confirmed` 判断。
 
-#### Scenario: 只检查当前阶段
+#### Scenario: 1.2 多节点未全通过阻塞推进
 
-- **WHEN** 已登录用户请求推进项目阶段
-- **THEN** 系统必须只检查项目当前阶段的适用必填资料齐套情况，不得因其他阶段资料缺失而拒绝当前阶段推进
+- **WHEN** 第 1 阶段包含适用的 `1.2 项目立项审批表`
+- **AND** 商务评价审批、技术评价审批或总经理审批中任一必需节点尚未通过
+- **THEN** 系统 MUST 将 `1.2` 视为未完成
+- **AND** 系统 MUST 拒绝第 1 阶段推进
 
-#### Scenario: 当前阶段齐套允许推进
+#### Scenario: 1.2 单个中心负责人确认不放行
 
-- **WHEN** 当前阶段的 `incompleteRequiredCount = 0`
-- **THEN** 系统必须视为当前阶段适用必填资料齐套，并允许进入阶段推进状态更新
+- **WHEN** `1.2 项目立项审批表` 已被某个中心负责人或单个资料审核动作确认
+- **AND** `1.2` 的商务评价、技术评价和总经理审批尚未全部最终通过
+- **THEN** 系统 MUST NOT 将 `1.2` 计为阶段齐套完成
+- **AND** 系统 MUST NOT 因该单次确认允许第 1 阶段推进
 
-#### Scenario: 当前阶段资料清单必须已初始化
+#### Scenario: 1.2 相关返工阻塞推进
 
-- **WHEN** 当前阶段没有任何 `project_stage_documents` 资料项记录
-- **THEN** 系统必须拒绝推进，并且不得修改项目状态或任何阶段状态
+- **WHEN** `1.2 项目立项审批表` 退回已触发 `1.1 项目需求表` 精准返工
+- **AND** `1.1` 存在未清除的 `revision_required`
+- **THEN** 系统 MUST 将 `1.2` 相关门禁视为未完成
+- **AND** 系统 MUST 拒绝第 1 阶段推进
+- **AND** 系统 MUST NOT 要求或依赖 `1.2 revision_required` 表达该阻塞
 
-#### Scenario: 没有适用必填资料允许推进
+#### Scenario: 1.2 自身状态阻塞推进
 
-- **WHEN** 当前阶段已经存在项目级阶段资料项记录，且当前阶段的 `requiredTotal = 0`
-- **THEN** 系统必须视为当前阶段适用必填资料齐套，并允许进入阶段推进状态更新
+- **WHEN** `1.2 项目立项审批表` 存在待审、退回、未通过或其他专用多节点阻塞状态
+- **THEN** 系统 MUST 将 `1.2` 视为未完成
+- **AND** 系统 MUST 拒绝第 1 阶段推进
+- **AND** 系统 MUST NOT 将 `1.2` 自身作为返工目标写入 `revision_required`
 
-#### Scenario: 缺失适用必填资料拒绝推进
+#### Scenario: 1.2 多节点全部通过后参与普通齐套
 
-- **WHEN** 当前阶段的 `incompleteRequiredCount > 0`
-- **THEN** 系统必须拒绝推进，并且不得修改项目状态或任何阶段状态
-
-#### Scenario: 返回缺失资料列表
-
-- **WHEN** 系统因缺失适用必填资料拒绝阶段推进
-- **THEN** 响应必须包含可读错误和缺失适用必填资料列表，列表中每项至少包含 `id`、`documentCode`、`documentName` 和 `status`
-
-#### Scenario: 齐套门禁基于手工状态和适用性
-
-- **WHEN** 系统检查阶段推进齐套门禁
-- **THEN** 系统必须按当前资料项手工状态和人工适用性判断计算，且不得把门禁结果表示为文件已上传、文件已归档或在线表单已提交
+- **WHEN** `1.2 项目立项审批表` 商务评价、技术评价和总经理审批均最终通过
+- **AND** `1.1` 不存在由 `1.2` NO 触发且未清除的 `revision_required`
+- **THEN** 系统 MUST 将 `1.2` 按专用派生完成规则计为已完成
+- **AND** 第 1 阶段仍 MUST 继续检查其他适用资料是否按各自 `completionMode` 完成
 
 ### Requirement: 项目总览看板查询接口
 
-系统 MUST 提供 `GET /api/projects/overview-dashboard`，用于已登录用户查询跨项目总览数据和汇总指标。
-
-#### Scenario: 项目总览要求登录
-
-- **WHEN** 用户未携带登录态、登录态无效或登录态已过期时请求 `GET /api/projects/overview-dashboard`
-- **THEN** 系统必须拒绝该请求，并提示需要登录
-
-#### Scenario: 项目总览静态路由优先匹配
-
-- **WHEN** 已登录用户请求 `GET /api/projects/overview-dashboard`
-- **THEN** 系统必须命中项目总览看板接口，不得被 `/:projectId` 动态项目详情路由当作项目 ID 处理，也不得返回项目 ID 校验错误
-
-#### Scenario: 项目总览不要求平台管理员
-
-- **WHEN** 已登录用户请求项目总览看板接口
-- **THEN** 系统必须只做 `requireAuth`，不得要求 `isPlatformAdmin`，不得实现项目成员权限、项目经理权限、复杂权限、角色权限或轻角色校验
-
-#### Scenario: 第一版返回所有项目总览
-
-- **WHEN** 已登录用户请求项目总览看板接口
-- **THEN** 系统必须按筛选条件返回所有匹配项目的总览数据，不得按当前用户、平台管理员标识、项目经理或项目成员关系限制项目范围
+系统 MUST 提供 `GET /api/projects/overview-dashboard`，用于已登录用户查询其有权查看项目的跨项目总览数据和汇总指标，并 MUST 按当前 20260625 `completionMode` 与 `revision_required` 派生完成口径返回我的待办资料任务数量；当前阶段齐套摘要和未完成资料明细 MUST 仅在当前用户拥有该项目完整资料查看权时返回。
 
 #### Scenario: 返回项目总览汇总指标
 
 - **WHEN** 系统返回项目总览看板数据
-- **THEN** 响应必须包含 `summary`，且至少包含 `totalProjects`、`activeProjects`、`completedProjects`、`riskProjects` 和 `myPendingStageDocumentTasks`
+- **THEN** 响应必须包含 `summary`
+- **AND** `summary` 至少包含 `totalProjects`、`activeProjects`、`completedProjects`、`riskProjects` 和 `myPendingStageDocumentTasks`
 
-#### Scenario: 汇总项目数量
+#### Scenario: 总览按项目查看范围返回项目
 
-- **WHEN** 系统计算项目总览汇总指标
-- **THEN** `totalProjects` 必须统计筛选后项目总数，`activeProjects` 必须统计筛选后 `status != completed` 的项目数量，`completedProjects` 必须统计筛选后 `status = completed` 的项目数量
+- **WHEN** 总经理、总经理助理或中心负责人查询项目总览
+- **THEN** 系统 MUST 按全量项目范围返回总览项目和汇总指标
+- **AND** 系统 MUST NOT 因总览可见性放宽而放宽任何阶段推进或资料操作权限
 
-#### Scenario: 汇总风险延期项目
+#### Scenario: 创建人总览可见自己创建项目
 
-- **WHEN** 系统计算 `riskProjects`
-- **THEN** 系统必须统计筛选后 `status = risk` 或 `status = delayed` 的项目数量，并且不得把其他状态计入该指标
+- **WHEN** 项目创建人查询项目总览
+- **THEN** 系统 MUST 在可见项目范围中包含其 `createdByUserId` 匹配的项目
 
 #### Scenario: 汇总我的待办资料任务
 
 - **WHEN** 系统计算 `myPendingStageDocumentTasks`
-- **THEN** 系统必须使用当前登录用户 ID，按 `responsible_user_id = 当前登录用户 id`、`is_applicable = 1`、`status in not_submitted, submitted, returned` 的口径统计待办资料任务数量
-
-#### Scenario: 我的待办资料指标不受项目筛选影响
-
-- **WHEN** 用户使用 `status`、`currentStageOrder` 或 `keyword` 筛选项目总览
-- **THEN** `myPendingStageDocumentTasks` 必须仍表示当前登录用户全局 pending 资料任务数量，不得因项目总览筛选而改变口径
-
-#### Scenario: 返回项目总览卡片字段
-
-- **WHEN** 系统返回项目总览项目列表
-- **THEN** 每个项目必须至少包含 `projectId`、`projectCode`、`projectName`、`customerName`、`projectManager`、`status`、`currentStageId`、`currentStageName`、`currentStageOrder`、`currentStageStatus`、`currentStageCompletenessSummary`、`currentStageIncompleteRequiredDocuments`、`currentStageIssue`、`createdBy`、`plannedStartDate` 和 `plannedEndDate`
-
-#### Scenario: 已完成项目当前阶段为空
-
-- **WHEN** 项目 `status = completed`
-- **THEN** 系统必须允许该项目的 `currentStageId`、`currentStageName`、`currentStageOrder`、`currentStageStatus` 和 `currentStageCompletenessSummary` 为空，并不得因此阻止看板返回
-
-#### Scenario: 未完成项目缺失当前阶段
-
-- **WHEN** 项目 `status != completed` 且没有当前阶段
-- **THEN** 系统必须返回该项目总览卡片，当前阶段字段为空，并设置 `currentStageIssue = missing_current_stage`，不得让接口崩溃
-
-#### Scenario: 未完成项目存在多个当前阶段
-
-- **WHEN** 项目 `status != completed` 且存在多个当前阶段
-- **THEN** 系统必须返回该项目总览卡片，当前阶段字段为空或使用稳定方式置空，并设置 `currentStageIssue = multiple_current_stages`，不得在本接口中修复异常数据
-
-#### Scenario: 当前阶段资料清单未初始化
-
-- **WHEN** 项目存在唯一当前阶段，但当前阶段没有任何 `project_stage_documents` 资料项记录
-- **THEN** 系统必须返回 `currentStageCompletenessSummary = null`、`currentStageIncompleteRequiredDocuments = []` 和 `currentStageIssue = checklist_not_initialized`，不得自动初始化资料清单
+- **THEN** 系统必须使用当前登录用户 ID，按资料责任人、适用性、`completionMode` 和 `revision_required` 派生完成状态统计待办资料任务数量
+- **AND** 系统 MUST 将当前用户负责且 `revision_required = true` 的适用资料计入待办
+- **AND** 系统 MUST NOT 将 `completionMode = submit_only`、`status = submitted` 且 `revision_required` 不是 true 的已完成资料计入待办
+- **AND** 系统 MUST NOT 将 `isApplicable = false` 的未触发 `conditional_submit` 资料计入待办
 
 #### Scenario: 当前阶段正常返回齐套摘要
 
-- **WHEN** 项目存在唯一当前阶段且当前阶段存在资料项记录
-- **THEN** 系统必须返回该当前阶段的 `currentStageCompletenessSummary`，且至少包含 `requiredTotal`、`confirmedRequiredCount`、`incompleteRequiredCount` 和 `completionPercent`
+- **WHEN** 当前用户拥有该项目完整资料查看权，且项目存在唯一当前阶段且当前阶段存在资料项记录
+- **THEN** 系统必须返回该当前阶段的 `currentStageCompletenessSummary`
+- **AND** 摘要至少包含 `requiredTotal`、`completedRequiredCount` 或等价完成数量、`incompleteRequiredCount` 和 `completionPercent`
+- **AND** 如为兼容旧前端继续返回 `confirmedRequiredCount`，其含义 MUST 等同按 `completionMode` 与 `revision_required` 派生的完成数量，不得只统计 `status = confirmed`
 
 #### Scenario: 当前阶段缺失资料列表字段
 
-- **WHEN** 当前阶段存在未完成适用必填资料
-- **THEN** `currentStageIncompleteRequiredDocuments` 中每个资料项必须至少包含 `id`、`documentCode`、`documentName` 和 `status`
+- **WHEN** 当前用户拥有该项目完整资料查看权，并且当前阶段存在未按 `completionMode` 完成或 `revision_required = true` 的适用资料
+- **THEN** `currentStageIncompleteRequiredDocuments` 中每个资料项必须至少包含 `id`、`documentCode`、`documentName`、`status`、`completionMode`、返工标记和 `isComplete`、`completionStatus` 或等价派生完成状态
+
+#### Scenario: 普通员工受限总览不返回完整齐套明细
+
+- **WHEN** 普通员工仅因负责项目中某个资料项而可见该项目总览卡片
+- **THEN** 系统 MAY 返回项目基础卡片字段，用于识别项目
+- **AND** 系统 MUST NOT 返回该项目完整当前阶段齐套摘要
+- **AND** 系统 MUST NOT 返回该项目中当前用户无权查看的未完成资料编号、名称、状态或 `completionMode`
+- **AND** `myPendingStageDocumentTasks` 仍 MUST 只按当前登录用户的责任资料统计
 
 ### Requirement: 项目总览看板筛选与排序
 
@@ -468,40 +437,6 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **WHEN** 实现项目核心后端模块拆分
 - **THEN** 系统不得因本次结构治理新增文件管理平台联动、在线表单、表单草稿、表单归档文件、消息提醒、超期提醒、项目成员权限、项目经理权限、复杂权限、导出、批量操作或管理大屏图表
 
-### Requirement: 20260610 项目流程依据
-系统 MUST 以 `智能制造项目管理流程图20260610.pdf` 作为项目管理主流程依据，并 MUST 使用 `docs/9.7_智能制造项目整体推进流程_20260610.md` 作为流程文字整理依据。
-
-#### Scenario: 使用 20260610 流程图作为主流程依据
-- **WHEN** 系统说明或实现项目主流程、阶段推进和阶段资料归属口径
-- **THEN** 系统必须以 20260610 新项目管理流程图为依据，而不得继续以旧资料模板作为主流程依据
-
-#### Scenario: 保持 8 阶段主干不变
-- **WHEN** 系统初始化或展示项目阶段
-- **THEN** 系统必须继续按顺序使用立项阶段、方案设计阶段、合同签订阶段、详细设计阶段、生产制作阶段、预验收阶段、终验收阶段和结题阶段
-
-#### Scenario: 阶段标识保持不变
-- **WHEN** 系统保存标准 8 阶段
-- **THEN** 系统必须继续使用 `initiation`、`solution`、`contract`、`detailedDesign`、`manufacturing`、`preAcceptance`、`finalAcceptance`、`closeout` 作为稳定阶段标识
-
-### Requirement: 20260610 阶段推进边界
-系统 MUST 在 20260610 项目流程依据下继续使用当前阶段齐套门禁推进项目阶段，并 MUST 在本 change 引入的阶段审批流中要求当前阶段审批通过后才允许推进。系统 MUST 不因审批流新增跳阶段、回退、自动阶段流转或复杂工作流引擎。
-
-#### Scenario: 阶段推进继续基于当前阶段齐套门禁
-- **WHEN** 已登录且有推进权限的用户请求推进项目当前阶段
-- **THEN** 系统必须继续只检查当前阶段适用必填资料齐套情况，并在满足门禁和审批状态后按 8 阶段顺序推进
-
-#### Scenario: 阶段推进要求当前阶段审批通过
-- **WHEN** 用户请求推进项目当前阶段且当前阶段审批状态不是 `approved`
-- **THEN** 系统必须返回 `PROJECT_APPROVAL_NOT_APPROVED`，并不得修改项目或阶段状态
-
-#### Scenario: 不新增跳阶段或回退
-- **WHEN** 系统按 20260610 流程和审批流推进项目阶段
-- **THEN** 系统不得新增跳阶段、阶段回退、任意选择目标阶段或自由调整阶段顺序能力
-
-#### Scenario: 不新增复杂审批流引擎
-- **WHEN** 系统实现阶段审批流
-- **THEN** 系统不得新增可视化流程编排、任意节点配置器、自动通知、日报周报或文件管理平台联动能力
-
 ### Requirement: 项目模式
 系统 MUST 为项目维护项目模式字段，并 MUST 保持自研模式和供应链/外包模式共用同一项目流程、阶段资料和状态机。
 
@@ -523,44 +458,63 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 
 #### Scenario: 项目模式不改变资料清单
 - **WHEN** 系统初始化自研或外包项目阶段资料
-- **THEN** 两种模式都必须使用同一套 20260610 版 54 项资料
+- **THEN** 两种模式都必须使用同一套 `v20260624` 64 项阶段资料
 
 #### Scenario: 项目模式不改变状态规则
 - **WHEN** 系统处理自研或外包项目
 - **THEN** `projectMode` 不得改变阶段推进规则、资料状态机、适用/不适用规则、附件规则或齐套门禁
 
 ### Requirement: 项目可见范围
-系统 MUST 对项目列表、项目详情和项目总览看板按当前用户过滤可见项目，并 MUST 使用后端校验作为安全边界。
+
+系统 MUST 对项目列表、项目详情和项目总览看板按当前用户过滤可见项目，并 MUST 使用后端校验作为安全边界；查看范围放宽 MUST NOT 放宽任何业务操作权限。
 
 #### Scenario: 项目列表必须登录
+
 - **WHEN** 未登录用户请求 `GET /api/projects`
 - **THEN** 系统必须返回未登录错误，不得返回项目列表
 
 #### Scenario: 项目详情必须登录
+
 - **WHEN** 未登录用户请求 `GET /api/projects/:projectId`
 - **THEN** 系统必须返回未登录错误，不得返回项目详情
 
 #### Scenario: 管理层全局查看
-- **WHEN** 当前用户 `organizationRole` 为 `general_manager` 或 `general_manager_assistant`
-- **THEN** 项目列表、项目详情和项目总览看板可返回全部项目
+
+- **WHEN** 当前用户 `organizationRole` 为 `general_manager`、`general_manager_assistant` 或 `center_manager`
+- **THEN** 项目列表、项目详情和项目总览看板 MUST 可返回全部业务项目
+
+#### Scenario: 项目创建人查看自己创建项目
+
+- **WHEN** 当前用户是某项目 `createdByUserId`
+- **THEN** 系统 MUST 允许其查看该项目列表项、详情和总览卡片
+
+#### Scenario: 项目经理查看自己负责项目
+
+- **WHEN** 当前用户是某项目 `projectManagerUserId`
+- **THEN** 系统 MUST 允许其查看该项目列表项、详情和总览卡片
+
+#### Scenario: 资料责任人可见相关项目
+
+- **WHEN** 当前用户在某项目中至少负责一项资料
+- **THEN** 系统必须允许该用户查看该项目列表项、详情和总览卡片，但完整资料和附件视图仍按阶段资料权限过滤
+
+#### Scenario: 普通员工只能查看自己相关项目
+
+- **WHEN** 当前用户 `organizationRole = employee`
+- **THEN** 系统只能返回该用户负责资料、作为项目经理或作为项目创建人的项目
 
 #### Scenario: 系统管理员无默认业务项目权限
+
 - **WHEN** 当前用户 `organizationRole = system_admin`
 - **THEN** 系统不得仅因系统管理身份返回全部业务项目或授予项目详情查看权限
 
-#### Scenario: 项目经理和资料责任人可见
-- **WHEN** 当前用户是某项目 `projectManagerUserId` 或在该项目中至少负责一项资料
-- **THEN** 系统必须允许该用户查看该项目列表项、详情和总览卡片
+#### Scenario: 查看权限不派生操作权限
 
-#### Scenario: 中心负责人只能查看本中心相关项目
-- **WHEN** 当前用户 `organizationRole = center_manager`
-- **THEN** 系统只能返回本中心相关项目；本中心相关按 `participating_departments` 包含其部门，或项目中存在本中心责任人资料判断
-
-#### Scenario: 普通员工只能查看自己相关项目
-- **WHEN** 当前用户 `organizationRole = employee`
-- **THEN** 系统只能返回该用户负责资料或作为项目经理的项目
+- **WHEN** 用户因项目可见范围规则可查看某项目
+- **THEN** 系统 MUST NOT 仅因项目可见授予阶段推进、项目编号填写、责任人分配、适用性标记/恢复、资料提交、资料审核、资料退回、精准返工退回、附件上传或附件删除权限
 
 #### Scenario: 无权项目详情返回权限错误
+
 - **WHEN** 已登录用户直接访问无权项目详情
 - **THEN** 系统必须返回稳定权限错误码 `FORBIDDEN_OPERATION`，不得返回项目详情
 
@@ -583,9 +537,11 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **WHEN** 用户提交中文部门名、未知值、非数组非空值或任意自由文本参与部门
 - **THEN** 系统必须拒绝保存，并返回稳定错误码 `INVALID_PARTICIPATING_DEPARTMENT`，HTTP 状态为 400
 
-#### Scenario: 参与部门用于中心负责人可见范围
+#### Scenario: 参与部门不限制中心负责人项目查看
 - **WHEN** 系统判断中心负责人是否可见某项目
-- **THEN** 系统只能基于合法 `participatingDepartments` 枚举数组或项目中本中心责任人资料判断本中心相关项目
+- **THEN** 系统 MUST 将中心负责人项目查看范围视为全部业务项目
+- **AND** `participatingDepartments`、结构化资料归属和责任人部门只用于阶段推进、责任分配、适用性管理、审核等本中心业务操作判断
+- **AND** 系统 MUST NOT 使用 `participatingDepartments`、结构化资料归属或责任人部门限制中心负责人项目查看范围
 
 ### Requirement: 项目经理用户关联
 系统 MUST 将项目经理建模为项目内用户关联，并 MUST 校验项目经理只能由启用的部门用户担任。
@@ -635,50 +591,32 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **THEN** 系统必须允许该用户作为该资料项 `responsibleUserId`
 
 ### Requirement: 项目经理职责边界
-系统 MUST 明确项目经理在项目内负责推进、任务分配、催办和全量进度查看，但不得因此改变资料审批身份。
+
+系统 MUST 明确项目经理在项目内负责推进、任务分配、催办和全量进度查看，但不得因此改变资料审核身份、`completionMode` 派生完成门禁或精准返工审核边界。
 
 #### Scenario: 项目经理查看项目全量进度
 - **WHEN** 项目经理查看其负责项目
-- **THEN** 系统必须允许其查看该项目阶段、资料、齐套摘要、责任人和附件等全量进度信息
+- **THEN** 系统必须允许其查看该项目阶段、资料、齐套摘要、责任人、返工标记和附件等全量进度信息
 
-#### Scenario: 项目经理分配或调整资料责任人
-- **WHEN** 项目经理在其负责项目中分配或调整资料责任人
-- **THEN** 第一版可将可选范围限制在项目参与部门内或符合资料责任人候选规则的部门用户
+#### Scenario: 项目经理完成后推进阶段
+- **WHEN** 当前阶段适用资料均已按各自 `completionMode` 派生为完成且没有 `revision_required`
+- **THEN** 项目经理可推进其负责项目当前阶段，且阶段推进仍必须基于完成门禁、返工门禁和既有推进权限
 
-#### Scenario: 非项目经理不得仅凭员工身份分配资料责任人
-- **WHEN** 用户不是该项目项目经理、不是中心负责人、也不是系统允许的其他角色，却直接调用该项目资料责任人分配或清空接口
-- **THEN** 后端必须拒绝该操作，并返回稳定权限错误码 `FORBIDDEN_OPERATION` 或既有统一权限错误码
+#### Scenario: 项目经理可分配未指定责任人的返工资料
+- **WHEN** 项目存在 `revision_required = true` 且未分配责任人的资料
+- **THEN** 项目经理或既有规则允许的负责人可先按资料责任人分配能力为该资料分配责任人
 
-#### Scenario: 项目经理催办资料
-- **WHEN** 后续实现催办能力
-- **THEN** 项目经理可对其负责项目的资料责任人发起催办，但本 change 不实现自动通知
-
-#### Scenario: 项目经理齐套后推进阶段
-- **WHEN** 当前阶段适用必填资料全部 `confirmed`
-- **THEN** 项目经理可推进其负责项目当前阶段，且阶段推进仍必须基于齐套门禁
+#### Scenario: 项目经理不因项目身份获得资料审批权
+- **WHEN** 用户仅因是该项目项目经理而直接调用资料确认、退回或精准返工退回接口
+- **THEN** 后端必须拒绝该操作，除非该用户同时具备资料级审核规则允许的审核身份
 
 #### Scenario: 非项目经理不得推进不属于自己的项目
 - **WHEN** 普通员工不是该项目项目经理却直接调用该项目阶段推进接口
 - **THEN** 后端必须拒绝该操作，并返回稳定权限错误码 `FORBIDDEN_OPERATION` 或既有统一权限错误码
 
-#### Scenario: 总经理助理不得推进任何项目
-- **WHEN** 总经理助理直接调用任意项目阶段推进接口
-- **THEN** 后端必须拒绝该操作，并返回稳定权限错误码 `FORBIDDEN_OPERATION` 或既有统一权限错误码
-
-#### Scenario: 系统管理员不得推进业务项目
-- **WHEN** 系统管理员直接调用任意项目阶段推进接口
-- **THEN** 后端必须拒绝该操作，并返回稳定权限错误码 `FORBIDDEN_OPERATION` 或既有统一权限错误码
-
-#### Scenario: 中心负责人不得跨中心推进
-- **WHEN** 中心负责人直接调用非本中心相关项目阶段推进接口
-- **THEN** 后端必须拒绝该操作，并返回稳定权限错误码 `FORBIDDEN_OPERATION` 或既有统一权限错误码
-
-#### Scenario: 项目经理不因项目身份获得资料审批权
-- **WHEN** 用户仅因是该项目项目经理而直接调用资料确认或退回接口
-- **THEN** 后端必须拒绝该操作，除非该用户同时具备中心负责人、总经理或后续审批规则允许的审批身份
-
 ### Requirement: 项目参与人派生
-系统 MUST 从项目资料责任人派生项目参与人，不得在第一版新增项目成员表或项目参与人表。
+
+系统 MUST 从项目资料责任人派生项目参与人，不得在第一版新增项目成员表或项目参与人表，并 MUST NOT 因项目参与人派生改变当前阶段 `completionMode` 派生完成门禁。
 
 #### Scenario: 项目参与人由资料责任人派生
 - **WHEN** 用户在某项目中至少负责一项资料
@@ -688,288 +626,649 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **WHEN** 系统表达项目参与人
 - **THEN** 系统不得在本 change 中新增项目参与人表或手工维护项目参与人清单
 
-#### Scenario: 不新增项目成员表
-- **WHEN** 系统表达项目内协作关系
-- **THEN** 系统不得在本 change 中新增项目成员表
-
 #### Scenario: 项目参与人不改变阶段推进门禁
 - **WHEN** 系统判断阶段是否可推进
-- **THEN** 项目参与人派生规则不得改变当前阶段适用必填资料全部 `confirmed` 的门禁口径
+- **THEN** 项目参与人派生规则不得改变当前阶段适用资料按 `completionMode` 派生完成的门禁口径
 
-### Requirement: 阶段审批流状态模型
-系统 MUST 为每个项目阶段维护唯一当前审批状态，并 MUST 在第一版只支持阶段级审批。
+### Requirement: 我的工作台查询接口
 
-#### Scenario: 第一版只支持阶段级审批
-- **WHEN** 系统创建、查询或处理审批目标
-- **THEN** 审批目标必须绑定到项目阶段，审批记录中的 `stageId` 必须非空
+系统 MUST 提供当前登录用户的工作台查询接口，用于返回资料责任、资料审核、`1.2` 专用多节点审批和阶段推进相关待办，并 MUST 只基于当前登录态确定用户身份；当前内部资料闭环 MUST NOT 返回泛化阶段关口审批待办，且 MUST 将有责任人的精准返工资料纳入资料责任待办。
 
-#### Scenario: 不支持独立项目级审批
-- **WHEN** 用户尝试创建不绑定阶段的项目级审批
-- **THEN** 系统必须拒绝该能力边界，不得创建项目级审批单或可空 `stageId` 的审批记录
+#### Scenario: 1.2 商务评价待办只给营销中心负责人
 
-#### Scenario: 审批状态枚举
-- **WHEN** 系统保存阶段审批状态
-- **THEN** 审批状态必须是 `not_submitted`、`pending_center_manager`、`returned_by_center_manager`、`pending_general_manager`、`returned_by_general_manager`、`approved` 或 `cancelled` 之一
+- **WHEN** `1.2 项目立项审批表` 进入商务评价审批节点
+- **THEN** 工作台 MUST 只向营销中心负责人返回对应待办
+- **AND** 工作台 MUST NOT 因用户是任意中心负责人而返回该待办
 
-#### Scenario: 每项目每阶段唯一当前审批状态
-- **WHEN** 系统保存项目阶段审批状态
-- **THEN** 每个项目的每个阶段必须只有一个当前审批状态，且该状态必须挂在项目阶段记录上
+#### Scenario: 1.2 技术评价待办只给研发中心负责人
 
-#### Scenario: 审批记录不是当前状态来源
-- **WHEN** 系统判断某阶段当前审批状态
-- **THEN** 系统必须读取项目阶段记录上的当前审批状态，不得把审批历史记录聚合结果作为当前状态来源
+- **WHEN** `1.2 项目立项审批表` 进入技术评价审批节点
+- **THEN** 工作台 MUST 只向研发中心负责人返回对应待办
+- **AND** 工作台 MUST NOT 因用户是任意中心负责人而返回该待办
 
-#### Scenario: 退回后重新提交复用同一审批目标
-- **WHEN** 阶段审批被退回后项目经理重新提交
-- **THEN** 系统必须复用同一个阶段审批状态，不得创建第二个当前审批目标
+#### Scenario: 1.2 商务技术并行待办同时出现
 
-#### Scenario: 审批历史允许多条记录
-- **WHEN** 阶段审批经过提交、退回、重新提交或审批通过
-- **THEN** 系统可以保存多条审批历史记录，但当前审批状态仍只能有一个
+- **WHEN** `1.2 项目立项审批表` 基础状态达到 `submitted`
+- **OR** 既有兼容数据中的 `1.2` 基础状态为 `confirmed`
+- **THEN** 工作台 MUST 同时向营销中心负责人返回 `business_review` 待办、向研发中心负责人返回 `technical_review` 待办
+- **AND** 当营销中心负责人查询工作台时，系统 MUST 返回 `business_review` 待办
+- **AND** 当研发中心负责人查询工作台时，系统 MUST 返回 `technical_review` 待办
+- **AND** 二者 MUST NOT 互相等待或互相阻塞
 
-### Requirement: 阶段审批接口和参数校验
-系统 MUST 使用固定阶段审批接口路径，并 MUST 严格校验项目 ID、阶段 ID 和阶段归属。
+#### Scenario: 1.2 未提交不生成商务技术待办
 
-#### Scenario: 提交审批接口路径
-- **WHEN** 用户提交阶段审批
-- **THEN** 系统必须使用 `POST /api/projects/:projectId/stages/:stageId/approval/submit`
+- **WHEN** `1.2 项目立项审批表` 基础状态为 `not_submitted`
+- **AND** `business_review`、`technical_review` 和 `general_review` 节点已预创建
+- **THEN** 工作台 MUST NOT 向营销中心负责人返回 `business_review` 待办
+- **AND** 工作台 MUST NOT 向研发中心负责人返回 `technical_review` 待办
 
-#### Scenario: 审批通过接口路径
-- **WHEN** 用户审批通过阶段审批
-- **THEN** 系统必须使用 `POST /api/projects/:projectId/stages/:stageId/approval/approve`
+#### Scenario: 1.2 returned 重新提交前不生成商务技术待办
 
-#### Scenario: 审批退回接口路径
-- **WHEN** 用户退回阶段审批
-- **THEN** 系统必须使用 `POST /api/projects/:projectId/stages/:stageId/approval/return`
+- **WHEN** `1.2 项目立项审批表` 基础状态为 `returned`
+- **THEN** 工作台 MUST NOT 向营销中心负责人返回 `business_review` 待办
+- **AND** 工作台 MUST NOT 向研发中心负责人返回 `technical_review` 待办
+- **AND** 系统 MUST 等待普通 `1.2` 资料重新提交后再激活商务评价和技术评价审批
+- **AND** 该 `returned` 只表示历史或兼容的普通资料基础状态 `returned`
+- **AND** 系统 MUST NOT 将 `business_review`、`technical_review` 或 `general_review` 节点退回映射为普通资料基础状态 `returned`
 
-#### Scenario: 重新提交接口路径
-- **WHEN** 项目经理重新提交已退回阶段审批
-- **THEN** 系统必须使用 `POST /api/projects/:projectId/stages/:stageId/approval/resubmit`
+#### Scenario: 1.2 总经理审批待办后置生成
 
-#### Scenario: 审批历史接口路径
-- **WHEN** 用户查询阶段审批历史
-- **THEN** 系统必须使用 `GET /api/projects/:projectId/stages/:stageId/approval/history`
+- **WHEN** `1.2 项目立项审批表` 的商务评价审批和技术评价审批均已通过
+- **THEN** 工作台 MUST 生成总经理审批待办
+- **AND** 工作台 MUST 只向总经理返回对应待办
+- **AND** 工作台 MUST NOT 向总经理助理、中心负责人或项目创建人自动返回该审批待办
 
-#### Scenario: 非法项目 ID
-- **WHEN** `projectId` 不是严格正整数
-- **THEN** 系统必须返回 `INVALID_PROJECT_ID`
+#### Scenario: 1.2 总经理审批待办不得提前生成
 
-#### Scenario: 非法阶段 ID
-- **WHEN** `stageId` 不是严格正整数
-- **THEN** 系统必须返回 `INVALID_PROJECT_STAGE_ID`
+- **WHEN** `business_review` 或 `technical_review` 任一节点尚未 `approved`
+- **THEN** 工作台 MUST NOT 生成 `general_review` 总经理审批待办
 
-#### Scenario: 项目不存在
-- **WHEN** `projectId` 合法但项目不存在
-- **THEN** 系统必须返回 `PROJECT_NOT_FOUND`
+#### Scenario: 1.2 多节点审批不恢复泛化阶段关口待办
 
-#### Scenario: 阶段不存在或不属于项目
-- **WHEN** `stageId` 合法但阶段不存在或阶段不属于该项目
-- **THEN** 系统必须返回 `PROJECT_STAGE_NOT_FOUND`
+- **WHEN** 系统生成 `1.2 项目立项审批表` 多节点审批待办
+- **THEN** 工作台 MUST 使用专用 `1.2` 发起/审批待办类型或等价资料专项待办
+- **AND** 工作台 MUST NOT 生成 `stage_gate_approval` 或泛化阶段关口审批待办
 
-### Requirement: 第一版审批节点规则
-系统 MUST 按固定 8 阶段审批节点规则确定阶段审批中心和是否需要总经理审批。
+### Requirement: 项目基础可见与资料访问分离
 
-#### Scenario: 阶段 1 立项审批规则
-- **WHEN** 阶段 key 为 `initiation`
-- **THEN** 审批中心必须是营销中心，且必须需要总经理审批
+系统 MUST 区分项目基础信息可见性、完整资料查看权限、附件查看/下载权限和业务操作权限；完整查看角色可以查看完整资料和已上传附件，但不得因此获得资料、附件或阶段业务操作权限。
 
-#### Scenario: 阶段 2 方案设计审批规则
-- **WHEN** 阶段 key 为 `solution`
-- **THEN** 审批中心必须是研发中心，且不得需要总经理审批
+#### Scenario: 普通员工可见相关项目基础信息
 
-#### Scenario: 阶段 3 合同签订审批规则
-- **WHEN** 阶段 key 为 `contract`
-- **THEN** 审批中心必须是营销中心，且必须需要总经理审批
+- **WHEN** 普通员工负责某项目中的至少一个资料项
+- **THEN** 系统可以允许该员工查看该项目基础信息，用于理解任务所属项目
 
-#### Scenario: 阶段 4 详细设计审批规则
-- **WHEN** 阶段 key 为 `detailedDesign`
-- **THEN** 审批中心必须是研发中心，且不得需要总经理审批
+#### Scenario: 普通员工不因项目可见获得完整资料清单
 
-#### Scenario: 阶段 5 生产制作审批规则
-- **WHEN** 阶段 key 为 `manufacturing`
-- **THEN** 审批中心必须是制造中心，且不得需要总经理审批
+- **WHEN** 普通员工仅因负责某个资料项而可见项目
+- **THEN** 系统不得默认允许其查看该项目完整阶段资料清单
 
-#### Scenario: 阶段 6 预验收审批规则
-- **WHEN** 阶段 key 为 `preAcceptance`
-- **THEN** 审批中心必须是制造中心，且不得需要总经理审批
+#### Scenario: 普通员工不因项目可见获得全部附件访问
 
-#### Scenario: 阶段 7 终验收审批规则
-- **WHEN** 阶段 key 为 `finalAcceptance`
-- **THEN** 审批中心必须是制造中心，且不得需要总经理审批
+- **WHEN** 普通员工仅因负责某个资料项而可见项目
+- **THEN** 系统不得默认允许其查看、下载、上传或删除其他资料项附件
 
-#### Scenario: 阶段 8 结题审批规则
-- **WHEN** 阶段 key 为 `closeout`
-- **THEN** 审批中心必须是项目经理所属中心，且必须需要总经理审批
+#### Scenario: 项目经理查看自己项目完整资料
 
-#### Scenario: 阶段 8 项目经理没有有效部门
-- **WHEN** 阶段 key 为 `closeout` 且项目经理没有部门或部门不是 `operations_center`、`marketing_center`、`manufacturing_center`、`rd_center` 之一
-- **THEN** 系统必须拒绝提交审批，并返回 `PROJECT_APPROVAL_NOT_SUBMITTABLE`
+- **WHEN** 当前用户是项目 `projectManagerUserId`
+- **THEN** 系统必须允许其查看该项目完整资料清单、已上传附件和业务日志，用于统筹项目
 
-### Requirement: 阶段审批动作状态机
-系统 MUST 提供提交审批、中心负责人审批、总经理审批、退回和重新提交能力，并 MUST 使用固定错误码拒绝非法动作。
+#### Scenario: 项目创建人查看自己创建项目完整资料
 
-#### Scenario: 提交审批
-- **WHEN** 项目经理对自己负责项目的当前阶段提交审批，审批状态为 `not_submitted`，且当前阶段适用必填资料全部 `confirmed`
-- **THEN** 系统必须将对应审批状态流转为 `pending_center_manager`
+- **WHEN** 当前用户是项目 `createdByUserId`
+- **THEN** 系统 MUST 允许其查看该项目完整资料清单、已上传附件和业务日志
 
-#### Scenario: 当前阶段未齐套不能提交审批
-- **WHEN** 当前阶段存在未完成适用必填资料
-- **THEN** 系统必须拒绝提交审批，返回 `PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE`，且不得改变审批状态
+#### Scenario: 管理层查看完整项目资料
 
-#### Scenario: 当前审批状态不能提交
-- **WHEN** 当前审批状态不是 `not_submitted` 且用户调用提交审批接口
-- **THEN** 系统必须返回 `PROJECT_APPROVAL_NOT_SUBMITTABLE`，且不得改变审批状态
+- **WHEN** 当前用户 `organizationRole` 为 `general_manager`、`general_manager_assistant` 或 `center_manager`
+- **THEN** 系统 MUST 允许其查看全部项目的完整项目资料、已上传附件和业务日志
 
-#### Scenario: 重新提交审批
-- **WHEN** 项目经理对自己负责项目中审批状态为 `returned_by_center_manager` 或 `returned_by_general_manager` 的阶段重新提交，且当前阶段仍满足提交条件
-- **THEN** 系统必须将审批状态重新流转为 `pending_center_manager`
+#### Scenario: 系统管理员无默认业务资料访问
 
-#### Scenario: 当前审批状态不能重新提交
-- **WHEN** 当前审批状态不是 `returned_by_center_manager` 或 `returned_by_general_manager` 且用户调用重新提交接口
-- **THEN** 系统必须返回 `PROJECT_APPROVAL_NOT_SUBMITTABLE`，且不得改变审批状态
+- **WHEN** 当前用户 `organizationRole = system_admin`
+- **THEN** 系统不得仅因系统管理员身份授予业务项目资料、附件或业务日志访问权限
 
-#### Scenario: 不需要总经理审批的阶段中心负责人通过
-- **WHEN** 阶段 2、阶段 4、阶段 5、阶段 6 或阶段 7 处于 `pending_center_manager` 且匹配中心负责人执行通过
-- **THEN** 系统必须将审批状态直接流转为 `approved`
+#### Scenario: 完整查看不授予附件上传删除
 
-#### Scenario: 需要总经理审批的阶段中心负责人通过
-- **WHEN** 阶段 1、阶段 3 或阶段 8 处于 `pending_center_manager` 且匹配中心负责人执行通过
-- **THEN** 系统必须将审批状态流转为 `pending_general_manager`
+- **WHEN** 用户因总经理、总经理助理、中心负责人、项目创建人或项目经理身份获得完整资料和附件查看权限
+- **THEN** 系统 MUST NOT 仅因该查看权限授予附件上传或附件删除权限
 
-#### Scenario: 中心负责人退回审批
-- **WHEN** 匹配中心负责人在 `pending_center_manager` 状态填写非空退回原因执行退回
-- **THEN** 系统必须将审批状态流转为 `returned_by_center_manager`
+#### Scenario: 项目列表仍展示有权基础项目
 
-#### Scenario: 总经理通过审批
-- **WHEN** 阶段 1、阶段 3 或阶段 8 处于 `pending_general_manager` 且总经理执行通过
-- **THEN** 系统必须将审批状态流转为 `approved`
+- **WHEN** 用户查询项目列表或项目总览
+- **THEN** 系统可以继续返回该用户有权看到的项目基础信息，但不得通过列表或总览泄露无权资料附件内容
 
-#### Scenario: 总经理退回审批
-- **WHEN** 阶段 1、阶段 3 或阶段 8 处于 `pending_general_manager` 且总经理填写非空退回原因执行退回
-- **THEN** 系统必须将审批状态流转为 `returned_by_general_manager`
+#### Scenario: 员工直接打开项目详情仍受资料过滤
 
-#### Scenario: 当前审批状态不是待审批
-- **WHEN** 用户调用审批通过或审批退回接口，但当前审批状态不是 `pending_center_manager` 或 `pending_general_manager`
-- **THEN** 系统必须返回 `PROJECT_APPROVAL_NOT_PENDING`，并且不得改变项目、阶段或审批状态
+- **WHEN** 普通员工直接打开项目详情地址或直接调用资料清单 API
+- **THEN** 后端仍必须只返回该员工有权访问的资料项，不得因绕过工作台入口返回完整资料清单
 
-#### Scenario: 非法审批动作
-- **WHEN** 用户提交不支持的审批动作
-- **THEN** 系统必须返回 `INVALID_APPROVAL_ACTION`，并且不得改变项目、阶段或审批状态
+### Requirement: 工作台阶段关口审批和阶段推进待办
 
-#### Scenario: 退回原因必填
-- **WHEN** 中心负责人或总经理退回审批但未填写非空审批意见或退回原因
-- **THEN** 系统必须返回 `INVALID_APPROVAL_COMMENT`，并且不得改变审批状态
+系统 MUST 在当前 20260625 在线平台内部资料闭环中只按 `completionMode` 完成情况和既有推进权限生成阶段推进待办，并 MUST NOT 因泛化阶段关口审批生成推进前置。
 
-### Requirement: 阶段审批权限边界
-系统 MUST 在后端强制校验审批权限，不得只依赖前端隐藏按钮。
+#### Scenario: 阶段关口审批待办暂停
+- **WHEN** 系统生成当前阶段工作台待办
+- **THEN** 工作台 MUST NOT 因泛化阶段关口审批状态生成 `stage_gate_approval` 待办
 
-#### Scenario: 项目经理可以发起自己负责项目审批
-- **WHEN** 当前用户是该项目 `projectManagerUserId`
-- **THEN** 系统可以允许其在齐套条件满足时提交或重新提交该项目阶段审批
+#### Scenario: 项目经理阶段推进待办
+- **WHEN** 当前用户是项目经理、当前阶段适用资料已经按 `completionMode` 完成、且当前阶段不是第 8 阶段
+- **THEN** 工作台可以返回 `stage_advance` 待办
 
-#### Scenario: 非项目经理不能提交审批
-- **WHEN** 当前用户不是该项目 `projectManagerUserId` 且调用提交或重新提交接口
-- **THEN** 系统必须返回 `PROJECT_APPROVAL_FORBIDDEN`
+#### Scenario: 阶段推进待办不要求 approval_status
+- **WHEN** 当前阶段适用资料已经按 `completionMode` 完成
+- **THEN** 工作台 MUST NOT 因当前阶段关口审批状态不是 `approved` 而隐藏阶段推进待办
 
-#### Scenario: 系统根据第一版审批节点规则确定审批中心
-- **WHEN** 系统处理中心负责人审批通过或退回
-- **THEN** 系统必须根据当前阶段的第一版审批节点规则确定唯一审批中心
+#### Scenario: 阶段推进待办仍要求资料完成
+- **WHEN** 当前阶段存在适用资料未按 `completionMode` 完成，或项目已完成
+- **THEN** 工作台 MUST NOT 返回该阶段的 `stage_advance` 待办
 
-#### Scenario: 匹配中心负责人可以审批
-- **WHEN** 当前用户 `organizationRole = center_manager` 且 `department` 匹配当前阶段审批中心
-- **THEN** 系统可以允许其处理 `pending_center_manager` 的审批通过或退回
+### Requirement: 整项目审计信息访问控制
 
-#### Scenario: 其他中心负责人审批失败
-- **WHEN** 当前用户是中心负责人但 `department` 不匹配当前阶段审批中心
-- **THEN** 系统必须返回 `PROJECT_APPROVAL_FORBIDDEN`
+系统 MUST 将项目基础可见性与整项目业务日志访问权限分开；总经理、总经理助理、中心负责人、项目创建人和项目经理按其可见项目范围查看完整业务日志，查看日志不得放宽任何业务操作权限。
 
-#### Scenario: 员工不能执行中心负责人审批
-- **WHEN** 当前用户 `organizationRole = employee` 且调用中心负责人审批通过或退回
-- **THEN** 系统必须返回 `PROJECT_APPROVAL_FORBIDDEN`
+#### Scenario: 管理层查看全部项目业务日志
 
-#### Scenario: 项目经理不能替代中心负责人审批
-- **WHEN** 当前用户仅因项目经理身份调用中心负责人审批通过或退回接口
-- **THEN** 系统必须返回 `PROJECT_APPROVAL_FORBIDDEN`
+- **WHEN** 当前用户 `organizationRole` 为 `general_manager`、`general_manager_assistant` 或 `center_manager`
+- **THEN** 系统 MUST 允许其查看全部项目的完整业务日志
 
-#### Scenario: 总经理助理不能执行中心负责人审批
-- **WHEN** 当前用户 `organizationRole = general_manager_assistant` 且调用中心负责人审批通过或退回
-- **THEN** 系统必须返回 `PROJECT_APPROVAL_FORBIDDEN`
+#### Scenario: 项目创建人查看自己创建项目业务日志
 
-#### Scenario: 系统管理员不能执行中心负责人审批
-- **WHEN** 当前用户 `organizationRole = system_admin` 且调用中心负责人审批通过或退回
-- **THEN** 系统必须返回 `PROJECT_APPROVAL_FORBIDDEN`
+- **WHEN** 当前用户是项目 `createdByUserId`
+- **THEN** 系统 MUST 允许其查看该项目完整业务日志
 
-#### Scenario: 只有总经理可以处理总经理审批
-- **WHEN** 阶段审批状态为 `pending_general_manager`
-- **THEN** 只有 `organizationRole = general_manager` 的用户可以审批通过或退回
+#### Scenario: 项目经理查看自己项目审计信息
 
-#### Scenario: 总经理只能处理需要总经理审批的阶段
-- **WHEN** 总经理对阶段 2、阶段 4、阶段 5、阶段 6 或阶段 7 调用总经理审批动作
-- **THEN** 系统必须返回 `PROJECT_APPROVAL_FORBIDDEN`
+- **WHEN** 当前用户是项目 `projectManagerUserId`
+- **THEN** 系统可以允许其查看该项目完整业务日志
+- **AND** 如 legacy 阶段审批历史接口仍存在，系统 MAY 允许其按既有权限只读查看
 
-#### Scenario: 项目经理不能替代总经理审批
-- **WHEN** 当前用户仅因项目经理身份调用总经理审批通过或退回接口
-- **THEN** 系统必须返回 `PROJECT_APPROVAL_FORBIDDEN`
+#### Scenario: 普通员工不得查看整项目业务日志
 
-#### Scenario: 总经理助理不得审批
-- **WHEN** `organizationRole = general_manager_assistant` 的用户直接调用审批提交、通过、退回或代替总经理审批接口
-- **THEN** 系统必须返回 `PROJECT_APPROVAL_FORBIDDEN`
+- **WHEN** 普通员工仅因负责某个资料项而可见项目
+- **THEN** 系统必须拒绝其查询该项目完整业务日志，并返回无权错误
 
-#### Scenario: 系统管理员不得业务审批
-- **WHEN** `organizationRole = system_admin` 的用户直接调用审批通过、退回或阶段推进审批相关接口
-- **THEN** 系统必须返回 `PROJECT_APPROVAL_FORBIDDEN`
+#### Scenario: 系统管理员无默认业务日志权限
 
-#### Scenario: 审批失败无副作用
-- **WHEN** 审批操作因权限、状态、参数或齐套校验失败
-- **THEN** 系统不得改变项目状态、阶段状态、审批状态、资料状态或业务日志
+- **WHEN** 当前用户 `organizationRole = system_admin`
+- **THEN** 系统 MUST NOT 仅因系统管理员身份允许其查看项目业务日志
 
-### Requirement: 阶段审批历史
-系统 MUST 为每次成功审批动作保存审批历史记录，并 MUST 支持按项目阶段查询只读审批历史。
+#### Scenario: 日志查看不放宽操作
 
-#### Scenario: 保存审批记录字段
-- **WHEN** 审批动作成功
-- **THEN** 系统必须保存项目 ID、非空阶段 ID、审批节点、审批动作、审批人、审批角色、审批意见或退回原因、审批时间、审批前状态和审批后状态
+- **WHEN** 用户获得某项目业务日志查看权限
+- **THEN** 系统 MUST NOT 因日志查看权限授予资料提交、资料审核、资料退回、精准返工、附件上传、附件删除、阶段推进、责任人分配或适用性管理权限
 
-#### Scenario: 审批历史查询
-- **WHEN** 已登录且有权查看项目阶段审批历史的用户查询审批历史
-- **THEN** 系统必须按 `createdAt ASC, id ASC` 返回该项目该阶段的审批记录
+#### Scenario: legacy 阶段审批历史不是当前必备能力
 
-#### Scenario: 审批历史为空
-- **WHEN** 已登录且有权查看项目阶段审批历史的用户查询审批历史，但该阶段没有审批记录
-- **THEN** 系统必须返回空列表，且空列表不是错误
+- **WHEN** 当前 20260625 在线平台内部资料闭环运行
+- **THEN** 系统 MUST NOT 要求展示、生成或依赖新的泛化阶段关口审批历史
+- **AND** legacy 阶段审批历史 MUST NOT 作为当前阶段推进或资料完成判断依据
 
-#### Scenario: 审批历史不分页
-- **WHEN** 用户查询第一版审批历史
-- **THEN** 系统必须返回该阶段审批历史列表，不得要求分页参数
+### Requirement: 项目可见性按结构化归属中心识别
 
-#### Scenario: 越权查看审批历史
-- **WHEN** 用户无权查看该项目阶段审批历史
-- **THEN** 系统必须返回 `PROJECT_APPROVAL_FORBIDDEN`
+系统 MUST 保留结构化归属中心用于资料审核、责任分配、适用性管理和既有本中心业务操作判断，但中心负责人项目查看范围 MUST 按本 change 放宽为全部业务项目，不再仅按本中心相关项目过滤。
 
-#### Scenario: 审批历史只读
-- **WHEN** 用户查询审批历史
-- **THEN** 系统不得写审批记录、不得写业务日志、不得改变审批状态、项目状态、阶段状态或资料状态
+#### Scenario: 中心负责人查看全部项目
 
-### Requirement: 阶段审批流与阶段推进约束
-系统 MUST 要求当前阶段审批通过后才允许阶段推进，并 MUST 保持原有齐套门禁和标准 8 阶段顺序。
+- **WHEN** 当前用户是中心负责人且系统判断其是否可见某项目
+- **THEN** 系统 MUST 将全部业务项目视为该中心负责人可查看项目
 
-#### Scenario: 审批未提交不能推进
-- **WHEN** 当前阶段审批状态为 `not_submitted`
-- **THEN** 系统必须拒绝阶段推进，并返回 `PROJECT_APPROVAL_NOT_APPROVED`
+#### Scenario: 结构化归属中心仍用于操作权限
 
-#### Scenario: 审批待处理不能推进
-- **WHEN** 当前阶段审批状态为 `pending_center_manager` 或 `pending_general_manager`
-- **THEN** 系统必须拒绝阶段推进，并返回 `PROJECT_APPROVAL_NOT_APPROVED`
+- **WHEN** 系统判断中心负责人是否可审核资料、分配资料责任人、管理适用性或执行其他受中心边界约束的业务操作
+- **THEN** 系统 MUST 继续使用 `ownerDepartment`、`reviewDepartment`、`participatingDepartments` 或既有规则判断操作权限
+- **AND** 系统 MUST NOT 仅因中心负责人可查看全部项目而允许其操作跨中心资料
 
-#### Scenario: 审批被退回不能推进
-- **WHEN** 当前阶段审批状态为 `returned_by_center_manager` 或 `returned_by_general_manager`
-- **THEN** 系统必须拒绝阶段推进，并返回 `PROJECT_APPROVAL_NOT_APPROVED`
+#### Scenario: 责任人部门仅作为旧数据 fallback
 
-#### Scenario: 审批通过后仍需齐套门禁
-- **WHEN** 当前阶段审批状态为 `approved` 但当前阶段适用必填资料不再齐套
-- **THEN** 系统必须拒绝阶段推进，并返回 `PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE`
+- **WHEN** 项目阶段资料已保存 `ownerDepartment` 或 `reviewDepartment`
+- **THEN** 系统 MUST 优先使用 `ownerDepartment` 和 `reviewDepartment` 判断中心负责人资料操作范围，不得再无条件使用 `responsibleUser.department`
 
-#### Scenario: 审批通过且齐套后允许推进
-- **WHEN** 当前阶段审批状态为 `approved`、当前阶段适用必填资料全部 `confirmed`、阶段状态合法且当前用户具备推进权限
-- **THEN** 系统必须允许按标准 8 阶段顺序执行阶段推进
+#### Scenario: 旧资料缺少归属中心时兼容责任人部门
+
+- **WHEN** 某项目阶段资料的 `ownerDepartment` 和 `reviewDepartment` 都为空
+- **THEN** 系统 MAY 继续使用该资料责任人的部门作为旧数据兼容判断
+
+### Requirement: 阶段推进按结构化归属中心识别本中心项目
+
+系统 MUST 使用结构化归属中心判断中心负责人是否可推进本中心相关项目阶段，并 MUST 保持当前阶段 `completionMode` 完成门禁不变。
+
+#### Scenario: 中心负责人推进本中心相关项目
+- **WHEN** 当前用户是中心负责人且项目属于其本中心相关项目
+- **AND** 当前阶段适用资料已经按 `completionMode` 完成
+- **THEN** 系统 MAY 允许其推进当前阶段
+
+#### Scenario: 中心负责人不得跨中心推进
+- **WHEN** 当前用户是中心负责人但项目不属于其本中心相关项目
+- **THEN** 系统 MUST 拒绝其推进阶段，除非该用户同时具备项目经理或总经理等其他允许身份
+
+#### Scenario: 阶段推进归属判断优先级
+- **WHEN** 系统判断中心负责人是否可推进某项目阶段
+- **THEN** 系统 MUST 优先使用项目 `participatingDepartments`、阶段资料 `ownerDepartment` 和 `reviewDepartment`
+- **AND** 仅在阶段资料 `ownerDepartment` 和 `reviewDepartment` 均为空时，才 MAY 兼容使用责任人部门
+
+### Requirement: 工作台阶段推进待办按结构化归属中心识别
+
+系统 MUST 使用结构化归属中心生成中心负责人 `stage_advance` 工作台待办，并 MUST 以当前阶段适用资料按 `completionMode` 完成为前置条件。
+
+#### Scenario: 中心负责人因归属中心获得阶段推进待办
+- **WHEN** 当前用户是中心负责人且项目中存在 `ownerDepartment = 本人部门` 或 `reviewDepartment = 本人部门` 的阶段资料
+- **AND** 当前阶段适用资料已经按 `completionMode` 完成
+- **AND** 当前阶段不是第 8 阶段
+- **THEN** 工作台 MAY 返回该项目当前阶段的 `stage_advance` 待办
+
+#### Scenario: 第 8 阶段仍不生成普通推进待办
+- **WHEN** 当前阶段是第 8 阶段 `closeout`
+- **THEN** 工作台 MUST NOT 生成普通 `stage_advance` 待办
+
+#### Scenario: 阶段推进待办限制不变
+- **WHEN** 当前阶段适用资料未按 `completionMode` 完成，或项目已完成
+- **THEN** 工作台 MUST NOT 返回该阶段的 `stage_advance` 待办
+
+### Requirement: 20260624 项目流程依据
+
+当前 `online-platform-internal-document-flow-v1` MUST NOT 将 `智能制造项目管理流程图20260624.pdf` 或 `v20260624` 作为当前主流程依据；当前实现依据 MUST 收敛到 20260625 流程图、`docs/9.11_20260625项目流程资料审批口径规划.md` 和 `docs/9.12_在线平台内部资料闭环规划_20260625.md`。
+
+#### Scenario: 20260624 不再作为当前主流程依据
+- **WHEN** 系统说明或实现当前项目主流程、阶段推进和阶段资料完成口径
+- **THEN** 系统 MUST NOT 以 `智能制造项目管理流程图20260624.pdf` 或 `v20260624` 作为当前主流程依据
+
+#### Scenario: 保持 8 阶段主干不变
+- **WHEN** 系统初始化或展示项目阶段
+- **THEN** 系统必须继续按顺序使用立项阶段、方案设计阶段、合同签订阶段、详细设计阶段、生产制作阶段、预验收阶段、终验收阶段和结题阶段
+
+#### Scenario: 阶段标识保持不变
+- **WHEN** 系统保存标准 8 阶段
+- **THEN** 系统必须继续使用 `initiation`、`solution`、`contract`、`detailedDesign`、`manufacturing`、`preAcceptance`、`finalAcceptance`、`closeout` 作为稳定阶段标识
+
+### Requirement: 简单阶段推进边界
+
+系统 MUST 使用当前阶段资料 `completionMode` 完成门禁推进项目阶段，并 MUST 不因 20260625 内部资料闭环引入跳阶段、回退、自动阶段流转、泛化阶段关口审批或复杂工作流引擎。
+
+#### Scenario: 阶段推进继续基于当前阶段资料门禁
+- **WHEN** 已登录且有推进权限的用户请求推进项目当前阶段
+- **THEN** 系统必须继续只检查当前阶段适用资料按 `completionMode` 派生出的完成情况，并在满足推进权限和阶段状态后按 8 阶段顺序推进
+
+#### Scenario: 阶段推进不要求当前阶段审批通过
+- **WHEN** 用户请求推进项目当前阶段
+- **AND** 当前阶段适用资料已经按各自 `completionMode` 完成
+- **THEN** 系统 MUST NOT 因缺少泛化阶段关口审批或 `approval_status = approved` 而拒绝阶段推进
+
+#### Scenario: 不新增跳阶段或回退
+- **WHEN** 系统按 20260625 内部资料闭环推进项目阶段
+- **THEN** 系统不得新增跳阶段、阶段回退、任意选择目标阶段或自由调整阶段顺序能力
+
+#### Scenario: 不新增复杂流程引擎
+- **WHEN** 系统实现阶段资料收集、资料审核或阶段推进
+- **THEN** 系统不得新增可视化流程编排、任意节点配置器、合同审批流、采购审批流、付款流、发票审批流、设计变更流程引擎、自动通知、日报周报或资料服务器核查流程
+
+### Requirement: 第一版简单资料闭环
+
+系统 MUST 将当前第一版业务闭环限定为在线平台内部阶段资料收集、资料提交/审核、在线平台附件保存和阶段推进。
+
+#### Scenario: 项目创建初始化闭环对象
+- **WHEN** 项目创建成功
+- **THEN** 系统必须初始化标准 8 阶段和当前 20260625 64 项阶段资料，作为资料收集和阶段推进依据
+
+#### Scenario: completionMode 计入齐套
+- **WHEN** 当前阶段资料项适用且按其 `completionMode` 达到完成点
+- **THEN** 系统必须将该资料项计入当前阶段完成资料
+
+#### Scenario: 未达到 completionMode 不计入齐套
+- **WHEN** 当前阶段资料项适用但未达到其 `completionMode` 完成点
+- **THEN** 系统不得将该资料项计入已完成资料
+
+#### Scenario: 文件平台暂停
+- **WHEN** 当前阶段保存资料附件
+- **THEN** 系统 MUST 将附件保存在在线平台现有附件系统
+- **AND** 系统 MUST NOT 调用文件管理平台、保存文件平台 folder mapping 或产生归档状态
+
+### Requirement: 20260625 项目流程依据
+
+系统 MUST 将 `智能制造项目管理流程图20260625.pdf`、`docs/9.11_20260625项目流程资料审批口径规划.md` 和 `docs/9.12_在线平台内部资料闭环规划_20260625.md` 作为当前在线平台内部资料闭环的实现依据。
+
+#### Scenario: 使用 20260625 流程作为当前依据
+- **WHEN** 系统说明或实现项目主流程、项目编号生成、阶段资料完成规则和阶段推进门禁
+- **THEN** 系统 MUST 以 20260625 流程图、`docs/9.11` 和 `docs/9.12` 作为当前依据
+- **AND** 普通阶段资料项数量 MUST 为 64 项
+
+#### Scenario: completionMode 数量
+- **WHEN** 系统初始化或校验当前 20260625 64 项资料
+- **THEN** `submit_only` 数量 MUST 为 33
+- **AND** `approval_required` 数量 MUST 为 24
+- **AND** `conditional_submit` 数量 MUST 为 7
+- **AND** `conditional_approval` 数量 MUST 为 0
+
+#### Scenario: 排除非普通资料过程节点
+- **WHEN** 系统维护当前普通阶段资料模板
+- **THEN** 系统 MUST NOT 将 `7.P1 随机资料移交` 或 `8.P1 资料服务器核查` 计入普通 64 项资料模板，除非后续正式确认它们形成独立文件
+
+#### Scenario: 保持 8 阶段主干
+- **WHEN** 系统初始化或展示项目阶段
+- **THEN** 系统 MUST 继续使用立项、方案设计、合同签订、详细设计、生产制作、预验收、终验收和结题 8 个阶段
+
+### Requirement: 项目编号后置规划
+
+系统 MUST 在后续规划中支持项目创建时项目编号为空，并 MUST 在项目立项审批通过且 `项目立项通知` 发布后填写或生成正式项目编号。
+
+#### Scenario: 创建项目允许项目编号为空
+- **WHEN** 有权限用户创建项目且项目尚未完成立项审批
+- **THEN** 系统 MUST 允许 `projectCode` 为空
+- **AND** 系统 MUST 继续保存项目名称、客户、项目经理、参与部门、计划时间和创建人等基础信息
+
+#### Scenario: 立项通过后生成项目编号
+- **WHEN** 项目立项审批通过且 `项目立项通知` 已发布
+- **THEN** 系统 MUST 支持填写或生成正式 `projectCode`
+- **AND** 该编号 SHOULD 与项目立项通知形成可追溯关系
+
+#### Scenario: 非空项目编号仍需唯一
+- **WHEN** 系统保存或更新非空 `projectCode`
+- **THEN** 系统 MUST 校验该编号在项目主数据中唯一
+
+#### Scenario: 空项目编号不参与唯一冲突
+- **WHEN** 多个尚未立项的项目暂未生成 `projectCode`
+- **THEN** 系统 MUST 允许它们同时保持空项目编号，不得按重复编号拒绝
+
+#### Scenario: 项目查询兼容空编号
+- **WHEN** 项目列表、项目详情、搜索、工作台、业务日志或后续文件平台联动读取项目基础信息
+- **THEN** 系统 MUST 兼容 `projectCode` 为空，并使用项目 ID 或其他稳定字段完成内部关联
+
+### Requirement: 20260625 阶段推进按资料完成规则判断
+
+系统 MUST 规划阶段推进门禁按每个资料项的完成规则判断当前阶段是否可推进，而不是统一要求所有适用必填资料均为 `confirmed`，也不得额外叠加一个泛化的阶段级审批。
+
+#### Scenario: submit_only 资料提交后计为完成
+- **WHEN** 当前阶段适用且参与阶段推进门禁的资料项 `completionMode = submit_only`
+- **AND** 该资料项已经提交或上传
+- **THEN** 系统 MUST 将该资料项计为阶段齐套已完成
+
+#### Scenario: approval_required 资料确认后计为完成
+- **WHEN** 当前阶段适用且参与阶段推进门禁的资料项 `completionMode = approval_required`
+- **AND** 该资料项已经确认或审批通过
+- **THEN** 系统 MUST 将该资料项计为阶段齐套已完成
+
+#### Scenario: 条件资料未触发不计缺失
+- **WHEN** 当前阶段资料项 `completionMode` 为 `conditional_submit` 或 `conditional_approval`
+- **AND** 该资料项的业务触发条件尚未发生
+- **THEN** 系统 MUST 不将该资料项计入缺失资料或阶段推进阻塞项
+
+#### Scenario: 条件资料触发后按对应规则判断
+- **WHEN** 条件资料的业务触发条件已经发生
+- **THEN** 系统 MUST 按 `conditional_submit` 或 `conditional_approval` 对应的提交或确认规则判断该资料是否完成
+
+#### Scenario: 不叠加泛化阶段审批
+- **WHEN** 当前阶段适用资料已经按各自 `completionMode` 完成
+- **THEN** 系统 MUST NOT 因缺少泛化的阶段级审批而拒绝阶段推进
+
+#### Scenario: 只有显式节点资料需要确认审批
+- **WHEN** 资料本身对应 20260625 流程图中的明确 YES/NO 或 YES-only 节点
+- **THEN** 系统 MUST 按该资料的 `approval_required` 完成规则要求确认或审批通过
+- **AND** 没有明确确认/审批节点的产出资料 MUST NOT 被强制要求确认或审批通过
+
+#### Scenario: 发票资料不触发额外流程
+- **WHEN** 当前阶段适用资料为 `发票（预付款）`、`发票（发货款）` 或 `发票（尾款）`
+- **AND** 该发票资料 `completionMode = submit_only`
+- **THEN** 阶段推进 MUST 只要求该发票资料提交或上传完成
+- **AND** 系统 MUST NOT 因该发票资料要求付款流、发票审批流或额外确认前置
+
+#### Scenario: 图纸审查 NO 回退不改变上游资料完成规则
+- **WHEN** 当前阶段包含 `4.14 产品平面图`、`4.15 产品零部件清单` 和 `4.16 图纸审查记录`
+- **THEN** 阶段推进 MUST NOT 因 4.14 或 4.15 是图纸审查 NO 回退目标而要求它们审批通过
+- **AND** `4.14 产品平面图` MUST 只需要提交或上传完成
+- **AND** `4.15 产品零部件清单` MUST 只需要提交或上传完成
+- **AND** `4.16 图纸审查记录` MUST 需要确认或审批通过
+- **AND** 如果 4.16 不通过，系统 MAY 提示修改 4.14 或 4.15 后重新发起或提交图纸审查记录，但 MUST NOT 改变 4.14 或 4.15 的 `completionMode`
+
+#### Scenario: NO 回退不改变主线必产属性
+- **WHEN** 流程图中主线资料经过 YES/NO 确认节点且 NO 回退到前序修改节点
+- **THEN** 系统 MUST 将该资料继续视为主线必产资料
+- **AND** 系统 MUST NOT 仅因存在 NO 回退箭头而把该资料改为条件触发资料
+
+### Requirement: 在线平台项目编号后置
+
+系统 MUST 支持项目创建初期没有正式项目编号，并 MUST 在 `1.2 项目立项审批表` 多节点最终审批通过且 `1.3 项目立项通知` 提交或上传完成后填写或生成正式 `projectCode`。
+
+#### Scenario: 后置项目编号节点
+
+- **WHEN** `1.2 项目立项审批表` 商务评价审批、技术评价审批和总经理审批均最终通过
+- **AND** `1.3 项目立项通知` 已按 `submit_only` 提交或上传完成
+- **AND** `1.1 项目需求表` 不存在由 `1.2` NO 触发且未清除的 `revision_required`
+- **AND** `1.2 项目立项审批表` 不存在待审、退回、未通过或其他专用多节点阻塞状态
+- **THEN** 系统 MUST 允许填写或生成 `projectCode`
+- **AND** 系统 MUST 沿用项目维护权限、项目经理或等价业务项目编号维护权限，不新增复杂权限模型
+- **AND** 系统 MUST NOT 因当前用户仅具备系统管理员身份而允许填写或生成 `projectCode`
+
+#### Scenario: 商务或技术单独通过不生成编号
+
+- **WHEN** `1.2 项目立项审批表` 仅商务评价审批通过或仅技术评价审批通过
+- **THEN** 系统 MUST NOT 将项目编号填写门禁视为满足
+- **AND** 系统 MUST NOT 因单个节点通过提前生成正式 `projectCode`
+
+#### Scenario: 系统管理员不默认拥有项目编号填写权限
+
+- **WHEN** 当前用户仅具备系统管理员身份
+- **AND** 不具备项目维护权限、项目经理权限或等价业务项目编号维护权限
+- **THEN** 系统 MUST NOT 允许其填写或生成 `projectCode`
+- **AND** 系统 MUST NOT 将系统管理员平台维护职责解释为业务项目编号维护职责
+
+### Requirement: 在线平台 completionMode 阶段推进
+
+系统 MUST 按当前阶段适用资料的 `completionMode` 判断阶段推进门禁，并 MUST NOT 额外叠加泛化阶段审批门禁。
+
+#### Scenario: 阶段推进按 completionMode 计算
+- **WHEN** 系统判断当前阶段是否可推进
+- **THEN** 系统 MUST 只检查当前阶段适用资料是否按各自 `completionMode` 完成
+
+#### Scenario: submit_only 资料提交后完成
+- **WHEN** 当前阶段适用资料 `completionMode = submit_only`
+- **AND** 该资料已提交或上传
+- **THEN** 系统 MUST 将该资料计为已完成
+
+#### Scenario: approval_required 资料审核通过后完成
+- **WHEN** 当前阶段适用资料 `completionMode = approval_required`
+- **AND** 该资料已确认或审批通过
+- **THEN** 系统 MUST 将该资料计为已完成
+
+#### Scenario: approval_required 未审核不完成
+- **WHEN** 当前阶段适用资料 `completionMode = approval_required`
+- **AND** 该资料仅为已提交但未确认或审批通过
+- **THEN** 系统 MUST 将该资料计为未完成
+
+#### Scenario: conditional_submit 未触发不阻塞
+- **WHEN** 当前阶段资料 `completionMode = conditional_submit`
+- **AND** 该资料 `isApplicable = false`
+- **THEN** 系统 MUST NOT 将该资料计入缺失资料或阶段推进阻塞项
+
+#### Scenario: conditional_submit 触发后提交完成
+- **WHEN** 当前阶段资料 `completionMode = conditional_submit`
+- **AND** 该资料 `isApplicable = true`
+- **AND** 该资料已提交或上传
+- **THEN** 系统 MUST 将该资料计为已完成
+
+#### Scenario: 不依赖泛化阶段审批门禁
+- **WHEN** 当前阶段适用资料已经按各自 `completionMode` 完成
+- **THEN** 系统 MUST NOT 因缺少泛化阶段级审批或 `approval_status = approved` 而拒绝阶段推进
+
+#### Scenario: 阶段推进仍保留权限边界
+- **WHEN** 用户请求推进当前阶段
+- **THEN** 系统 MUST 继续校验当前用户是否具备阶段推进权限
+- **AND** 系统 MUST 继续只允许按标准 8 阶段顺序推进当前阶段
+
+### Requirement: 在线平台资料接口派生完成状态
+
+系统 MUST 在阶段资料相关后端响应中返回 `completionMode` 和派生完成状态，使前端能够区分基础状态 `submitted` 在不同完成规则下的业务含义。
+
+#### Scenario: 返回 completionMode 和完成状态
+- **WHEN** 后端返回项目阶段资料项、缺失资料项、资料责任待办或资料审核待办
+- **THEN** 每个资料项 MUST 包含 `completionMode`
+- **AND** 每个资料项 MUST 包含 `isComplete`、`completionStatus` 或等价派生完成状态字段
+
+#### Scenario: submit_only submitted 返回已完成
+- **WHEN** 资料项 `completionMode = submit_only`
+- **AND** 基础状态为 `submitted`
+- **THEN** 后端 MUST 返回派生完成状态为 `completed` 或等价已完成状态
+- **AND** 后端 MUST NOT 将该资料项返回为待审核状态
+
+#### Scenario: approval_required submitted 返回待审核
+- **WHEN** 资料项 `completionMode = approval_required`
+- **AND** 基础状态为 `submitted`
+- **THEN** 后端 MUST 返回派生完成状态为 `pending_review` 或等价待审核状态
+- **AND** `isComplete` MUST 为 false
+
+#### Scenario: returned 返回未完成
+- **WHEN** 资料项基础状态为 `returned`
+- **THEN** 后端 MUST 返回派生完成状态为 `returned`、`incomplete` 或等价未完成状态
+- **AND** `isComplete` MUST 为 false
+
+### Requirement: 在线平台附件本地保存
+
+暂停文件平台联动时，阶段资料附件 MUST 保存在在线平台现有附件系统中，且系统 MUST NOT 调用文件管理平台。
+
+#### Scenario: 附件保存到在线平台
+- **WHEN** 用户上传阶段资料附件
+- **THEN** 系统 MUST 使用在线平台现有附件存储和附件记录保存文件
+
+#### Scenario: 不调用文件平台
+- **WHEN** 用户上传、查看、下载、删除或提交阶段资料附件
+- **THEN** 系统 MUST NOT 调用文件管理平台 API
+- **AND** 系统 MUST NOT 创建或更新 file-platform folder mapping
+- **AND** 系统 MUST NOT 创建 `archived` 或 `archive_failed` 归档状态
+
+#### Scenario: 文件平台恢复需独立 change
+- **WHEN** 后续需要恢复文件管理平台联动
+- **THEN** 系统 MUST 通过独立 change 重新规划和实现文件夹映射、归档触发、文件列表、下载和文件日志
+
+### Requirement: 精准返工阶段门禁
+
+系统 MUST 将 `revision_required` 作为当前阶段推进门禁的一部分。
+
+#### Scenario: 返工标记未清除不得推进
+- **WHEN** 当前阶段存在适用资料 `revision_required = true`
+- **THEN** 系统 MUST 拒绝阶段推进
+- **AND** 拒绝结果 MUST 能让前端展示需返工资料
+
+#### Scenario: 清除返工后恢复推进判断
+- **WHEN** 当前阶段所有适用资料均按 `completionMode` 完成且所有 `revision_required` 均已清除
+- **THEN** 系统 MUST 按既有当前阶段、顺序推进、项目状态和推进权限规则继续判断是否允许推进
+
+### Requirement: 精准返工工作台集成
+
+系统 MUST 将有责任人的需返工资料纳入资料责任待办，并保持工作台不包含阶段关口审批待办。
+
+#### Scenario: 工作台显示需返工资料
+- **WHEN** 当前用户负责某个 `revision_required = true` 的适用资料
+- **THEN** 工作台 MUST 返回该资料的 `document_responsibility` 待办
+- **AND** 待办必须包含资料编号、资料名称、项目、阶段、返工原因和目标路由
+
+#### Scenario: 返工重提改变待办类型
+- **WHEN** `approval_required + revision_required` 资料尚未返工重提
+- **THEN** 工作台 MUST 将其作为责任待办
+- **WHEN** 该资料返工重提后进入 `submitted`
+- **THEN** 工作台 MUST 将其作为审核待办返回给有审核权限的用户
+
+#### Scenario: 工作台不发送通知
+- **WHEN** 系统生成需返工工作台数据
+- **THEN** 系统 MUST NOT 因本 change 创建推送通知、站内信、短信或邮件
+
+### Requirement: 1.2 项目立项多节点审批
+
+系统 MUST 将 `1.2 项目立项审批表` 规划为专用多节点审批资料；该能力只适用于 `1.2`，不得扩展为通用审批流引擎。
+
+#### Scenario: 1.2 必须多节点最终通过
+
+- **WHEN** 系统判断 `1.2 项目立项审批表` 是否最终完成
+- **THEN** 系统 MUST 同时要求商务评价审批通过、技术评价审批通过和总经理审批通过
+- **AND** 系统 MUST 要求 `1.1` 不存在由 `1.2` NO 触发且未清除的 `revision_required`
+- **AND** 系统 MUST 要求 `1.2` 自身不存在待审、退回、未通过或其他专用多节点阻塞状态
+
+#### Scenario: 1.2 保持在 64 项模板内
+
+- **WHEN** 系统规划或初始化 20260625 阶段资料模板
+- **THEN** `1.2 项目立项审批表` MUST 仍是 64 项普通阶段资料之一
+- **AND** `1.2` MUST 仍计入既有 `approval_required` 数量口径
+
+#### Scenario: 既有项目初始化 1.2 审批节点
+
+- **WHEN** 后续 migration 或幂等初始化逻辑处理既有项目中适用的 `1.2 项目立项审批表`
+- **THEN** 系统 MUST 创建 `business_review`、`technical_review` 和 `general_review` 三类专用审批节点
+- **AND** 当 `1.2 status = not_submitted` 时，`business_review` 和 `technical_review` MUST 等待资料提交且不得生成审批待办，`general_review` MUST 为未开始或等待前置
+- **AND** 当 `1.2 status = submitted` 时，`business_review` 和 `technical_review` MUST 初始化为待处理或可处理状态，`general_review` MUST 为未开始或等待前置
+- **AND** 当既有 `1.2 status = confirmed` 时，系统 MUST 将其作为资料已提交过的兼容输入，使 `business_review` 和 `technical_review` 初始化为待处理或可处理状态，`general_review` MUST 为未开始或等待前置
+- **AND** 当 `1.2 status = returned` 时，`business_review` 和 `technical_review` MUST 等待普通 `1.2` 资料重新提交且不得生成审批待办
+
+#### Scenario: 旧 confirmed 不得绕过多节点门禁
+
+- **WHEN** 既有项目的 `1.2 项目立项审批表` 在普通资料状态中已经是 `confirmed`
+- **AND** 专用多节点审批尚未满足 `business_review approved`、`technical_review approved` 和 `general_review approved`
+- **THEN** 系统 MUST NOT 将旧 `confirmed` 解释为 `1.2` 多节点最终通过
+- **AND** 系统 MUST NOT 因旧 `confirmed` 放行第 1 阶段推进或项目编号填写门禁
+
+#### Scenario: 商务技术并行审批
+
+- **WHEN** `1.2 项目立项审批表` 基础状态达到 `submitted`
+- **OR** 既有兼容数据中的 `1.2` 基础状态为 `confirmed`
+- **THEN** `business_review` 和 `technical_review` MUST 并行进入可处理状态
+- **AND** 系统 MUST NOT 要求商务评价先于技术评价或技术评价先于商务评价
+
+#### Scenario: 普通 1.2 资料提交激活多节点审批
+
+- **WHEN** 用户通过既有资料提交或上传入口将 `1.2 项目立项审批表` 基础状态提交为 `submitted`
+- **THEN** 系统 MUST 激活 `business_review` 和 `technical_review`
+- **AND** 系统 MUST NOT 要求前端调用单独的 `1.2` 节点提交动作
+- **AND** `general_review` MUST 继续等待商务评价和技术评价均通过
+
+#### Scenario: 审批人规则已确认
+
+- **WHEN** 系统设计 `1.2` 商务评价审批人和技术评价审批人
+- **THEN** 商务评价审批人 MUST 固定为营销中心负责人
+- **AND** 技术评价审批人 MUST 固定为研发中心负责人
+- **AND** 总经理审批人 MUST 为总经理
+
+#### Scenario: 总经理节点前置条件
+
+- **WHEN** `business_review` 和 `technical_review` 均已 `approved`
+- **THEN** 系统 MUST 生成或激活 `general_review`
+- **AND** 在二者均通过前，`general_review` MUST 保持未开始、等待前置或不可处理状态
+
+#### Scenario: 商务退回保留技术通过并失效总经理节点
+
+- **WHEN** `business_review` 被退回
+- **THEN** `business_review` MUST 进入退回阻塞状态，并在关联 `1.1` 返工清除后由后端自动回到待处理或可处理状态
+- **AND** 系统 MUST NOT 将 `1.2` 普通资料基础状态置为 `returned`
+- **AND** 已 `approved` 的 `technical_review` MUST 保留通过结果
+- **AND** 已生成或已通过的 `general_review` MUST 失效、清空或回到 `not_started`
+
+#### Scenario: 技术退回保留商务通过并失效总经理节点
+
+- **WHEN** `technical_review` 被退回
+- **THEN** `technical_review` MUST 进入退回阻塞状态，并在关联 `1.1` 返工清除后由后端自动回到待处理或可处理状态
+- **AND** 系统 MUST NOT 将 `1.2` 普通资料基础状态置为 `returned`
+- **AND** 已 `approved` 的 `business_review` MUST 保留通过结果
+- **AND** 已生成或已通过的 `general_review` MUST 失效、清空或回到 `not_started`
+
+#### Scenario: 总经理退回保留商务技术通过
+
+- **WHEN** `general_review` 被退回
+- **THEN** `general_review` MUST 进入退回阻塞状态，并在关联 `1.1` 返工清除后由后端自动回到待处理或可处理状态
+- **AND** 系统 MUST NOT 将 `1.2` 普通资料基础状态置为 `returned`
+- **AND** 已 `approved` 的 `business_review` 和 `technical_review` MUST 保留通过结果
+
+#### Scenario: 节点退回返工清除后无需普通 1.2 重新提交
+
+- **WHEN** `business_review`、`technical_review` 或 `general_review` 节点退回并触发 `1.1 revision_required`
+- **AND** `1.1 revision_required` 已清除
+- **THEN** 系统 MUST 按专用节点状态自动将被退回节点回到待审批或可处理状态
+- **AND** 系统 MUST 将该节点重新返回给对应节点审批人的待办
+- **AND** 系统 MUST NOT 要求普通 `1.2` 资料重新提交
+
+#### Scenario: 不放宽业务操作权限
+
+- **WHEN** 总经理助理、中心负责人、项目创建人或项目经理因项目查看规则能查看项目和 `1.2` 状态
+- **THEN** 系统 MUST NOT 因查看权限授予其商务评价、技术评价或总经理审批操作权限
+
+#### Scenario: 不处理文件平台和推送
+
+- **WHEN** 系统处理 `1.2` 多节点审批
+- **THEN** 系统 MUST NOT 调用文件管理平台
+- **AND** 系统 MUST NOT 因节点状态变化发送推送通知、站内信、短信或邮件
 

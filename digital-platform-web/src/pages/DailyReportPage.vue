@@ -390,63 +390,6 @@ function isBlankCompletedItem(item) {
 }
 
 // 提交前校验
-// 完成进度必须是“数字+%”格式，例如 95%、85.5%、100%。
-function isValidCompletionProgress(value) {
-  return /^\d+(?:\.\d+)?%$/.test(String(value || '').trim());
-}
-
-// 单独更新某一行某个字段的错误状态，避免输入完成进度时覆盖其他字段校验结果。
-function setItemFieldError(localId, field, hasError) {
-  const rowErrors = { ...(itemErrors.value[localId] || {}) };
-  const nextErrors = { ...itemErrors.value };
-
-  if (hasError) {
-    rowErrors[field] = true;
-  } else {
-    delete rowErrors[field];
-  }
-
-  if (Object.keys(rowErrors).length > 0) {
-    nextErrors[localId] = rowErrors;
-  } else {
-    delete nextErrors[localId];
-  }
-
-  itemErrors.value = nextErrors;
-}
-
-// 输入时只校验非空值，空值继续交给提交必填校验处理。
-function validateCompletionProgressInput(item) {
-  const progress = String(item?.completionProgress || '').trim();
-  setItemFieldError(item.localId, 'completionProgress', Boolean(progress) && !isValidCompletionProgress(progress));
-}
-
-// 暂存和提交前都阻止保存非法完成进度，空值仍按原有提交必填规则处理。
-function validateCompletionProgressRows() {
-  const errors = {};
-
-  for (const item of form.items) {
-    const progress = String(item.completionProgress || '').trim();
-    if (progress && !isValidCompletionProgress(progress)) {
-      errors[item.localId] = {
-        ...(errors[item.localId] || {}),
-        completionProgress: true
-      };
-    }
-  }
-
-  if (Object.keys(errors).length === 0) {
-    return true;
-  }
-
-  itemErrors.value = {
-    ...itemErrors.value,
-    ...errors
-  };
-  errorMessage.value = '完成进度只能填写数字+%，例如 95%、85.5%、100%。';
-  return false;
-}
-
 function prepareSubmittedItems() {
   const nonBlankItems = form.items.filter((item) => !isBlankCompletedItem(item));
   const errors = {};
@@ -798,11 +741,6 @@ async function saveReport(status) {
   itemErrors.value = {};
 
   try {
-    if (!validateCompletionProgressRows()) {
-      saving.value = false;
-      return;
-    }
-
     if (status === ReportStatus.SUBMITTED && !prepareSubmittedItems()) {
       saving.value = false;
       return;

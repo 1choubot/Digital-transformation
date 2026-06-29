@@ -12,9 +12,21 @@ import {
   isValidBusinessDepartment
 } from '../../domain/organization.js';
 import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
+import { isInitiationReviewDocument } from '../../domain/initiationReview.js';
+import {
+  getDocumentCompletionMode,
+  isReviewCompletionMode,
+  isRevisionRequired,
+  isRevisionResubmitted,
+  isStageDocumentComplete
+} from './shared.js';
 
 function getProjectManagerUserId(project) {
   return project?.project_manager_user_id ?? project?.projectManagerUserId ?? null;
+}
+
+function getProjectCreatorUserId(project) {
+  return project?.created_by_user_id ?? project?.createdByUserId ?? null;
 }
 
 function getResponsibleUserId(document) {
@@ -43,6 +55,27 @@ function isCurrentUserProjectManager(user, project) {
   return (
     Boolean(getProjectManagerUserId(project)) &&
     isProjectManagerForProject(user, project)
+  );
+}
+
+function isCurrentUserProjectCreator(user, project) {
+  const creatorUserId = getProjectCreatorUserId(project);
+  return Boolean(creatorUserId) && String(creatorUserId) === String(user?.id);
+}
+
+function isGlobalBusinessViewer(user) {
+  return isGeneralManagerUser(user) || isGeneralManagerAssistantUser(user) || isCenterManagerUser(user);
+}
+
+export function canViewCompleteStageDocumentSet(user, project) {
+  if (isSystemAdminUser(user)) {
+    return false;
+  }
+
+  return (
+    isGlobalBusinessViewer(user) ||
+    isCurrentUserProjectCreator(user, project) ||
+    isCurrentUserProjectManager(user, project)
   );
 }
 
@@ -76,7 +109,16 @@ export function isStageDocumentReviewAuthority(user, document) {
 }
 
 export function canReviewStageDocument(user, document) {
-  return getDocumentStatus(document) === DOCUMENT_STATUS.SUBMITTED && isStageDocumentReviewAuthority(user, document);
+  if (isInitiationReviewDocument(document)) {
+    return false;
+  }
+
+  return (
+    getDocumentStatus(document) === DOCUMENT_STATUS.SUBMITTED &&
+    isReviewCompletionMode(getDocumentCompletionMode(document)) &&
+    (!isRevisionRequired(document) || isRevisionResubmitted(document)) &&
+    isStageDocumentReviewAuthority(user, document)
+  );
 }
 
 export function canViewStageDocumentItem(user, { project, document }) {
@@ -84,11 +126,7 @@ export function canViewStageDocumentItem(user, { project, document }) {
     return false;
   }
 
-  if (isGeneralManagerUser(user) || isGeneralManagerAssistantUser(user)) {
-    return true;
-  }
-
-  if (isCurrentUserProjectManager(user, project)) {
+  if (canViewCompleteStageDocumentSet(user, project)) {
     return true;
   }
 
@@ -100,6 +138,42 @@ export function canViewStageDocumentItem(user, { project, document }) {
 }
 
 export function canViewStageDocumentAttachments(user, { project, document }) {
+  if (isSystemAdminUser(user)) {
+    return false;
+  }
+
+  if (canViewCompleteStageDocumentSet(user, project)) {
+    return true;
+  }
+
+  if (isCurrentUserResponsible(user, document)) {
+    return true;
+  }
+
+  return isDocumentRelatedToCenterManager(user, document);
+}
+
+export function canViewCompleteProjectAudit(user, project) {
+  if (isSystemAdminUser(user)) {
+    return false;
+  }
+
+  return isGeneralManagerUser(user) || isCurrentUserProjectManager(user, project);
+}
+
+export function canViewProjectOperationLogs(user, project) {
+  return canViewCompleteStageDocumentSet(user, project);
+}
+
+export function canDownloadStageDocumentAttachment(user, { project, document }) {
+  return canViewStageDocumentAttachments(user, { project, document });
+}
+
+export function canUploadStageDocumentAttachment(user, { document }) {
+  return isDocumentApplicable(document) && isCurrentUserResponsible(user, document);
+}
+
+function canAccessStageDocumentAttachmentForDelete(user, { project, document }) {
   if (isSystemAdminUser(user) || isGeneralManagerAssistantUser(user)) {
     return false;
   }
@@ -115,28 +189,12 @@ export function canViewStageDocumentAttachments(user, { project, document }) {
   return isDocumentRelatedToCenterManager(user, document);
 }
 
-export function canViewCompleteProjectAudit(user, project) {
-  if (isSystemAdminUser(user) || isGeneralManagerAssistantUser(user)) {
-    return false;
-  }
-
-  return isGeneralManagerUser(user) || isCurrentUserProjectManager(user, project);
-}
-
-export function canDownloadStageDocumentAttachment(user, { project, document }) {
-  return canViewStageDocumentAttachments(user, { project, document });
-}
-
-export function canUploadStageDocumentAttachment(user, { document }) {
-  return isDocumentApplicable(document) && isCurrentUserResponsible(user, document);
-}
-
 export function canDeleteStageDocumentAttachment(user, { project = null, document, attachment = null }) {
   if (isSystemAdminUser(user) || isGeneralManagerAssistantUser(user)) {
     return false;
   }
 
-  if (getDocumentStatus(document) === DOCUMENT_STATUS.CONFIRMED) {
+  if (isStageDocumentComplete(document)) {
     return false;
   }
 
@@ -145,7 +203,7 @@ export function canDeleteStageDocumentAttachment(user, { project = null, documen
   }
 
   return (
-    canViewStageDocumentAttachments(user, { project, document }) &&
+    canAccessStageDocumentAttachmentForDelete(user, { project, document }) &&
     Boolean(attachment.uploaded_by_user_id ?? attachment.uploadedByUserId) &&
     String(attachment.uploaded_by_user_id ?? attachment.uploadedByUserId) === String(user?.id)
   );

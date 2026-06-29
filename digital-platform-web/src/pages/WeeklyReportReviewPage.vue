@@ -8,7 +8,8 @@
         <span class="page-user">{{ targetUserName }} / {{ targetDepartment }}</span>
       </div>
       <div class="page-header__right">
-        <button type="button" class="ghost-button" @click="navigate('/weekly-reports')">
+        <!-- 动态返回路径 -->
+        <button type="button" class="ghost-button" @click="navigate(returnPath)">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="19" y1="12" x2="5" y2="12" />
             <polyline points="12 19 5 12 12 5" />
@@ -375,10 +376,21 @@ const props = defineProps({
   navigate: {
     type: Function,
     required: true
+  },
+  // 新增：接收 route 对象以读取查询参数
+  route: {
+    type: Object,
+    required: true
   }
 });
 
 const emit = defineEmits(['auth-expired']);
+
+// 计算返回路径
+const returnPath = computed(() => {
+  const from = props.route.query?.from;
+  return from === 'overview' ? '/weekly-overview' : '/weekly-reports';
+});
 
 const loading = ref(false);
 const comparisonLoading = ref(false);

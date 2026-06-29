@@ -66,178 +66,98 @@
     </section>
 
     <!-- ============================================= -->
-    <!-- 权限警告（仅针对个人周报和考评总览）          -->
+    <!-- 权限警告（仅针对个人周报）                   -->
     <!-- ============================================= -->
 
-    <section v-if="!canUseWeeklyReport && !canReadOverview" class="state-panel state-panel--error panel">
+    <section v-if="!canUseWeeklyReport" class="state-panel state-panel--error panel">
       <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10" />
         <line x1="12" y1="8" x2="12" y2="12" />
         <line x1="12" y1="16" x2="12.01" y2="16" />
       </svg>
       <h3>无周报访问权限</h3>
-      <p>当前账号不能访问个人周报或考评总览，但可查看单双休设置。</p>
+      <p>当前账号不能访问个人周报，但可查看单双休设置。</p>
     </section>
 
     <!-- ============================================= -->
-    <!-- 有权限时显示本人周报和考评总览               -->
+    <!-- 本人周报列表                                  -->
     <!-- ============================================= -->
 
-    <template v-else>
-      <!-- 本人周报列表 -->
-      <section v-if="canUseWeeklyReport" class="panel weekly-list-panel">
-        <div class="panel-toolbar">
-          <div class="toolbar-info">
-            <strong class="toolbar-title">本人周报</strong>
-            <span class="toolbar-subtitle">{{ loading ? '正在加载' : `共 ${reports.length} 条` }}</span>
-          </div>
-          <button type="button" class="ghost-button" :disabled="loading" @click="loadReports">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9" />
-            </svg>
-            刷新
-          </button>
+    <section v-else class="panel weekly-list-panel">
+      <div class="panel-toolbar">
+        <div class="toolbar-info">
+          <strong class="toolbar-title">本人周报</strong>
+          <span class="toolbar-subtitle">{{ loading ? '正在加载' : `共 ${reports.length} 条` }}</span>
         </div>
+        <button type="button" class="ghost-button" :disabled="loading" @click="loadReports">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9" />
+          </svg>
+          刷新
+        </button>
+      </div>
 
-        <section v-if="errorMessage" class="state-panel state-panel--error panel state-panel--compact">
-          <p>{{ errorMessage }}</p>
-        </section>
-
-        <div v-if="loading" class="state-panel panel">
-          <div class="loading-spinner"></div>
-          <p>正在加载周报列表...</p>
-        </div>
-
-        <div v-else-if="reports.length === 0" class="state-panel panel state-panel--empty">
-          <p>暂无周报记录。</p>
-        </div>
-
-        <div v-else class="table-container">
-          <div class="weekly-report-table" :class="{ 'weekly-report-table--employee': isEmployeeUser }">
-            <div class="weekly-report-table__head">
-              <span>周期</span>
-              <span>状态</span>
-              <span v-if="!isEmployeeUser">最终评分</span>
-              <span v-if="!isEmployeeUser">参考评分</span>
-              <span>更新时间</span>
-              <span class="text-right">操作</span>
-            </div>
-            <div v-for="report in reports" :key="report.id" class="weekly-report-table__row">
-              <div>
-                <strong>{{ report.weekStart }} 至 {{ report.weekEnd }}</strong>
-              </div>
-              <span class="status-badge" :class="statusClass(report.status)">{{ statusLabel(report.status) }}</span>
-              <span v-if="!isEmployeeUser">{{ finalScoreText(report) }}</span>
-              <span v-if="!isEmployeeUser">{{ sourceLabel(report.aiEvaluationSource) }}</span>
-              <time>{{ formatDateTime(report.updatedAt) }}</time>
-              <div class="weekly-report-table__actions">
-                <button type="button" class="row-btn action-btn" @click="navigate(`/weekly-report/${report.id}`)">详情</button>
-                <button type="button" class="row-btn action-btn" @click="downloadReportExcel(report)">导出</button>
-                <button
-                  v-if="report.status === ReportStatus.DRAFT"
-                  type="button"
-                  class="row-btn action-btn action-btn--danger"
-                  @click="removeDraft(report)"
-                >
-                  删除
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      <section v-if="errorMessage" class="state-panel state-panel--error panel state-panel--compact">
+        <p>{{ errorMessage }}</p>
       </section>
 
-      <!-- 考评总览 -->
-      <section v-if="canReadOverview" class="panel weekly-overview-panel">
-        <div class="panel-toolbar">
-          <div class="toolbar-info">
-            <strong class="toolbar-title">考评总览</strong>
-            <span class="toolbar-subtitle">{{ overviewLoading ? '正在加载' : `共 ${overviewRows.length} 条` }}</span>
+      <div v-if="loading" class="state-panel panel">
+        <div class="loading-spinner"></div>
+        <p>正在加载周报列表...</p>
+      </div>
+
+      <div v-else-if="reports.length === 0" class="state-panel panel state-panel--empty">
+        <p>暂无周报记录。</p>
+      </div>
+
+      <div v-else class="table-container">
+        <div class="weekly-report-table" :class="{ 'weekly-report-table--employee': isEmployeeUser }">
+          <div class="weekly-report-table__head">
+            <span>周期</span>
+            <span>状态</span>
+            <span v-if="!isEmployeeUser">最终评分</span>
+            <span v-if="!isEmployeeUser">参考评分</span>
+            <span>更新时间</span>
+            <span class="text-right">操作</span>
           </div>
-          <form class="weekly-overview-filters" @submit.prevent="loadOverview">
-            <div class="filter-group">
-              <span class="filter-label">周开始</span>
-              <div class="input-wrapper">
-                <input v-model="overviewFilters.weekStart" type="date" />
-              </div>
+          <div v-for="report in reports" :key="report.id" class="weekly-report-table__row">
+            <div>
+              <strong>{{ report.weekStart }} 至 {{ report.weekEnd }}</strong>
             </div>
-            <div v-if="canReadAllCenters" class="filter-group">
-              <span class="filter-label">中心</span>
-              <div class="input-wrapper">
-                <select v-model="overviewFilters.department">
-                  <option value="">全部中心</option>
-                  <option value="operations_center">运营中心</option>
-                  <option value="marketing_center">营销中心</option>
-                  <option value="manufacturing_center">制造中心</option>
-                  <option value="rd_center">研发中心</option>
-                </select>
-              </div>
-            </div>
-            <button type="submit" class="primary-button" :disabled="overviewLoading">
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-              查询
-            </button>
-          </form>
-        </div>
-
-        <section v-if="overviewError" class="state-panel state-panel--error panel state-panel--compact">
-          <p>{{ overviewError }}</p>
-        </section>
-
-        <div v-if="overviewLoading" class="state-panel panel">
-          <div class="loading-spinner"></div>
-          <p>正在加载考评总览...</p>
-        </div>
-
-        <div v-else-if="overviewRows.length === 0" class="state-panel panel state-panel--empty">
-          <p>暂无考评记录。</p>
-        </div>
-
-        <div v-else class="table-container">
-          <div class="weekly-overview-table">
-            <div class="weekly-overview-table__head">
-              <span>员工</span>
-              <span>中心</span>
-              <span>状态</span>
-              <span>最终评分</span>
-              <span>参考评分</span>
-              <span>评分人</span>
-              <span class="text-right">操作</span>
-            </div>
-            <div v-for="row in overviewRows" :key="row.reportId" class="weekly-overview-table__row">
-              <strong>{{ row.userName }}</strong>
-              <span>{{ formatBusinessDepartment(row.department) }}</span>
-              <span class="status-badge" :class="statusClass(row.status)">{{ statusLabel(row.status) }}</span>
-              <span>{{ overviewFinalScoreText(row) }}</span>
-              <span>{{ overviewReferenceScoreText(row) }}</span>
-              <span>{{ row.finalReviewedByName || '-' }}</span>
-              <button type="button" class="row-btn action-btn" @click="navigate(`/weekly-report-review/${row.reportId}`)">
-                详情
+            <span class="status-badge" :class="statusClass(report.status)">{{ statusLabel(report.status) }}</span>
+            <span v-if="!isEmployeeUser">{{ finalScoreText(report) }}</span>
+            <span v-if="!isEmployeeUser">{{ sourceLabel(report.aiEvaluationSource) }}</span>
+            <time>{{ formatDateTime(report.updatedAt) }}</time>
+            <div class="weekly-report-table__actions">
+              <button type="button" class="row-btn action-btn" @click="navigate(`/weekly-report/${report.id}`)">详情</button>
+              <button type="button" class="row-btn action-btn" @click="downloadReportExcel(report)">导出</button>
+              <button
+                v-if="report.status === ReportStatus.DRAFT"
+                type="button"
+                class="row-btn action-btn action-btn--danger"
+                @click="removeDraft(report)"
+              >
+                删除
               </button>
             </div>
           </div>
         </div>
-      </section>
-    </template>
+      </div>
+    </section>
   </section>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { OrganizationRole, ReportStatus, WeeklyRestMode } from '../constants/reports.js';
 import {
   deleteWeeklyReport,
   exportWeeklyReport,
   getWeeklyRestMode,
-  listWeeklyComparisonOverview,
   listWeeklyReports,
   setWeeklyRestMode,
   toReadableApiError
 } from '../api/weeklyReports.js';
-import { formatBusinessDepartment } from '../utils/format.js';
 
 const props = defineProps({
   authToken: {
@@ -257,40 +177,22 @@ const props = defineProps({
 const emit = defineEmits(['auth-expired']);
 
 const loading = ref(false);
-const overviewLoading = ref(false);
 const savingRestMode = ref(false);
 const reports = ref([]);
-const overviewRows = ref([]);
 const errorMessage = ref('');
-const overviewError = ref('');
 const restModeError = ref('');
-const overviewFilters = reactive({
-  weekStart: previousWeekStart(),
-  department: ''
-});
 const resolvedRestMode = ref('');
 const restModeWeekStart = ref('');
 const restModeAnchor = ref(null);
 const selectedAnchorMode = ref(WeeklyRestMode.DOUBLE_REST);
 
-// Weekly report personal pages are writable by employees and center managers.
+// 本人周报权限
 const canUseWeeklyReport = computed(() =>
   [OrganizationRole.EMPLOYEE, OrganizationRole.CENTER_MANAGER].includes(props.currentUser.organizationRole)
 );
 const isEmployeeUser = computed(() => props.currentUser.organizationRole === OrganizationRole.EMPLOYEE);
-const canReadOverview = computed(() =>
-  [
-    OrganizationRole.CENTER_MANAGER,
-    OrganizationRole.GENERAL_MANAGER,
-    OrganizationRole.GENERAL_MANAGER_ASSISTANT
-  ].includes(props.currentUser.organizationRole)
-);
-const canReadAllCenters = computed(() =>
-  [
-    OrganizationRole.GENERAL_MANAGER,
-    OrganizationRole.GENERAL_MANAGER_ASSISTANT
-  ].includes(props.currentUser.organizationRole)
-);
+
+// 单双休设置权限
 const canManageRestMode = computed(() =>
   props.currentUser.organizationRole === OrganizationRole.GENERAL_MANAGER ||
   (props.currentUser.organizationRole === OrganizationRole.SYSTEM_ADMIN && props.currentUser.isPlatformAdmin)
@@ -301,21 +203,7 @@ const restModeWeekLabel = computed(() => {
   return `${restModeWeekStart.value} 起`;
 });
 
-// Return previous natural week Monday for default overview filtering.
-function previousWeekStart() {
-  const now = new Date();
-  const day = now.getDay();
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  const currentMonday = new Date(now);
-  currentMonday.setDate(now.getDate() + mondayOffset);
-  currentMonday.setDate(currentMonday.getDate() - 7);
-  const year = currentMonday.getFullYear();
-  const month = String(currentMonday.getMonth() + 1).padStart(2, '0');
-  const date = String(currentMonday.getDate()).padStart(2, '0');
-  return `${year}-${month}-${date}`;
-}
-
-// Current week Monday for rest-mode display.
+// 工具函数
 function currentWeekStart() {
   const now = new Date();
   const day = now.getDay();
@@ -328,7 +216,6 @@ function currentWeekStart() {
   return `${year}-${month}-${date}`;
 }
 
-// Convert backend timestamps into compact local display text.
 function formatDateTime(value) {
   if (!value) {
     return '-';
@@ -336,7 +223,6 @@ function formatDateTime(value) {
   return String(value).replace('T', ' ').slice(0, 16);
 }
 
-// Display report status labels consistently with the daily report UI.
 function statusLabel(status) {
   return status === ReportStatus.SUBMITTED ? '已提交' : '草稿';
 }
@@ -345,14 +231,12 @@ function statusClass(status) {
   return status === ReportStatus.SUBMITTED ? 'status-badge--done' : 'status-badge--draft';
 }
 
-// Convert score source codes into explicit labels, including fallback.
 function sourceLabel(source) {
   if (source === 'ai') return 'AI';
   if (source === 'fallback_rule') return '规则降级';
   return '未评估';
 }
 
-// Render score and grade from cached list payloads.
 function finalScoreText(report) {
   if (report.finalScore === null || report.finalScore === undefined) {
     return '待最终评分';
@@ -360,21 +244,6 @@ function finalScoreText(report) {
   return `${report.finalScore}${report.finalGrade ? ` / ${report.finalGrade}` : ''}`;
 }
 
-function overviewFinalScoreText(row) {
-  if (row.finalScore === null || row.finalScore === undefined) {
-    return '待最终评分';
-  }
-  return `${row.finalScore}${row.finalGrade ? ` / ${row.finalGrade}` : ''}`;
-}
-
-function overviewReferenceScoreText(row) {
-  if (row.totalScore === null || row.totalScore === undefined) {
-    return sourceLabel(row.evaluationSource);
-  }
-  return `${row.totalScore}${row.grade ? ` / ${row.grade}` : ''}`;
-}
-
-// Trigger a browser download for one weekly workbook.
 function saveBlob(download, fallbackName) {
   const url = URL.createObjectURL(download.blob);
   const link = globalThis.document.createElement('a');
@@ -386,7 +255,7 @@ function saveBlob(download, fallbackName) {
   URL.revokeObjectURL(url);
 }
 
-// ── Rest-mode anchor management ──
+// ── Rest-mode ──
 
 async function loadRestMode() {
   try {
@@ -425,7 +294,7 @@ async function handleSetRestMode() {
   }
 }
 
-// ── Report list management ──
+// ── Report list ──
 
 async function loadReports() {
   if (!canUseWeeklyReport.value) {
@@ -446,32 +315,6 @@ async function loadReports() {
     errorMessage.value = toReadableApiError(error);
   } finally {
     loading.value = false;
-  }
-}
-
-async function loadOverview() {
-  if (!canReadOverview.value) {
-    return;
-  }
-
-  overviewLoading.value = true;
-  overviewError.value = '';
-
-  try {
-    const filters = {
-      weekStart: overviewFilters.weekStart,
-      department: canReadAllCenters.value ? overviewFilters.department : props.currentUser.department
-    };
-    const result = await listWeeklyComparisonOverview(filters, props.authToken);
-    overviewRows.value = result.reports || [];
-  } catch (error) {
-    if (error.code === 'UNAUTHENTICATED') {
-      emit('auth-expired');
-      return;
-    }
-    overviewError.value = toReadableApiError(error);
-  } finally {
-    overviewLoading.value = false;
   }
 }
 
@@ -499,7 +342,6 @@ async function downloadReportExcel(report) {
 
 onMounted(() => {
   loadReports();
-  loadOverview();
   loadRestMode();
 });
 </script>
@@ -856,40 +698,6 @@ onMounted(() => {
   padding: 0.15rem 0.5rem;
 }
 
-/* ===== 考评总览表格 ===== */
-.weekly-overview-table {
-  min-width: 700px;
-  width: 100%;
-}
-.weekly-overview-table__head {
-  display: grid;
-  padding: 0.6rem 0.75rem;
-  background: #fafafa;
-  border-bottom: 2px solid #ebeef5;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #909399;
-  gap: 0.75rem;
-  grid-template-columns: 1fr 1fr 0.7fr 0.9fr 0.9fr 1fr 0.7fr;
-}
-.weekly-overview-table__row {
-  display: grid;
-  padding: 0.6rem 0.75rem;
-  align-items: center;
-  border-bottom: 1px solid #f0f0f2;
-  gap: 0.75rem;
-  transition: background 0.2s ease;
-  grid-template-columns: 1fr 1fr 0.7fr 0.9fr 0.9fr 1fr 0.7fr;
-}
-.weekly-overview-table__row:hover {
-  background: #fdfdfe;
-}
-.weekly-overview-table__row .row-btn {
-  font-size: 0.7rem;
-  padding: 0.15rem 0.5rem;
-  justify-self: flex-end;
-}
-
 /* ===== 行内操作按钮 ===== */
 .row-btn {
   padding: 0.2rem 0.6rem;
@@ -918,24 +726,6 @@ onMounted(() => {
   background: #fef0f0;
 }
 
-/* ===== 考评总览筛选栏 ===== */
-.weekly-overview-filters {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-.weekly-overview-filters .filter-group {
-  min-width: 140px;
-}
-.weekly-overview-filters .filter-group .input-wrapper input,
-.weekly-overview-filters .filter-group .input-wrapper select {
-  height: 36px;
-}
-.weekly-overview-filters .primary-button {
-  height: 36px;
-}
-
 /* ===== 响应式 ===== */
 @media (max-width: 900px) {
   .page-stack {
@@ -954,14 +744,6 @@ onMounted(() => {
   }
   .rest-mode-actions .filter-group {
     flex: 1;
-    min-width: unset;
-  }
-  .weekly-overview-filters {
-    width: 100%;
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .weekly-overview-filters .filter-group {
     min-width: unset;
   }
   .weekly-report-table__head,
@@ -984,23 +766,6 @@ onMounted(() => {
   }
   .weekly-report-table__row .weekly-report-table__actions {
     justify-content: flex-start;
-  }
-  .weekly-overview-table__head,
-  .weekly-overview-table__row {
-    grid-template-columns: 1fr !important;
-    gap: 0.4rem;
-  }
-  .weekly-overview-table__head {
-    display: none;
-  }
-  .weekly-overview-table__row {
-    padding: 0.75rem;
-    border: 1px solid #ebeef5;
-    border-radius: 4px;
-    margin-bottom: 0.5rem;
-  }
-  .weekly-overview-table__row .row-btn {
-    justify-self: flex-start;
   }
 }
 </style>

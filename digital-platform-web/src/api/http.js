@@ -419,7 +419,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'CENTER_SCOPE_FORBIDDEN') {
-    return '当前账号不能查看其他中心的考评总览。';
+    return '当前账号不能查看其他中心的中心周报汇总。';
   }
 
   if (error.code === 'WEEKLY_REST_MODE_MANAGER_REQUIRED') {

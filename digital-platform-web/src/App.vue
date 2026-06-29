@@ -74,7 +74,7 @@
         
         <!-- 日报周报：非管理员且满足任一权限时显示 -->
         <div 
-          v-if="!canAccessUserManagement && (isDailyReportUser || isWeeklyReportUser || canAccessWeeklyReports || canAccessCenterDailyReport)" 
+          v-if="!canAccessUserManagement && (isDailyReportUser || isWeeklyReportUser || canAccessWeeklyReports || canAccessCenterDailyReport || canAccessWeeklyOverview)" 
           class="nav-group"
         >
           <div class="nav-group-header" :class="{ 'is-active': isGroupActive('reports') }" @click="toggleMenu('reports')">
@@ -112,6 +112,15 @@
               <button
                 type="button"
                 class="nav-child-item"
+                :class="{ active: route.name === 'center-daily-report' }"
+                v-if="canAccessCenterDailyReport"
+                @click="handleNavigate('/center-daily-report')"
+              >
+                <span>中心日报汇总</span>
+              </button>
+              <button
+                type="button"
+                class="nav-child-item"
                 :class="{ active: route.name === 'weekly-report' }"
                 v-if="isWeeklyReportUser"
                 @click="handleNavigate('/weekly-report')"
@@ -121,20 +130,21 @@
               <button
                 type="button"
                 class="nav-child-item"
-                :class="{ active: ['weekly-reports', 'weekly-report-review'].includes(route.name) }"
+                :class="{ active: ['weekly-reports', 'weekly-report-review'].includes(route.name) && route.query?.from !== 'overview' }"
                 v-if="canAccessWeeklyReports"
                 @click="handleNavigate('/weekly-reports')"
               >
                 <span>我的周报列表</span>
               </button>
+              <!-- 周报汇总及考评（独立页面） -->
               <button
                 type="button"
                 class="nav-child-item"
-                :class="{ active: route.name === 'center-daily-report' }"
-                v-if="canAccessCenterDailyReport"
-                @click="handleNavigate('/center-daily-report')"
+                :class="{ active: route.name === 'weekly-report-overview' || (route.name === 'weekly-report-review' && route.query?.from === 'overview') }"
+                v-if="canAccessWeeklyOverview"
+                @click="handleNavigate('/weekly-overview')"
               >
-                <span>中心日报汇总</span>
+                <span>周报汇总及考评</span>
               </button>
             </div>
           </div>
@@ -326,6 +336,14 @@
           :current-user="currentUser"
           :report-id="route.params?.reportId || ''"
           :navigate="navigate"
+          :route="route"
+          @auth-expired="handleAuthExpired"
+        />
+        <WeeklyReportReviewListPage
+          v-else-if="route.name === 'weekly-report-overview'"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          :navigate="navigate"
           @auth-expired="handleAuthExpired"
         />
         <CenterDailyReportPage
@@ -391,6 +409,7 @@ import CenterDailyReportPage from './pages/CenterDailyReportPage.vue';
 import WeeklyReportListPage from './pages/WeeklyReportListPage.vue';
 import WeeklyReportPage from './pages/WeeklyReportPage.vue';
 import WeeklyReportReviewPage from './pages/WeeklyReportReviewPage.vue';
+import WeeklyReportReviewListPage from './pages/WeeklyReportReviewListPage.vue';
 import LoginPage from './pages/LoginPage.vue';
 import MyStageDocumentTasksPage from './pages/MyStageDocumentTasksPage.vue';
 import ProjectCreatePage from './pages/ProjectCreatePage.vue';
@@ -404,28 +423,23 @@ import {
   formatOrganizationRole
 } from './utils/format.js';
 
-// ===== 核心修改：自定义导航，新标签页打开项目详情 =====
+// ===== 自定义导航 =====
 const { route, navigate: baseNavigate } = useHashRouter();
 
 const navigate = (path, options = {}) => {
-  // 检测是否为项目详情页路径（如 /projects/123）
   const isProjectDetail = /^\/projects\/\d+$/.test(path);
-  // 如果当前已经在项目详情页，且点击的是同一个项目，则不重复打开新标签
   const currentProjectId = route.value.params?.projectId;
   const targetProjectId = path.split('/').pop();
   const isSameDetail = route.value.name === 'project-detail' && currentProjectId === targetProjectId;
 
-  // 若是项目详情且不是同一个，且没有显式禁用新标签，则在新标签页打开
   if (isProjectDetail && !isSameDetail && options.newTab !== false) {
     const base = window.location.origin + window.location.pathname;
     const hash = path.startsWith('#') ? path : '#' + path;
     window.open(base + hash, '_blank');
   } else {
-    // 其他情况使用原始导航（同标签页跳转）
     baseNavigate(path);
   }
 };
-// ===== 修改结束 =====
 
 const authLoading = ref(true);
 const loggingOut = ref(false);
@@ -450,7 +464,7 @@ function toggleMenu(menuName) {
 function isGroupActive(groupName) {
   const map = {
     projects: ['projects', 'project-create', 'project-detail'],
-    reports: ['daily-report', 'daily-reports', 'weekly-report', 'weekly-reports', 'weekly-report-review', 'center-daily-report'],
+    reports: ['daily-report', 'daily-reports', 'weekly-report', 'weekly-reports', 'weekly-report-review', 'weekly-report-overview', 'center-daily-report'],
     dashboards: ['project-overview-dashboard', 'my-stage-document-tasks'],
     admin: ['users']
   };
@@ -478,7 +492,8 @@ const currentRouteLabel = computed(() => {
     case 'daily-reports': return '我的日报列表';
     case 'weekly-report': return '周报填写';
     case 'weekly-reports': return '我的周报列表';
-    case 'weekly-report-review': return '周报审阅';
+    case 'weekly-report-review': return '周报详情';
+    case 'weekly-report-overview': return '周报汇总及考评';
     case 'center-daily-report': return '中心日报汇总';
     default: return '管理驾驶舱';
   }
@@ -496,6 +511,7 @@ function hideToast() {
   toastVisible.value = false;
 }
 
+// 权限计算
 const canAccessUserManagement = computed(
   () => currentUser.value?.isPlatformAdmin && currentUser.value?.organizationRole === 'system_admin'
 );
@@ -508,6 +524,12 @@ const canAccessWeeklyReports = computed(() =>
 );
 const canAccessCenterDailyReport = computed(() =>
   ['center_manager', 'general_manager', 'general_manager_assistant', 'system_admin'].includes(
+    currentUser.value?.organizationRole
+  )
+);
+// 周报汇总及考评权限（中心经理及以上）
+const canAccessWeeklyOverview = computed(() =>
+  ['center_manager', 'general_manager', 'general_manager_assistant'].includes(
     currentUser.value?.organizationRole
   )
 );
@@ -539,17 +561,14 @@ async function restoreAuth() {
   } finally { authLoading.value = false; }
 }
 
-// ===== 修改登录成功后的默认跳转 =====
 function handleLoggedIn(result) {
   setAuth(result.token, result.user);
   authMessage.value = '';
   showToast(`${result.user.name}，欢迎回来！`, 'success');
-  // 判断是否为系统管理员，决定默认跳转页面
   const isAdmin = result.user.isPlatformAdmin && result.user.organizationRole === 'system_admin';
   const targetPath = isAdmin ? '/users' : '/projects';
   navigate(targetPath);
 }
-// ===== 修改结束 =====
 
 async function handleLogout() {
   loggingOut.value = true;

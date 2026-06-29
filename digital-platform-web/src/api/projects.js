@@ -54,14 +54,6 @@ export async function getProjectDetail(projectId, authToken = '') {
   return request(`/api/projects/${projectId}`, { authToken });
 }
 
-export async function updateProjectCode(projectId, projectCode, authToken) {
-  return request(`/api/projects/${projectId}/project-code`, {
-    method: 'PUT',
-    authToken,
-    body: JSON.stringify({ projectCode })
-  });
-}
-
 export async function getProjectStageDocumentChecklist(projectId, authToken = '') {
   return request(`/api/projects/${projectId}/stage-document-checklist`, { authToken });
 }
@@ -130,43 +122,11 @@ export async function confirmStageDocument(projectId, documentId, authToken) {
   });
 }
 
-export async function returnStageDocument(projectId, documentId, returnReason, authToken, options = {}) {
+export async function returnStageDocument(projectId, documentId, returnReason, authToken) {
   return request(`/api/projects/${projectId}/stage-documents/${documentId}/return`, {
     method: 'POST',
     authToken,
-    body: JSON.stringify({
-      returnReason,
-      ...(Array.isArray(options.revisionTargetDocumentIds)
-        ? { revisionTargetDocumentIds: options.revisionTargetDocumentIds }
-        : {}),
-      ...(Array.isArray(options.designChangeTargetDocumentIds)
-        ? { designChangeTargetDocumentIds: options.designChangeTargetDocumentIds }
-        : {})
-    })
-  });
-}
-
-export async function approveInitiationReviewNode(projectId, documentId, nodeKey, comment, authToken) {
-  return request(`/api/projects/${projectId}/stage-documents/${documentId}/initiation-review/${nodeKey}/approve`, {
-    method: 'POST',
-    authToken,
-    body: JSON.stringify({ comment })
-  });
-}
-
-export async function returnInitiationReviewNode(projectId, documentId, nodeKey, returnReason, authToken) {
-  return request(`/api/projects/${projectId}/stage-documents/${documentId}/initiation-review/${nodeKey}/return`, {
-    method: 'POST',
-    authToken,
     body: JSON.stringify({ returnReason })
-  });
-}
-
-export async function completeStageDocumentRevision(projectId, documentId, authToken) {
-  return request(`/api/projects/${projectId}/stage-documents/${documentId}/revision/complete`, {
-    method: 'POST',
-    authToken,
-    body: JSON.stringify({})
   });
 }
 

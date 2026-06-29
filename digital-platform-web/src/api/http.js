@@ -155,7 +155,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'VALIDATION_ERROR') {
-    return '请补充项目名称、客户和项目经理。';
+    return '请补充项目编号、项目名称、客户和项目经理。';
   }
 
   if (error.code === 'INVALID_PROJECT_MODE') {
@@ -199,7 +199,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'PROJECT_APPROVAL_NOT_APPROVED') {
-    return '当前阶段暂不能推进。若这是旧流程兼容错误，请刷新后按当前资料完成规则重试。';
+    return '当前阶段审批未通过，暂不能推进阶段。';
   }
 
   if (error.code === 'PROJECT_APPROVAL_FORBIDDEN') {
@@ -207,7 +207,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE') {
-    return '当前阶段存在未按完成规则完成的适用资料，暂不能推进阶段。';
+    return '当前阶段存在未完成的适用必填资料，不能提交或通过审批。';
   }
 
   if (error.code === 'PROJECT_CODE_EXISTS') {
@@ -391,7 +391,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'STAGE_ADVANCE_INCOMPLETE_REQUIRED_DOCUMENTS') {
-    return '当前阶段仍有缺失的适用资料，不能推进阶段。';
+    return '当前阶段仍有缺失的适用必填资料，不能推进阶段。';
   }
 
   if (error.code === 'STAGE_ADVANCE_CHECKLIST_NOT_INITIALIZED') {

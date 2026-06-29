@@ -1071,10 +1071,12 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **WHEN** 当前用户是总经理
 - **THEN** 页面可以展示完整业务日志和阶段关口审批历史
 
-#### Scenario: 中心负责人视图按中心收敛
+#### Scenario: 中心负责人全量查看但操作按权限收敛
 
 - **WHEN** 当前用户是中心负责人
-- **THEN** 页面应展示项目基础信息和本中心相关资料，跨中心资料附件入口不得展示
+- **THEN** 页面可以展示全部项目、完整阶段资料、附件下载入口和业务日志
+- **AND** 资料提交、审核、退回、精准返工、责任人分配、适用性、附件上传、附件删除、阶段推进和项目编号填写等操作入口仍必须以后端权限字段或本中心业务授权为准
+- **AND** 页面 MUST NOT 仅因中心负责人可全量查看项目和资料而展示上述业务操作入口
 
 #### Scenario: 前端使用后端权限字段
 
@@ -1431,4 +1433,3 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **WHEN** 前端展示 `1.2 项目立项审批表` 的退回能力
 - **THEN** 本 change MUST 只规划审批 NO 后对 `1.1` 的精准返工选择
 - **AND** 页面 MUST NOT 因本 change 新增商务评价、技术评价、总经理多节点在线审批流程 UI
-

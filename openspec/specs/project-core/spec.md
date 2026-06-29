@@ -579,9 +579,11 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **WHEN** 用户提交中文部门名、未知值、非数组非空值或任意自由文本参与部门
 - **THEN** 系统必须拒绝保存，并返回稳定错误码 `INVALID_PARTICIPATING_DEPARTMENT`，HTTP 状态为 400
 
-#### Scenario: 参与部门用于中心负责人可见范围
+#### Scenario: 参与部门不限制中心负责人项目查看
 - **WHEN** 系统判断中心负责人是否可见某项目
-- **THEN** 系统只能基于合法 `participatingDepartments` 枚举数组或项目中本中心责任人资料判断本中心相关项目
+- **THEN** 系统 MUST 将中心负责人项目查看范围视为全部业务项目
+- **AND** `participatingDepartments`、结构化资料归属和责任人部门只用于阶段推进、责任分配、适用性管理、审核等本中心业务操作判断
+- **AND** 系统 MUST NOT 使用 `participatingDepartments`、结构化资料归属或责任人部门限制中心负责人项目查看范围
 
 ### Requirement: 项目经理用户关联
 系统 MUST 将项目经理建模为项目内用户关联，并 MUST 校验项目经理只能由启用的部门用户担任。
@@ -1214,4 +1216,3 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 #### Scenario: 工作台不发送通知
 - **WHEN** 系统生成需返工工作台数据
 - **THEN** 系统 MUST NOT 因本 change 创建推送通知、站内信、短信或邮件
-

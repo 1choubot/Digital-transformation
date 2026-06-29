@@ -131,6 +131,7 @@ import {
   actionKey,
   getCompletionMode,
   getSelectedResponsibleUserId,
+  isDocumentRelatedToDepartmentByOwnership,
   stageCompleteness
 } from '../components/project-detail/stageDocumentViewHelpers.js';
 import { formatUser } from '../utils/format.js';
@@ -239,16 +240,17 @@ const isCurrentUserGeneralManagerAssistant = computed(
 );
 const isCurrentUserSystemAdmin = computed(() => currentUserOrganizationRole.value === 'system_admin');
 const currentUserDepartment = computed(() => props.currentUser?.department || '');
-const projectParticipatingDepartments = computed(() => {
-  const value = detail.value?.project?.participatingDepartments;
-  return Array.isArray(value) ? value : [];
-});
+const allStageDocuments = computed(() =>
+  (checklist.value?.stages || []).flatMap((stage) => stage.documents || [])
+);
 const isProjectRelatedToCurrentCenter = computed(() => {
   if (!isCurrentUserCenterManager.value || !currentUserDepartment.value) {
     return false;
   }
 
-  return projectParticipatingDepartments.value.includes(currentUserDepartment.value);
+  return allStageDocuments.value.some((document) =>
+    isDocumentRelatedToDepartmentByOwnership(document, currentUserDepartment.value)
+  );
 });
 const visibleResponsibilityCandidates = computed(() => {
   if (!isCurrentUserCenterManager.value || isCurrentUserProjectManager.value || isCurrentUserGeneralManager.value) {
@@ -274,9 +276,6 @@ const canViewProjectAudit = computed(
       isCurrentUserProjectCreator.value ||
       isCurrentUserProjectManager.value
     )
-);
-const allStageDocuments = computed(() =>
-  (checklist.value?.stages || []).flatMap((stage) => stage.documents || [])
 );
 const initiationApprovalDocument = computed(() =>
   allStageDocuments.value.find((document) => document.documentCode === '1.2') || null

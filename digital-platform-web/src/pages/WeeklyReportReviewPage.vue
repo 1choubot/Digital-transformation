@@ -264,6 +264,15 @@
               </div>
             </div>
           </div>
+          <div v-if="score.summary || score.suggestions?.length" class="weekly-score__body">
+            <h3>AI评语</h3>
+            <p v-if="score.summary">{{ score.summary }}</p>
+            <ul v-if="score.suggestions?.length">
+              <li v-for="(suggestion, index) in score.suggestions" :key="index">
+                {{ suggestion }}
+              </li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -1049,6 +1058,35 @@ onMounted(loadReport);
   font-size: 1rem;
   font-weight: 600;
   color: #3e63dd;
+}
+
+.weekly-score__body {
+  padding: 1rem;
+  background: #fafafa;
+  border-radius: 4px;
+  border: 1px solid #ebeef5;
+}
+.weekly-score__body h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #303133;
+}
+.weekly-score__body p {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: #606266;
+  line-height: 1.6;
+}
+.weekly-score__body ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+.weekly-score__body li {
+  font-size: 0.85rem;
+  color: #606266;
+  margin-bottom: 0.25rem;
+  line-height: 1.5;
 }
 
 /* ===== 最终评分表单 ===== */

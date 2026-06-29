@@ -367,6 +367,18 @@ function getPreviousWeekPeriod() {
   };
 }
 
+function shiftWeekPeriod(weekStart, offsetWeeks) {
+  const start = new Date(`${weekStart}T00:00:00`);
+  start.setDate(start.getDate() + offsetWeeks * 7);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+
+  return {
+    weekStart: formatLocalIsoDate(start),
+    weekEnd: formatLocalIsoDate(end)
+  };
+}
+
 // Add a local id so rows remain stable while users edit fields.
 function withLocalId(row = {}) {
   return {
@@ -437,6 +449,25 @@ function initializeEmptyForm() {
   form.status = ReportStatus.DRAFT;
   form.summaries = [blankSummary()];
   form.plans = [blankPlan()];
+}
+
+function prefillSummariesFromPreviousPlans(previousReport) {
+  const previousPlans = previousReport?.plans || [];
+  if (previousPlans.length === 0) {
+    return;
+  }
+
+  // 首次填写本周周报时，将上个周报的下周计划带入本周工作总结。
+  form.summaries = previousPlans.map((plan) =>
+    withLocalId({
+      workTask: plan.workTask || '',
+      workTarget: plan.workTarget || '',
+      plannedDate: plan.plannedDate || form.weekStart,
+      completionStatus: 'completed',
+      completionDescription: '',
+      completedDate: plan.plannedDate || form.weekEnd
+    })
+  );
 }
 
 // Copy a backend report into the editable form state.
@@ -617,6 +648,14 @@ async function loadInitialReport() {
     if (reports.reports?.[0]?.id) {
       const detail = await getWeeklyReport(reports.reports[0].id, props.authToken);
       applyReport(detail.report);
+      return;
+    }
+
+    const previousPeriod = shiftWeekPeriod(form.weekStart, -1);
+    const previousReports = await listWeeklyReports({ weekStart: previousPeriod.weekStart }, props.authToken);
+    if (previousReports.reports?.[0]?.id) {
+      const previousDetail = await getWeeklyReport(previousReports.reports[0].id, props.authToken);
+      prefillSummariesFromPreviousPlans(previousDetail.report);
     }
   } catch (error) {
     if (error.code === 'UNAUTHENTICATED') {

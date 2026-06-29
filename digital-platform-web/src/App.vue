@@ -34,7 +34,8 @@
       </div>
 
       <nav class="sidebar-nav">
-        <div class="nav-group">
+        <!-- 项目主数据：非管理员可见 -->
+        <div v-if="!canAccessUserManagement" class="nav-group">
           <div class="nav-group-header" :class="{ 'is-active': isGroupActive('projects') }" @click="toggleMenu('projects')">
             <div class="header-left">
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -71,7 +72,11 @@
           </div>
         </div>
         
-        <div v-if="isDailyReportUser || isWeeklyReportUser || canAccessWeeklyReports || canAccessCenterDailyReport" class="nav-group">
+        <!-- 日报周报：非管理员且满足任一权限时显示 -->
+        <div 
+          v-if="!canAccessUserManagement && (isDailyReportUser || isWeeklyReportUser || canAccessWeeklyReports || canAccessCenterDailyReport)" 
+          class="nav-group"
+        >
           <div class="nav-group-header" :class="{ 'is-active': isGroupActive('reports') }" @click="toggleMenu('reports')">
             <div class="header-left">
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -94,7 +99,7 @@
                 :class="{ active: route.name === 'daily-report' }"
                 @click="handleNavigate('/daily-report')"
               >
-                <span>我的日报</span>
+                <span>日报填写</span>
               </button>
               <button
                 type="button"
@@ -102,7 +107,7 @@
                 :class="{ active: route.name === 'daily-reports' }"
                 @click="handleNavigate('/daily-reports')"
               >
-                <span>日报列表</span>
+                <span>我的日报列表</span>
               </button>
               <button
                 type="button"
@@ -111,7 +116,7 @@
                 v-if="isWeeklyReportUser"
                 @click="handleNavigate('/weekly-report')"
               >
-                <span>我的周报</span>
+                <span>周报填写</span>
               </button>
               <button
                 type="button"
@@ -120,7 +125,7 @@
                 v-if="canAccessWeeklyReports"
                 @click="handleNavigate('/weekly-reports')"
               >
-                <span>周报列表</span>
+                <span>我的周报列表</span>
               </button>
               <button
                 type="button"
@@ -129,13 +134,14 @@
                 v-if="canAccessCenterDailyReport"
                 @click="handleNavigate('/center-daily-report')"
               >
-                <span>中心日报</span>
+                <span>中心日报汇总</span>
               </button>
             </div>
           </div>
         </div>
 
-        <div class="nav-group">
+        <!-- 过程追踪看板：非管理员可见 -->
+        <div v-if="!canAccessUserManagement" class="nav-group">
           <div class="nav-group-header" :class="{ 'is-active': isGroupActive('dashboards') }" @click="toggleMenu('dashboards')">
             <div class="header-left">
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -170,6 +176,7 @@
           </div>
         </div>
 
+        <!-- 系统设置（用户管理）：仅系统管理员可见 -->
         <div v-if="canAccessUserManagement" class="nav-group">
           <div class="nav-group-header" :class="{ 'is-active': isGroupActive('admin') }" @click="toggleMenu('admin')">
             <div class="header-left">
@@ -467,12 +474,12 @@ const currentRouteLabel = computed(() => {
     case 'project-detail': return '项目详情控制台';
     case 'my-stage-document-tasks': return '我的资料任务';
     case 'users': return '用户管理';
-    case 'daily-report': return '我的日报';
-    case 'daily-reports': return '日报列表';
-    case 'weekly-report': return '我的周报';
-    case 'weekly-reports': return '周报列表';
+    case 'daily-report': return '日报填写';
+    case 'daily-reports': return '我的日报列表';
+    case 'weekly-report': return '周报填写';
+    case 'weekly-reports': return '我的周报列表';
     case 'weekly-report-review': return '周报审阅';
-    case 'center-daily-report': return '中心日报';
+    case 'center-daily-report': return '中心日报汇总';
     default: return '管理驾驶舱';
   }
 });
@@ -531,12 +538,19 @@ async function restoreAuth() {
     showToast('您的登录状态已过期，请重新登录。', 'error');
   } finally { authLoading.value = false; }
 }
+
+// ===== 修改登录成功后的默认跳转 =====
 function handleLoggedIn(result) {
   setAuth(result.token, result.user);
   authMessage.value = '';
   showToast(`${result.user.name}，欢迎回来！`, 'success');
-  navigate('/projects');
+  // 判断是否为系统管理员，决定默认跳转页面
+  const isAdmin = result.user.isPlatformAdmin && result.user.organizationRole === 'system_admin';
+  const targetPath = isAdmin ? '/users' : '/projects';
+  navigate(targetPath);
 }
+// ===== 修改结束 =====
+
 async function handleLogout() {
   loggingOut.value = true;
   try { await logoutRequest(authToken.value); } catch {}

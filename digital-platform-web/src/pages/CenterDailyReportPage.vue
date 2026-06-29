@@ -1,29 +1,5 @@
 <template>
   <section class="page-stack center-daily-report-page animate-fadeIn">
-    <!-- 页面头部 -->
-    <div class="page-header">
-      <div class="page-header__left">
-        <span class="section-eyebrow">中心日报</span>
-        <h2 class="page-title">部门工作日报汇总</h2>
-        <span class="page-user">{{ currentUser.name }} / {{ formatOrganizationRole(currentUser.organizationRole) }}</span>
-      </div>
-      <div class="page-header__right">
-        <button
-          type="button"
-          class="primary-button"
-          :disabled="loading || exporting"
-          @click="handleExport"
-        >
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-          {{ exporting ? '正在导出...' : '导出中心日报' }}
-        </button>
-      </div>
-    </div>
-
     <!-- 无权限警告 -->
     <section v-if="!canUseCenterDailyReport" class="state-panel state-panel--error panel">
       <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -36,16 +12,18 @@
     </section>
 
     <template v-else>
-      <!-- 筛选面板 -->
+      <!-- 筛选面板（含导出按钮） -->
       <section class="panel filter-panel">
         <div class="panel-body">
           <div class="filter-grid">
+            <!-- 报告日期 -->
             <div class="filter-group">
               <span class="filter-label">报告日期</span>
               <div class="input-wrapper">
                 <input v-model="filters.date" type="date" />
               </div>
             </div>
+            <!-- 中心 -->
             <div class="filter-group">
               <span class="filter-label">中心</span>
               <div class="input-wrapper">
@@ -56,49 +34,27 @@
                 </select>
               </div>
             </div>
-            <button type="button" class="primary-button" :disabled="loading" @click="loadReport">查询</button>
-          </div>
-        </div>
-      </section>
-
-      <!-- 自动生成计划配置 -->
-      <section class="panel schedule-panel">
-        <div class="panel-toolbar">
-          <div class="toolbar-info">
-            <strong class="toolbar-title">自动生成计划</strong>
-            <span class="toolbar-subtitle">默认每日 18:00 自动生成；中心负责人只能配置本中心。</span>
-          </div>
-          <button
-            v-if="canManageSchedule"
-            type="button"
-            class="ghost-button"
-            :disabled="savingSchedule"
-            @click="handleSaveSchedule"
-          >
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-              <polyline points="17 21 17 13 7 13 7 21" />
-              <polyline points="7 3 7 8 15 8" />
-            </svg>
-            {{ savingSchedule ? '正在保存...' : '保存计划' }}
-          </button>
-        </div>
-        <div class="panel-body">
-          <div class="schedule-grid">
-            <div class="filter-group">
-              <span class="filter-label">是否启用</span>
-              <div class="input-wrapper">
-                <select v-model="schedule.isEnabled" :disabled="!canManageSchedule">
-                  <option :value="true">启用</option>
-                  <option :value="false">停用</option>
-                </select>
-              </div>
+            <!-- 查询按钮（紧挨着中心） -->
+            <div class="filter-query">
+              <button type="button" class="primary-button" :disabled="loading" @click="loadReport">
+                查询
+              </button>
             </div>
-            <div class="filter-group">
-              <span class="filter-label">生成时间</span>
-              <div class="input-wrapper">
-                <input v-model="schedule.generateTime" type="time" :disabled="!canManageSchedule" />
-              </div>
+            <!-- 导出按钮（靠右） -->
+            <div class="filter-export">
+              <button
+                type="button"
+                class="primary-button"
+                :disabled="loading || exporting"
+                @click="handleExport"
+              >
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                {{ exporting ? '正在导出...' : '导出中心日报' }}
+              </button>
             </div>
           </div>
         </div>
@@ -313,14 +269,12 @@ const canManageSchedule = computed(
 
 // ── Data transformation: person-first → project-first grouping ──
 
-// Flatten all items from all employees, attaching personName for fallback display.
 function flattenWithPerson(employees, sectionKey) {
   return employees.flatMap(emp =>
     emp[sectionKey].map(item => ({ ...item, personName: emp.name }))
   );
 }
 
-// Group flat items by project, preserving order of first appearance.
 function groupByProject(items) {
   const map = new Map();
   for (const item of items) {
@@ -361,7 +315,6 @@ function formatProgress(value) {
   if (value === null || value === undefined) return '';
   const num = Number(value);
   if (!Number.isFinite(num)) return String(value);
-  // 1 = 100%, 0.5 = 50%, etc.
   return num >= 1 ? '100%' : `${Math.round(num * 100)}%`;
 }
 
@@ -406,7 +359,6 @@ async function loadReport() {
   try {
     const result = await getCenterDailyReport({ date: filters.date, department: filters.department }, props.authToken);
     report.value = result.report;
-    await loadSchedule();
   } catch (error) {
     handleApiError(error);
   } finally {
@@ -489,44 +441,6 @@ onMounted(async () => {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ===== 页面头部 ===== */
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-}
-.page-header__left {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-.page-header__right {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-.section-eyebrow {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #909399;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.page-title {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #303133;
-  margin: 0;
-  line-height: 1.2;
-}
-.page-user {
-  font-size: 0.85rem;
-  color: #909399;
-}
-
 /* ===== 面板 ===== */
 .panel {
   background: #ffffff;
@@ -538,64 +452,8 @@ onMounted(async () => {
 .panel-body {
   padding: 1.5rem;
 }
-.panel-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid #ebeef5;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-.toolbar-info {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-.toolbar-title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #303133;
-}
-.toolbar-subtitle {
-  font-size: 0.8rem;
-  color: #909399;
-}
 
 /* ===== 按钮基础 ===== */
-.ghost-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  background: #ffffff;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  color: #606266;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  height: 36px;
-  white-space: nowrap;
-}
-.ghost-button:hover:not(:disabled) {
-  border-color: #c6e2ff;
-  background: #ecf5ff;
-  color: #3e63dd;
-}
-.ghost-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.ghost-button.active {
-  border-color: #3e63dd;
-  background: #ecf5ff;
-  color: #3e63dd;
-}
-
 .primary-button {
   display: inline-flex;
   align-items: center;
@@ -610,7 +468,7 @@ onMounted(async () => {
   font-size: 0.875rem;
   cursor: pointer;
   transition: all 0.2s ease;
-  height: 36px;
+  height: 48px;          /* 与输入框等高 */
   white-space: nowrap;
 }
 .primary-button:hover:not(:disabled) {
@@ -621,7 +479,6 @@ onMounted(async () => {
   background: #a0cfff;
   cursor: not-allowed;
 }
-
 .btn-icon {
   width: 16px;
   height: 16px;
@@ -683,10 +540,11 @@ onMounted(async () => {
 /* ===== 筛选面板 ===== */
 .filter-grid {
   display: flex;
-  gap: 1.5rem;
-  align-items: flex-end;
   flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1.5rem;
 }
+
 .filter-group {
   display: flex;
   flex-direction: column;
@@ -737,15 +595,19 @@ onMounted(async () => {
   cursor: not-allowed;
 }
 
-/* ===== 计划配置面板 ===== */
-.schedule-grid {
+/* 查询按钮（紧挨中心） */
+.filter-query {
   display: flex;
-  gap: 1.5rem;
   align-items: flex-end;
-  flex-wrap: wrap;
+  padding-bottom: 0;   /* 与输入框底部对齐 */
 }
-.schedule-grid .filter-group {
-  min-width: 160px;
+
+/* 导出按钮（靠右） */
+.filter-export {
+  display: flex;
+  align-items: flex-end;
+  margin-left: auto;   /* 推到最右 */
+  padding-bottom: 0;
 }
 
 /* ===== 报告内容面板 ===== */
@@ -829,9 +691,14 @@ onMounted(async () => {
 /* ===== 中心日报表格 ===== */
 .center-report-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 0.85rem;
-  min-width: 700px;
+}
+.center-report-table td,
+.center-report-table th {
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 .center-report-table thead th {
   padding: 0.6rem 0.75rem;
@@ -859,28 +726,28 @@ onMounted(async () => {
   text-align: center;
 }
 .col-project {
-  width: 160px;
+  width: 140px;
   font-weight: 500;
   color: #303133;
 }
 .col-content {
-  min-width: 160px;
+  width: 200px;
 }
 .col-person {
   width: 80px;
 }
 .col-progress {
-  width: 90px;
+  width: 70px;
   text-align: center;
 }
 .col-deviation {
-  min-width: 140px;
+  width: 130px;
 }
 .col-collab-dept {
-  width: 100px;
+  width: 80px;
 }
 .col-collab-item {
-  min-width: 120px;
+  width: 120px;
 }
 
 .empty-section-note {
@@ -898,28 +765,12 @@ onMounted(async () => {
   .page-stack {
     padding: 1rem;
   }
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .page-header__right {
-    width: 100%;
-    justify-content: flex-start;
-  }
   .filter-grid {
     flex-direction: column;
     align-items: stretch;
   }
-  .schedule-grid {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .schedule-grid .filter-group {
-    min-width: unset;
-  }
-  .panel-toolbar {
-    flex-direction: column;
-    align-items: flex-start;
+  .filter-export {
+    margin-left: 0;
   }
   .report-header-info {
     flex-direction: column;
@@ -927,22 +778,6 @@ onMounted(async () => {
   }
   .center-report-table {
     font-size: 0.8rem;
-    min-width: 500px;
-  }
-  .col-project {
-    width: 100px;
-  }
-  .col-seq {
-    width: 36px;
-  }
-  .col-person {
-    width: 60px;
-  }
-  .col-progress {
-    width: 70px;
-  }
-  .col-collab-dept {
-    width: 70px;
   }
 }
 </style>

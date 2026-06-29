@@ -1,0 +1,96 @@
+## 1. Planning / Spec Tasks
+
+- [x] 1.1 Create `add-initiation-multi-review-flow-v1` change directory and OpenSpec scaffold.
+- [x] 1.2 Add planning document `docs/9.15_项目立项多节点审批规划_20260629.md`.
+- [x] 1.3 Write proposal describing the current single-review gap and the dedicated `1.2` multi-node goal.
+- [x] 1.4 Write design covering the dedicated initiation review nodes, data-model direction, gates, workbench, frontend and logging.
+- [x] 1.5 Document confirmed business decisions for business/technical ordering and reviewer assignment.
+- [x] 1.6 Document precise rework integration: `1.2` NO returns only to fixed candidate `1.1`, without whole-stage return.
+- [x] 1.7 Document stage advancement and project-code gates requiring final multi-node approval, `1.3` completion and cleared rework.
+- [x] 1.8 Document workbench scope: node-specific initiation review tasks only, no generic `stage_gate_approval`.
+- [x] 1.9 Document frontend scope: `1.2` node status display and node-specific actions, not a generic stage approval UI.
+- [x] 1.10 Add delta specs for `project-core`, `project-core-frontend`, `stage-document-checklist`, `business-operation-log` and `technical-architecture`.
+- [x] 1.11 `cmd /c openspec validate add-initiation-multi-review-flow-v1 --strict` passes.
+- [x] 1.12 `cmd /c openspec validate --all --strict` passes.
+
+## 2. Future Implementation Tasks
+
+- [x] 2.1 Business decision confirmed: business review and technical review run in parallel.
+- [x] 2.2 Business decision confirmed: business approval is fixed to the marketing center manager.
+- [x] 2.3 Business decision confirmed: technical approval is fixed to the R&D center manager.
+- [x] 2.4 Business decision confirmed: the general manager workbench task is generated only after business and technical approvals both pass.
+- [x] 2.5 Business decision confirmed: the returned node and its downstream nodes rerun; the approved result of the other parallel branch MUST be retained.
+- [x] 2.6 Business decisions are confirmed; future implementation may proceed according to the fixed rules in this change.
+- [x] 2.7 Backend migration/schema: add `project_initiation_review_nodes` or equivalent dedicated structure for `1.2` review nodes, plus migration or idempotent initialization for existing applicable projects.
+- [x] 2.8 Backend: initialize `1.2` business, technical and general manager review nodes for new projects and existing applicable projects, with states split by `1.2` base status: `not_submitted` waits for document submit, `submitted` activates business/technical review, legacy `confirmed` activates business/technical review without final completion, and `returned` waits for document resubmission.
+- [x] 2.9 Backend: implement the `1.2` dedicated multi-node state machine, where ordinary `1.2` document submit/upload activates initiation review nodes; include approve, return and automatic pending/actionable restoration after linked `1.1` rework is cleared.
+- [x] 2.10 Backend: implement node ordering according to confirmed business decisions.
+- [x] 2.11 Backend: implement business/technical reviewer assignment according to confirmed business decisions.
+- [x] 2.12 Backend: implement general manager task generation according to confirmed business decisions.
+- [x] 2.13 Backend: derive `1.2` completion from all required node states, `1.2` base/special state and absence of `1.1 revision_required` triggered by `1.2`.
+- [x] 2.14 Backend: update stage completeness and stage-advance gate so single-node `1.2` confirmation does not release stage 1.
+- [x] 2.15 Backend: update project-code gate so it requires final `1.2` multi-node approval, `1.3` submit/upload completion, no `1.1` rework triggered by `1.2`, and valid business project-code maintenance permission.
+- [x] 2.16 Backend: ensure system administrator identity alone cannot fill or generate `projectCode`.
+- [x] 2.17 Backend: integrate `1.2` node return with precise rework, requiring return reason and fixed `1.1` revision target.
+- [x] 2.18 Backend: ensure `1.2` NO only marks `1.1 revision_required = true`; `1.2` itself is blocked by node/base/special state and is not marked `revision_required`.
+- [x] 2.19 Backend: ensure `1.2` NO does not whole-stage return, does not auto-return all previous documents and does not set `1.1` base status to `returned`.
+- [x] 2.20 Backend: reject ordinary stage-document confirm/return endpoints for `1.2` with a clear instruction to use the dedicated initiation review endpoints.
+- [x] 2.21 Backend: implement workbench initiation review tasks for the exact active node reviewer only.
+- [x] 2.22 Backend: ensure workbench does not generate generic `stage_gate_approval` tasks for this flow.
+- [x] 2.23 Backend: implement structured business logs for ordinary `1.2` document submit activating initiation review nodes, node approve/return, automatic post-rework pending restoration and final-completed actions.
+- [x] 2.24 Backend: commit node state changes, precise rework field changes and business logs in the same transaction.
+- [x] 2.25 Backend: keep file platform integration paused and avoid file-platform API calls.
+- [x] 2.26 Backend: keep cross-center operation permissions unchanged for submit/review/return/rework/responsibility/applicability/attachment/stage-advance/project-code actions.
+- [x] 2.27 Frontend: show `1.2` multi-node approval status in project detail.
+- [x] 2.28 Frontend: show business, technical and general manager node status, reviewer/role, comment/reason and timestamp.
+- [x] 2.29 Frontend: show approve/return actions only for the current user's actionable `1.2` node.
+- [x] 2.30 Frontend: do not show `1.2` multi-node approval as a generic stage-gate approval flow.
+- [x] 2.31 Frontend: keep stage-advance and project-code buttons controlled by backend permission fields and gate responses.
+- [x] 2.32 Frontend: show clear blocked-gate messaging when `1.2` is not finally approved or `1.1 revision_required` remains.
+- [x] 2.32a Frontend: keep the existing document submit/upload entry for starting `1.2` multi-node review and do not add a dedicated `1.2` node-submit button.
+- [x] 2.33 Smoke: single business-node approval does not mark `1.2` complete and does not allow stage advancement or project-code update.
+- [x] 2.34 Smoke: single technical-node approval does not mark `1.2` complete and does not allow stage advancement or project-code update.
+- [x] 2.35 Smoke: all required `1.2` nodes approved plus `1.3` submitted allows gates when other stage documents are complete and no rework remains.
+- [x] 2.36 Smoke: old ordinary stage-document confirm endpoint directly confirming `1.2` is rejected and does not produce final completion.
+- [x] 2.37 Smoke: old ordinary stage-document return endpoint directly returning `1.2` is rejected and does not trigger `1.1 revision_required`.
+- [x] 2.38 Smoke: `1.2` node NO requires a return reason and marks only `1.1 revision_required = true`.
+- [x] 2.39 Smoke: after `1.2` node NO, `1.2 revision_required` remains false/empty and `1.2` is blocked by node/base/special state.
+- [x] 2.40 Smoke: outstanding `1.1 revision_required` blocks `1.2` final completion, stage advancement and project-code update.
+- [x] 2.41 Smoke: system administrator cannot fill or generate project code solely because of system administrator identity.
+- [x] 2.42 Smoke: business and technical review workbench tasks appear in parallel for marketing center manager and R&D center manager.
+- [x] 2.43 Smoke: `business_review approved` plus `technical_review not approved` does not generate the general manager workbench task.
+- [x] 2.44 Smoke: `business_review approved` plus `technical_review approved` generates the general manager workbench task.
+- [x] 2.45 Smoke: `business_review returned` preserves approved `technical_review`, but invalidates or resets `general_review`.
+- [x] 2.46 Smoke: `technical_review returned` preserves approved `business_review`, but invalidates or resets `general_review`.
+- [x] 2.47 Smoke: `general_review returned` preserves approved `business_review` and `technical_review`.
+- [x] 2.48 Smoke: approving a returned `1.2` node is rejected while `1.1 revision_required` remains uncleared.
+- [x] 2.49 Smoke: after `1.1` rework is cleared, the returned node automatically re-enters the corresponding approver's pending/actionable workbench task.
+- [x] 2.50 Smoke: after the returned node is automatically pending/actionable, it still cannot bypass the corresponding approver's approval.
+- [x] 2.51 Smoke: unauthorized users cannot approve or return business, technical or general manager nodes.
+- [x] 2.52 Smoke: workbench tasks appear only for the configured node reviewer and not for all center managers.
+- [x] 2.53 Smoke: no generic `stage_gate_approval` workbench item is generated.
+- [x] 2.54 Smoke: business logs capture node actions, general-review invalidation context, retained parallel-node context and final initiation completion; failed operations do not write success logs.
+- [x] 2.55 Smoke: migration or idempotent initialization creates `business_review`, `technical_review` and `general_review` for existing applicable projects.
+- [x] 2.56 Smoke: existing ordinary `1.2 confirmed` cannot bypass the dedicated multi-node completion, stage-advance or project-code gates.
+- [x] 2.57 Smoke: after `1.1` rework is cleared, the returned node returns to the exact configured approver's workbench and still requires that approver to approve.
+- [x] 2.58 Smoke: existing `1.2 not_submitted` initialization creates the three nodes but does not generate business or technical approval workbench tasks.
+- [x] 2.59 Smoke: after ordinary `1.2` document submit/upload sets status to `submitted`, business and technical approval workbench tasks appear in parallel.
+- [x] 2.60 Smoke: legacy `1.2 confirmed` initialization MUST generate business and technical approval workbench tasks but cannot directly release stage-advance or project-code gates.
+- [x] 2.61 Smoke: `1.2 returned` does not generate business or technical approval tasks until ordinary `1.2` document resubmission.
+- [x] 2.62 Smoke: node status values do not include any state that requires a frontend `1.2` node-submit button before review can continue; ordinary document submit/upload is the only submit trigger.
+- [x] 2.63 Smoke: after a `1.2` node return, `project_stage_documents.status` for `1.2` does not become `returned`; only the dedicated node state changes and `1.1 revision_required` is marked.
+- [x] 2.64 Smoke: after `1.1` rework is cleared for a returned `1.2` node, the returned node automatically re-enters the configured approver's workbench without requiring ordinary `1.2` document resubmission.
+- [x] 2.65 Validation: run API check after implementation.
+- [x] 2.66 Validation: run Web build after implementation.
+- [x] 2.67 Validation: run OpenSpec validate after implementation.
+
+## 3. Review Follow-up Tasks
+
+- [x] 3.1 Review follow-up: include `1.1` rework fields in the project-code gate query so outstanding `revision_required` from `1.2` blocks `projectCode` updates.
+- [x] 3.2 Review follow-up: add smoke coverage for project-code rejection when `1.2` nodes are approved, `1.3` is submitted and linked `1.1 revision_required` remains.
+- [x] 3.3 Review follow-up: make initiation review workbench queries idempotently create missing `1.2` nodes for existing applicable projects without overwriting existing node state.
+- [x] 3.4 Review follow-up: add smoke coverage for old projects with missing initiation review nodes self-healing through workbench query and not generating `stage_gate_approval`.
+- [x] 3.5 Review follow-up: ensure direct approve/return responses for `1.2` include linked `1.1` rework blocker context.
+- [x] 3.6 Review follow-up: add smoke coverage that node return responses include `blockedByRework` and `1.1 项目需求表返工未清除` blocking reason.
+- [x] 3.7 Review follow-up validation: API check and Web build pass after the fixes.
+- [x] 3.8 Review follow-up: merge initiation_review workbench items into the frontend "待我审核的资料" filter while keeping backend todo types separate.

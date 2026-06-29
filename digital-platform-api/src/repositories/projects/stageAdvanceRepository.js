@@ -5,9 +5,10 @@ import {
   isValidBusinessDepartment
 } from '../../domain/organization.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
-import { PROJECT_APPROVAL_ERROR, PROJECT_APPROVAL_STATUS } from '../../domain/projectApproval.js';
+import { PROJECT_APPROVAL_ERROR } from '../../domain/projectApproval.js';
 import { STANDARD_PROJECT_STAGES, STAGE_STATUS } from '../../domain/stages.js';
 import { buildStageCompletenessSummary, mapGateDocument } from '../stageDocuments/shared.js';
+import { attachInitiationReviewToStageDocumentRows } from '../stageDocuments/initiationReviewRepository.js';
 import {
   insertOperationLog,
   OPERATION_ACTION_TYPE,
@@ -140,11 +141,29 @@ async function selectProjectForUpdate(connection, projectId, user) {
 
 async function buildCurrentStageGateSummary(connection, projectId, stageOrder) {
   const [rows] = await connection.execute(
-    `SELECT id, document_code, document_name, is_required, status, is_applicable
+    `SELECT
+      d.id,
+      d.document_code,
+      d.document_name,
+      d.is_required,
+      d.completion_mode,
+      d.status,
+      d.is_applicable,
+      d.revision_required,
+      d.revision_reason,
+      d.revision_source_document_id,
+      d.revision_requested_at,
+      d.revision_resubmitted_by_user_id,
+      d.revision_resubmitted_at,
+      source.document_code AS revision_source_document_code,
+      source.document_name AS revision_source_document_name
     FROM project_stage_documents
-    WHERE project_id = ?
-      AND stage_order = ?
-    ORDER BY document_order ASC
+      d
+    LEFT JOIN project_stage_documents source
+      ON source.id = d.revision_source_document_id
+    WHERE d.project_id = ?
+      AND d.stage_order = ?
+    ORDER BY d.document_order ASC
     FOR UPDATE`,
     [projectId, stageOrder]
   );
@@ -156,7 +175,8 @@ async function buildCurrentStageGateSummary(connection, projectId, stageOrder) {
     );
   }
 
-  return buildStageCompletenessSummary(rows.map(mapGateDocument));
+  const rowsWithInitiationReview = await attachInitiationReviewToStageDocumentRows(connection, rows);
+  return buildStageCompletenessSummary(rowsWithInitiationReview.map(mapGateDocument));
 }
 
 export async function advanceProjectStage(projectId, user) {
@@ -170,13 +190,6 @@ export async function advanceProjectStage(projectId, user) {
 
     const stageRows = await selectProjectStagesForUpdate(connection, projectId);
     const currentStage = assertSingleCurrentStage(stageRows);
-    if (currentStage.approval_status !== PROJECT_APPROVAL_STATUS.APPROVED) {
-      throw new ProjectStageAdvanceError(
-        PROJECT_APPROVAL_ERROR.PROJECT_APPROVAL_NOT_APPROVED,
-        'Current stage approval is not approved'
-      );
-    }
-
     const gateSummary = await buildCurrentStageGateSummary(connection, projectId, currentStage.stage_order);
 
     if (gateSummary.incompleteRequiredCount > 0) {

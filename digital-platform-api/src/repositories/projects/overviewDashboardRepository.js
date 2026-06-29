@@ -1,7 +1,9 @@
 import { pool } from '../../db/pool.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
-import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
+import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
+import { canViewCompleteStageDocumentSet } from '../stageDocuments/accessControl.js';
 import { buildStageCompletenessSummary } from '../stageDocuments/shared.js';
+import { attachInitiationReviewToStageDocumentRows } from '../stageDocuments/initiationReviewRepository.js';
 import { mapCreator } from '../userRepository.js';
 import {
   buildInClause,
@@ -117,20 +119,36 @@ function mapProjectOverviewDocument(row) {
     documentName: row.document_name,
     isRequired: Boolean(row.is_required),
     isApplicable: row.is_applicable === undefined ? true : Boolean(row.is_applicable),
-    status: row.status
+    status: row.status,
+    initiationReview: row.initiationReview ?? row.initiation_review ?? null,
+    completionMode: row.completion_mode,
+    revisionRequired: Boolean(row.revision_required),
+    revisionReason: row.revision_reason ?? null,
+    revisionSourceDocumentId: row.revision_source_document_id ?? null,
+    revisionSourceDocument: row.revision_source_document_id
+      ? {
+          id: row.revision_source_document_id,
+          documentCode: row.revision_source_document_code ?? null,
+          documentName: row.revision_source_document_name ?? null
+        }
+      : null,
+    revisionRequestedAt: row.revision_requested_at ?? null,
+    revisionResubmittedByUserId: row.revision_resubmitted_by_user_id ?? null,
+    revisionResubmittedAt: row.revision_resubmitted_at ?? null
   };
 }
 
 function stripCompletenessSummary(summary) {
   return {
     requiredTotal: summary.requiredTotal,
+    completedRequiredCount: summary.completedRequiredCount,
     confirmedRequiredCount: summary.confirmedRequiredCount,
     incompleteRequiredCount: summary.incompleteRequiredCount,
     completionPercent: summary.completionPercent
   };
 }
 
-function buildProjectOverviewCard(projectRow, stages, documents) {
+function buildProjectOverviewCard(projectRow, stages, documents, user) {
   const isCompleted = projectRow.status === PROJECT_STATUS.COMPLETED;
   const currentStages = stages.filter((stage) => Boolean(stage.is_current));
   const base = {
@@ -174,9 +192,9 @@ function buildProjectOverviewCard(projectRow, stages, documents) {
   }
 
   const currentStage = currentStages[0];
-  const currentStageDocuments = documents
-    .filter((document) => document.stage_order === currentStage.stage_order)
-    .map(mapProjectOverviewDocument);
+  const currentStageDocumentRows = documents.filter(
+    (document) => document.stage_order === currentStage.stage_order
+  );
 
   const currentStageBase = {
     ...base,
@@ -186,13 +204,18 @@ function buildProjectOverviewCard(projectRow, stages, documents) {
     currentStageStatus: currentStage.stage_status
   };
 
-  if (currentStageDocuments.length === 0) {
+  if (currentStageDocumentRows.length === 0) {
     return {
       ...currentStageBase,
       currentStageIssue: 'checklist_not_initialized'
     };
   }
 
+  if (!canViewCompleteStageDocumentSet(user, projectRow)) {
+    return currentStageBase;
+  }
+
+  const currentStageDocuments = currentStageDocumentRows.map(mapProjectOverviewDocument);
   const summary = buildStageCompletenessSummary(currentStageDocuments);
 
   return {
@@ -242,7 +265,6 @@ async function selectProjectOverviewRows(filters, user) {
       u.department AS creator_department,
       u.organization_role AS creator_organization_role,
       u.role AS creator_role,
-      u.job_title AS creator_job_title,
       u.is_enabled AS creator_is_enabled,
       u.file_platform_user_id AS creator_file_platform_user_id,
       pm.account AS project_manager_account,
@@ -295,18 +317,29 @@ async function selectProjectOverviewDocuments(projectIds) {
 
   const [rows] = await pool.execute(
     `SELECT
-      id,
-      project_id,
-      stage_order,
-      document_order,
-      document_code,
-      document_name,
-      is_required,
-      is_applicable,
-      status
-    FROM project_stage_documents
-    WHERE project_id IN (${buildInClause(projectIds)})
-    ORDER BY project_id ASC, stage_order ASC, document_order ASC, id ASC`,
+      d.id,
+      d.project_id,
+      d.stage_order,
+      d.document_order,
+      d.document_code,
+      d.document_name,
+      d.is_required,
+      d.is_applicable,
+      d.completion_mode,
+      d.status,
+      d.revision_required,
+      d.revision_reason,
+      d.revision_source_document_id,
+      d.revision_requested_at,
+      d.revision_resubmitted_by_user_id,
+      d.revision_resubmitted_at,
+      source.document_code AS revision_source_document_code,
+      source.document_name AS revision_source_document_name
+    FROM project_stage_documents d
+    LEFT JOIN project_stage_documents source
+      ON source.id = d.revision_source_document_id
+    WHERE d.project_id IN (${buildInClause(projectIds)})
+    ORDER BY d.project_id ASC, d.stage_order ASC, d.document_order ASC, d.id ASC`,
     projectIds
   );
 
@@ -319,8 +352,25 @@ async function countMyPendingStageDocumentTasks(userId) {
     FROM project_stage_documents
     WHERE responsible_user_id = ?
       AND is_applicable = 1
-      AND status IN (?, ?, ?)`,
-    [userId, DOCUMENT_STATUS.NOT_SUBMITTED, DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.RETURNED]
+      AND (
+        (
+          revision_required = 1
+          AND NOT (
+            completion_mode IN (?, ?)
+            AND status = ?
+            AND revision_resubmitted_at IS NOT NULL
+          )
+        )
+        OR status IN (?, ?)
+      )`,
+    [
+      userId,
+      COMPLETION_MODE.APPROVAL_REQUIRED,
+      COMPLETION_MODE.CONDITIONAL_APPROVAL,
+      DOCUMENT_STATUS.SUBMITTED,
+      DOCUMENT_STATUS.NOT_SUBMITTED,
+      DOCUMENT_STATUS.RETURNED
+    ]
   );
 
   return Number(rows[0].count);
@@ -332,10 +382,11 @@ export async function getProjectOverviewDashboard(user, filters) {
     countMyPendingStageDocumentTasks(user.id)
   ]);
   const projectIds = projectRows.map((project) => project.id);
-  const [stageRows, documentRows] = await Promise.all([
+  const [stageRows, rawDocumentRows] = await Promise.all([
     selectProjectOverviewStages(projectIds),
     selectProjectOverviewDocuments(projectIds)
   ]);
+  const documentRows = await attachInitiationReviewToStageDocumentRows(pool, rawDocumentRows, user);
   const stagesByProject = groupRowsBy(stageRows, 'project_id');
   const documentsByProject = groupRowsBy(documentRows, 'project_id');
   const projects = projectRows
@@ -343,7 +394,8 @@ export async function getProjectOverviewDashboard(user, filters) {
       buildProjectOverviewCard(
         projectRow,
         stagesByProject.get(projectRow.id) || [],
-        documentsByProject.get(projectRow.id) || []
+        documentsByProject.get(projectRow.id) || [],
+        user
       )
     )
     .filter((project) => matchesCurrentStageOrderFilter(project, filters.currentStageOrder));

@@ -1,0 +1,106 @@
+﻿## 1. Planning / Review Tasks
+
+- [x] 1.1 Read `docs/9.11_20260625项目流程资料审批口径规划.md`.
+- [x] 1.2 Read current formal specs for `project-core`, `project-core-frontend`, `stage-document-checklist`, and `technical-architecture`.
+- [x] 1.3 Read `file-platform-integration-v1` proposal, design, tasks, and spec deltas only to confirm it should be paused.
+- [x] 1.4 Read current online-platform code status for project creation, project-code schema, stage document templates, status transitions, completeness summary, stage advancement, and attachments.
+- [x] 1.5 Add `docs/9.12_在线平台内部资料闭环规划_20260625.md`.
+- [x] 1.6 Create `online-platform-internal-document-flow-v1` proposal.
+- [x] 1.7 Create design for nullable `projectCode`, completionMode, online-platform attachments, and paused file-platform linkage.
+- [x] 1.8 Add `project-core` spec delta for project-code post-generation, completionMode stage advancement, and online-platform attachment storage.
+- [x] 1.9 Add `project-core-frontend` spec delta for optional project code, empty-code display, completionMode UI, and paused file-platform archive UI.
+- [x] 1.10 Add `stage-document-checklist` spec delta for completionMode template/instance fields, 33/24/7/0 statistics, review todo filtering, and online-platform attachments.
+- [x] 1.11 Add `technical-architecture` spec delta for no file-platform call/config in the current phase.
+- [x] 1.12 Keep this change planning-only: no backend code, no frontend code, no database change, no migration, no git commit, and no archive.
+- [x] 1.13 Do not modify `file-platform-integration-v1`.
+- [x] 1.14 Do not modify `define-digital-platform-v1`.
+- [x] 1.15 Do not modify `D:\file-server-local`.
+- [x] 1.16 Run OpenSpec validation before review.
+- [x] 1.17 Review follow-up: add MODIFIED/REMOVED spec deltas to resolve old `confirmed`-only completeness and generic stage-gate approval conflicts.
+- [x] 1.18 Review follow-up: require backend responses to include `completionMode` plus `isComplete`, `completionStatus`, or equivalent derived completion status.
+- [x] 1.19 Review follow-up: clarify `submit_only + submitted` is completed, `approval_required + submitted` is pending review, and `returned` remains incomplete.
+- [x] 1.20 Review follow-up: clarify `conditional_submit` reuses existing `isApplicable` instead of adding a trigger workflow engine.
+- [x] 1.21 Review follow-up: tighten project-code post-generation to `1.2 项目立项审批表` approved plus `1.3 项目立项通知` submitted/uploaded, with existing permission boundaries and no object rebuild.
+- [x] 1.22 Review follow-up: keep file-platform integration paused in this change and keep the work planning-only with no backend, frontend, database, file-platform, git commit, or archive changes.
+- [x] 1.23 Review follow-up: cover the old frontend stage-approval display requirement so generic stage approval status, history, and two-level approval progress are not shown as current advancement prerequisites.
+- [x] 1.24 Review follow-up: cover the old frontend stage-approval operation requirement so submit/resubmit stage approval and stage approval pass/return entries are not shown in this internal flow.
+- [x] 1.25 Review follow-up: tighten the frontend stage advancement requirement so `approval_status != approved` does not hide advancement when current-stage applicable documents are complete by `completionMode`.
+- [x] 1.26 Review follow-up: adjust frontend approval error handling so `PROJECT_APPROVAL_NOT_APPROVED` is only legacy compatibility messaging, not the current happy-path rule.
+- [x] 1.27 Review follow-up: keep frontend wording focused on document-level `approval_required` review and stage advancement, without presenting generic stage-gate approval as required.
+- [x] 1.28 Review follow-up: cover the old frontend workbench requirement so the workbench shows document responsibility, document review, and stage advancement todos, but not stage-gate approval todo categories or entries.
+- [x] 1.29 Review follow-up: cover the old simple document-closure frontend boundary so project detail shows online-platform attachment storage and no file-platform archive status, file list, download, or retry UI.
+- [x] 1.30 Review follow-up: keep the simple document-closure stage advancement wording based on `completionMode` completion plus advancement permission, not generic stage-gate approval.
+- [x] 1.31 Review follow-up: cover project-core overview, project-manager boundary, participant derivation, workbench, audit, and 20260624/20260625 basis requirements so they use the 20260625 `completionMode` internal flow.
+- [x] 1.32 Review follow-up: cover stage-document template, initialization, base status, manual transitions, my tasks, behavior preservation, review boundaries, attachment boundaries, review todos, attachment permissions, stage advancement, and closure requirements so they do not retain confirmed-only, stage-gate, or file-platform archive requirements.
+- [x] 1.33 Review follow-up: cover frontend project-detail operations, completeness display, my document tasks, overview, modularization, and attachment UI so they use `completionMode` derived completion and do not show archive status or generic stage-gate approval as current flow.
+- [x] 1.34 Review follow-up: tighten technical architecture so file-platform integration stays paused and the online platform owns document completion, review todos, completeness summaries, and stage advancement without generic stage-gate approval.
+- [x] 1.35 Review follow-up: sync docs/9.12 and design.md with the 20260625 basis, no `stage_gate_approval` workbench, derived completion status in overview/tasks/operations/attachments, paused file-platform archive, and no generic stage-gate approval.
+- [x] 1.36 Review follow-up: move the old `项目详情页 v20260624 阶段资料展示` frontend requirement to REMOVED and add the positive `项目详情页 20260625 阶段资料展示` requirement.
+- [x] 1.37 Review follow-up: move the old `阶段资料收集审核归档闭环` stage-document requirement to REMOVED and add the positive online-platform stage document collection/review closure requirement with file-platform archive paused.
+- [x] 1.38 Review follow-up: tighten the new project page exclusion wording so frontend does not write logs directly while `project.created` remains the backend project-creation transaction responsibility.
+- [x] 1.39 Review follow-up: align frontend gate summary wording from applicable required documents to applicable gate documents.
+- [x] 1.40 Review follow-up: sync API/Web README to the 20260625 64-item `completionMode` internal flow, nullable project code gate, three-type workbench, and paused file-platform boundary.
+
+## 2. Future Implementation Tasks
+
+- [x] 2.1 Backend migration: make `projects.project_code` nullable.
+- [x] 2.2 Backend migration: ensure only non-empty `projectCode` values are unique, preserving multiple empty project codes.
+- [x] 2.3 Backend migration: add `completion_mode` to `stage_document_templates`.
+- [x] 2.4 Backend migration: add `completion_mode` to `project_stage_documents`.
+- [x] 2.5 Backend template: write current 64 stage document items with `completionMode`.
+- [x] 2.6 Backend template: add verification that completionMode counts are `submit_only 33`, `approval_required 24`, `conditional_submit 7`, and `conditional_approval 0`.
+- [x] 2.7 Backend init/reset: rebuild simulated project stage documents from the 20260625 64-item template.
+- [x] 2.8 Backend project creation: make `projectCode` optional in input normalization and validation.
+- [x] 2.9 Backend project creation: insert `project_code = NULL` when project code is not supplied.
+- [x] 2.10 Backend project code: implement post-initiation project-code fill/update endpoint or reuse project update with explicit permission and uniqueness checks after `1.2 项目立项审批表` is approved and `1.3 项目立项通知` is submitted/uploaded.
+- [x] 2.11 Backend project code: return a stable `PROJECT_CODE_EXISTS` or equivalent error for duplicate non-empty codes.
+- [x] 2.12 Backend project code: ensure post-creation project-code update does not rebuild stages, project stage documents, or attachments.
+- [x] 2.13 Backend document responses: return `completionMode` and `isComplete`, `completionStatus`, or equivalent derived completion status for stage document lists, missing documents, responsibility todos, and review todos.
+- [x] 2.14 Backend document status: implement `submit_only` so submit/upload leaves base `status = submitted` but derived completion status is completed without review.
+- [x] 2.15 Backend document status: keep `approval_required` as submitted then confirmed before completion; `submitted` must derive to pending review.
+- [x] 2.16 Backend conditional documents: implement `conditional_submit` with existing `isApplicable`; `isApplicable=false` is untriggered/not applicable and non-blocking, `isApplicable=true` is triggered and requires submit/upload.
+- [x] 2.17 Backend workbench: generate document review todos only for `approval_required` documents in `submitted` status.
+- [x] 2.18 Backend responsibility todos: remove completed `submit_only` documents from actionable responsibility todos after submit/upload.
+- [x] 2.19 Backend completeness summary: compute stage completeness by `completionMode` and derived completion status rather than requiring all applicable required documents to be `confirmed`.
+- [x] 2.20 Backend missing list: include `completionMode`, current status, `isApplicable`, and derived completion status in incomplete document outputs.
+- [x] 2.21 Backend stage advancement: remove the generic `stage approval_status` gate from the 20260625 internal document flow.
+- [x] 2.22 Backend stage advancement: keep current-stage, standard-order, project-status, and advancement-permission checks.
+- [x] 2.23 Backend attachments: keep using online-platform attachment storage and permissions.
+- [x] 2.24 Backend attachments: ensure no file-platform client, folder mapping, archive status, archive retry, or file-platform API call is introduced.
+- [x] 2.25 Backend workbench: `GET /api/me/workbench` returns only `document_responsibility`, `document_review`, and `stage_advance` todo types.
+- [x] 2.26 Backend workbench: do not return `stage_gate_approval`.
+- [x] 2.27 Backend workbench: generate `stage_advance` only from current-stage applicable document completion by `completionMode` plus advancement permission, and do not generate or hide it because of `approval_status`.
+- [x] 2.28 Backend workbench: ensure `targetRoute` never points to stage-gate approval handling, stage approval pass, or stage approval return pages.
+- [x] 2.29 Backend overview/my tasks: project overview, my document tasks, and responsibility todos use derived completion status and must not treat `submit_only + submitted` as pending review or pending work.
+- [x] 2.30 Frontend project creation: make project code non-required in `ProjectCreatePage`.
+- [x] 2.31 Frontend project list/detail/workbench: display empty project code as `待生成` or equivalent.
+- [x] 2.32 Frontend project detail: implement a post-initiation project-code fill/update entry after `1.2` approval and `1.3` notice submission, using existing permission boundaries.
+- [x] 2.33 Frontend stage document list: display completionMode labels and backend derived completion status.
+- [x] 2.34 Frontend `submit_only`: use submit/upload/complete wording, show `submitted` as completed, and hide review/return actions.
+- [x] 2.35 Frontend `approval_required`: keep submit, pending-review, review approval, and return UI.
+- [x] 2.36 Frontend `conditional_submit`: display `isApplicable=false` as untriggered/not applicable and `isApplicable=true` as triggered submit completion state.
+- [x] 2.37 Frontend review workbench: show only documents that require review.
+- [x] 2.38 Frontend file-platform UI: do not display file-platform archive status, file list, download entry, folder ID, or retry entry in this phase.
+- [x] 2.39 Frontend project detail: do not display generic stage approval status, stage approval history, or two-level stage approval progress as advancement prerequisites.
+- [x] 2.40 Frontend project detail: do not display submit stage approval, resubmit stage approval, stage approval pass, stage approval return, center-manager stage approval, or general-manager stage approval entries.
+- [x] 2.41 Frontend stage advancement: when current-stage documents are complete by `completionMode` and the user has advancement permission, do not hide the advancement entry because `approval_status != approved`.
+- [x] 2.42 Frontend error handling: treat `PROJECT_APPROVAL_NOT_APPROVED` only as legacy compatibility messaging, not as the current normal-flow rule, and do not guide users to perform stage-gate approval.
+- [x] 2.43 Frontend workbench: do not display stage-gate approval categories, counts, filters, entries, or routes.
+- [x] 2.44 Frontend overview/my document tasks: use backend derived completion status, show `submit_only + submitted` as completed, and keep it out of pending lists.
+- [x] 2.45 Test: project creation with empty `projectCode`.
+- [x] 2.46 Test: post-creation project-code fill/update after `1.2` approval and `1.3` notice submission, duplicate-code rejection, and no stage/document/attachment rebuild.
+- [x] 2.47 Test: `submit_only` submit/upload completes document and returns derived completed status.
+- [x] 2.48 Test: `approval_required` submitted item derives pending review and does not complete until confirmed.
+- [x] 2.49 Test: `returned` derives incomplete and blocks when applicable.
+- [x] 2.50 Test: `conditional_submit` with `isApplicable=false` does not block, `isApplicable=true` unsubmitted blocks, and `isApplicable=true` submitted completes.
+- [x] 2.51 Test: stage advancement no longer depends on generic stage `approval_status`.
+- [x] 2.52 Test: attachment upload/list/download/delete still works with online-platform storage.
+- [x] 2.53 Test: no file-platform API call/config/folder mapping/archive status is used.
+- [x] 2.54 Test: workbench response contains no `stage_gate_approval` and no stage-approval `targetRoute`.
+- [x] 2.55 Test: stage advance todo appears when completionMode completion and advancement permission match, even if old `approval_status` is not approved.
+- [x] 2.56 Test: frontend project detail and workbench do not show generic stage-gate approval UI.
+- [x] 2.57 Test: `PROJECT_APPROVAL_NOT_APPROVED` is handled only as legacy compatibility messaging.
+- [x] 2.58 Test: overview and my tasks do not count completed `submit_only + submitted` as pending or review work.
+- [x] 2.59 Validation: run API check/test.
+- [x] 2.60 Validation: run frontend build.
+- [x] 2.61 Validation: run OpenSpec validate before implementation review.

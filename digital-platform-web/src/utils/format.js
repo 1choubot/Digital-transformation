@@ -25,6 +25,21 @@ export const submitModeText = {
   tbd: '暂未确定'
 };
 
+export const completionModeText = {
+  submit_only: '提交即完成',
+  approval_required: '需审核',
+  conditional_submit: '条件触发后提交',
+  conditional_approval: '条件触发后审核'
+};
+
+export const completionStatusText = {
+  incomplete: '未完成',
+  pending_review: '待审核',
+  revision_required: '需返工',
+  completed: '已完成',
+  not_applicable: '未触发/不适用'
+};
+
 export const organizationRoleText = {
   general_manager: '总经理',
   system_admin: '系统管理员',
@@ -66,6 +81,18 @@ export function formatStatus(value) {
 
 export function formatSubmitMode(value) {
   return submitModeText[value] || value || '-';
+}
+
+export function formatCompletionMode(value) {
+  return completionModeText[value] || value || '-';
+}
+
+export function formatCompletionStatus(value) {
+  return completionStatusText[value] || value || '-';
+}
+
+export function formatProjectCode(value) {
+  return value ? String(value) : '待生成';
 }
 
 export function formatOrganizationRole(value) {

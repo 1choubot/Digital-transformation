@@ -20,13 +20,13 @@ import {
   isInitiationReviewDocumentCode
 } from '../../domain/initiationReview.js';
 import { normalizeReturnReason } from '../../domain/stageDocumentStatus.js';
-import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
+import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import {
   insertOperationLog,
   OPERATION_ACTION_TYPE,
   OPERATION_TARGET_TYPE
 } from '../operationLogRepository.js';
-import { mapDocument } from './shared.js';
+import { deriveStageDocumentCompletion, mapDocument } from './shared.js';
 
 export const INITIATION_REVIEW_TODO_TYPE = 'initiation_review';
 
@@ -426,6 +426,59 @@ export async function mapDocumentWithInitiationReview(executor, row, user = null
   const attachedRow =
     attachedRows.find((candidate) => String(getDocumentId(candidate)) === String(getDocumentId(row))) ?? row;
   return mapDocument(attachedRow);
+}
+
+export async function assertInitiationNoticeSubmitGateReady(connection, projectId) {
+  const [rows] = await connection.execute(
+    `SELECT
+      id,
+      project_id,
+      document_code,
+      document_name,
+      status,
+      completion_mode,
+      is_applicable,
+      revision_required,
+      revision_source_document_id
+    FROM project_stage_documents
+    WHERE project_id = ?
+      AND document_code IN (?, ?)
+    FOR UPDATE`,
+    [projectId, INITIATION_REVIEW_DOCUMENT_CODE, INITIATION_REWORK_TARGET_DOCUMENT_CODE]
+  );
+
+  const rowsWithInitiationReview = await attachInitiationReviewToStageDocumentRows(connection, rows);
+  const byCode = new Map(rowsWithInitiationReview.map((row) => [row.document_code, row]));
+  const initiationApproval = byCode.get(INITIATION_REVIEW_DOCUMENT_CODE);
+  const initiationRequirement = byCode.get(INITIATION_REWORK_TARGET_DOCUMENT_CODE);
+  const details = [];
+
+  if (
+    !initiationApproval ||
+    initiationApproval.completion_mode !== COMPLETION_MODE.APPROVAL_REQUIRED ||
+    !deriveStageDocumentCompletion(initiationApproval).isComplete
+  ) {
+    details.push(INITIATION_REVIEW_DOCUMENT_CODE);
+  }
+
+  if (
+    initiationApproval &&
+    initiationRequirement &&
+    isRevisionRequired(initiationRequirement) &&
+    Boolean(getRevisionSourceDocumentId(initiationRequirement)) &&
+    String(getRevisionSourceDocumentId(initiationRequirement)) === String(getDocumentId(initiationApproval))
+  ) {
+    details.push(INITIATION_REWORK_TARGET_DOCUMENT_CODE);
+  }
+
+  if (details.length > 0) {
+    throw new InitiationReviewError(
+      'INITIATION_NOTICE_GATE_NOT_READY',
+      'Initiation notice can be submitted only after initiation approval and rework clearance',
+      409,
+      details
+    );
+  }
 }
 
 async function selectInitiationDocumentForUpdate(connection, projectId, documentId) {

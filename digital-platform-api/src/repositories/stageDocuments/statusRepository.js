@@ -12,7 +12,10 @@ import {
   StageDocumentStatusError
 } from '../../domain/stageDocumentStatus.js';
 import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
-import { isInitiationReviewDocument } from '../../domain/initiationReview.js';
+import {
+  INITIATION_NOTICE_DOCUMENT_CODE,
+  isInitiationReviewDocument
+} from '../../domain/initiationReview.js';
 import {
   DESIGN_CHANGE_SOURCE_DOCUMENT_CODE,
   DESIGN_CHANGE_TARGET_DOCUMENT_CODES,
@@ -39,9 +42,14 @@ import { isStageDocumentReviewAuthority } from './accessControl.js';
 import { selectProjectPermissionContext } from './permissionContext.js';
 import {
   activateInitiationReviewNodesForDocument,
+  assertInitiationNoticeSubmitGateReady,
   attachInitiationReviewToStageDocumentRows,
   restoreInitiationReviewNodesAfterReworkCleared
 } from './initiationReviewRepository.js';
+
+function isInitiationNoticeDocument(document) {
+  return String(document?.document_code ?? document?.documentCode ?? '') === INITIATION_NOTICE_DOCUMENT_CODE;
+}
 
 function assertUserCanUpdateDocumentStatus({ user, action, currentDocument, project }) {
   if (isGeneralManagerAssistantUser(user) || isSystemAdminUser(user)) {
@@ -632,6 +640,9 @@ export async function updateProjectStageDocumentStatus({
       currentDocument,
       returnReason
     });
+    if (action === DOCUMENT_STATUS_ACTION.SUBMIT && isInitiationNoticeDocument(currentDocument)) {
+      await assertInitiationNoticeSubmitGateReady(connection, projectId);
+    }
 
     if (action === DOCUMENT_STATUS_ACTION.RETURN) {
       const normalizedReason = normalizeReturnReason(returnReason);

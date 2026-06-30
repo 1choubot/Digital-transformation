@@ -39,7 +39,11 @@ import {
   listProjects,
   updateProjectCode
 } from '../src/repositories/projectRepository.js';
-import { listProjectOperationLogs } from '../src/repositories/operationLogRepository.js';
+import {
+  OPERATION_ACTION_TYPE,
+  OPERATION_TARGET_TYPE,
+  listProjectOperationLogs
+} from '../src/repositories/operationLogRepository.js';
 import {
   approveInitiationReviewNode,
   completeProjectStageDocumentRevision,
@@ -660,6 +664,97 @@ async function assertHasInitiationWorkbenchTask(user, projectId, nodeKey) {
   );
 }
 
+async function resetInitiationNoticeForSubmit(projectId, user) {
+  const notice = await selectSmokeDocument(projectId, '1.3');
+  await pool.execute(
+    `UPDATE project_stage_documents
+     SET responsible_user_id = ?,
+       status = ?,
+       submitted_by_user_id = NULL,
+       submitted_at = NULL,
+       confirmed_by_user_id = NULL,
+       confirmed_at = NULL,
+       returned_by_user_id = NULL,
+       returned_at = NULL,
+       return_reason = NULL,
+       revision_required = 0,
+       revision_reason = NULL,
+       revision_source_document_id = NULL,
+       revision_requested_by_user_id = NULL,
+       revision_requested_at = NULL,
+       revision_resubmitted_by_user_id = NULL,
+       revision_resubmitted_at = NULL,
+       revision_completed_by_user_id = NULL,
+       revision_completed_at = NULL,
+       is_applicable = 1
+     WHERE id = ?`,
+    [user.id, DOCUMENT_STATUS.NOT_SUBMITTED, notice.id]
+  );
+
+  return selectSmokeDocument(projectId, '1.3');
+}
+
+async function countDocumentSubmittedLogs(projectId, documentId) {
+  const [rows] = await pool.execute(
+    `SELECT COUNT(*) AS count
+     FROM business_operation_logs
+     WHERE project_id = ?
+       AND action_type = ?
+       AND target_type = ?
+       AND target_id = ?`,
+    [
+      projectId,
+      OPERATION_ACTION_TYPE.DOCUMENT_SUBMITTED,
+      OPERATION_TARGET_TYPE.STAGE_DOCUMENT,
+      documentId
+    ]
+  );
+
+  return Number(rows[0].count);
+}
+
+async function assertInitiationNoticeSubmitGateRejects({ projectId, user, expectedDetails }) {
+  const notice = await resetInitiationNoticeForSubmit(projectId, user);
+  const submittedLogCountBefore = await countDocumentSubmittedLogs(projectId, notice.id);
+
+  await assert.rejects(
+    () =>
+      updateProjectStageDocumentStatus({
+        projectId,
+        documentId: notice.id,
+        action: DOCUMENT_STATUS_ACTION.SUBMIT,
+        user
+      }),
+    (error) =>
+      error.code === 'INITIATION_NOTICE_GATE_NOT_READY' &&
+      error.statusCode === 409 &&
+      Array.isArray(error.details) &&
+      expectedDetails.every((detail) => error.details.includes(detail))
+  );
+
+  const noticeAfterReject = await selectSmokeDocument(projectId, '1.3');
+  assert.equal(noticeAfterReject.status, DOCUMENT_STATUS.NOT_SUBMITTED);
+  assert.equal(noticeAfterReject.submitted_by_user_id, null);
+  assert.equal(await countDocumentSubmittedLogs(projectId, notice.id), submittedLogCountBefore);
+}
+
+async function submitInitiationNoticeAfterGateReady(projectId, user) {
+  const notice = await resetInitiationNoticeForSubmit(projectId, user);
+  const submittedNotice = await updateProjectStageDocumentStatus({
+    projectId,
+    documentId: notice.id,
+    action: DOCUMENT_STATUS_ACTION.SUBMIT,
+    user
+  });
+
+  assert.equal(submittedNotice.documentCode, '1.3');
+  assert.equal(submittedNotice.status, DOCUMENT_STATUS.SUBMITTED);
+  assert.equal(submittedNotice.isComplete, true);
+  assert.equal(submittedNotice.completionStatus, 'completed');
+
+  return submittedNotice;
+}
+
 async function runInitiationReviewSmoke({
   uniqueSuffix,
   smokeProjectIds,
@@ -689,6 +784,11 @@ async function runInitiationReviewSmoke({
     departmentUser(9101, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER),
     projectId
   );
+  await assertInitiationNoticeSubmitGateRejects({
+    projectId,
+    user: managerUser,
+    expectedDetails: ['1.2']
+  });
 
   await assert.rejects(
     () =>
@@ -754,6 +854,11 @@ async function runInitiationReviewSmoke({
     (error) => error instanceof ProjectCodeUpdateError && error.code === 'PROJECT_CODE_GATE_NOT_READY'
   );
   await assertNoInitiationWorkbenchTask(generalManagerUser, projectId, 'general_review');
+  await assertInitiationNoticeSubmitGateRejects({
+    projectId,
+    user: managerUser,
+    expectedDetails: ['1.2']
+  });
 
   await approveInitiationReviewNode({
     projectId,
@@ -763,6 +868,11 @@ async function runInitiationReviewSmoke({
     comment: 'technical approval'
   });
   await assertHasInitiationWorkbenchTask(generalManagerUser, projectId, 'general_review');
+  await assertInitiationNoticeSubmitGateRejects({
+    projectId,
+    user: managerUser,
+    expectedDetails: ['1.2']
+  });
   await approveInitiationReviewNode({
     projectId,
     documentId: initiationDocument.id,
@@ -803,6 +913,11 @@ async function runInitiationReviewSmoke({
       Array.isArray(error.details) &&
       error.details.includes('1.1')
   );
+  await assertInitiationNoticeSubmitGateRejects({
+    projectId,
+    user: managerUser,
+    expectedDetails: ['1.1']
+  });
   await pool.execute(
     `UPDATE project_stage_documents
      SET revision_required = 0,
@@ -814,10 +929,11 @@ async function runInitiationReviewSmoke({
        revision_resubmitted_at = NULL,
        revision_completed_by_user_id = NULL,
        revision_completed_at = NULL
-     WHERE project_id = ?
-       AND document_code = '1.1'`,
+      WHERE project_id = ?
+        AND document_code = '1.1'`,
     [projectId]
   );
+  await submitInitiationNoticeAfterGateReady(projectId, managerUser);
   await assert.rejects(
     () =>
       updateProjectCode({
@@ -1021,6 +1137,11 @@ async function runInitiationReviewSmoke({
   assertInitiationNodeStatus(nodes, 'technical_review', 'waiting_document_submission');
   await assertNoInitiationWorkbenchTask(marketingManagerUser, notSubmittedProjectId, 'business_review');
   await assertNoInitiationWorkbenchTask(managerUser, notSubmittedProjectId, 'technical_review');
+  await assertInitiationNoticeSubmitGateRejects({
+    projectId: notSubmittedProjectId,
+    user: managerUser,
+    expectedDetails: ['1.2']
+  });
 
   const legacyProjectId = await createInitiationSmokeProject({
     uniqueSuffix,

@@ -1,4 +1,5 @@
 import { normalizeCreateProjectInput, ValidationError } from '../domain/projects.js';
+import { canCreateProject } from '../domain/organization.js';
 import { DOCUMENT_APPLICABILITY_ACTION } from '../domain/stageDocumentApplicability.js';
 import { DOCUMENT_STATUS_ACTION } from '../domain/stageDocumentStatus.js';
 import {
@@ -12,6 +13,7 @@ import {
   listProjects,
   normalizeProjectOverviewDashboardFilters,
   ProjectNotFoundError,
+  ProjectAuthorizationError,
   projectExists,
   resubmitStageApproval,
   returnStageApproval,
@@ -182,6 +184,14 @@ export async function listMyActiveProjectsHandler(req, res) {
 }
 
 export async function createProjectHandler(req, res) {
+  if (!canCreateProject(req.auth.user)) {
+    throw new ProjectAuthorizationError(
+      'FORBIDDEN_OPERATION',
+      'Current user cannot create project',
+      ['organizationRole']
+    );
+  }
+
   const project = normalizeCreateProjectInput(req.body || {});
   const created = await createProject(project, req.auth.user.id);
 

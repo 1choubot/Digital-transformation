@@ -426,19 +426,9 @@ import {
 // ===== 自定义导航 =====
 const { route, navigate: baseNavigate } = useHashRouter();
 
+// 修改点：移除项目详情的“新标签页打开”逻辑，统一为当前页导航
 const navigate = (path, options = {}) => {
-  const isProjectDetail = /^\/projects\/\d+$/.test(path);
-  const currentProjectId = route.value.params?.projectId;
-  const targetProjectId = path.split('/').pop();
-  const isSameDetail = route.value.name === 'project-detail' && currentProjectId === targetProjectId;
-
-  if (isProjectDetail && !isSameDetail && options.newTab !== false) {
-    const base = window.location.origin + window.location.pathname;
-    const hash = path.startsWith('#') ? path : '#' + path;
-    window.open(base + hash, '_blank');
-  } else {
-    baseNavigate(path);
-  }
+  baseNavigate(path);
 };
 
 const authLoading = ref(true);

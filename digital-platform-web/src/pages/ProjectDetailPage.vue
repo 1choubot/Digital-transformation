@@ -24,6 +24,17 @@
 
     <!-- 主内容区 -->
     <template v-else-if="detail">
+      <!-- 页面标题与操作栏：返回按钮 -->
+      <div class="page-header-bar">
+        <button type="button" class="back-btn" @click="navigate('/projects')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+          返回项目列表
+        </button>
+      </div>
+
       <!-- 模块 1: 项目头部信息概览 -->
       <div class="card-wrapper">
         <ProjectDetailHeader :detail="detail" :current-stage-title="currentStageTitle" />
@@ -1129,6 +1140,41 @@ onUnmounted(() => {
 
 .tab-content {
   margin-top: 0;
+}
+
+/* ===== 页面头部操作栏（返回按钮） ===== */
+.page-header-bar {
+  display: flex;
+  align-items: center;
+  padding-bottom: 0.5rem;
+}
+
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  border: 1px solid #dcdfe6;
+  background: #ffffff;
+  color: #606266;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.back-btn:hover {
+  background: #f4f6f9;
+  color: #3e63dd;
+  border-color: #c0c4cc;
+}
+
+.back-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
 }
 
 /* ===== Toast 通知气泡样式 ===== */

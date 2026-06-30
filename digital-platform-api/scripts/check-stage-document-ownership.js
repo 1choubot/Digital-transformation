@@ -116,6 +116,27 @@ function mapCompletionModeCountRows(rows) {
   return counts;
 }
 
+function findChecklistDocument(checklist, documentCode) {
+  const document = checklist.stages
+    .flatMap((stage) => stage.documents)
+    .find((candidate) => candidate.documentCode === documentCode);
+  assert.ok(document, `Checklist document not found: ${documentCode}`);
+  return document;
+}
+
+async function assertStageDocumentSubmitForbidden({ projectId, documentId, user }) {
+  await assert.rejects(
+    () =>
+      updateProjectStageDocumentStatus({
+        projectId,
+        documentId,
+        action: DOCUMENT_STATUS_ACTION.SUBMIT,
+        user
+      }),
+    (error) => error.code === 'FORBIDDEN_OPERATION' && error.statusCode === 403
+  );
+}
+
 async function selectSmokeUser(account) {
   const [rows] = await pool.execute(
     `SELECT
@@ -250,12 +271,17 @@ async function completeInitiationGate(projectId, { submitterUser, marketingManag
        WHEN '1.1' THEN ?
        WHEN '1.3' THEN ?
        ELSE status
-     END
+      END,
+       responsible_user_id = CASE document_code
+        WHEN '1.2' THEN ?
+        ELSE responsible_user_id
+      END
      WHERE project_id = ?
-       AND document_code IN ('1.1', '1.3')`,
+       AND document_code IN ('1.1', '1.2', '1.3')`,
     [
       DOCUMENT_STATUS.SUBMITTED,
       DOCUMENT_STATUS.SUBMITTED,
+      submitterUser.id,
       projectId
     ]
   );
@@ -577,17 +603,28 @@ async function prepareInitiationSmokeBase(projectId, submitterUser) {
     `UPDATE project_stage_documents
      SET status = CASE document_code
        WHEN '1.1' THEN ?
+       WHEN '1.2' THEN ?
        WHEN '1.3' THEN ?
        ELSE status
-     END,
-       revision_required = 0,
-       revision_source_document_id = NULL,
-       revision_resubmitted_by_user_id = NULL,
-       revision_resubmitted_at = NULL,
-       is_applicable = 1
-     WHERE project_id = ?
-       AND document_code IN ('1.1', '1.3')`,
-    [DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.SUBMITTED, projectId]
+      END,
+       responsible_user_id = CASE document_code
+        WHEN '1.2' THEN ?
+        ELSE responsible_user_id
+      END,
+        revision_required = 0,
+        revision_source_document_id = NULL,
+        revision_resubmitted_by_user_id = NULL,
+        revision_resubmitted_at = NULL,
+        is_applicable = 1
+      WHERE project_id = ?
+        AND document_code IN ('1.1', '1.2', '1.3')`,
+    [
+      DOCUMENT_STATUS.SUBMITTED,
+      DOCUMENT_STATUS.NOT_SUBMITTED,
+      DOCUMENT_STATUS.SUBMITTED,
+      submitterUser.id,
+      projectId
+    ]
   );
   const initiationDocument = await selectSmokeDocument(projectId, '1.2');
   await updateProjectStageDocumentStatus({
@@ -906,6 +943,10 @@ async function runInitiationReviewSmoke({
       }),
     (error) => error instanceof ProjectCodeUpdateError && error.code === 'PROJECT_CODE_GATE_NOT_READY'
   );
+  await pool.execute(
+    'UPDATE project_stage_documents SET responsible_user_id = ? WHERE id = ?',
+    [managerUser.id, returnedRequirement.id]
+  );
   await completeProjectStageDocumentRevision({
     projectId: returnProjectId,
     documentId: returnedRequirement.id,
@@ -1045,10 +1086,11 @@ async function runInitiationReviewSmoke({
   });
   await pool.execute(
     `UPDATE project_stage_documents
-     SET status = ?
+     SET status = ?,
+       responsible_user_id = ?
      WHERE project_id = ?
        AND document_code = '1.2'`,
-    [DOCUMENT_STATUS.RETURNED, returnedBaseProjectId]
+    [DOCUMENT_STATUS.RETURNED, managerUser.id, returnedBaseProjectId]
   );
   await pool.execute(
     'DELETE FROM project_initiation_review_nodes WHERE project_id = ?',
@@ -1115,6 +1157,14 @@ async function runProjectLifecycleSmoke() {
       role: 'Smoke 员工'
     });
     smokeUserIds.push(limitedEmployeeUser.id);
+    const rdEmployeeUser = await insertSmokeUser({
+      account: `smoke_rd_employee_${uniqueSuffix}`.replace(/[^a-zA-Z0-9_]/g, '_'),
+      name: 'Smoke 研发员工',
+      department: RD_CENTER,
+      organizationRole: ORGANIZATION_ROLE.EMPLOYEE,
+      role: 'Smoke 研发员工'
+    });
+    smokeUserIds.push(rdEmployeeUser.id);
     const marketingManagerUser = await insertSmokeUser({
       account: `smoke_marketing_manager_${uniqueSuffix}`.replace(/[^a-zA-Z0-9_]/g, '_'),
       name: 'Smoke 营销中心负责人',
@@ -1140,6 +1190,14 @@ async function runProjectLifecycleSmoke() {
       isPlatformAdmin: true
     });
     smokeUserIds.push(smokeSystemAdminUser.id);
+    const generalManagerAssistantUser = await insertSmokeUser({
+      account: `smoke_general_manager_assistant_${uniqueSuffix}`.replace(/[^a-zA-Z0-9_]/g, '_'),
+      name: 'Smoke 总经理助理',
+      department: null,
+      organizationRole: ORGANIZATION_ROLE.GENERAL_MANAGER_ASSISTANT,
+      role: 'Smoke 总经理助理'
+    });
+    smokeUserIds.push(generalManagerAssistantUser.id);
 
     const createdA = await createProject(
       {
@@ -1277,6 +1335,31 @@ async function runProjectLifecycleSmoke() {
     );
     assert.equal(centerManagerDetail.project.id, projectAId);
 
+    const unassignedSubmitDocument = await selectSmokeDocument(projectAId, '1.1');
+    await pool.execute(
+      `UPDATE project_stage_documents
+       SET responsible_user_id = NULL,
+         status = ?,
+         submitted_by_user_id = NULL,
+         submitted_at = NULL,
+         confirmed_by_user_id = NULL,
+         confirmed_at = NULL,
+         returned_by_user_id = NULL,
+         returned_at = NULL,
+         return_reason = NULL,
+         revision_required = 0,
+         revision_source_document_id = NULL,
+         revision_requested_by_user_id = NULL,
+         revision_requested_at = NULL,
+         revision_resubmitted_by_user_id = NULL,
+         revision_resubmitted_at = NULL,
+         revision_completed_by_user_id = NULL,
+         revision_completed_at = NULL,
+         is_applicable = 1
+       WHERE id = ?`,
+      [DOCUMENT_STATUS.NOT_SUBMITTED, unassignedSubmitDocument.id]
+    );
+
     const centerManagerChecklist = await getProjectStageDocumentChecklist(
       projectAId,
       departmentUser(9008, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER)
@@ -1292,6 +1375,121 @@ async function runProjectLifecycleSmoke() {
     assert.equal(
       assistantChecklist.stages.reduce((sum, stage) => sum + stage.documents.length, 0),
       EXPECTED_STAGE_DOCUMENT_ITEM_COUNT
+    );
+    const projectManagerChecklist = await getProjectStageDocumentChecklist(projectAId, managerUser);
+    const generalManagerChecklist = await getProjectStageDocumentChecklist(projectAId, generalManagerUser);
+    const marketingManagerChecklist = await getProjectStageDocumentChecklist(projectAId, marketingManagerUser);
+    const unassignedForProjectManager = findChecklistDocument(projectManagerChecklist, '1.1');
+    assert.equal(unassignedForProjectManager.canViewAttachments, true);
+    assert.equal(unassignedForProjectManager.canUploadAttachment, false);
+    assert.equal(unassignedForProjectManager.canDownloadAttachment, true);
+    assert.equal(unassignedForProjectManager.canSubmitDocument, false);
+    const unassignedForGeneralManager = findChecklistDocument(generalManagerChecklist, '1.1');
+    assert.equal(unassignedForGeneralManager.canViewAttachments, true);
+    assert.equal(unassignedForGeneralManager.canUploadAttachment, false);
+    assert.equal(unassignedForGeneralManager.canDownloadAttachment, true);
+    assert.equal(unassignedForGeneralManager.canSubmitDocument, false);
+    const unassignedForCenterManager = findChecklistDocument(marketingManagerChecklist, '1.1');
+    assert.equal(unassignedForCenterManager.canViewAttachments, true);
+    assert.equal(unassignedForCenterManager.canUploadAttachment, false);
+    assert.equal(unassignedForCenterManager.canDownloadAttachment, true);
+    assert.equal(unassignedForCenterManager.canSubmitDocument, false);
+    const unassignedForAssistant = findChecklistDocument(assistantChecklist, '1.1');
+    assert.equal(unassignedForAssistant.canViewAttachments, true);
+    assert.equal(unassignedForAssistant.canUploadAttachment, false);
+    assert.equal(unassignedForAssistant.canDownloadAttachment, true);
+    assert.equal(unassignedForAssistant.canSubmitDocument, false);
+    await assertStageDocumentSubmitForbidden({
+      projectId: projectAId,
+      documentId: unassignedSubmitDocument.id,
+      user: managerUser
+    });
+    await assertStageDocumentSubmitForbidden({
+      projectId: projectAId,
+      documentId: unassignedSubmitDocument.id,
+      user: generalManagerUser
+    });
+    await assertStageDocumentSubmitForbidden({
+      projectId: projectAId,
+      documentId: unassignedSubmitDocument.id,
+      user: marketingManagerUser
+    });
+    await assertStageDocumentSubmitForbidden({
+      projectId: projectAId,
+      documentId: unassignedSubmitDocument.id,
+      user: generalManagerAssistantUser
+    });
+    await assertStageDocumentSubmitForbidden({
+      projectId: projectAId,
+      documentId: unassignedSubmitDocument.id,
+      user: smokeSystemAdminUser
+    });
+    const unchangedUnassignedSubmitDocument = await selectSmokeDocument(projectAId, '1.1');
+    assert.equal(unchangedUnassignedSubmitDocument.responsible_user_id, null);
+    assert.equal(unchangedUnassignedSubmitDocument.status, DOCUMENT_STATUS.NOT_SUBMITTED);
+
+    const reviewerBoundaryDocument = await selectSmokeDocument(projectAId, '2.2');
+    await pool.execute(
+      `UPDATE project_stage_documents
+       SET responsible_user_id = ?,
+         review_department = ?,
+         status = ?,
+         submitted_by_user_id = NULL,
+         submitted_at = NULL,
+         confirmed_by_user_id = NULL,
+         confirmed_at = NULL,
+         returned_by_user_id = NULL,
+         returned_at = NULL,
+         return_reason = NULL,
+         revision_required = 0,
+         revision_source_document_id = NULL,
+         revision_requested_by_user_id = NULL,
+         revision_requested_at = NULL,
+         revision_resubmitted_by_user_id = NULL,
+         revision_resubmitted_at = NULL,
+         revision_completed_by_user_id = NULL,
+         revision_completed_at = NULL,
+         is_applicable = 1
+       WHERE id = ?`,
+      [rdEmployeeUser.id, RD_CENTER, DOCUMENT_STATUS.NOT_SUBMITTED, reviewerBoundaryDocument.id]
+    );
+    const responsibleChecklist = await getProjectStageDocumentChecklist(projectAId, rdEmployeeUser);
+    assert.equal(findChecklistDocument(responsibleChecklist, '2.2').canSubmitDocument, true);
+    const reviewerChecklistBeforeSubmit = await getProjectStageDocumentChecklist(projectAId, managerUser);
+    const reviewerDocumentBeforeSubmit = findChecklistDocument(reviewerChecklistBeforeSubmit, '2.2');
+    assert.equal(reviewerDocumentBeforeSubmit.canSubmitDocument, false);
+    assert.equal(reviewerDocumentBeforeSubmit.canReviewDocument, false);
+    await assertStageDocumentSubmitForbidden({
+      projectId: projectAId,
+      documentId: reviewerBoundaryDocument.id,
+      user: managerUser
+    });
+    await updateProjectStageDocumentStatus({
+      projectId: projectAId,
+      documentId: reviewerBoundaryDocument.id,
+      action: DOCUMENT_STATUS_ACTION.SUBMIT,
+      user: rdEmployeeUser
+    });
+    const reviewerChecklistAfterSubmit = await getProjectStageDocumentChecklist(projectAId, managerUser);
+    const reviewerDocumentAfterSubmit = findChecklistDocument(reviewerChecklistAfterSubmit, '2.2');
+    assert.equal(reviewerDocumentAfterSubmit.canSubmitDocument, false);
+    assert.equal(reviewerDocumentAfterSubmit.canReviewDocument, true);
+    const reviewedByNonResponsibleReviewer = await updateProjectStageDocumentStatus({
+      projectId: projectAId,
+      documentId: reviewerBoundaryDocument.id,
+      action: DOCUMENT_STATUS_ACTION.CONFIRM,
+      user: managerUser
+    });
+    assert.equal(reviewedByNonResponsibleReviewer.status, DOCUMENT_STATUS.CONFIRMED);
+    await pool.execute(
+      `UPDATE project_stage_documents
+       SET status = ?,
+         submitted_by_user_id = NULL,
+         submitted_at = NULL,
+         confirmed_by_user_id = NULL,
+         confirmed_at = NULL
+       WHERE id = ?`,
+      [DOCUMENT_STATUS.NOT_SUBMITTED, reviewerBoundaryDocument.id]
     );
     const creatorChecklist = await getProjectStageDocumentChecklist(creatorProjectId, creatorUser);
     assert.equal(
@@ -1364,6 +1562,10 @@ async function runProjectLifecycleSmoke() {
       'UPDATE project_stage_documents SET responsible_user_id = ? WHERE id = ?',
       [managerUser.id, attachmentDocument.id]
     );
+    const managerResponsibleChecklist = await getProjectStageDocumentChecklist(projectAId, managerUser);
+    const managerResponsibleDocument = findChecklistDocument(managerResponsibleChecklist, '1.1');
+    assert.equal(managerResponsibleDocument.canUploadAttachment, true);
+    assert.equal(managerResponsibleDocument.canSubmitDocument, true);
     const uploadedAttachment = await uploadStageDocumentAttachment({
       projectId: projectAId,
       documentId: attachmentDocument.id,
@@ -1912,6 +2114,10 @@ async function runProjectLifecycleSmoke() {
     assert.equal(Boolean(blockedConditionalDocument.is_applicable), true);
     assert.equal(blockedConditionalDocument.completion_mode, COMPLETION_MODE.CONDITIONAL_SUBMIT);
     assert.equal(blockedConditionalDocument.status, DOCUMENT_STATUS.NOT_SUBMITTED);
+    await pool.execute(
+      'UPDATE project_stage_documents SET responsible_user_id = ? WHERE id = ?',
+      [managerUser.id, blockedConditionalDocument.id]
+    );
 
     const workbenchWithBlockedConditional = await getMyWorkbench(managerUser);
     assert.equal(
@@ -2356,6 +2562,33 @@ assert.equal(canViewStageDocumentItem(manufacturingManager, { project, document:
 assert.equal(canViewStageDocumentItem(generalManagerAssistant, { project, document: unassignedRdDocument }), true);
 assert.equal(canViewStageDocumentItem(projectCreator, { project, document: unassignedRdDocument }), true);
 assert.equal(canViewStageDocumentItem(rdEmployee, { project, document: unassignedRdDocument }), false);
+const unassignedProjectManagerPermissions = buildStageDocumentPermissions({
+  user: projectManager,
+  project,
+  document: unassignedRdDocument
+});
+assert.equal(unassignedProjectManagerPermissions.canViewAttachments, true);
+assert.equal(unassignedProjectManagerPermissions.canDownloadAttachment, true);
+assert.equal(unassignedProjectManagerPermissions.canUploadAttachment, false);
+assert.equal(unassignedProjectManagerPermissions.canSubmitDocument, false);
+const unassignedGeneralManagerPermissions = buildStageDocumentPermissions({
+  user: generalManager,
+  project,
+  document: unassignedRdDocument
+});
+assert.equal(unassignedGeneralManagerPermissions.canViewAttachments, true);
+assert.equal(unassignedGeneralManagerPermissions.canDownloadAttachment, true);
+assert.equal(unassignedGeneralManagerPermissions.canUploadAttachment, false);
+assert.equal(unassignedGeneralManagerPermissions.canSubmitDocument, false);
+const unassignedCenterManagerPermissions = buildStageDocumentPermissions({
+  user: rdManager,
+  project,
+  document: unassignedRdDocument
+});
+assert.equal(unassignedCenterManagerPermissions.canViewAttachments, true);
+assert.equal(unassignedCenterManagerPermissions.canDownloadAttachment, true);
+assert.equal(unassignedCenterManagerPermissions.canUploadAttachment, false);
+assert.equal(unassignedCenterManagerPermissions.canSubmitDocument, false);
 const crossCenterPermissions = buildStageDocumentPermissions({
   user: manufacturingManager,
   project,
@@ -2370,6 +2603,35 @@ assert.equal(crossCenterPermissions.canReviewDocument, false);
 assert.equal(crossCenterPermissions.canManageResponsibility, false);
 assert.equal(crossCenterPermissions.canChangeApplicability, false);
 assert.equal(canAdvanceProjectStage(manufacturingManager, project), false);
+const responsibleRdDocument = makeDocument({
+  responsibleUserId: rdEmployee.id,
+  responsibleUser: { department: RD_CENTER }
+});
+const rdResponsiblePermissions = buildStageDocumentPermissions({
+  user: rdEmployee,
+  project,
+  document: responsibleRdDocument
+});
+assert.equal(rdResponsiblePermissions.canUploadAttachment, true);
+assert.equal(rdResponsiblePermissions.canSubmitDocument, true);
+const projectManagerNonResponsiblePermissions = buildStageDocumentPermissions({
+  user: projectManager,
+  project,
+  document: responsibleRdDocument
+});
+assert.equal(projectManagerNonResponsiblePermissions.canViewAttachments, true);
+assert.equal(projectManagerNonResponsiblePermissions.canDownloadAttachment, true);
+assert.equal(projectManagerNonResponsiblePermissions.canUploadAttachment, false);
+assert.equal(projectManagerNonResponsiblePermissions.canSubmitDocument, false);
+const projectManagerResponsiblePermissions = buildStageDocumentPermissions({
+  user: projectManager,
+  project,
+  document: makeDocument({
+    responsibleUserId: projectManager.id,
+    responsibleUser: { department: RD_CENTER }
+  })
+});
+assert.equal(projectManagerResponsiblePermissions.canSubmitDocument, true);
 assert.equal(
   canManageProjectResponsibility(rdManager, project, {
     document: unassignedRdDocument,
@@ -2393,6 +2655,18 @@ assert.equal(
 );
 
 const submittedRdDocument = makeDocument({ status: DOCUMENT_STATUS.SUBMITTED });
+const rdReviewOnlyPermissions = buildStageDocumentPermissions({
+  user: rdManager,
+  project,
+  document: {
+    ...submittedRdDocument,
+    responsibleUserId: rdEmployee.id,
+    responsibleUser: { department: RD_CENTER }
+  }
+});
+assert.equal(rdReviewOnlyPermissions.canReviewDocument, true);
+assert.equal(rdReviewOnlyPermissions.canUploadAttachment, false);
+assert.equal(rdReviewOnlyPermissions.canSubmitDocument, false);
 assert.equal(
   buildStageDocumentPermissions({ user: rdManager, project, document: submittedRdDocument }).canReviewDocument,
   true

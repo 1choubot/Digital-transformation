@@ -1,6 +1,6 @@
 <template>
   <section class="stage-document-card__actions" aria-label="资料项手工操作">
-    <h4>手工操作</h4>
+    <h4>资料操作</h4>
     <div class="stage-document-actions">
       <ProjectStageDocumentResponsibility
         v-if="canManageResponsibility"
@@ -27,44 +27,89 @@
 
       <template v-else>
         <button
-          v-if="canSubmitDocument && canSubmit(document)"
+          v-if="canSubmitDocument && canCompleteRevisionDocument"
+          type="button"
+          class="ghost-button"
+          :disabled="isActionPending(document.id, 'complete-revision')"
+          @click="$emit('complete-revision-document', document)"
+        >
+          {{ isActionPending(document.id, 'complete-revision') ? '处理中...' : '完成返工' }}
+        </button>
+
+        <button
+          v-else-if="canSubmitDocument && canSubmit(document)"
           type="button"
           class="ghost-button"
           :disabled="isActionPending(document.id, 'submit')"
           @click="$emit('submit-document', document)"
         >
-          {{ isActionPending(document.id, 'submit') ? '标记中...' : '标记提交' }}
+          {{ isActionPending(document.id, 'submit') ? '提交中...' : submitButtonText }}
         </button>
 
-        <template v-else-if="document.status === 'submitted' && canConfirmReturnDocument">
+        <template v-else-if="canReview(document) && canConfirmReturnDocument">
           <button
             type="button"
             class="ghost-button"
             :disabled="isActionPending(document.id, 'confirm')"
             @click="$emit('confirm-document', document)"
           >
-            {{ isActionPending(document.id, 'confirm') ? '确认中...' : '确认' }}
+            {{ isActionPending(document.id, 'confirm') ? '审核中...' : '资料审核通过' }}
           </button>
           <div class="stage-document-return">
             <input
               v-model.trim="returnReasons[document.id]"
               type="text"
-              placeholder="退回原因"
+              placeholder="资料审核退回原因"
               :disabled="isActionPending(document.id, 'return')"
             />
+            <div v-if="isAClassReturn" class="stage-document-rework-selector">
+              <strong>选择需返工资料</strong>
+              <p v-if="revisionCandidates.length === 0">当前没有可选的适用返工候选。</p>
+              <label v-for="candidate in revisionCandidates" :key="candidate.id">
+                <input
+                  v-model="revisionTargetSelections[document.id]"
+                  type="checkbox"
+                  :value="candidate.id"
+                  :disabled="isActionPending(document.id, 'return')"
+                />
+                <span class="mono">{{ candidate.documentCode }}</span>
+                <span>{{ candidate.documentName }}</span>
+                <span>{{ formatResponsibleUser(candidate) }}</span>
+                <span>{{ formatDocumentCompletionMode(candidate) }}</span>
+                <span>{{ formatDocumentCompletionStatus(candidate) }}</span>
+                <span>{{ formatApplicability(candidate) }}</span>
+              </label>
+            </div>
+            <div v-if="isCClassReturn" class="stage-document-rework-selector">
+              <strong>选择设计变更触发资料</strong>
+              <label v-for="candidate in designChangeCandidates" :key="candidate.id">
+                <input
+                  v-model="designChangeTargetSelections[document.id]"
+                  type="checkbox"
+                  :value="candidate.id"
+                  :disabled="isActionPending(document.id, 'return')"
+                />
+                <span class="mono">{{ candidate.documentCode }}</span>
+                <span>{{ candidate.documentName }}</span>
+                <span>{{ formatResponsibleUser(candidate) }}</span>
+                <span>{{ formatDocumentCompletionMode(candidate) }}</span>
+                <span>{{ formatDocumentCompletionStatus(candidate) }}</span>
+                <span>将设置为适用且需返工</span>
+              </label>
+            </div>
             <button
               type="button"
               class="ghost-button"
-              :disabled="isActionPending(document.id, 'return')"
-              @click="$emit('return-document', document)"
+              :disabled="isActionPending(document.id, 'return') || !canSubmitReturn"
+              @click="emitReturnDocument"
             >
-              {{ isActionPending(document.id, 'return') ? '退回中...' : '退回' }}
+              {{ isActionPending(document.id, 'return') ? '退回中...' : '退回资料审核' }}
             </button>
           </div>
         </template>
 
         <span v-else class="stage-document-actions__empty">
-          {{ document.status === 'confirmed' ? '已确认' : '暂无状态操作' }}
+          {{ emptyActionText }}
         </span>
 
         <div v-if="canChangeApplicability" class="stage-document-applicability-action">
@@ -89,20 +134,35 @@
 </template>
 
 <script setup>
+import { computed, reactive, watch } from 'vue';
 import ProjectStageDocumentResponsibility from './ProjectStageDocumentResponsibility.vue';
-import { canSubmit, isApplicable } from './stageDocumentViewHelpers.js';
+import {
+  canReview,
+  canSubmit,
+  formatDocumentCompletionStatus,
+  formatApplicability,
+  getCompletionMode,
+  formatDocumentCompletionMode,
+  formatResponsibleUser,
+  isApplicable,
+  isReviewCompletionMode,
+  isRevisionRequired,
+  isRevisionResubmitted,
+  isSubmitCompletionMode
+} from './stageDocumentViewHelpers.js';
 
-defineEmits([
+const emit = defineEmits([
   'submit-document',
   'confirm-document',
   'return-document',
+  'complete-revision-document',
   'mark-not-applicable',
   'restore-applicable',
   'save-responsible-user',
   'clear-responsible-user'
 ]);
 
-defineProps({
+const props = defineProps({
   document: {
     type: Object,
     required: true
@@ -148,182 +208,98 @@ defineProps({
     required: true
   }
 });
+
+const revisionTargetSelections = reactive({});
+const designChangeTargetSelections = reactive({});
+
+watch(
+  () => props.document.id,
+  (documentId) => {
+    if (!Array.isArray(revisionTargetSelections[documentId])) {
+      revisionTargetSelections[documentId] = [];
+    }
+    if (!Array.isArray(designChangeTargetSelections[documentId])) {
+      designChangeTargetSelections[documentId] = [];
+    }
+  },
+  { immediate: true }
+);
+
+const revisionCandidates = computed(() => props.document.reworkCandidates || []);
+const designChangeCandidates = computed(() => props.document.designChangeCandidates || []);
+const reworkClass = computed(() => props.document.reworkClass || props.document.rework_class || 'b_class');
+const isAClassReturn = computed(() => reworkClass.value === 'a_class');
+const isCClassReturn = computed(() => props.document.documentCode === '5.12' || reworkClass.value === 'c_class');
+const selectedRevisionTargetIds = computed(() => revisionTargetSelections[props.document.id] || []);
+const selectedDesignChangeTargetIds = computed(() => designChangeTargetSelections[props.document.id] || []);
+const canSubmitReturn = computed(() => {
+  if (isAClassReturn.value) {
+    return selectedRevisionTargetIds.value.length > 0;
+  }
+
+  if (isCClassReturn.value) {
+    return selectedDesignChangeTargetIds.value.length > 0;
+  }
+
+  return true;
+});
+const canCompleteRevisionDocument = computed(
+  () =>
+    isRevisionRequired(props.document) &&
+    isSubmitCompletionMode(props.document) &&
+    ['submitted', 'confirmed'].includes(props.document.status)
+);
+
+const submitButtonText = computed(() => {
+  if (isRevisionRequired(props.document) && isReviewCompletionMode(props.document)) {
+    return '返工重提';
+  }
+
+  if (isRevisionRequired(props.document) && isSubmitCompletionMode(props.document)) {
+    return '提交返工资料';
+  }
+
+  const completionMode = getCompletionMode(props.document);
+  if (completionMode === 'approval_required' || completionMode === 'conditional_approval') {
+    return '提交资料审核';
+  }
+
+  return props.document.status === 'returned' ? '重新提交资料' : '提交资料';
+});
+
+const emptyActionText = computed(() => {
+  if (!isApplicable(props.document)) {
+    return '条件未触发/不适用';
+  }
+
+  if (props.document.status === 'confirmed') {
+    return isRevisionRequired(props.document) ? '需返工' : '资料审核通过';
+  }
+
+  if (isRevisionRequired(props.document)) {
+    if (!props.document.responsibleUserId && !props.document.responsibleUser) {
+      return '需返工但未分配责任人';
+    }
+
+    return isRevisionResubmitted(props.document) ? '返工已重提，待审核' : '需返工';
+  }
+
+  if (props.document.isComplete || props.document.completionStatus === 'completed') {
+    return formatDocumentCompletionStatus(props.document);
+  }
+
+  if (props.document.completionStatus === 'pending_review') {
+    return '待资料审核';
+  }
+
+  return '暂无资料操作';
+});
+
+function emitReturnDocument() {
+  emit('return-document', {
+    document: props.document,
+    revisionTargetDocumentIds: isAClassReturn.value ? [...selectedRevisionTargetIds.value] : [],
+    designChangeTargetDocumentIds: isCClassReturn.value ? [...selectedDesignChangeTargetIds.value] : []
+  });
+}
 </script>
-
-<style scoped>
-/* ===== 外层容器 ===== */
-.stage-document-card__actions {
-  margin-top: 0.5rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid #f0f0f0;
-}
-
-.stage-document-card__actions h4 {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #606266;
-  margin: 0 0 0.5rem 0;
-  letter-spacing: 0.03em;
-}
-
-/* ===== 操作按钮组容器 ===== */
-.stage-document-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.75rem;
-}
-
-/* ===== 通用按钮样式（与系统一致） ===== */
-.stage-document-actions .ghost-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  padding: 0.25rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  background: #ffffff;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  color: #606266;
-  cursor: pointer;
-  transition: all 0.2s;
-  height: 28px;
-  white-space: nowrap;
-}
-
-.stage-document-actions .ghost-button:hover:not(:disabled) {
-  border-color: #c6e2ff;
-  background: #ecf5ff;
-  color: #3e63dd;
-}
-
-.stage-document-actions .ghost-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* ===== 输入框通用样式 ===== */
-.stage-document-actions input[type="text"] {
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  padding: 0.2rem 0.5rem;
-  font-size: 0.75rem;
-  height: 28px;
-  transition: border-color 0.2s;
-  background: #ffffff;
-  color: #303133;
-  min-width: 100px;
-  width: auto;
-}
-
-.stage-document-actions input[type="text"]:focus {
-  border-color: #3e63dd;
-  outline: none;
-}
-
-.stage-document-actions input[type="text"]:disabled {
-  background: #f5f7fa;
-  color: #c0c4cc;
-  cursor: not-allowed;
-}
-
-.stage-document-actions input[type="text"]::placeholder {
-  color: #c0c4cc;
-}
-
-/* ===== 退回操作组合 ===== */
-.stage-document-return {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-/* ===== 不适用操作组合 ===== */
-.stage-document-applicability-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-/* ===== 空状态文字（“已确认”/“暂无状态操作”） ===== */
-.stage-document-actions__empty {
-  font-size: 0.8rem;
-  color: #909399;
-  font-style: italic;
-}
-
-/* ===== 让责任人类似内联块，与其他操作对齐 ===== */
-.stage-document-actions :deep(.project-stage-document-responsibility) {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  flex-wrap: wrap;
-}
-
-/* ============================================================ */
-/* ===== 响应式适配 ===== */
-/* ============================================================ */
-
-/* 768px 以下：让输入框在窄屏时尽量占满 */
-@media (max-width: 768px) {
-  .stage-document-actions {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.4rem;
-  }
-
-  .stage-document-actions .ghost-button {
-    justify-content: center;
-    width: 100%;
-  }
-
-  .stage-document-return,
-  .stage-document-applicability-action {
-    flex-wrap: wrap;
-  }
-
-  .stage-document-return input[type="text"],
-  .stage-document-applicability-action input[type="text"] {
-    flex: 1;
-    min-width: 120px;
-    width: 100%;
-  }
-
-  .stage-document-return .ghost-button,
-  .stage-document-applicability-action .ghost-button {
-    flex: 1;
-  }
-
-  /* 责任人类组件在窄屏下也尽可能占满 */
-  .stage-document-actions :deep(.project-stage-document-responsibility) {
-    flex-direction: column;
-    align-items: stretch;
-    width: 100%;
-  }
-}
-
-/* 480px 以下：进一步缩小内边距和字体 */
-@media (max-width: 480px) {
-  .stage-document-card__actions {
-    padding-top: 0.5rem;
-  }
-  .stage-document-card__actions h4 {
-    font-size: 0.75rem;
-  }
-  .stage-document-actions .ghost-button {
-    font-size: 0.7rem;
-    padding: 0.2rem 0.6rem;
-    height: 26px;
-  }
-  .stage-document-actions input[type="text"] {
-    font-size: 0.7rem;
-    height: 26px;
-    padding: 0.15rem 0.4rem;
-  }
-  .stage-document-actions__empty {
-    font-size: 0.75rem;
-  }
-}
-</style>

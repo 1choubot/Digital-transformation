@@ -108,16 +108,24 @@ async function selectProjectForUpdate(connection, projectId, user) {
         EXISTS (
           SELECT 1
           FROM project_stage_documents d
-          INNER JOIN users u
+          LEFT JOIN users u
             ON u.id = d.responsible_user_id
           WHERE d.project_id = p.id
-            AND u.department = ?
+            AND (
+              d.owner_department = ?
+              OR d.review_department = ?
+              OR (
+                d.owner_department IS NULL
+                AND d.review_department IS NULL
+                AND u.department = ?
+              )
+            )
         ) AS has_department_responsible
       FROM projects p
       WHERE p.id = ?
       LIMIT 1
       FOR UPDATE`,
-      [user.department, projectId]
+      [user.department, user.department, user.department, projectId]
     );
 
     if (rows.length === 0) {

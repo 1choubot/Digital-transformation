@@ -102,8 +102,6 @@ function normalizeCreateUserInput(payload) {
     department: normalizeDepartment(payload.department),
     organizationRole: normalizeOrganizationRole(payload.organizationRole),
     role: normalizeText(payload.role),
-    // Weekly report exports read jobTitle when filling the template header.
-    jobTitle: normalizeNullableText(payload.jobTitle),
     password: String(payload.password),
     isEnabled: normalizeBoolean(payload.isEnabled, true),
     isPlatformAdmin: normalizeBoolean(payload.isPlatformAdmin, false),
@@ -151,11 +149,6 @@ function normalizeUpdateUserInput(payload) {
         'role'
       ]);
     }
-  }
-
-  // Keep jobTitle optional because legacy users may not have one yet.
-  if (Object.prototype.hasOwnProperty.call(payload, 'jobTitle')) {
-    patch.jobTitle = normalizeNullableText(payload.jobTitle);
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, 'isEnabled')) {

@@ -93,6 +93,10 @@ export function canBeResponsibleUser(user) {
   return Boolean(user?.isEnabled) && isDepartmentUser(user);
 }
 
+export function canCreateProject(user) {
+  return isGeneralManagerUser(user) || isCenterManagerUser(user);
+}
+
 export function isProjectManagerForProject(user, project) {
   return (
     Boolean(user?.id) &&
@@ -142,9 +146,23 @@ export function getDocumentReviewDepartment(document) {
   return document?.review_department ?? document?.reviewDepartment ?? null;
 }
 
+export function isStageDocumentOwnedByDepartment(document, department) {
+  return isValidBusinessDepartment(department) && getDocumentOwnerDepartment(document) === department;
+}
+
+export function isStageDocumentReviewableByDepartment(document, department) {
+  return isValidBusinessDepartment(department) && getDocumentReviewDepartment(document) === department;
+}
+
 export function isStageDocumentRelatedToDepartment({ project, document, department }) {
   if (!isValidBusinessDepartment(department)) {
     return false;
+  }
+
+  const ownerDepartment = getDocumentOwnerDepartment(document);
+  const reviewDepartment = getDocumentReviewDepartment(document);
+  if (ownerDepartment || reviewDepartment) {
+    return ownerDepartment === department || reviewDepartment === department;
   }
 
   const responsibleDepartment = getDocumentResponsibleDepartment(document);
@@ -164,11 +182,12 @@ export function canApproveStageDocument(user, { project = null, document = null 
     return false;
   }
 
-  return isStageDocumentRelatedToDepartment({
-    project,
-    document,
-    department: user.department
-  });
+  if (isStageDocumentReviewableByDepartment(document, user.department)) {
+    return true;
+  }
+
+  const responsibleDepartment = getDocumentResponsibleDepartment(document);
+  return !getDocumentReviewDepartment(document) && responsibleDepartment === user.department;
 }
 
 export function canSubmitStageDocument(user, { project = null, document = null } = {}) {
@@ -176,16 +195,13 @@ export function canSubmitStageDocument(user, { project = null, document = null }
     return true;
   }
 
-  if (isCenterManagerUser(user)) {
-    return isStageDocumentRelatedToDepartment({
-      project,
-      document,
-      department: user.department
-    });
-  }
-
   if (isProjectManagerForProject(user, project)) {
     return true;
+  }
+
+  if (isCenterManagerUser(user)) {
+    const responsibleDepartment = getDocumentResponsibleDepartment(document);
+    return Boolean(responsibleDepartment) && responsibleDepartment === user.department;
   }
 
   const responsibleUserId = document?.responsible_user_id ?? document?.responsibleUserId;
@@ -193,7 +209,25 @@ export function canSubmitStageDocument(user, { project = null, document = null }
 }
 
 export function canManageStageDocumentApplicability(user, { project = null, document = null } = {}) {
-  return canApproveStageDocument(user, { project, document });
+  if (isGeneralManagerAssistantUser(user) || isSystemAdminUser(user)) {
+    return false;
+  }
+
+  if (isGeneralManagerUser(user)) {
+    return true;
+  }
+
+  if (!isCenterManagerUser(user) || !isValidBusinessDepartment(user.department)) {
+    return false;
+  }
+
+  const ownerDepartment = getDocumentOwnerDepartment(document);
+  const reviewDepartment = getDocumentReviewDepartment(document);
+  if (ownerDepartment || reviewDepartment) {
+    return ownerDepartment === user.department || reviewDepartment === user.department;
+  }
+
+  return getDocumentResponsibleDepartment(document) === user.department;
 }
 
 export function canManageProjectResponsibility(user, project, { document = null, targetResponsibleUser = null } = {}) {
@@ -209,11 +243,11 @@ export function canManageProjectResponsibility(user, project, { document = null,
     return false;
   }
 
-  const managesDocument = isStageDocumentRelatedToDepartment({
-    project,
-    document,
-    department: user.department
-  });
+  const ownerDepartment = getDocumentOwnerDepartment(document);
+  const reviewDepartment = getDocumentReviewDepartment(document);
+  const managesDocument = ownerDepartment
+    ? ownerDepartment === user.department
+    : !reviewDepartment && getDocumentResponsibleDepartment(document) === user.department;
   if (!managesDocument) {
     return false;
   }

@@ -149,6 +149,25 @@ export async function requestBlob(path, options = {}) {
   };
 }
 
+// 将后端错误的关键信息拼到页面提示里，方便现场直接定位请求失败原因。
+function formatDetailedApiError(error, fallbackMessage = '请求失败，请稍后重试。') {
+  const parts = [];
+  if (error.message) {
+    parts.push(error.message);
+  }
+  if (error.code) {
+    parts.push(`code: ${error.code}`);
+  }
+  if (error.status) {
+    parts.push(`HTTP ${error.status}`);
+  }
+  if (Array.isArray(error.details) && error.details.length > 0) {
+    parts.push(`details: ${error.details.join(', ')}`);
+  }
+
+  return parts.length > 0 ? parts.join('；') : fallbackMessage;
+}
+
 export function toReadableApiError(error) {
   if (!(error instanceof ApiError)) {
     return '请求失败，请稍后重试。';
@@ -462,6 +481,54 @@ export function toReadableApiError(error) {
     return '当前账号无权填写个人日报。';
   }
 
+  if (error.code === 'INVALID_DAILY_REPORT_ID') {
+    return formatDetailedApiError(error, '日报参数无效，请刷新页面后重试。');
+  }
+
+  if (error.code === 'INVALID_REPORT_DATE') {
+    return formatDetailedApiError(error, '日报日期格式无效，请重新选择日期。');
+  }
+
+  if (error.code === 'INVALID_DAILY_REPORT_STATUS') {
+    return formatDetailedApiError(error, '日报状态无效，请刷新页面后重试。');
+  }
+
+  if (error.code === 'DAILY_REPORT_REQUIRED_FIELDS') {
+    return formatDetailedApiError(error, '请补全日报必填字段后再提交。');
+  }
+
+  if (error.code === 'DAILY_REPORT_PROJECT_NOT_AVAILABLE') {
+    return formatDetailedApiError(error, '当前项目不可用于填写日报，请重新选择项目。');
+  }
+
+  if (error.code === 'DAILY_REPORT_DUPLICATE') {
+    return formatDetailedApiError(error, '当天该项目已存在日报，请打开已有草稿或日报继续编辑。');
+  }
+
+  if (error.code === 'DAILY_REPORT_NOT_FOUND') {
+    return formatDetailedApiError(error, '日报不存在、已删除或不属于当前账号。');
+  }
+
+  if (error.code === 'DAILY_REPORT_FORBIDDEN') {
+    return formatDetailedApiError(error, '当前账号无权操作该日报。');
+  }
+
+  if (error.code === 'DAILY_REPORT_DELETE_SUBMITTED') {
+    return formatDetailedApiError(error, '已提交日报不能删除。');
+  }
+
+  if (error.code === 'DAILY_REPORT_INVALID_ATTACHMENT_FILE') {
+    return formatDetailedApiError(error, '日报附件文件无效。');
+  }
+
+  if (error.code === 'DAILY_REPORT_ATTACHMENT_NOT_FOUND') {
+    return formatDetailedApiError(error, '日报附件不存在或不属于当前日报。');
+  }
+
+  if (error.code === 'DAILY_REPORT_ATTACHMENT_FILE_MISSING') {
+    return formatDetailedApiError(error, '日报附件记录存在，但后端文件已丢失。');
+  }
+
   if (error.code === 'WEEKLY_REPORT_WRITER_REQUIRED') {
     return '当前账号无权填写个人周报。';
   }
@@ -511,5 +578,5 @@ export function toReadableApiError(error) {
     return error.message;
   }
 
-  return error.message || '请求失败，请稍后重试。';
+  return formatDetailedApiError(error);
 }

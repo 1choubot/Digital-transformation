@@ -140,10 +140,9 @@
                 <input
                   v-model="item.completionProgress"
                   required
-                  placeholder="如 100% "
+                  placeholder="如 100% / 已完成"
                   class="form-control"
                   :class="{ invalid: itemErrors[item.localId]?.completionProgress }"
-                  @input="validateCompletionProgressInput(item)"
                 />
                 <input
                   v-model="item.completedAt"
@@ -407,10 +406,9 @@ function prepareSubmittedItems() {
   }
 
   for (const item of nonBlankItems) {
-    const progress = String(item.completionProgress || '').trim();
     const rowErrors = {
       workContent: !String(item.workContent || '').trim(),
-      completionProgress: !progress || !isValidCompletionProgress(progress),
+      completionProgress: !String(item.completionProgress || '').trim(),
       completedAt: !String(item.completedAt || '').trim()
     };
     if (rowErrors.workContent || rowErrors.completionProgress || rowErrors.completedAt) {
@@ -420,7 +418,7 @@ function prepareSubmittedItems() {
 
   itemErrors.value = errors;
   if (Object.keys(errors).length > 0) {
-    errorMessage.value = '请补全高亮的今日完成情况：工作内容、完成进度、完成时间；完成进度只能填写数字+%，例如 95%、85.5%、100%。';
+    errorMessage.value = '请补全高亮的今日完成情况：工作内容、完成进度、完成时间。';
     return false;
   }
 

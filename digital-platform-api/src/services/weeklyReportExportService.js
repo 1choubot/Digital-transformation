@@ -167,7 +167,7 @@ export async function generateWeeklyReportWorkbook(exportDto) {
 
   worksheet.getCell(WEEKLY_REPORT_CELLS.employeeName).value = user.name || user.account || '';
   worksheet.getCell(WEEKLY_REPORT_CELLS.department).value = formatDepartment(user.department);
-  worksheet.getCell(WEEKLY_REPORT_CELLS.role).value = user.role || '';
+  worksheet.getCell(WEEKLY_REPORT_CELLS.role).value = user.jobTitle || user.role || '';
   worksheet.getCell(WEEKLY_REPORT_CELLS.period).value = `${formatDottedDate(report.weekStart)}-${formatDottedDate(
     report.weekEnd
   )}`;

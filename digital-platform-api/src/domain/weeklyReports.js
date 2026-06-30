@@ -7,6 +7,7 @@ export const WEEKLY_REPORT_ERROR = {
   INVALID_WEEK: 'INVALID_WEEKLY_REPORT_WEEK',
   INVALID_STATUS: 'INVALID_WEEKLY_REPORT_STATUS',
   REQUIRED_FIELDS: 'WEEKLY_REPORT_REQUIRED_FIELDS',
+  INVALID_PROJECT_ID: 'INVALID_WEEKLY_REPORT_PROJECT_ID',
   DUPLICATE_REPORT: 'WEEKLY_REPORT_DUPLICATE',
   NOT_FOUND: 'WEEKLY_REPORT_NOT_FOUND',
   FORBIDDEN: 'WEEKLY_REPORT_FORBIDDEN',
@@ -105,6 +106,14 @@ function normalizeNullableText(value, maxLength = 5000) {
   return text ? text.slice(0, maxLength) : null;
 }
 
+function normalizeOptionalProjectId(value, fieldName) {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return null;
+  }
+
+  return parsePositiveInteger(value, fieldName, WEEKLY_REPORT_ERROR.INVALID_PROJECT_ID);
+}
+
 // Track missing fields without throwing until the row has been fully inspected.
 function normalizeRequiredText(value, fieldName, missing, maxLength = 5000) {
   const text = String(value ?? '').trim();
@@ -127,6 +136,7 @@ function normalizeSummaryRow(row, index, isSubmit) {
   const prefix = `summaries.${index}`;
   const normalized = {
     sortOrder: index + 1,
+    projectId: normalizeOptionalProjectId(row?.projectId, `${prefix}.projectId`),
     workTask: normalizeRequiredText(row?.workTask, `${prefix}.workTask`, missing, 500),
     workTarget: normalizeRequiredText(row?.workTarget, `${prefix}.workTarget`, missing),
     plannedDate: normalizeIsoDate(row?.plannedDate, `${prefix}.plannedDate`),
@@ -156,6 +166,7 @@ function normalizePlanRow(row, index, isSubmit) {
   const prefix = `plans.${index}`;
   const normalized = {
     sortOrder: index + 1,
+    projectId: normalizeOptionalProjectId(row?.projectId, `${prefix}.projectId`),
     workTask: normalizeRequiredText(row?.workTask, `${prefix}.workTask`, missing, 500),
     workTarget: normalizeRequiredText(row?.workTarget, `${prefix}.workTarget`, missing),
     plannedDate: normalizeIsoDate(row?.plannedDate, `${prefix}.plannedDate`),

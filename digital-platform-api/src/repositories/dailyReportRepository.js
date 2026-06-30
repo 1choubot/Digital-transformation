@@ -66,6 +66,7 @@ function mapDailyReportItem(row) {
   return {
     id: row.id,
     sortOrder: row.sort_order,
+    projectId: row.project_id,
     workContent: row.work_content,
     completionProgress: row.completion_progress,
     completedAt: String(row.completed_at).slice(0, 5),
@@ -79,6 +80,7 @@ function mapDailyReportPlan(row) {
   return {
     id: row.id,
     sortOrder: row.sort_order,
+    projectId: row.project_id,
     plannedWorkContent: row.planned_work_content,
     responsiblePerson: row.responsible_person,
     plannedCompleteAt: row.planned_complete_at ? String(row.planned_complete_at).slice(0, 5) : null,
@@ -141,15 +143,14 @@ export async function searchActiveProjectsForDailyReports({ q = '', limit = 20, 
 }
 
 // Lock and validate the project used by a report write.
-async function assertProjectAvailable(executor, { projectId, user }) {
+async function assertProjectAvailable(executor, { projectId, user, forUpdate = true }) {
   const visibility = buildProjectVisibilityCondition(user, 'p');
   const [rows] = await executor.execute(
     `SELECT p.id, p.status
     FROM projects p
     WHERE p.id = ?
       AND ${visibility.sql}
-    LIMIT 1
-    FOR UPDATE`,
+    LIMIT 1${forUpdate ? ' FOR UPDATE' : ''}`,
     [projectId, ...visibility.params]
   );
 
@@ -189,7 +190,7 @@ async function selectDailyReportHeader(executor, { reportId, userId, forUpdate =
 }
 
 // Replace child rows in a stable sort order.
-async function replaceDailyReportRows(executor, reportId, { items, plans }) {
+async function replaceDailyReportRows(executor, reportId, { projectId, items, plans }) {
   await executor.execute('DELETE FROM daily_report_items WHERE daily_report_id = ?', [reportId]);
   await executor.execute('DELETE FROM daily_report_plans WHERE daily_report_id = ?', [reportId]);
 
@@ -198,15 +199,17 @@ async function replaceDailyReportRows(executor, reportId, { items, plans }) {
       `INSERT INTO daily_report_items (
         daily_report_id,
         sort_order,
+        project_id,
         work_content,
         completion_progress,
         completed_at,
         responsible_person,
         deviation_and_corrective_action
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         reportId,
         item.sortOrder,
+        projectId,
         item.workContent,
         item.completionProgress,
         item.completedAt,
@@ -221,15 +224,17 @@ async function replaceDailyReportRows(executor, reportId, { items, plans }) {
       `INSERT INTO daily_report_plans (
         daily_report_id,
         sort_order,
+        project_id,
         planned_work_content,
         responsible_person,
         planned_complete_at,
         collaborating_center,
         collaboration_item
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         reportId,
         plan.sortOrder,
+        projectId,
         plan.plannedWorkContent,
         plan.responsiblePerson,
         plan.plannedCompleteAt,
@@ -244,18 +249,22 @@ async function replaceDailyReportRows(executor, reportId, { items, plans }) {
 export async function getDailyReportById({ reportId, userId }, executor = pool) {
   const report = mapDailyReportHeader(await selectDailyReportHeader(executor, { reportId, userId }));
   const [itemRows] = await executor.execute(
-    `SELECT *
-    FROM daily_report_items
-    WHERE daily_report_id = ?
+    `SELECT
+      dri.*,
+      COALESCE(dri.project_id, ?) AS project_id
+    FROM daily_report_items dri
+    WHERE dri.daily_report_id = ?
     ORDER BY sort_order ASC, id ASC`,
-    [reportId]
+    [report.projectId, reportId]
   );
   const [planRows] = await executor.execute(
-    `SELECT *
-    FROM daily_report_plans
-    WHERE daily_report_id = ?
+    `SELECT
+      drp.*,
+      COALESCE(drp.project_id, ?) AS project_id
+    FROM daily_report_plans drp
+    WHERE drp.daily_report_id = ?
     ORDER BY sort_order ASC, id ASC`,
-    [reportId]
+    [report.projectId, reportId]
   );
   const attachments = await listDailyReportAttachments({ reportId, userId }, executor);
 
@@ -301,6 +310,41 @@ export async function listDailyReports({ userId, filters = {} }, executor = pool
   );
 
   return rows.map(mapDailyReportHeader);
+}
+
+export async function getDailyReportPlanSuggestion({ user, reportDate, projectId }, executor = pool) {
+  await assertProjectAvailable(executor, { projectId, user, forUpdate: false });
+  const [rows] = await executor.execute(
+    `SELECT
+      wrp.id,
+      wrp.weekly_report_id,
+      wrp.sort_order,
+      wrp.project_id,
+      wrp.work_task,
+      wrp.work_target,
+      wrp.planned_date
+    FROM weekly_report_plans wrp
+    INNER JOIN weekly_reports wr ON wr.id = wrp.weekly_report_id
+    WHERE wr.user_id = ?
+      AND wrp.project_id = ?
+      AND wrp.planned_date = ?
+    ORDER BY wr.week_start DESC, wrp.sort_order ASC, wrp.id ASC`,
+    [user.id, projectId, reportDate]
+  );
+
+  return {
+    reportDate,
+    projectId,
+    items: rows.map((row) => ({
+      id: row.id,
+      weeklyReportId: row.weekly_report_id,
+      sortOrder: row.sort_order,
+      projectId: row.project_id,
+      workTask: row.work_task,
+      workTarget: row.work_target,
+      plannedDate: formatDateOnly(row.planned_date)
+    }))
+  };
 }
 
 // Create a draft or submitted report for the authenticated employee.

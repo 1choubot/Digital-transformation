@@ -185,7 +185,7 @@ weeklyReportsRouter.post(
   requireWeeklyReportWriter,
   asyncHandler(async (req, res) => {
     const report = normalizeWeeklyReportPayload(req.body || {});
-    const created = await createWeeklyReport({ userId: req.auth.user.id, report });
+    const created = await createWeeklyReport({ user: req.auth.user, report });
 
     res.status(201).json({
       data: {
@@ -232,7 +232,7 @@ weeklyReportsRouter.put(
   asyncHandler(async (req, res) => {
     const reportId = parseReportId(req.params.reportId);
     const report = normalizeWeeklyReportPayload(req.body || {});
-    const updated = await updateWeeklyReport({ reportId, userId: req.auth.user.id, report });
+    const updated = await updateWeeklyReport({ reportId, user: req.auth.user, report });
 
     res.json({
       data: {

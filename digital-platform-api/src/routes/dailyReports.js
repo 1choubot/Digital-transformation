@@ -9,7 +9,8 @@ import {
   DAILY_REPORT_ERROR,
   parsePositiveInteger,
   normalizeDailyReportListFilters,
-  normalizeDailyReportPayload
+  normalizeDailyReportPayload,
+  normalizeReportDate
 } from '../domain/dailyReports.js';
 import { DAILY_REPORT_ATTACHMENT_MAX_FILE_SIZE } from '../storage/dailyReportAttachmentStorage.js';
 import {
@@ -20,6 +21,7 @@ import {
   getDailyReportAttachmentDownload,
   getDailyReportById,
   getDailyReportExportDto,
+  getDailyReportPlanSuggestion,
   listDailyReportAttachments,
   listDailyReports,
   updateDailyReport,
@@ -63,6 +65,21 @@ dailyReportsRouter.post(
     res.status(201).json({
       data: {
         report: created
+      }
+    });
+  })
+);
+
+dailyReportsRouter.get(
+  '/plan-suggestion',
+  asyncHandler(async (req, res) => {
+    const reportDate = normalizeReportDate(req.query.reportDate);
+    const projectId = parsePositiveInteger(req.query.projectId, 'projectId', DAILY_REPORT_ERROR.INVALID_PROJECT_ID);
+    const suggestion = await getDailyReportPlanSuggestion({ user: req.auth.user, reportDate, projectId });
+
+    res.json({
+      data: {
+        suggestion
       }
     });
   })

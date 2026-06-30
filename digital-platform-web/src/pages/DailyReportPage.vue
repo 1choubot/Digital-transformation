@@ -120,6 +120,20 @@
             </button>
           </div>
 
+          <div v-if="planSuggestion.items.length" class="daily-plan-suggestion">
+            <div class="daily-plan-suggestion__content">
+              <strong>周报计划匹配</strong>
+              <ul>
+                <li v-for="item in planSuggestion.items" :key="item.id">
+                  {{ item.workTarget }}
+                </li>
+              </ul>
+            </div>
+            <button type="button" class="ghost-button" @click="applyPlanSuggestion">
+              填入今日完成情况
+            </button>
+          </div>
+
           <div class="table-container">
             <div class="daily-edit-table daily-edit-table--items">
               <div class="daily-edit-table__head">
@@ -293,6 +307,7 @@ import {
   downloadDailyReportAttachment,
   exportDailyReport,
   getDailyReport,
+  getDailyReportPlanSuggestion,
   searchDailyReportProjects,
   toReadableApiError,
   updateDailyReport,
@@ -342,6 +357,10 @@ const errorMessage = ref('');
 const showDropdown = ref(false);
 const projectInput = ref(null);
 const itemErrors = ref({});
+const planSuggestion = reactive({
+  items: []
+});
+let planSuggestionRequestSeq = 0;
 
 // ===== 缩略图缓存 =====
 const thumbnails = reactive({});
@@ -484,6 +503,58 @@ function buildPayload(status) {
       collaborationItem: plan.collaborationItem
     }))
   };
+}
+
+// 根据报告日期和项目刷新可带入的周报计划。
+async function refreshPlanSuggestion() {
+  const requestSeq = ++planSuggestionRequestSeq;
+  planSuggestion.items = [];
+
+  if (!form.reportDate || !form.projectId || !canUseDailyReport.value) {
+    return;
+  }
+
+  try {
+    const result = await getDailyReportPlanSuggestion(
+      { reportDate: form.reportDate, projectId: form.projectId },
+      props.authToken
+    );
+    if (requestSeq !== planSuggestionRequestSeq) {
+      return;
+    }
+    planSuggestion.items = result.suggestion?.items || [];
+  } catch (error) {
+    if (requestSeq !== planSuggestionRequestSeq) {
+      return;
+    }
+    if (error.code === 'UNAUTHENTICATED') {
+      emit('auth-expired');
+      return;
+    }
+    planSuggestion.items = [];
+  }
+}
+
+function applyPlanSuggestion() {
+  const suggestionText = planSuggestion.items
+    .map((item) => String(item.workTarget || '').trim())
+    .filter(Boolean)
+    .join('\n');
+  if (!suggestionText) {
+    return;
+  }
+
+  const firstItem = form.items[0] || createEmptyItem();
+  if (form.items.length === 0) {
+    form.items = [firstItem];
+  }
+  if (String(firstItem.workContent || '').trim()) {
+    const confirmed = window.confirm('当前工作内容已有填写，是否用周报计划内容覆盖？');
+    if (!confirmed) {
+      return;
+    }
+  }
+  firstItem.workContent = suggestionText;
 }
 
 // ===== 缩略图加载函数 =====
@@ -834,6 +905,7 @@ onMounted(async () => {
 });
 
 watch(() => props.reportId, loadReport);
+watch(() => [form.reportDate, form.projectId], refreshPlanSuggestion, { immediate: true });
 
 // 组件卸载时清理 object URL
 onBeforeUnmount(() => {
@@ -1203,6 +1275,33 @@ onBeforeUnmount(() => {
   font-weight: 600;
   color: #303133;
   margin: 0;
+}
+
+.daily-plan-suggestion {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #d9ecff;
+  border-radius: 4px;
+  background: #f5faff;
+}
+.daily-plan-suggestion__content {
+  min-width: 0;
+}
+.daily-plan-suggestion__content strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #303133;
+  font-size: 0.9rem;
+}
+.daily-plan-suggestion__content ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #606266;
+  font-size: 0.85rem;
+  line-height: 1.5;
 }
 
 .table-container {

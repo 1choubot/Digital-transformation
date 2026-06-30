@@ -81,11 +81,11 @@
                 >
                   <div class="form-field">
                     <input
-                      v-model="summary.workTask"
+                      :value="summary.workTask"
                       list="weekly-project-options"
                       class="form-control"
                       :class="{ invalid: fieldErrors[`summaries.${index}.workTask`] }"
-                      @input="scheduleProjectSearch(summary.workTask)"
+                      @input="onProjectTaskInput(summary, $event.target.value)"
                       placeholder="输入或选择项目名称"
                     />
                     <small v-if="fieldErrors[`summaries.${index}.workTask`]" class="field-error">
@@ -192,11 +192,11 @@
                 >
                   <div class="form-field">
                     <input
-                      v-model="plan.workTask"
+                      :value="plan.workTask"
                       list="weekly-project-options"
                       class="form-control"
                       :class="{ invalid: fieldErrors[`plans.${index}.workTask`] }"
-                      @input="scheduleProjectSearch(plan.workTask)"
+                      @input="onProjectTaskInput(plan, $event.target.value)"
                       placeholder="输入或选择项目名称"
                     />
                     <small v-if="fieldErrors[`plans.${index}.workTask`]" class="field-error">
@@ -390,6 +390,7 @@ function withLocalId(row = {}) {
 // Create one blank summary row using the current week start as a helpful default.
 function blankSummary() {
   return withLocalId({
+    projectId: null,
     workTask: '',
     workTarget: '',
     plannedDate: form.weekStart,
@@ -402,6 +403,7 @@ function blankSummary() {
 // Create one blank next-week plan row.
 function blankPlan() {
   return withLocalId({
+    projectId: null,
     workTask: '',
     workTarget: '',
     plannedDate: form.weekEnd,
@@ -411,6 +413,21 @@ function blankPlan() {
 
 function projectOptionLabel(project) {
   return [project.projectCode, project.projectName].filter(Boolean).join(' / ');
+}
+
+function resolveProjectIdFromTask(workTask) {
+  const text = String(workTask || '').trim();
+  const matched = projectOptions.value.find((project) =>
+    [projectOptionLabel(project), project.projectCode, project.projectName].filter(Boolean).includes(text)
+  );
+
+  return matched ? matched.id : null;
+}
+
+function onProjectTaskInput(row, value) {
+  row.workTask = value;
+  row.projectId = resolveProjectIdFromTask(value);
+  scheduleProjectSearch(value);
 }
 
 async function loadProjectOptions(keyword = '') {
@@ -460,6 +477,7 @@ function prefillSummariesFromPreviousPlans(previousReport) {
   // 首次填写本周周报时，将上个周报的下周计划带入本周工作总结。
   form.summaries = previousPlans.map((plan) =>
     withLocalId({
+      projectId: plan.projectId || null,
       workTask: plan.workTask || '',
       workTarget: plan.workTarget || '',
       plannedDate: plan.plannedDate || form.weekStart,
@@ -478,6 +496,7 @@ function applyReport(report) {
   form.status = report.status;
   form.summaries = (report.summaries?.length ? report.summaries : [{}]).map((item) =>
     withLocalId({
+      projectId: item.projectId || null,
       workTask: item.workTask || '',
       workTarget: item.workTarget || '',
       plannedDate: item.plannedDate || report.weekStart,
@@ -488,6 +507,7 @@ function applyReport(report) {
   );
   form.plans = (report.plans?.length ? report.plans : [{}]).map((item) =>
     withLocalId({
+      projectId: item.projectId || null,
       workTask: item.workTask || '',
       workTarget: item.workTarget || '',
       plannedDate: item.plannedDate || report.weekEnd,
@@ -533,6 +553,7 @@ function buildPayload(status) {
     weekEnd: form.weekEnd,
     status,
     summaries: form.summaries.map((item) => ({
+      projectId: item.projectId || null,
       workTask: item.workTask,
       workTarget: item.workTarget,
       plannedDate: item.plannedDate,
@@ -541,6 +562,7 @@ function buildPayload(status) {
       completedDate: item.completedDate
     })),
     plans: form.plans.map((item) => ({
+      projectId: item.projectId || null,
       workTask: item.workTask,
       workTarget: item.workTarget,
       plannedDate: item.plannedDate,

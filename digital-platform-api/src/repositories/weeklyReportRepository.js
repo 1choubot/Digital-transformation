@@ -12,6 +12,7 @@ import {
 } from '../domain/weeklyReports.js';
 import { env } from '../config/env.js';
 import { findLatestWeeklyRestModeAnchor } from './reportSettingsRepository.js';
+import { buildProjectVisibilityCondition } from './projects/visibility.js';
 
 // MySQL can return DATE values as Date objects; the API always emits YYYY-MM-DD.
 function dateOnly(value) {
@@ -90,6 +91,7 @@ function mapSummaryRow(row) {
     id: row.id,
     weeklyReportId: row.weekly_report_id,
     sortOrder: row.sort_order,
+    projectId: row.project_id,
     workTask: row.work_task,
     workTarget: row.work_target,
     plannedDate: dateOnly(row.planned_date),
@@ -105,6 +107,7 @@ function mapPlanRow(row) {
     id: row.id,
     weeklyReportId: row.weekly_report_id,
     sortOrder: row.sort_order,
+    projectId: row.project_id,
     workTask: row.work_task,
     workTarget: row.work_target,
     plannedDate: dateOnly(row.planned_date),
@@ -215,6 +218,40 @@ function mapWeeklyReportUserRow(row) {
   };
 }
 
+async function assertWeeklyReportProjectsAvailable(executor, { report, user }) {
+  const projectIds = [
+    ...report.summaries.map((item) => item.projectId),
+    ...report.plans.map((item) => item.projectId)
+  ].filter((projectId) => projectId !== null && projectId !== undefined);
+  const uniqueProjectIds = [...new Set(projectIds.map((projectId) => Number(projectId)))];
+
+  if (uniqueProjectIds.length === 0) {
+    return;
+  }
+
+  const visibility = buildProjectVisibilityCondition(user, 'p');
+  const placeholders = uniqueProjectIds.map(() => '?').join(', ');
+  const [rows] = await executor.execute(
+    `SELECT p.id
+    FROM projects p
+    WHERE p.id IN (${placeholders})
+      AND p.status <> 'completed'
+      AND ${visibility.sql}`,
+    [...uniqueProjectIds, ...visibility.params]
+  );
+  const availableIds = new Set(rows.map((row) => Number(row.id)));
+  const unavailableId = uniqueProjectIds.find((projectId) => !availableIds.has(projectId));
+
+  if (unavailableId) {
+    throw new WeeklyReportError(
+      WEEKLY_REPORT_ERROR.INVALID_PROJECT_ID,
+      'Weekly report project is not available',
+      409,
+      ['projectId']
+    );
+  }
+}
+
 // Fetch summary and plan children after a weekly report row is known.
 async function attachWeeklyReportChildren(report, executor = pool) {
   const [summaryRows] = await executor.execute(
@@ -253,16 +290,18 @@ async function insertWeeklyReportSummaries(executor, weeklyReportId, summaries) 
       `INSERT INTO weekly_report_summaries (
         weekly_report_id,
         sort_order,
+        project_id,
         work_task,
         work_target,
         planned_date,
         completion_status,
         completion_description,
         completed_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         weeklyReportId,
         item.sortOrder,
+        item.projectId,
         item.workTask,
         item.workTarget,
         item.plannedDate,
@@ -281,12 +320,13 @@ async function insertWeeklyReportPlans(executor, weeklyReportId, plans) {
       `INSERT INTO weekly_report_plans (
         weekly_report_id,
         sort_order,
+        project_id,
         work_task,
         work_target,
         planned_date,
         responsible_person
-      ) VALUES (?, ?, ?, ?, ?, ?)`,
-      [weeklyReportId, item.sortOrder, item.workTask, item.workTarget, item.plannedDate, item.responsiblePerson]
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [weeklyReportId, item.sortOrder, item.projectId, item.workTask, item.workTarget, item.plannedDate, item.responsiblePerson]
     );
   }
 }
@@ -399,10 +439,12 @@ export async function listWeeklyReports({ userId, filters = {} }) {
 }
 
 // Create one weekly report and its child rows in a transaction.
-export async function createWeeklyReport({ userId, report }) {
+export async function createWeeklyReport({ user, report }) {
+  const userId = user.id;
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+    await assertWeeklyReportProjectsAvailable(connection, { report, user });
     const [result] = await connection.execute(
       `INSERT INTO weekly_reports (
         user_id,
@@ -428,11 +470,13 @@ export async function createWeeklyReport({ userId, report }) {
 }
 
 // Replace a weekly report and invalidate cached scoring when content changes.
-export async function updateWeeklyReport({ reportId, userId, report }) {
+export async function updateWeeklyReport({ reportId, user, report }) {
+  const userId = user.id;
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
     const existing = await getWeeklyReportById({ reportId, userId }, connection);
+    await assertWeeklyReportProjectsAvailable(connection, { report, user });
 
     await connection.execute(
       `UPDATE weekly_reports

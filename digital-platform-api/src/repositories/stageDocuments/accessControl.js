@@ -1,4 +1,5 @@
 import {
+  BUSINESS_DEPARTMENT,
   canManageProjectResponsibility,
   canManageStageDocumentApplicability,
   canSubmitStageDocument,
@@ -13,6 +14,8 @@ import {
 } from '../../domain/organization.js';
 import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import {
+  INITIATION_REVIEW_DOCUMENT_CODE,
+  INITIATION_REWORK_TARGET_DOCUMENT_CODE,
   isInitiationOnlineFormDocument,
   isInitiationReviewDocument
 } from '../../domain/initiationReview.js';
@@ -216,6 +219,19 @@ export function canDeleteStageDocumentAttachment(user, { project = null, documen
   );
 }
 
+export function canManageInitiationOnlineFormResponsibility(user, document) {
+  const documentCode = String(document?.document_code ?? document?.documentCode ?? '').trim();
+  if (![INITIATION_REWORK_TARGET_DOCUMENT_CODE, INITIATION_REVIEW_DOCUMENT_CODE].includes(documentCode)) {
+    return false;
+  }
+
+  if (isSystemAdminUser(user) || isGeneralManagerAssistantUser(user)) {
+    return false;
+  }
+
+  return isCenterManagerUser(user) && user.department === BUSINESS_DEPARTMENT.MARKETING_CENTER;
+}
+
 export function buildStageDocumentPermissions({ user, project, document, relatedDocumentsByCode = null }) {
   const canViewAttachments = canViewStageDocumentAttachments(user, { project, document });
   const canDownloadAttachment = canDownloadStageDocumentAttachment(user, { project, document });
@@ -227,10 +243,11 @@ export function buildStageDocumentPermissions({ user, project, document, related
     !isSystemAdminUser(user) &&
     !isOnlineFormOnlyDocument &&
     canSubmitStageDocument(user, { project, document });
-  const canManageResponsibility =
-    !isGeneralManagerAssistantUser(user) &&
-    !isSystemAdminUser(user) &&
-    canManageProjectResponsibility(user, project, { document });
+  const canManageResponsibility = isOnlineFormOnlyDocument
+    ? canManageInitiationOnlineFormResponsibility(user, document)
+    : !isGeneralManagerAssistantUser(user) &&
+      !isSystemAdminUser(user) &&
+      canManageProjectResponsibility(user, project, { document });
   const canChangeApplicability =
     !isGeneralManagerAssistantUser(user) &&
     !isSystemAdminUser(user) &&

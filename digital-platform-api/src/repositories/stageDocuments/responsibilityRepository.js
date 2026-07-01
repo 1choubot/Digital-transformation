@@ -1,13 +1,13 @@
 import { pool } from '../../db/pool.js';
 import {
-  BUSINESS_DEPARTMENT,
   canBeResponsibleUser,
-  canManageProjectResponsibility,
-  isCenterManagerUser
+  canManageProjectResponsibility
 } from '../../domain/organization.js';
 import {
+  INITIATION_NOTICE_DOCUMENT_CODE,
   INITIATION_REVIEW_DOCUMENT_CODE,
-  INITIATION_REWORK_TARGET_DOCUMENT_CODE
+  INITIATION_REWORK_TARGET_DOCUMENT_CODE,
+  isInitiationOnlineFormDocument
 } from '../../domain/initiationReview.js';
 import {
   insertOperationLog,
@@ -25,6 +25,7 @@ import {
   selectProjectPermissionContext,
   selectResponsibleUserPermissionContext
 } from './permissionContext.js';
+import { canManageInitiationOnlineFormResponsibility } from './accessControl.js';
 
 function normalizeResponsibleUserId(value) {
   if (value === null) {
@@ -45,7 +46,7 @@ function normalizeResponsibleUserId(value) {
 
 function assertUserCanManageResponsibility({ user, project, currentDocument, targetResponsibleUser }) {
   if ([INITIATION_REWORK_TARGET_DOCUMENT_CODE, INITIATION_REVIEW_DOCUMENT_CODE].includes(currentDocument.document_code)) {
-    if (!isCenterManagerUser(user) || user.department !== BUSINESS_DEPARTMENT.MARKETING_CENTER) {
+    if (!canManageInitiationOnlineFormResponsibility(user, currentDocument)) {
       throw new StageDocumentResponsibilityError(
         'FORBIDDEN_OPERATION',
         'Only marketing center manager can assign initiation stage document responsibility',
@@ -54,6 +55,15 @@ function assertUserCanManageResponsibility({ user, project, currentDocument, tar
       );
     }
     return;
+  }
+
+  if (currentDocument.document_code === INITIATION_NOTICE_DOCUMENT_CODE || isInitiationOnlineFormDocument(currentDocument)) {
+    throw new StageDocumentResponsibilityError(
+      'FORBIDDEN_OPERATION',
+      'Initiation notice does not support separate stage document responsibility assignment',
+      403,
+      ['documentId']
+    );
   }
 
   if (!canManageProjectResponsibility(user, project, {

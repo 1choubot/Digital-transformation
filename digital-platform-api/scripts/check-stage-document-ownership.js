@@ -137,6 +137,15 @@ function findChecklistDocument(checklist, documentCode) {
   return document;
 }
 
+function findWorkspaceOutput(workspace, documentCode) {
+  const output = workspace.stages
+    .flatMap((stage) => stage.nodes || [])
+    .flatMap((node) => node.outputs || [])
+    .find((candidate) => candidate.documentCode === documentCode);
+  assert.ok(output, `Workspace output not found: ${documentCode}`);
+  return output;
+}
+
 async function assertStageDocumentSubmitForbidden({ projectId, documentId, user }) {
   await assert.rejects(
     () =>
@@ -905,7 +914,8 @@ async function runInitiationReviewSmoke({
   limitedEmployeeUser,
   marketingManagerUser,
   generalManagerUser,
-  systemAdminUser
+  systemAdminUser,
+  generalManagerAssistantUser
 }) {
   const requirementFormData = {
     projectBackground: 'smoke requirement background',
@@ -955,6 +965,21 @@ async function runInitiationReviewSmoke({
           stage.nodes.length === 0
       )
   );
+
+  const marketingResponsibilityChecklist = await getProjectStageDocumentChecklist(projectId, marketingManagerUser);
+  assert.equal(findChecklistDocument(marketingResponsibilityChecklist, '1.1').canManageResponsibility, true);
+  assert.equal(findChecklistDocument(marketingResponsibilityChecklist, '1.2').canManageResponsibility, true);
+  assert.equal(findChecklistDocument(marketingResponsibilityChecklist, '1.3').canManageResponsibility, false);
+  const marketingResponsibilityWorkspace = await getProjectWorkspace(projectId, marketingManagerUser);
+  assert.equal(findWorkspaceOutput(marketingResponsibilityWorkspace, '1.1').permissions.canManageResponsibility, true);
+  assert.equal(findWorkspaceOutput(marketingResponsibilityWorkspace, '1.2').permissions.canManageResponsibility, true);
+  assert.equal(findWorkspaceOutput(marketingResponsibilityWorkspace, '1.3').permissions.canManageResponsibility, false);
+  const rdResponsibilityChecklist = await getProjectStageDocumentChecklist(projectId, managerUser);
+  assert.equal(findChecklistDocument(rdResponsibilityChecklist, '1.1').canManageResponsibility, false);
+  assert.equal(findChecklistDocument(rdResponsibilityChecklist, '1.2').canManageResponsibility, false);
+  const assistantResponsibilityChecklist = await getProjectStageDocumentChecklist(projectId, generalManagerAssistantUser);
+  assert.equal(findChecklistDocument(assistantResponsibilityChecklist, '1.1').canManageResponsibility, false);
+  assert.equal(findChecklistDocument(assistantResponsibilityChecklist, '1.2').canManageResponsibility, false);
 
   const visibilityProjectId = await createInitiationSmokeProject({
     uniqueSuffix,
@@ -1038,6 +1063,26 @@ async function runInitiationReviewSmoke({
         user: managerUser
       }),
     (error) => error.code === 'FORBIDDEN_OPERATION'
+  );
+  await assert.rejects(
+    () =>
+      updateProjectStageDocumentResponsibleUser({
+        projectId,
+        documentId: requirementDocument.id,
+        responsibleUserId: managerUser.id,
+        user: generalManagerAssistantUser
+      }),
+    (error) => error.code === 'FORBIDDEN_OPERATION' && error.statusCode === 403
+  );
+  await assert.rejects(
+    () =>
+      updateProjectStageDocumentResponsibleUser({
+        projectId,
+        documentId: requirementDocument.id,
+        responsibleUserId: managerUser.id,
+        user: systemAdminUser
+      }),
+    (error) => error.code === 'FORBIDDEN_OPERATION' && error.statusCode === 403
   );
   await updateProjectStageDocumentResponsibleUser({
     projectId,
@@ -1134,6 +1179,36 @@ async function runInitiationReviewSmoke({
         formData: initiationFormData
       }),
     (error) => error.code === 'FORM_RESPONSIBLE_USER_REQUIRED'
+  );
+  await assert.rejects(
+    () =>
+      updateProjectStageDocumentResponsibleUser({
+        projectId,
+        documentId: initialInitiationDocument.id,
+        responsibleUserId: managerUser.id,
+        user: managerUser
+      }),
+    (error) => error.code === 'FORBIDDEN_OPERATION' && error.statusCode === 403
+  );
+  await assert.rejects(
+    () =>
+      updateProjectStageDocumentResponsibleUser({
+        projectId,
+        documentId: initialInitiationDocument.id,
+        responsibleUserId: managerUser.id,
+        user: generalManagerAssistantUser
+      }),
+    (error) => error.code === 'FORBIDDEN_OPERATION' && error.statusCode === 403
+  );
+  await assert.rejects(
+    () =>
+      updateProjectStageDocumentResponsibleUser({
+        projectId,
+        documentId: initialInitiationDocument.id,
+        responsibleUserId: managerUser.id,
+        user: systemAdminUser
+      }),
+    (error) => error.code === 'FORBIDDEN_OPERATION' && error.statusCode === 403
   );
   await updateProjectStageDocumentResponsibleUser({
     projectId,
@@ -1260,6 +1335,17 @@ async function runInitiationReviewSmoke({
   await assertNoInitiationWorkbenchTask(
     departmentUser(9101, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER),
     projectId
+  );
+  const noticeResponsibilityDocument = await selectSmokeDocument(projectId, '1.3');
+  await assert.rejects(
+    () =>
+      updateProjectStageDocumentResponsibleUser({
+        projectId,
+        documentId: noticeResponsibilityDocument.id,
+        responsibleUserId: marketingManagerUser.id,
+        user: marketingManagerUser
+      }),
+    (error) => error.code === 'FORBIDDEN_OPERATION' && error.statusCode === 403
   );
   await pool.execute(
     `UPDATE project_stage_documents
@@ -2364,7 +2450,8 @@ async function runProjectLifecycleSmoke() {
       limitedEmployeeUser,
       marketingManagerUser,
       generalManagerUser,
-      systemAdminUser: smokeSystemAdminUser
+      systemAdminUser: smokeSystemAdminUser,
+      generalManagerAssistantUser
     });
 
     const initialCountsA = await countSmokeProjectObjects(projectAId);
@@ -3714,6 +3801,78 @@ assert.equal(
     document: unassignedRdDocument,
     targetResponsibleUser: manufacturingEmployee
   }),
+  false
+);
+
+const initiationRequirementDocument = makeDocument({
+  documentCode: '1.1',
+  documentName: '项目需求表',
+  ownerDepartment: RD_CENTER,
+  reviewDepartment: MARKETING_CENTER,
+  completionMode: COMPLETION_MODE.SUBMIT_ONLY
+});
+const initiationApprovalDocument = makeDocument({
+  documentCode: '1.2',
+  documentName: '项目立项审批表',
+  ownerDepartment: RD_CENTER,
+  reviewDepartment: MARKETING_CENTER,
+  completionMode: COMPLETION_MODE.APPROVAL_REQUIRED
+});
+const initiationNoticeDocument = makeDocument({
+  documentCode: '1.3',
+  documentName: '项目立项通知',
+  ownerDepartment: MARKETING_CENTER,
+  reviewDepartment: MARKETING_CENTER,
+  completionMode: COMPLETION_MODE.SUBMIT_ONLY
+});
+for (const initiationResponsibilityDocument of [initiationRequirementDocument, initiationApprovalDocument]) {
+  assert.equal(
+    buildStageDocumentPermissions({
+      user: marketingManager,
+      project,
+      document: initiationResponsibilityDocument
+    }).canManageResponsibility,
+    true
+  );
+  assert.equal(
+    buildStageDocumentPermissions({
+      user: rdManager,
+      project,
+      document: initiationResponsibilityDocument
+    }).canManageResponsibility,
+    false
+  );
+  assert.equal(
+    buildStageDocumentPermissions({
+      user: generalManager,
+      project,
+      document: initiationResponsibilityDocument
+    }).canManageResponsibility,
+    false
+  );
+  assert.equal(
+    buildStageDocumentPermissions({
+      user: generalManagerAssistant,
+      project,
+      document: initiationResponsibilityDocument
+    }).canManageResponsibility,
+    false
+  );
+  assert.equal(
+    buildStageDocumentPermissions({
+      user: systemAdmin,
+      project,
+      document: initiationResponsibilityDocument
+    }).canManageResponsibility,
+    false
+  );
+}
+assert.equal(
+  buildStageDocumentPermissions({
+    user: marketingManager,
+    project,
+    document: initiationNoticeDocument
+  }).canManageResponsibility,
   false
 );
 

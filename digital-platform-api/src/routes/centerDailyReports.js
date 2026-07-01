@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import fs from 'node:fs/promises';
 import { AuthError } from '../domain/auth.js';
 import {
   CENTER_DAILY_REPORT_DEPARTMENTS,
@@ -139,6 +140,9 @@ centerDailyReportsRouter.post(
           }
         },
         (error) => {
+          // 导出文件现在只作为下载临时文件，响应结束后立即清理。
+          fs.unlink(download.filePath).catch(() => {});
+          fs.unlink(download.filePath).catch(() => {});
           if (error && !res.headersSent) {
             reject(error);
             return;

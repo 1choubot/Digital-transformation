@@ -7,11 +7,16 @@ import {
   getShanghaiMinuteString,
   withCenterDailyExportLock
 } from '../repositories/centerDailyReportRepository.js';
-import { generateCenterDailyReportWorkbook } from './centerDailyReportExportService.js';
 
 let schedulerTimer = null;
 
-// Run all center exports that are due for the current Asia/Shanghai minute.
+// 返回兼容旧调用方的“应生成文件名”，但不会实际创建文件。
+function buildSkippedCenterDailyFileName({ department, reportDate }) {
+  const departmentName = department === 'rd_center' ? '研发中心' : department;
+  return `部门工作日报-${departmentName}${String(reportDate).replaceAll('-', '')}.xlsx`;
+}
+
+// 检查到点的中心日报任务，但暂停自动生成本地 Excel 文件。
 export async function runDueCenterDailyReportExports(now = new Date()) {
   const reportDate = getShanghaiDateString(now);
   const currentMinute = getShanghaiMinuteString(now);
@@ -25,20 +30,15 @@ export async function runDueCenterDailyReportExports(now = new Date()) {
 
     const lockKey = `center_daily_report:${department}:${reportDate}:${currentMinute}`;
     const locked = await withCenterDailyExportLock(lockKey, async () => {
-      const report = await getCenterDailyReportDto({ department, reportDate });
-      const download = await generateCenterDailyReportWorkbook({
-        ...report,
-        generatedBy: {
-          name: '系统自动生成',
-          account: 'system'
-        }
-      });
+      // 只验证数据可生成，真正的 Excel 生成保留给页面手动导出下载。
+      await getCenterDailyReportDto({ department, reportDate });
 
       return {
         department,
         reportDate,
-        filePath: download.filePath,
-        fileName: download.fileName
+        fileName: buildSkippedCenterDailyFileName({ department, reportDate }),
+        skipped: true,
+        reason: 'local_report_storage_disabled'
       };
     });
 
@@ -52,7 +52,7 @@ export async function runDueCenterDailyReportExports(now = new Date()) {
   return results;
 }
 
-// Start a lightweight minute poller; tests call runDueCenterDailyReportExports directly.
+// 启动分钟级轮询；当前轮询不会再落盘生成 Excel。
 export function startCenterDailyReportScheduler() {
   if (!env.centerDailyScheduler.enabled || schedulerTimer) {
     return null;
@@ -68,7 +68,7 @@ export function startCenterDailyReportScheduler() {
   return schedulerTimer;
 }
 
-// Stop the poller during process shutdown or test cleanup.
+// 进程关闭或测试清理时停止轮询。
 export function stopCenterDailyReportScheduler() {
   if (schedulerTimer) {
     clearInterval(schedulerTimer);

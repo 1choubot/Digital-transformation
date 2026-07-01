@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import ExcelJS from 'exceljs';
 import { env } from '../config/env.js';
@@ -131,10 +132,10 @@ function fillPlans(worksheet, plans, summaryExtraRows) {
   }
 }
 
-// Build a deterministic output path under REPORT_EXPORT_ROOT/weekly/yyyy/mm.
+// 手动导出只需要临时文件供下载，暂停写入 REPORT_EXPORT_ROOT 的持久目录。
 function buildWeeklyReportExportPath({ report, user }) {
   const [year, month] = String(report.weekEnd).split('-');
-  const directory = path.resolve(env.reports.exportRoot, 'weekly', year, month);
+  const directory = path.resolve(os.tmpdir(), 'digital-platform-report-downloads', 'weekly', year, month);
   const centerName = sanitizeFileNamePart(formatDepartment(user.department), '中心');
   const userName = sanitizeFileNamePart(user.name, user.account || 'employee');
   const fileName = `周绩效考核表-${centerName}${userName}${formatCompactDate(report.weekEnd)}.xlsx`;

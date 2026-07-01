@@ -16,8 +16,12 @@
         <h1>项目核心管理</h1>
       </div>
       <nav class="app-nav">
-        <button type="button" :class="{ active: route.name === 'projects' }" @click="navigate('/projects')">
-          项目列表
+        <button
+          type="button"
+          :class="{ active: route.name === 'project-overview-dashboard' }"
+          @click="navigate('/projects')"
+        >
+          项目总览
         </button>
         <button
           v-if="canCurrentUserCreateProject"
@@ -26,13 +30,6 @@
           @click="navigate('/projects/new')"
         >
           新建项目
-        </button>
-        <button
-          type="button"
-          :class="{ active: route.name === 'project-overview-dashboard' }"
-          @click="navigate('/projects/overview-dashboard')"
-        >
-          项目总览
         </button>
         <button
           type="button"
@@ -62,14 +59,8 @@
     </header>
 
     <main class="app-main">
-      <ProjectListPage
-        v-if="route.name === 'projects'"
-        :auth-token="authToken"
-        :current-user="currentUser"
-        :navigate="navigate"
-      />
       <ProjectCreatePage
-        v-else-if="route.name === 'project-create'"
+        v-if="route.name === 'project-create'"
         :auth-token="authToken"
         :current-user="currentUser"
         :navigate="navigate"
@@ -90,6 +81,7 @@
         :task-mode="route.query?.taskMode || ''"
         :focus-document-id="route.query?.documentId || ''"
         :focus-stage-id="route.query?.stageId || ''"
+        :focus-node-key="route.query?.nodeKey || ''"
         :navigate="navigate"
       />
       <MyStageDocumentTasksPage
@@ -109,7 +101,7 @@
       <section v-else class="state-panel">
         <h2>页面不存在</h2>
         <p>当前地址无法匹配到项目核心页面。</p>
-        <button type="button" class="primary-button" @click="navigate('/projects')">返回项目列表</button>
+        <button type="button" class="primary-button" @click="navigate('/projects')">返回项目总览</button>
       </section>
     </main>
   </div>
@@ -129,7 +121,6 @@ import LoginPage from './pages/LoginPage.vue';
 import MyStageDocumentTasksPage from './pages/MyStageDocumentTasksPage.vue';
 import ProjectCreatePage from './pages/ProjectCreatePage.vue';
 import ProjectDetailPage from './pages/ProjectDetailPage.vue';
-import ProjectListPage from './pages/ProjectListPage.vue';
 import ProjectOverviewDashboardPage from './pages/ProjectOverviewDashboardPage.vue';
 import UserManagementPage from './pages/UserManagementPage.vue';
 import { useHashRouter } from './router.js';

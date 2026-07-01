@@ -206,6 +206,13 @@ p {
   gap: 16px;
 }
 
+.page-title-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .page-title-row h2 {
   margin-top: 4px;
   color: #17212f;
@@ -1730,23 +1737,26 @@ p {
 
 .project-workspace__layout {
   display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
   gap: 16px;
   align-items: start;
+  padding: 16px 18px 18px;
 }
 
-.project-workspace__nav {
+.project-workspace__stage-nav {
   display: grid;
   gap: 8px;
+  position: sticky;
+  top: 16px;
 }
 
-.project-workspace__stage {
+.project-workspace__main {
   display: grid;
-  gap: 6px;
+  gap: 14px;
+  min-width: 0;
 }
 
-.project-workspace__stage-button,
-.project-workspace__node-button {
+.project-workspace__stage-button {
   width: 100%;
   border: 1px solid #d8dde6;
   background: #fff;
@@ -1759,21 +1769,109 @@ p {
   cursor: pointer;
 }
 
-.project-workspace__stage-button small,
-.project-workspace__node-button small {
+.project-workspace__stage-button small {
   color: #607089;
 }
 
-.project-workspace__stage-button--active,
-.project-workspace__node-button--active {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+.project-workspace__stage-button--active {
+  border-color: #226d68;
+  background: #f0faf8;
+  box-shadow: 0 0 0 2px rgba(34, 109, 104, 0.12);
 }
 
-.project-workspace__node-list {
+.project-workspace__stage-button--current small::after {
+  content: " / 当前阶段";
+}
+
+.project-workspace__node-section {
   display: grid;
-  gap: 6px;
-  padding-left: 14px;
+  gap: 12px;
+  min-width: 0;
+}
+
+.project-workspace__section-heading,
+.project-workspace__detail-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.project-workspace__section-heading h3,
+.project-workspace__detail-heading h3 {
+  margin-top: 4px;
+  color: #17212f;
+  font-size: 18px;
+}
+
+.project-workspace__node-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.project-workspace__node-card {
+  display: grid;
+  gap: 7px;
+  min-height: 104px;
+  min-width: 0;
+  border: 1px solid #c7d8ee;
+  border-radius: 8px;
+  background: #f7fbff;
+  color: #17212f;
+  padding: 12px;
+  text-align: left;
+}
+
+.project-workspace__node-card strong,
+.project-workspace__node-card span,
+.project-workspace__node-card small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.project-workspace__node-card span {
+  width: fit-content;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.project-workspace__node-card small,
+.project-workspace__hint,
+.project-workspace__placeholder p {
+  color: #667789;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.project-workspace__node-card--active {
+  border-color: #226d68;
+  background: #effaf7;
+  box-shadow: 0 0 0 2px rgba(34, 109, 104, 0.12);
+}
+
+.project-workspace__placeholder {
+  display: grid;
+  gap: 10px;
+  border: 1px dashed #cbd6e2;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 16px;
+}
+
+.project-workspace__placeholder strong {
+  color: #17212f;
+}
+
+.project-workspace__legacy-link {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
 }
 
 .project-workspace__detail,
@@ -1781,13 +1879,7 @@ p {
 .online-form-editor {
   display: grid;
   gap: 12px;
-}
-
-.project-workspace__detail-heading {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: start;
+  min-width: 0;
 }
 
 .project-workspace__output {
@@ -1796,6 +1888,17 @@ p {
   padding: 14px;
   display: grid;
   gap: 12px;
+}
+
+.project-workspace__output-meta {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.project-workspace__output-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .stage-document-attachments__heading {
@@ -2017,6 +2120,7 @@ p {
 
   .app-nav,
   .current-user,
+  .page-title-actions,
   .form-actions {
     width: 100%;
   }
@@ -2092,6 +2196,16 @@ p {
 
   .project-workspace__detail-heading {
     display: grid;
+  }
+
+  .project-workspace__stage-nav {
+    position: static;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .project-workspace__node-grid,
+  .project-workspace__output-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .approval-stage__badges {
@@ -2176,6 +2290,9 @@ p {
   .stage-document-completeness__summary,
   .overview-summary-grid,
   .overview-filters,
+  .project-workspace__stage-nav,
+  .project-workspace__node-grid,
+  .project-workspace__output-meta,
   .overview-project__documents li,
   .task-table__row,
   .approval-return,

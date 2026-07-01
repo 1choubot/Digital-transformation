@@ -9,9 +9,19 @@
           齐套率基于资料 completionMode、基础状态和适用性派生完成状态计算。
         </p>
       </div>
-      <button type="button" class="ghost-button" :disabled="loading" @click="loadDashboard">
-        {{ loading ? '加载中...' : '重新加载' }}
-      </button>
+      <div class="page-title-actions">
+        <button
+          v-if="canCreateProject"
+          type="button"
+          class="primary-button"
+          @click="navigate('/projects/new')"
+        >
+          新建项目
+        </button>
+        <button type="button" class="ghost-button" :disabled="loading" @click="loadDashboard">
+          {{ loading ? '加载中...' : '重新加载' }}
+        </button>
+      </div>
     </div>
 
     <section class="overview-summary-grid" aria-label="项目总览指标">
@@ -124,7 +134,7 @@
               <small>创建人：{{ formatUser(project.createdBy) }}</small>
             </div>
             <button type="button" class="ghost-button" @click="navigate(`/projects/${project.projectId}`)">
-              查看详情
+              进入工作区
             </button>
           </div>
 
@@ -229,6 +239,9 @@ const dashboard = ref({
 
 const summary = computed(() => dashboard.value.summary || emptySummary);
 const projects = computed(() => dashboard.value.projects || []);
+const canCreateProject = computed(() =>
+  ['general_manager', 'center_manager'].includes(props.currentUser?.organizationRole)
+);
 
 function formatCurrentStage(project) {
   if (project.currentStageName) {

@@ -6,7 +6,7 @@
         <h2>用户管理</h2>
         <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
       </div>
-      <button type="button" class="ghost-button" @click="navigate('/projects')">返回项目列表</button>
+      <button type="button" class="ghost-button" @click="navigate('/projects')">返回项目总览</button>
     </div>
 
     <section v-if="!canAccessUserManagement" class="state-panel state-panel--error">

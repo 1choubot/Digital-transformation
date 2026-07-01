@@ -6,7 +6,7 @@ function parseHash() {
   const query = Object.fromEntries(new URLSearchParams(queryString));
 
   if (path === '/' || path === '/projects') {
-    return { name: 'projects', path: '/projects', query: {} };
+    return { name: 'project-overview-dashboard', path: '/projects', query };
   }
 
   if (path === '/projects/new') {
@@ -14,7 +14,7 @@ function parseHash() {
   }
 
   if (path === '/projects/overview-dashboard') {
-    return { name: 'project-overview-dashboard', path, query };
+    return { name: 'project-overview-dashboard', path: '/projects', query };
   }
 
   if (path === '/users') {

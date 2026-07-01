@@ -6,13 +6,13 @@
         <h2>新建项目</h2>
         <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
       </div>
-      <button type="button" class="ghost-button" @click="navigate('/projects')">返回列表</button>
+      <button type="button" class="ghost-button" @click="navigate('/projects')">返回项目总览</button>
     </div>
 
     <section v-if="!canCreateProject" class="state-panel state-panel--error">
       <h3>无权创建项目</h3>
       <p>当前账号无权创建项目。项目创建仅开放给总经理和中心负责人。</p>
-      <button type="button" class="primary-button" @click="navigate('/projects')">返回项目列表</button>
+      <button type="button" class="primary-button" @click="navigate('/projects')">返回项目总览</button>
     </section>
 
     <form v-else class="panel form-grid" @submit.prevent="submitProject">

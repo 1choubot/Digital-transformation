@@ -196,41 +196,53 @@
 
             <div class="stage-document-card__body">
               <ProjectStageDocumentTrace :document="document" />
-              <ProjectInitiationReviewPanel
-                v-if="document.initiationReview"
-                :document="document"
-                :is-action-pending="isActionPending"
-                @approve-node="$emit('approve-initiation-review-node', $event)"
-                @return-node="$emit('return-initiation-review-node', $event)"
-              />
-              <ProjectStageDocumentAttachments
-                :document="document"
-                :state="getAttachmentState(document.id)"
-                @upload="$emit('upload-attachment', $event)"
-                @download="$emit('download-attachment', $event)"
-                @delete="$emit('delete-attachment', $event)"
-              />
-              <ProjectStageDocumentActions
-                :document="document"
-                :responsibility-candidates="responsibilityCandidates"
-                :responsibility-candidates-loading="responsibilityCandidatesLoading"
-                :responsibility-selections="responsibilitySelections"
-                :can-submit-document="canSubmitDocument(document)"
-                :can-confirm-return-document="canConfirmReturnDocument(document)"
-                :can-manage-responsibility="canManageResponsibility(document)"
-                :can-change-applicability="canChangeApplicability(document)"
-                :return-reasons="returnReasons"
-                :not-applicable-reasons="notApplicableReasons"
-                :is-action-pending="isActionPending"
-                @submit-document="$emit('submit-document', $event)"
-                @confirm-document="$emit('confirm-document', $event)"
-                @return-document="$emit('return-document', $event)"
-                @complete-revision-document="$emit('complete-revision-document', $event)"
-                @mark-not-applicable="$emit('mark-not-applicable', $event)"
-                @restore-applicable="$emit('restore-applicable', $event)"
-                @save-responsible-user="$emit('save-responsible-user', $event)"
-                @clear-responsible-user="$emit('clear-responsible-user', $event)"
-              />
+              <section
+                v-if="isInitiationOnlineFormDocument(document)"
+                class="stage-document-card__actions"
+                aria-label="立项阶段资料辅助提示"
+              >
+                <h4>立项阶段在线表单</h4>
+                <span class="stage-document-actions__empty">
+                  请在上方项目工作区处理立项阶段在线表单。
+                </span>
+              </section>
+              <template v-else>
+                <ProjectInitiationReviewPanel
+                  v-if="document.initiationReview"
+                  :document="document"
+                  :is-action-pending="isActionPending"
+                  @approve-node="$emit('approve-initiation-review-node', $event)"
+                  @return-node="$emit('return-initiation-review-node', $event)"
+                />
+                <ProjectStageDocumentAttachments
+                  :document="document"
+                  :state="getAttachmentState(document.id)"
+                  @upload="$emit('upload-attachment', $event)"
+                  @download="$emit('download-attachment', $event)"
+                  @delete="$emit('delete-attachment', $event)"
+                />
+                <ProjectStageDocumentActions
+                  :document="document"
+                  :responsibility-candidates="responsibilityCandidates"
+                  :responsibility-candidates-loading="responsibilityCandidatesLoading"
+                  :responsibility-selections="responsibilitySelections"
+                  :can-submit-document="canSubmitDocument(document)"
+                  :can-confirm-return-document="canConfirmReturnDocument(document)"
+                  :can-manage-responsibility="canManageResponsibility(document)"
+                  :can-change-applicability="canChangeApplicability(document)"
+                  :return-reasons="returnReasons"
+                  :not-applicable-reasons="notApplicableReasons"
+                  :is-action-pending="isActionPending"
+                  @submit-document="$emit('submit-document', $event)"
+                  @confirm-document="$emit('confirm-document', $event)"
+                  @return-document="$emit('return-document', $event)"
+                  @complete-revision-document="$emit('complete-revision-document', $event)"
+                  @mark-not-applicable="$emit('mark-not-applicable', $event)"
+                  @restore-applicable="$emit('restore-applicable', $event)"
+                  @save-responsible-user="$emit('save-responsible-user', $event)"
+                  @clear-responsible-user="$emit('clear-responsible-user', $event)"
+                />
+              </template>
             </div>
           </article>
         </div>
@@ -254,6 +266,7 @@ import {
   formatRevisionSummary,
   formatResponsibleUser,
   isApplicable,
+  isInitiationOnlineFormDocument,
   isRevisionRequired,
   isResponsibleUserDisabled,
   stageCompleteness,

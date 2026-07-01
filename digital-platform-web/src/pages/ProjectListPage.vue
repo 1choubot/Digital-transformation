@@ -1,26 +1,131 @@
 <template>
   <section class="page-stack animate-fadeIn">
-    <!-- 筛选与操作面板 -->
-    <section class="panel project-filter-panel">
-      <div class="project-filters">
+    <!-- 统计卡片 -->
+    <section class="dashboard-stats-grid">
+      <div class="stat-card stat-card--blue">
+        <div class="stat-info">
+          <span class="stat-label">项目总数</span>
+          <strong class="stat-value">{{ summary.totalProjects }}</strong>
+        </div>
+        <div class="stat-icon-wrapper">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            <line x1="12" y1="11" x2="12" y2="17" />
+            <polyline points="9 14 12 11 15 14" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="stat-card stat-card--emerald">
+        <div class="stat-info">
+          <span class="stat-label">进行中</span>
+          <strong class="stat-value">{{ summary.activeProjects }}</strong>
+        </div>
+        <div class="stat-icon-wrapper">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="stat-card stat-card--indigo">
+        <div class="stat-info">
+          <span class="stat-label">已完成</span>
+          <strong class="stat-value">{{ summary.completedProjects }}</strong>
+        </div>
+        <div class="stat-icon-wrapper">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+            <polyline points="22 4 12 14.01 9 11.01" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="stat-card stat-card--amber">
+        <div class="stat-info">
+          <span class="stat-label">风险 / 延期</span>
+          <strong class="stat-value">{{ summary.riskProjects }}</strong>
+        </div>
+        <div class="stat-icon-wrapper">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 7v6" />
+            <path d="M12 17h.01" />
+            <circle cx="12" cy="12" r="10" />
+          </svg>
+        </div>
+      </div>
+
+      <button type="button" class="stat-card stat-card--todo" @click="navigate('/my-stage-document-tasks')">
+        <div class="stat-info">
+          <span class="stat-label">我的待办资料</span>
+          <strong class="stat-value">{{ summary.myPendingStageDocumentTasks }}</strong>
+          <span class="todo-hint">立即处理 →</span>
+        </div>
+        <div class="stat-icon-wrapper">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+            <path d="M8 14h.01" />
+            <path d="M12 14h.01" />
+            <path d="M16 14h.01" />
+            <path d="M8 18h.01" />
+            <path d="M12 18h.01" />
+            <path d="M16 18h.01" />
+          </svg>
+        </div>
+      </button>
+    </section>
+
+    <!-- 过滤面板（含新建按钮） -->
+    <section class="panel overview-filter-panel">
+      <form class="overview-filters" @submit.prevent="applyFilters">
+        <label class="filter-group">
+          <span class="filter-label">项目状态</span>
+          <div class="select-wrapper">
+            <select v-model="statusFilter" :disabled="loading">
+              <option v-for="option in statusOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+        </label>
+
+        <label class="filter-group">
+          <span class="filter-label">当前阶段</span>
+          <div class="select-wrapper">
+            <select v-model="stageOrderFilter" :disabled="loading">
+              <option value="">全部阶段</option>
+              <option v-for="option in stageOrderOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+        </label>
+
         <label class="filter-group flex-1">
-          <span class="filter-label">搜索项目</span>
+          <span class="filter-label">关键字</span>
           <div class="input-wrapper">
             <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8" />
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input
-              v-model.trim="projectKeyword"
+              v-model="keywordFilter"
               type="search"
               autocomplete="off"
-              placeholder="搜索项目编号或项目名称..."
-              @input="handleSearchInput"
+              placeholder="项目编号、名称或客户名称"
+              @keydown.enter.prevent="applyFilters"
             />
           </div>
         </label>
 
         <div class="filter-actions">
+          <button type="submit" class="primary-button apply-btn" :disabled="loading">
+            <span>应用筛选</span>
+          </button>
           <button type="button" class="primary-button create-btn" @click="navigate('/projects/new')">
             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="12" y1="5" x2="12" y2="19" />
@@ -28,161 +133,195 @@
             </svg>
             <span>新建项目</span>
           </button>
-          <button type="button" class="ghost-button reload-btn" :disabled="loading" @click="loadProjects">
+          <button type="button" class="ghost-button reload-btn" :disabled="loading" @click="loadDashboard">
             <svg v-if="loading" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
               <circle cx="12" cy="12" r="10" stroke="rgba(0,0,0,0.1)" />
             </svg>
             <span>{{ loading ? '加载中...' : '重新加载' }}</span>
           </button>
         </div>
-      </div>
+      </form>
     </section>
 
-    <!-- 主展示面板 -->
-    <section class="panel">
-      <div class="panel-toolbar">
+    <!-- 全新独立堆叠卡片式列表容器 -->
+    <section class="overview-list-container">
+      <!-- 独立顶栏卡片（含提示，右对齐） -->
+      <header class="list-header-card">
         <div class="toolbar-info">
-          <div class="badge-row">
-            <span class="toolbar-title">项目台账</span>
-            <span class="api-endpoint-badge">{{ apiBaseUrl }}</span>
-          </div>
+          <strong class="toolbar-title">项目列表</strong>
           <span class="toolbar-subtitle">共 {{ filteredProjects.length }} 个项目</span>
         </div>
-      </div>
+        <p class="manual-status-note">
+          提示：齐套率基于当前手工状态和人工适用性判断，不代表物理文件已全部完成上传或在线表单已真实填写完毕。
+        </p>
+      </header>
 
-      <!-- 数据加载中 -->
-      <div v-if="loading" class="state-panel state-panel--inline">
+      <!-- 加载中 -->
+      <div v-if="loading" class="state-card state-card--inline">
         <div class="loading-wave">
           <div class="wave-bar"></div>
           <div class="wave-bar"></div>
           <div class="wave-bar"></div>
         </div>
-        <p>正在拉取全量项目清单，请稍候...</p>
+        <p>正在为您汇总全项目齐套看板，请稍候...</p>
       </div>
 
-      <!-- 异常捕捉 -->
-      <div v-else-if="errorMessage" class="state-panel state-panel--error">
+      <!-- 异常 -->
+      <div v-else-if="errorMessage" class="state-card state-card--error">
         <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="10" />
           <line x1="12" y1="8" x2="12" y2="12" />
           <line x1="12" y1="16" x2="12.01" y2="16" />
         </svg>
         <div class="error-details">
-          <h3>项目列表加载失败</h3>
+          <h3>项目总览加载失败</h3>
           <p>{{ errorMessage }}</p>
         </div>
-        <button type="button" class="primary-button inline-btn" @click="loadProjects">重试加载</button>
+        <button type="button" class="primary-button inline-btn" @click="loadDashboard">重新尝试</button>
       </div>
 
-      <!-- 空白状态 -->
-      <div v-else-if="filteredProjects.length === 0" class="state-panel state-panel--empty">
+      <!-- 空状态 -->
+      <div v-else-if="filteredProjects.length === 0" class="state-card state-card--empty">
         <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <rect x="2" y="2" width="20" height="20" rx="2" ry="2" />
-          <line x1="9" y1="9" x2="15" y2="9" />
-          <line x1="9" y1="13" x2="15" y2="13" />
-          <line x1="9" y1="17" x2="13" y2="17" />
+          <path d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-1.125 1.125-1.125V11.25a9 9 0 00-9-9z" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
-        <h3 v-if="projectKeyword">未找到匹配项目</h3>
-        <h3 v-else>暂无数字化项目</h3>
-        <p v-if="projectKeyword">没有项目编号或名称包含"{{ projectKeyword }}"的项目，请尝试其他关键词。</p>
-        <p v-else>系统目前尚未建立任何项目台账。请先创建一个新项目！</p>
-        <button v-if="!projectKeyword" type="button" class="primary-button inline-btn" @click="navigate('/projects/new')">新建项目</button>
-        <button v-else type="button" class="ghost-button inline-btn" @click="clearSearch">清除搜索</button>
+        <h3>暂无匹配项目</h3>
+        <p>当前筛选条件下没有对应的项目，请调整筛选条件。</p>
       </div>
 
-      <!-- 项目列表（点击整行进入详情） -->
-      <div v-else class="table-container">
-        <div class="project-table">
-          <!-- 表头：5列 -->
-          <div class="project-table__head">
-            <span>项目信息</span>
-            <span>模式 / 经理</span>
-            <span>状态</span>
-            <span>当前阶段</span>
-            <span>计划周期</span>
+      <!-- 独立的卡片列表流 -->
+      <div v-else class="overview-list">
+        <article
+          v-for="project in paginatedProjects"
+          :key="project.projectId"
+          class="overview-project"
+          @click="navigate(`/projects/${project.projectId}`)"
+        >
+          <div class="overview-project__main">
+            <!-- 身份区：编号、名称、客户名称 -->
+            <div class="overview-project__identity">
+              <span class="mono-badge">{{ project.projectCode || '暂无项目编号' }}</span>
+              <strong class="project-name">{{ project.projectName }}</strong>
+              <small class="project-meta-desc">
+                {{ project.customerName || '未知客户' }}
+              </small>
+            </div>
+
+            <!-- 模式列 -->
+            <div class="overview-project__mode">
+              <span class="column-lbl">模式</span>
+              <span class="mode-value">{{ formatProjectMode(project.projectMode) }}</span>
+            </div>
+
+            <!-- 经理列 -->
+            <div class="overview-project__manager">
+              <span class="column-lbl">经理</span>
+              <span class="manager-value">{{ formatUser(project.projectManagerUser) }}</span>
+            </div>
+
+            <!-- 状态 -->
+            <div class="cell-status" @click.stop>
+              <StatusBadge :status="project.status" />
+            </div>
+
+            <!-- 当前阶段 -->
+            <div class="overview-project__stage">
+              <span class="column-lbl">当前阶段</span>
+              <strong class="stage-name-text">{{ formatCurrentStage(project) }}</strong>
+              <span v-if="project.currentStageIssue" class="stage-warning-badge">{{ formatStageIssue(project.currentStageIssue) }}</span>
+            </div>
+
+            <!-- 齐套率 -->
+            <div class="overview-project__completion">
+              <span class="column-lbl">当前阶段齐套率</span>
+              <div class="rate-bar-container">
+                <strong class="rate-number">{{ formatCompletionPercent(project.currentStageCompletenessSummary) }}</strong>
+                <div v-if="project.currentStageCompletenessSummary" class="progress-bar-bg">
+                  <div class="progress-bar-fill" :style="{ width: `${project.currentStageCompletenessSummary.completionPercent}%` }"></div>
+                </div>
+              </div>
+              <small class="rate-summary-lbl">{{ formatCompletionSummary(project.currentStageCompletenessSummary) }}</small>
+            </div>
           </div>
 
-          <div class="project-table__body">
-            <article
-              v-for="project in paginatedProjects"
-              :key="project.id"
-              class="project-table__row"
-              @click="navigate(`/projects/${project.id}`)"
+          <!-- 未完成资料清单（阻止冒泡） -->
+          <div class="overview-project__documents" @click.stop>
+            <div class="docs-summary-header">
+              <div class="docs-count-pill" :class="{ 'docs-count-pill--alert': project.currentStageIncompleteRequiredDocuments.length > 0 }">
+                <span>未完成适用必填资料</span>
+                <strong>{{ project.currentStageIncompleteRequiredDocuments.length }}</strong>
+              </div>
+            </div>
+
+            <details v-if="project.currentStageIncompleteRequiredDocuments.length > 0" class="docs-details">
+              <summary class="docs-toggle-btn">
+                <span>展开未齐套文件清单</span>
+                <span class="toggle-icon"></span>
+              </summary>
+              <ul class="incomplete-docs-list">
+                <li v-for="document in project.currentStageIncompleteRequiredDocuments" :key="document.id" class="doc-list-item">
+                  <span class="doc-code">{{ document.documentCode }}</span>
+                  <strong class="doc-name">{{ document.documentName }}</strong>
+                  <StatusBadge :status="document.status" />
+                </li>
+              </ul>
+            </details>
+
+            <p v-else-if="project.currentStageCompletenessSummary" class="checklist-finished-placeholder">
+              <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              <span>当前阶段已全部齐套（无未完成适用必填资料）。</span>
+            </p>
+
+            <p v-else class="checklist-empty-placeholder">
+              {{ formatStageIssue(project.currentStageIssue) || '暂无齐套及清单摘要数据。' }}
+            </p>
+          </div>
+        </article>
+      </div>
+
+      <!-- 独立底部分页卡片 -->
+      <footer v-if="filteredProjects.length > 0" class="pagination-card">
+        <div class="pagination-info">
+          <span>当前第</span>
+          <span class="page-current-highlight">{{ currentPage }}</span>
+          <span>/ {{ totalPages }} 页</span>
+          <span class="divider">|</span>
+          <span>共 {{ filteredProjects.length }} 个项目</span>
+        </div>
+
+        <div class="pagination-controls">
+          <button type="button" class="page-control-btn" :disabled="currentPage === 1" @click="changePage(1)">首页</button>
+          <button type="button" class="page-control-btn" :disabled="currentPage === 1" @click="changePage(currentPage - 1)">上一页</button>
+          <div class="page-numbers-group">
+            <button
+              v-for="page in visiblePages"
+              :key="page"
+              type="button"
+              :class="['page-number-btn', { 'page-number-btn--active': page === currentPage }]"
+              @click="changePage(page)"
             >
-              <!-- 列1：项目信息（编号 + 名称 + 客户） -->
-              <div class="cell-project-info">
-                <span class="mono-badge">{{ project.projectCode }}</span>
-                <strong class="project-name" :title="project.projectName">{{ project.projectName }}</strong>
-                <span class="customer-text" :title="project.customerName">{{ project.customerName }}</span>
-              </div>
+              {{ page }}
+            </button>
+          </div>
+          <button type="button" class="page-control-btn" :disabled="currentPage === totalPages" @click="changePage(currentPage + 1)">下一页</button>
+          <button type="button" class="page-control-btn" :disabled="currentPage === totalPages" @click="changePage(totalPages)">尾页</button>
+        </div>
 
-              <!-- 列2：模式 / 经理 -->
-              <div class="cell-mode-manager">
-                <span class="mode-tag">{{ formatProjectMode(project.projectMode) }}</span>
-                <span class="manager-text" :title="formatUser(project.projectManagerUser)">{{ formatUser(project.projectManagerUser) }}</span>
-              </div>
-
-              <!-- 列3：状态 -->
-              <div class="cell-status">
-                <StatusBadge :status="project.status" />
-              </div>
-
-              <!-- 列4：当前阶段 -->
-              <span class="stage-text" :title="project.currentStage?.stageName || '-'">
-                {{ project.currentStage?.stageName || '-' }}
-              </span>
-
-              <!-- 列5：计划周期 -->
-              <span class="date-range">
-                {{ formatDate(project.plannedStartDate) }} <span class="to-arrow">→</span> {{ formatDate(project.plannedEndDate) }}
-              </span>
-            </article>
+        <div class="pagination-sizes">
+          <span>每页显示</span>
+          <div class="select-wrapper select-size">
+            <select v-model="pageSize" @change="currentPage = 1">
+              <option :value="5">5 项/页</option>
+              <option :value="8">8 项/页</option>
+              <option :value="12">12 项/页</option>
+              <option :value="20">20 项/页</option>
+            </select>
           </div>
         </div>
-      </div>
+      </footer>
     </section>
-
-    <!-- 分页控制 -->
-    <footer v-if="filteredProjects.length > 0" class="panel pagination-panel">
-      <div class="pagination-info">
-        <span>当前第</span>
-        <span class="page-current-highlight">{{ currentPage }}</span>
-        <span>/ {{ totalPages }} 页</span>
-        <span class="divider">|</span>
-        <span>共 {{ filteredProjects.length }} 个项目</span>
-        <span v-if="projectKeyword" class="search-indicator">（搜索: {{ projectKeyword }}）</span>
-      </div>
-
-      <div class="pagination-controls">
-        <button type="button" class="page-control-btn" :disabled="currentPage === 1" @click="changePage(1)">首页</button>
-        <button type="button" class="page-control-btn" :disabled="currentPage === 1" @click="changePage(currentPage - 1)">上一页</button>
-        <div class="page-numbers-group">
-          <button
-            v-for="page in visiblePages"
-            :key="page"
-            type="button"
-            :class="['page-number-btn', { 'page-number-btn--active': page === currentPage }]"
-            @click="changePage(page)"
-          >
-            {{ page }}
-          </button>
-        </div>
-        <button type="button" class="page-control-btn" :disabled="currentPage === totalPages" @click="changePage(currentPage + 1)">下一页</button>
-        <button type="button" class="page-control-btn" :disabled="currentPage === totalPages" @click="changePage(totalPages)">尾页</button>
-      </div>
-
-      <div class="pagination-sizes">
-        <span>每页显示</span>
-        <div class="select-wrapper select-size">
-          <select v-model="pageSize" @change="currentPage = 1">
-            <option :value="5">5 项/页</option>
-            <option :value="8">8 项/页</option>
-            <option :value="12">12 项/页</option>
-            <option :value="20">20 项/页</option>
-          </select>
-        </div>
-      </div>
-    </footer>
 
     <!-- Toast -->
     <Transition name="toast">
@@ -212,7 +351,8 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { getApiBaseUrlLabel, listProjects, toReadableApiError } from '../api/projects.js';
+import { getProjectOverviewDashboard } from '../api/projects.js';
+import { toReadableApiError } from '../api/http.js';
 import StatusBadge from '../components/StatusBadge.vue';
 import { formatDate, formatProjectMode, formatUser } from '../utils/format.js';
 
@@ -222,17 +362,49 @@ const props = defineProps({
   navigate: { type: Function, required: true }
 });
 
-const apiBaseUrl = getApiBaseUrlLabel();
+const emit = defineEmits(['auth-expired']);
+
+const emptySummary = {
+  totalProjects: 0,
+  activeProjects: 0,
+  completedProjects: 0,
+  riskProjects: 0,
+  myPendingStageDocumentTasks: 0
+};
+
+const statusOptions = [
+  { value: '', label: '全部状态' },
+  { value: 'normal', label: '正常' },
+  { value: 'risk', label: '风险' },
+  { value: 'paused', label: '暂停' },
+  { value: 'delayed', label: '延期' },
+  { value: 'completed', label: '完成' }
+];
+
+const stageOrderOptions = Array.from({ length: 8 }, (_, index) => ({
+  value: String(index + 1),
+  label: `第 ${index + 1} 阶段`
+}));
+
+const stageIssueText = {
+  missing_current_stage: '当前阶段缺失',
+  multiple_current_stages: '存在多个当前阶段',
+  checklist_not_initialized: '当前阶段资料清单未初始化'
+};
+
+const statusFilter = ref('');
+const stageOrderFilter = ref('');
+const keywordFilter = ref('');
 const loading = ref(false);
 const errorMessage = ref('');
-const projects = ref([]);
+const dashboard = ref({
+  summary: { ...emptySummary },
+  projects: []
+});
 
-// 搜索与分页
-const projectKeyword = ref('');
 const currentPage = ref(1);
 const pageSize = ref(5);
 
-// Toast
 const toastVisible = ref(false);
 const toastMessage = ref('');
 const toastType = ref('error');
@@ -245,23 +417,18 @@ function showToast(msg, type = 'error') {
   toastVisible.value = true;
   toastTimer = setTimeout(() => { toastVisible.value = false; }, 3000);
 }
+
 function hideToast() {
   if (toastTimer) clearTimeout(toastTimer);
   toastVisible.value = false;
 }
+
 onUnmounted(() => { if (toastTimer) clearTimeout(toastTimer); });
 
-// 过滤
-const filteredProjects = computed(() => {
-  const kw = projectKeyword.value.trim().toLowerCase();
-  if (!kw) return projects.value;
-  return projects.value.filter(p =>
-    (p.projectCode || '').toLowerCase().includes(kw) ||
-    (p.projectName || '').toLowerCase().includes(kw)
-  );
-});
+const summary = computed(() => dashboard.value.summary || emptySummary);
+const projects = computed(() => dashboard.value.projects || []);
+const filteredProjects = computed(() => projects.value);
 
-// 分页
 const totalPages = computed(() => Math.ceil(filteredProjects.value.length / pageSize.value) || 1);
 const paginatedProjects = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
@@ -281,25 +448,66 @@ const visiblePages = computed(() => {
 function changePage(page) {
   if (page >= 1 && page <= totalPages.value) currentPage.value = page;
 }
-function handleSearchInput() { currentPage.value = 1; }
-function clearSearch() { projectKeyword.value = ''; currentPage.value = 1; }
 
-async function loadProjects() {
+function applyFilters() {
+  currentPage.value = 1;
+  loadDashboard();
+}
+
+function formatCurrentStage(project) {
+  if (project.currentStageName) {
+    return project.currentStageOrder
+      ? `第 ${project.currentStageOrder} 阶段：${project.currentStageName}`
+      : project.currentStageName;
+  }
+  if (project.status === 'completed') {
+    return '项目已完成';
+  }
+  return formatStageIssue(project.currentStageIssue) || '-';
+}
+
+function formatStageIssue(issue) {
+  return stageIssueText[issue] || '';
+}
+
+function formatCompletionPercent(summaryValue) {
+  if (!summaryValue) return '-';
+  return `${summaryValue.completionPercent}%`;
+}
+
+function formatCompletionSummary(summaryValue) {
+  if (!summaryValue) return '暂无齐套摘要';
+  return `适用必填 ${summaryValue.requiredTotal} 项，已确认 ${summaryValue.confirmedRequiredCount} 项，未完成 ${summaryValue.incompleteRequiredCount} 项`;
+}
+
+async function loadDashboard() {
   loading.value = true;
   errorMessage.value = '';
+
   try {
-    projects.value = await listProjects(props.authToken);
+    dashboard.value = await getProjectOverviewDashboard(
+      {
+        status: statusFilter.value,
+        currentStageOrder: stageOrderFilter.value,
+        keyword: keywordFilter.value
+      },
+      props.authToken
+    );
     currentPage.value = 1;
   } catch (error) {
-    const msg = toReadableApiError(error);
-    errorMessage.value = msg;
-    showToast(msg, 'error');
+    const message = toReadableApiError(error);
+    errorMessage.value = message;
+    showToast(message, 'error');
+
+    if (error.code === 'UNAUTHENTICATED') {
+      emit('auth-expired', message);
+    }
   } finally {
     loading.value = false;
   }
 }
 
-onMounted(loadProjects);
+onMounted(loadDashboard);
 </script>
 
 <style scoped>
@@ -309,37 +517,151 @@ onMounted(loadProjects);
   flex-direction: column;
   gap: 1.5rem;
   padding: 1.5rem;
-  max-width: 100%;
-  margin: 0;
-  min-height: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  min-height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   color: #333333;
   background: transparent;
-  box-sizing: border-box;
-  overflow: hidden;
 }
 .animate-fadeIn { animation: fadeIn 0.4s ease-out; }
 
+/* ===== 统计卡片 ===== */
+.dashboard-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1rem;
+}
+.stat-card {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.04);
+  transition: all 0.3s ease;
+  cursor: default;
+  text-align: left;
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 21, 41, 0.08);
+}
+.stat-card--todo {
+  cursor: pointer;
+  background: linear-gradient(135deg, #ffffff 0%, #fdf6ec 100%);
+  border: 1px solid #faecd8;
+  border-left: 4px solid #e6a23c;
+}
+.stat-card--todo:hover {
+  border-color: #f3d19e;
+  border-left-color: #e6a23c;
+  box-shadow: 0 6px 16px rgba(230, 162, 60, 0.12);
+}
+.stat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.stat-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #8c939d;
+}
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #303133;
+  line-height: 1;
+}
+.stat-card--todo .stat-value {
+  color: #e6a23c;
+}
+.todo-hint {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #e6a23c;
+  margin-top: 0.1rem;
+}
+.stat-icon-wrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.stat-icon-wrapper svg {
+  width: 24px;
+  height: 24px;
+  color: #ffffff;
+}
+.stat-card--blue .stat-icon-wrapper { background: linear-gradient(135deg, #5b86e5 0%, #36d1dc 100%); }
+.stat-card--emerald .stat-icon-wrapper { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+.stat-card--indigo .stat-icon-wrapper { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+.stat-card--amber .stat-icon-wrapper { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); }
+.stat-card--todo .stat-icon-wrapper { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); }
+
+/* ===== 过滤面板 ===== */
 .panel {
   background: #ffffff;
   border-radius: 8px;
-  border: none;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.04);
-  overflow: hidden;
+  border: 1px solid #ebeef5;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.02);
 }
-
-/* ===== 筛选面板 ===== */
-.project-filter-panel { padding: 1.25rem 1.5rem; }
-.project-filters {
+.overview-filter-panel { padding: 1.25rem 1.5rem; }
+.overview-filters {
   display: flex;
   gap: 1.5rem;
   align-items: flex-end;
   flex-wrap: wrap;
 }
-.filter-group { display: flex; flex-direction: column; gap: 0.5rem; }
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
 .flex-1 { flex: 1; min-width: 200px; }
-.filter-label { font-size: 0.85rem; font-weight: 500; color: #606266; }
-
+.filter-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #606266;
+}
+.select-wrapper {
+  position: relative;
+  width: 160px;
+}
+.select-wrapper select {
+  width: 100%;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  border: 1px solid #dcdfe6;
+  background-color: #ffffff;
+  border-radius: 4px;
+  color: #303133;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  transition: all 0.2s;
+  height: 36px;
+}
+.select-wrapper::after {
+  content: '';
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid #c0c4cc;
+  pointer-events: none;
+}
+.select-wrapper select:focus { border-color: #3e63dd; }
 .input-wrapper {
   display: flex;
   align-items: center;
@@ -360,9 +682,7 @@ onMounted(loadProjects);
   font-size: 0.9rem;
   color: #303133;
   outline: none;
-  min-width: 0;
 }
-
 .filter-actions {
   display: flex;
   align-items: center;
@@ -372,24 +692,6 @@ onMounted(loadProjects);
 }
 
 /* ===== 按钮 ===== */
-.ghost-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  background: #ffffff;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  color: #606266;
-  cursor: pointer;
-  transition: all 0.2s;
-  height: 36px;
-}
-.ghost-button:hover:not(:disabled) { border-color: #c6e2ff; background: #ecf5ff; color: #3e63dd; }
-.ghost-button:disabled { opacity: 0.6; cursor: not-allowed; }
-
 .primary-button {
   display: inline-flex;
   align-items: center;
@@ -408,52 +710,81 @@ onMounted(loadProjects);
 }
 .primary-button:hover:not(:disabled) { background: #5275e7; }
 .primary-button:disabled { opacity: 0.6; cursor: not-allowed; }
+.ghost-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background: #ffffff;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  color: #606266;
+  cursor: pointer;
+  transition: all 0.2s;
+  height: 36px;
+}
+.ghost-button:hover:not(:disabled) { border-color: #c6e2ff; background: #ecf5ff; color: #3e63dd; }
+.ghost-button:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn-icon { width: 16px; height: 16px; }
 .spinner { width: 16px; height: 16px; animation: spin 0.8s linear infinite; stroke: currentColor; }
 
-/* ===== 工具栏 ===== */
-.panel-toolbar {
+/* ===== 列表容器 ===== */
+.overview-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* ===== 独立顶栏卡片（含提示） ===== */
+.list-header-card {
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #ebeef5;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.02);
+  padding: 1rem 1.5rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid #ebeef5;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.5rem 1rem;
 }
-.toolbar-info { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
-.badge-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
 .toolbar-title {
   font-size: 1rem;
   font-weight: 600;
   color: #303133;
-  position: relative;
-  padding-left: 10px;
 }
-.toolbar-title::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 3px;
-  bottom: 3px;
-  width: 4px;
-  background: #3e63dd;
-  border-radius: 2px;
+.toolbar-subtitle {
+  display: block;
+  font-size: 0.8rem;
+  color: #909399;
+  margin-top: 0.2rem;
 }
-.api-endpoint-badge {
-  font-family: Consolas, monospace;
-  font-size: 0.7rem;
-  background: #f4f6f9;
-  color: #606266;
-  padding: 0.15rem 0.6rem;
+.list-header-card .manual-status-note {
+  margin: 0;
+  padding: 0.2rem 0.8rem;
+  font-size: 0.8rem;
+  color: #3e63dd;
+  background: #ecf5ff;
+  border-left: 3px solid #a4b3ff;
   border-radius: 4px;
-  border: 1px solid #ebeef5;
   white-space: nowrap;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  text-align: right;
+  line-height: 1.4;
+  font-weight: 500;
 }
-.toolbar-subtitle { font-size: 0.8rem; color: #909399; }
 
-/* ===== 状态面板 ===== */
-.state-panel {
+/* ===== 状态占位卡片 ===== */
+.state-card {
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #ebeef5;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.02);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -461,9 +792,9 @@ onMounted(loadProjects);
   padding: 4rem 2rem;
   text-align: center;
 }
-.state-panel--inline { padding: 3rem 1.5rem; }
-.state-panel h3 { font-size: 1.1rem; font-weight: 600; color: #303133; margin-bottom: 0.5rem; }
-.state-panel p { font-size: 0.9rem; color: #909399; max-width: 480px; }
+.state-card--inline { padding: 3.5rem 1.5rem; }
+.state-card h3 { font-size: 1.1rem; font-weight: 600; color: #303133; margin-bottom: 0.5rem; }
+.state-card p { font-size: 0.9rem; color: #909399; }
 .loading-wave { display: flex; gap: 6px; margin-bottom: 1rem; }
 .wave-bar {
   width: 4px;
@@ -476,149 +807,254 @@ onMounted(loadProjects);
 .wave-bar:nth-child(3) { animation-delay: 0.3s; }
 @keyframes wave { 0%,100% { transform: scaleY(0.4); } 50% { transform: scaleY(1); } }
 .empty-icon { width: 48px; height: 48px; stroke: #c0c4cc; margin-bottom: 1rem; }
-.state-panel--error { background: #fef0f0; border-radius: 8px; margin: 1.5rem; padding: 2rem; }
+.state-card--error { background: #fef0f0; border-color: #fde2e2; }
 .error-icon { width: 32px; height: 32px; stroke: #f56c6c; margin-bottom: 0.75rem; }
 .inline-btn { margin-top: 1.25rem; }
 
-/* ===== 表格容器 ===== */
-.table-container {
-  overflow: hidden;
-  width: 100%;
-}
-.project-table {
-  width: 100%;
-}
-
-/* ===== 表头：5列 — 只缩短"项目信息"列宽，其他列宽和行高均保持不变 ===== */
-.project-table__head {
-  display: grid;
-  grid-template-columns: 1.3fr 1.2fr 0.8fr 1.2fr 1.4fr;
-  padding: 0.7rem 1.5rem;
-  background: #f4f6f9;
-  border-bottom: 1px solid #ebeef5;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #606266;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  gap: 0.75rem;
-}
-
-/* ===== 行：可点击，5列 — 与表头列宽严格对应 ===== */
-.project-table__row {
-  display: grid;
-  grid-template-columns: 1.3fr 1.2fr 0.8fr 1.2fr 1.4fr;
-  padding: 0.85rem 1.5rem;
-  align-items: center;
-  border-bottom: 1px solid #f0f0f0;
-  transition: background 0.15s ease;
-  font-size: 13px;
-  color: #606266;
-  gap: 0.75rem;
-  cursor: pointer;
-  min-width: 0;
-}
-.project-table__row:hover { background: #f8fafc; }
-.project-table__row:last-child { border-bottom: none; }
-
-/* ===== 列1：项目信息（编号 + 名称 + 客户） — 只调整宽度，行高保持不变 ===== */
-.cell-project-info {
+/* ===== 卡片列表区 ===== */
+.overview-list {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  min-width: 0;
+  gap: 1rem;
+}
+
+/* ===== 单个项目卡片 ===== */
+.overview-project {
+  border: 1px solid #d6dee7;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.02);
+  transition: all 0.25s ease;
   overflow: hidden;
+  cursor: pointer;
+}
+.overview-project:hover {
+  border-color: #c4d0e2; 
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+
+/* --- 主网格：6列均匀分布（模式、经理独立） --- */
+.overview-project__main {
+  display: grid;
+  grid-template-columns: 2fr 0.8fr 0.8fr 0.8fr 1.5fr 2fr;
+  padding: 1.25rem;
+  align-items: center;
+  gap: 1.25rem;
+  border-bottom: 1px solid #f0f2f5;
+}
+
+.overview-project__identity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 .mono-badge {
   font-family: Consolas, monospace;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 500;
   color: #3e63dd;
   background: #f0f3ff;
   border: 1px solid #d6e0ff;
-  padding: 0.1rem 0.4rem;
+  padding: 0.15rem 0.4rem;
   border-radius: 4px;
   width: fit-content;
-  flex-shrink: 0;
 }
 .project-name {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: #303133;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-.customer-text {
+.project-meta-desc {
   font-size: 0.8rem;
   color: #909399;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 400;
 }
 
-/* ===== 列2：模式 / 经理 ===== */
-.cell-mode-manager {
+/* 新增模式列、经理列样式 */
+.overview-project__mode,
+.overview-project__manager {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
-  min-width: 0;
 }
-.mode-tag {
-  display: inline-block;
-  font-size: 0.7rem;
+.mode-value,
+.manager-value {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #303133;
+}
+
+/* 公共列标签 */
+.column-lbl {
+  display: block;
+  font-size: 0.75rem;
   font-weight: 500;
   color: #909399;
-  background: #f4f4f5;
-  border: 1px solid #e9e9eb;
-  padding: 0.1rem 0.5rem;
-  border-radius: 4px;
-  width: fit-content;
-  flex-shrink: 0;
-}
-.manager-text {
-  font-size: 0.8rem;
-  color: #606266;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  margin-bottom: 0.2rem;
 }
 
-/* ===== 列3：状态 ===== */
+/* 状态、阶段、齐套率保持原有样式 */
 .cell-status {
+  /* 保持原有，不额外改动 */
+}
+.stage-name-text {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #606266;
+}
+.stage-warning-badge {
+  display: inline-block;
+  margin-top: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  background-color: #fef0f0;
+  color: #f56c6c;
+  border: 1px solid #fde2e2;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+.rate-number {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #303133;
+}
+.rate-bar-container {
   display: flex;
   align-items: center;
-  min-width: 0;
+  gap: 0.5rem;
 }
-
-/* ===== 列4：当前阶段 ===== */
-.stage-text {
-  font-size: 0.85rem;
-  color: #606266;
-  white-space: nowrap;
+.progress-bar-bg {
+  flex: 1;
+  height: 6px;
+  background: #ebeef5;
+  border-radius: 9999px;
   overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: 120px;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: #3e63dd;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+.rate-summary-lbl {
+  display: block;
+  font-size: 0.75rem;
+  color: #909399;
+  margin-top: 0.2rem;
 }
 
-/* ===== 列5：计划周期 ===== */
-.date-range {
+/* ===== 未完成资料区域 ===== */
+.overview-project__documents {
+  padding: 1rem 1.25rem;
+  background-color: #fafbfc;
+}
+.docs-summary-header { margin-bottom: 0.5rem; }
+.docs-count-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #f4f4f5;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
   font-size: 0.8rem;
   color: #909399;
+  font-weight: 500;
+  border: 1px solid #e9e9eb;
+}
+.docs-count-pill--alert {
+  background: #fef0f0;
+  color: #f56c6c;
+  border-color: #fde2e2;
+}
+.docs-count-pill--alert strong {
+  background: #f56c6c;
+  color: #ffffff;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+.docs-details {
+  border-top: 1px dashed #ebeef5;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+}
+.docs-toggle-btn {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #3e63dd;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: fit-content;
+}
+.docs-toggle-btn::-webkit-details-marker { display: none; }
+.docs-toggle-btn:hover { color: #5275e7; }
+.incomplete-docs-list {
+  list-style: none;
+  padding-left: 0;
+  margin-top: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.6rem 1.5rem;
+}
+.doc-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #ffffff;
+  padding: 0.4rem 0.75rem;
+  border-radius: 4px;
+  border: 1px solid #ebeef5;
+}
+.doc-code {
+  font-family: Consolas, monospace;
+  font-size: 0.75rem;
+  color: #909399;
+  background-color: #f4f4f5;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+}
+.doc-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #606266;
+  flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.to-arrow { color: #c0c4cc; margin: 0 0.2rem; }
+.checklist-finished-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #67c23a;
+  font-weight: 500;
+  margin: 0;
+}
+.check-icon { width: 16px; height: 16px; stroke: #67c23a; }
+.checklist-empty-placeholder {
+  font-size: 0.85rem;
+  color: #909399;
+  margin: 0;
+}
 
-/* ===== 分页 ===== */
-.pagination-panel {
+/* ===== 底部分页卡片 ===== */
+.pagination-card {
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #ebeef5;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.02);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.5rem;
   flex-wrap: wrap;
   gap: 1rem;
-  margin-top: 0.5rem;
 }
 .pagination-info {
   display: flex;
@@ -636,7 +1072,6 @@ onMounted(loadProjects);
   border-radius: 4px;
 }
 .pagination-info .divider { color: #ebeef5; margin: 0 0.5rem; }
-.search-indicator { font-style: italic; color: #3e63dd; font-size: 0.8rem; margin-left: 0.25rem; }
 .pagination-controls {
   display: flex;
   align-items: center;
@@ -671,7 +1106,13 @@ onMounted(loadProjects);
 }
 .page-number-btn:hover { color: #3e63dd; border-color: #a4b3ff; }
 .page-number-btn--active { background: #3e63dd !important; color: #ffffff !important; border-color: #3e63dd !important; }
-.pagination-sizes { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: #606266; }
+.pagination-sizes {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #606266;
+}
 .select-size { width: 100px; }
 .select-size select { padding: 0.3rem 1.5rem 0.3rem 0.65rem; font-size: 0.8rem; }
 
@@ -726,109 +1167,27 @@ onMounted(loadProjects);
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
-/* ============================================================ */
-/* ===== 响应式：与 App.vue 断点保持一致 ===== */
-/* ============================================================ */
-
-/* 1024px 以下：侧边栏折叠，表格收缩为3列（隐藏部分次要信息） */
-@media (max-width: 1024px) {
-  .page-stack { padding: 1.25rem; }
-
-  .project-table__head {
-    grid-template-columns: 2fr 1fr 1fr;
-  }
-  .project-table__head span:nth-child(2),
-  .project-table__head span:nth-child(5) {
-    display: none;
-  }
-
-  .project-table__row {
-    grid-template-columns: 2fr 1fr 1fr;
-  }
-  .project-table__row .date-range,
-  .project-table__row .cell-mode-manager {
-    display: none;
-  }
-  .project-table__row .cell-status { justify-content: flex-start; }
-  .project-table__row .stage-text { font-size: 0.8rem; }
+/* ===== 响应式 ===== */
+@media (max-width: 1200px) {
+  .dashboard-stats-grid { grid-template-columns: repeat(3, 1fr); }
 }
-
-/* 768px 以下：完全变为卡片式布局 */
-@media (max-width: 768px) {
-  .page-stack { padding: 1rem; gap: 1rem; }
-
-  .project-filter-panel { padding: 1rem; }
-  .project-filters { flex-direction: column; align-items: stretch; gap: 0.75rem; }
-  .flex-1 { min-width: 0; }
-  .filter-actions { margin-left: 0; width: 100%; justify-content: stretch; }
-  .filter-actions .primary-button,
-  .filter-actions .ghost-button { flex: 1; justify-content: center; }
-
-  .panel-toolbar { padding: 0.85rem 1rem; flex-direction: column; align-items: stretch; }
-  .badge-row { flex-wrap: wrap; }
-
-  .project-table__head { display: none; }
-
-  .project-table__row {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.5rem;
-    padding: 1rem;
-    border-bottom: 2px solid #ebeef5;
-    cursor: pointer;
-  }
-  .project-table__row:last-child { border-bottom: none; }
-
-  .project-table__row .cell-mode-manager,
-  .project-table__row .date-range {
-    display: flex;
-  }
-
-  .project-table__row .cell-project-info {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.4rem 0.6rem;
-  }
-  .project-table__row .cell-project-info .project-name {
-    font-size: 0.95rem;
-    white-space: normal;
-  }
-  .project-table__row .cell-project-info .customer-text {
-    font-size: 0.8rem;
-    color: #909399;
-  }
-
-  .project-table__row .cell-mode-manager {
-    flex-direction: row;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  .project-table__row .cell-mode-manager .mode-tag { font-size: 0.7rem; }
-  .project-table__row .cell-mode-manager .manager-text { font-size: 0.85rem; }
-
-  .project-table__row .cell-status { align-items: flex-start; }
-  .project-table__row .stage-text { font-size: 0.85rem; white-space: normal; }
-  .project-table__row .date-range { font-size: 0.8rem; white-space: normal; }
-
-  .pagination-panel {
-    flex-direction: column;
-    align-items: stretch;
+@media (max-width: 900px) {
+  .dashboard-stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .overview-project__main {
+    grid-template-columns: 1fr;
     gap: 0.75rem;
-    padding: 1rem;
   }
-  .pagination-controls { justify-content: center; flex-wrap: wrap; }
-  .pagination-sizes { justify-content: center; }
-  .pagination-info { justify-content: center; }
+  .incomplete-docs-list { grid-template-columns: 1fr; }
+  .filter-actions { margin-left: 0; width: 100%; justify-content: flex-start; }
 }
-
-/* 480px 以下：超小屏微调 */
 @media (max-width: 480px) {
-  .page-stack { padding: 0.75rem; gap: 0.75rem; }
-  .project-table__row { padding: 0.75rem; }
-  .project-table__row .cell-project-info .project-name { font-size: 0.85rem; }
-  .page-control-btn { padding: 0.25rem 0.5rem; font-size: 0.7rem; }
-  .page-number-btn { width: 28px; height: 28px; font-size: 0.75rem; }
+  .dashboard-stats-grid { grid-template-columns: 1fr; }
+  .page-stack { padding: 1rem; }
+  .overview-project__main { padding: 0.75rem; }
+  .list-header-card .manual-status-note {
+    max-width: 100%;
+    font-size: 0.7rem;
+    padding: 0.1rem 0.6rem;
+  }
 }
 </style>

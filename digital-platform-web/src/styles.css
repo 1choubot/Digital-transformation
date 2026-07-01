@@ -1728,6 +1728,76 @@ p {
   min-width: 0;
 }
 
+.project-workspace__layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.project-workspace__nav {
+  display: grid;
+  gap: 8px;
+}
+
+.project-workspace__stage {
+  display: grid;
+  gap: 6px;
+}
+
+.project-workspace__stage-button,
+.project-workspace__node-button {
+  width: 100%;
+  border: 1px solid #d8dde6;
+  background: #fff;
+  color: #172033;
+  border-radius: 8px;
+  padding: 10px 12px;
+  text-align: left;
+  display: grid;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.project-workspace__stage-button small,
+.project-workspace__node-button small {
+  color: #607089;
+}
+
+.project-workspace__stage-button--active,
+.project-workspace__node-button--active {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
+
+.project-workspace__node-list {
+  display: grid;
+  gap: 6px;
+  padding-left: 14px;
+}
+
+.project-workspace__detail,
+.project-workspace__outputs,
+.online-form-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.project-workspace__detail-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.project-workspace__output {
+  border: 1px solid #e3e8f0;
+  border-radius: 8px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
 .stage-document-attachments__heading {
   display: grid;
   gap: 4px;
@@ -1971,6 +2041,7 @@ p {
   .form-grid,
   .detail-grid,
   .info-list,
+  .project-workspace__layout,
   .overview-project__main,
   .task-filters,
   .stage-document-completeness,
@@ -2017,6 +2088,10 @@ p {
   .approval-stage__heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .project-workspace__detail-heading {
+    display: grid;
   }
 
   .approval-stage__badges {

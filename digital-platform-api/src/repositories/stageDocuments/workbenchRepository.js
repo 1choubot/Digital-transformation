@@ -6,6 +6,7 @@ import {
   isSystemAdminUser
 } from '../../domain/organization.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
+import { isInitiationOnlineFormDocument } from '../../domain/initiationReview.js';
 import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import { attachStageDocumentPermissions } from './accessControl.js';
 import {
@@ -13,9 +14,11 @@ import {
   isRevisionRequired,
   isRevisionResubmitted,
   isReviewCompletionMode,
+  isStageDocumentComplete,
   mapDocument
 } from './shared.js';
 import {
+  attachInitiationReviewToStageDocumentRows,
   INITIATION_REVIEW_TODO_TYPE,
   selectInitiationReviewWorkbenchTodos
 } from './initiationReviewRepository.js';
@@ -49,13 +52,49 @@ function buildStageTargetRoute(item, taskMode) {
   return `/projects/${item.projectId}?taskMode=${taskMode}&stageId=${item.stageId}`;
 }
 
-function buildDocumentTodo({ row, user, type, actionText }) {
+function isLinkedInitiationRequirementReworkPending(relatedDocumentsByCode) {
+  const initiationApproval = relatedDocumentsByCode?.get('1.2');
+  const initiationRequirement = relatedDocumentsByCode?.get('1.1');
+  if (!initiationApproval || !initiationRequirement || !isRevisionRequired(initiationRequirement)) {
+    return false;
+  }
+
+  const revisionSourceDocumentId =
+    initiationRequirement.revisionSourceDocumentId ?? initiationRequirement.revision_source_document_id ?? null;
+  const initiationDocumentId = initiationApproval.id ?? initiationApproval.documentId ?? null;
+  return Boolean(revisionSourceDocumentId) && String(revisionSourceDocumentId) === String(initiationDocumentId);
+}
+
+function isInitiationNoticeOnlineFormReady(relatedDocumentsByCode) {
+  const initiationApproval = relatedDocumentsByCode?.get('1.2');
+  return (
+    Boolean(initiationApproval) &&
+    isStageDocumentComplete(initiationApproval) &&
+    !isLinkedInitiationRequirementReworkPending(relatedDocumentsByCode)
+  );
+}
+
+function buildDocumentTodo({ row, user, type, actionText, relatedDocumentsByCode = null }) {
   const project = mapWorkbenchProject(row);
   const document = attachStageDocumentPermissions({
     user,
     project,
-    document: mapDocument(row)
+    document: mapDocument(row),
+    relatedDocumentsByCode
   });
+  let displayActionText = actionText;
+  if (type === 'document_responsibility' && isInitiationOnlineFormDocument(row)) {
+    if (
+      (row.document_code === '1.2' && isLinkedInitiationRequirementReworkPending(relatedDocumentsByCode)) ||
+      (row.document_code === '1.3' && !isInitiationNoticeOnlineFormReady(relatedDocumentsByCode))
+    ) {
+      displayActionText = '查看在线表单前置状态';
+    } else if (isRevisionRequired(row) || row.status === DOCUMENT_STATUS.RETURNED) {
+      displayActionText = '通过在线表单重提';
+    } else {
+      displayActionText = '填写/提交在线表单';
+    }
+  }
   const item = {
     type,
     projectId: row.project_id,
@@ -82,7 +121,7 @@ function buildDocumentTodo({ row, user, type, actionText }) {
     revisionResubmitted: document.revisionResubmitted,
     isApplicable: document.isApplicable,
     status: row.status,
-    actionText,
+    actionText: displayActionText,
     createdAt: row.responsibility_updated_at || row.submitted_at || row.updated_at,
     updatedAt: row.responsibility_updated_at || row.submitted_at || row.updated_at,
     targetRoute: '',
@@ -91,6 +130,42 @@ function buildDocumentTodo({ row, user, type, actionText }) {
 
   item.targetRoute = buildDocumentTargetRoute(item, user);
   return item;
+}
+
+async function selectRelatedInitiationDocumentsByProjectId(projectIds, user) {
+  const uniqueProjectIds = [...new Set(projectIds.filter((projectId) => projectId !== null && projectId !== undefined))];
+  if (uniqueProjectIds.length === 0) {
+    return new Map();
+  }
+
+  const [rows] = await pool.execute(
+    `SELECT
+      d.*,
+      u.account AS responsible_account,
+      u.display_name AS responsible_display_name,
+      u.department AS responsible_department,
+      u.organization_role AS responsible_organization_role,
+      u.role AS responsible_role,
+      u.is_enabled AS responsible_is_enabled,
+      u.file_platform_user_id AS responsible_file_platform_user_id
+    FROM project_stage_documents d
+    LEFT JOIN users u
+      ON u.id = d.responsible_user_id
+    WHERE d.project_id IN (${uniqueProjectIds.map(() => '?').join(', ')})
+      AND d.document_code IN ('1.1', '1.2', '1.3')`,
+    uniqueProjectIds
+  );
+  const rowsWithInitiationReview = await attachInitiationReviewToStageDocumentRows(pool, rows, user);
+  const relatedDocumentsByProjectId = new Map();
+
+  for (const document of rowsWithInitiationReview.map(mapDocument)) {
+    if (!relatedDocumentsByProjectId.has(document.projectId)) {
+      relatedDocumentsByProjectId.set(document.projectId, new Map());
+    }
+    relatedDocumentsByProjectId.get(document.projectId).set(document.documentCode, document);
+  }
+
+  return relatedDocumentsByProjectId;
 }
 
 function buildStageTodo({ row, type, actionText, taskMode }) {
@@ -179,11 +254,17 @@ async function selectDocumentResponsibilityTodos(user) {
     ]
   );
 
+  const relatedDocumentsByProjectId = await selectRelatedInitiationDocumentsByProjectId(
+    rows.map((row) => row.project_id),
+    user
+  );
+
   return rows.map((row) =>
     buildDocumentTodo({
       row,
       user,
       type: 'document_responsibility',
+      relatedDocumentsByCode: relatedDocumentsByProjectId.get(row.project_id) ?? null,
       actionText: isRevisionRequired(row)
         ? isReviewCompletionMode(getDocumentCompletionMode(row))
           ? '返工重提'
@@ -338,8 +419,21 @@ async function selectStageAdvanceTodos(user) {
                   FROM project_initiation_review_nodes initiation_nodes
                   WHERE initiation_nodes.stage_document_id = incomplete_documents.id
                   GROUP BY initiation_nodes.stage_document_id
-                  HAVING SUM(initiation_nodes.node_status = 'approved') = 3
-                    AND COUNT(*) = 3
+                  HAVING COUNT(*) = 3
+                    AND SUM(
+                      initiation_nodes.node_key = 'business_review'
+                      AND initiation_nodes.node_status = 'approved'
+                      AND NULLIF(TRIM(COALESCE(initiation_nodes.comment, '')), '') IS NOT NULL
+                    ) = 1
+                    AND SUM(
+                      initiation_nodes.node_key = 'technical_review'
+                      AND initiation_nodes.node_status = 'approved'
+                      AND NULLIF(TRIM(COALESCE(initiation_nodes.comment, '')), '') IS NOT NULL
+                    ) = 1
+                    AND SUM(
+                      initiation_nodes.node_key = 'general_review'
+                      AND initiation_nodes.node_status = 'approved'
+                    ) = 1
                 )
                 OR EXISTS (
                   SELECT 1

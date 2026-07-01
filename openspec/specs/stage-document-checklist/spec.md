@@ -56,44 +56,43 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 ### Requirement: 资料项基础状态
 
-系统 MUST 保存项目级资料项基础状态，并 MUST 区分基础状态、业务完成状态、精准返工标记和 `1.2 项目立项审批表` 专用多节点审批状态；业务完成状态 MUST 由 `completionMode`、`status`、`isApplicable`、`revision_required` 和特殊资料规则派生。
+系统 MUST 保存项目级资料项基础状态，并 MUST 区分基础状态、业务完成状态、精准返工标记和 `1.2 项目立项审批表` 专用评价/审批状态；业务完成状态 MUST 由 `completionMode`、`status`、`isApplicable`、`revision_required` 和特殊资料规则派生。
 
 #### Scenario: 1.2 基础 confirmed 不等于最终完成
 
 - **WHEN** 资料项为 `1.2 项目立项审批表`
 - **AND** 该资料基础状态为 `confirmed`
-- **AND** 商务评价审批、技术评价审批或总经理审批尚未全部最终通过
-- **THEN** 系统 MUST 将该资料业务完成状态派生为未完成或待审批
+- **AND** 营销评价、研发评价或总经理最终审批尚未全部满足
+- **THEN** 系统 MUST 将该资料业务完成状态派生为未完成或待处理
 - **AND** 系统 MUST NOT 将其计入阶段齐套完成
 
-#### Scenario: 1.2 未提交时多节点不进入审批
+#### Scenario: 1.2 未提交时不进入评价
 
 - **WHEN** 资料项为 `1.2 项目立项审批表`
 - **AND** 该资料基础状态为 `not_submitted`
-- **THEN** 系统 MAY 预创建 `business_review`、`technical_review` 和 `general_review`
-- **AND** `business_review` 和 `technical_review` MUST 处于等待资料提交或不可审批状态
-- **AND** 系统 MUST NOT 将其纳入商务评价或技术评价审批待办
+- **THEN** 系统 MUST NOT 将其纳入营销评价、研发评价或总经理审批待办
+- **AND** 系统 MUST 将其表达为等待责任人填写或提交在线表单
 
-#### Scenario: 1.2 普通提交激活商务技术节点
+#### Scenario: 1.2 普通提交后进入评价
 
 - **WHEN** 资料项为 `1.2 项目立项审批表`
-- **AND** 普通资料提交或上传使其基础状态达到 `submitted`
-- **THEN** 系统 MUST 将 `business_review` 和 `technical_review` 激活为待审批或可审批状态
-- **AND** `general_review` MUST 继续保持未开始或等待前置状态
+- **AND** 责任人提交在线表单使其基础状态达到 `submitted` 或等价已提交状态
+- **THEN** 系统 MUST 激活营销评价和研发评价
+- **AND** 系统 MUST 继续保持总经理最终审批等待两项评价完成
 
-#### Scenario: 1.2 returned 重新提交前不进入审批
+#### Scenario: 1.2 returned 重新提交前不进入评价
 
 - **WHEN** 资料项为 `1.2 项目立项审批表`
 - **AND** 该资料基础状态为 `returned`
-- **THEN** 系统 MUST 等待普通 `1.2` 资料重新提交
-- **AND** 系统 MUST NOT 在重新提交前将 `business_review` 或 `technical_review` 纳入审批待办
+- **THEN** 系统 MUST 等待责任人重新提交普通 `1.2` 在线表单
+- **AND** 系统 MUST NOT 在重新提交前将营销评价或研发评价纳入待办
 
 #### Scenario: 1.2 相关阻塞覆盖完成状态
 
 - **WHEN** 资料项为 `1.2 项目立项审批表`
-- **AND** `1.1 项目需求表` 存在由 `1.2` NO 触发且未清除的 `revision_required`
-- **THEN** 系统 MUST 将 `1.2` 业务完成状态派生为未完成或需返工
-- **AND** `1.2` 自身 MUST 通过节点状态、基础状态或专用多节点状态表达待审、退回或未通过，不得作为返工目标写入 `revision_required`
+- **AND** `1.1 项目需求表` 存在由 `1.2` 总经理审批不通过触发且未清除的 `revision_required`
+- **THEN** 系统 MUST 将 `1.2` 业务完成状态派生为未完成或需重新填写
+- **AND** `1.2` 自身 MUST 通过专用状态表达待评价、待审批、审批不通过或需重填，不得作为 `1.1` 返工目标的替代字段
 
 ### Requirement: 阶段资料清单查询接口
 
@@ -153,55 +152,57 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 ### Requirement: 资料项手工状态流转
 
-系统 MUST 提供项目级阶段资料项的手工状态操作接口，并 MUST 按 `completionMode` 限定提交、确认和退回动作；`1.2 项目立项审批表` 的普通资料确认/退回接口不得继续承载审批，必须使用专用多节点审批状态机。
+系统 MUST 提供项目级阶段资料项的手工状态操作接口，并 MUST 按 `completionMode` 限定提交、确认和退回动作；`1.1 项目需求表`、`1.2 项目立项审批表` 和 `1.3 项目立项通知` 的普通资料提交和普通返工完成接口不得替代在线表单提交，`1.2 项目立项审批表` 的普通资料确认/退回接口不得承载评价或最终审批，必须使用 `1.2` 专用评价/审批能力。
+
+#### Scenario: 1.1/1.2/1.3 普通提交接口必须拒绝
+
+- **WHEN** 用户通过普通资料提交接口对 `1.1 项目需求表`、`1.2 项目立项审批表` 或 `1.3 项目立项通知` 执行提交
+- **THEN** 系统 MUST 拒绝该请求
+- **AND** 系统 MUST 提示调用方使用对应在线表单提交能力
+- **AND** 系统 MUST NOT 将该资料基础状态改为 `submitted`
+- **AND** 系统 MUST NOT 激活 `1.2` 营销评价、研发评价或总经理审批
 
 #### Scenario: 1.2 普通确认接口必须拒绝
 
 - **WHEN** 用户通过普通资料确认接口对 `1.2 项目立项审批表` 执行确认
 - **THEN** 系统 MUST 拒绝该请求
-- **AND** 系统 MUST 提示调用方使用 `1.2` 专用多节点审批能力
+- **AND** 系统 MUST 提示调用方使用 `1.2` 专用评价/审批能力
 - **AND** 系统 MUST NOT 将 `1.2` 派生为最终完成
 
 #### Scenario: 1.2 普通退回接口必须拒绝
 
 - **WHEN** 用户通过普通资料退回接口对 `1.2 项目立项审批表` 执行退回
 - **THEN** 系统 MUST 拒绝该请求
-- **AND** 系统 MUST 提示调用方使用 `1.2` 专用多节点审批能力
+- **AND** 系统 MUST 提示调用方使用 `1.2` 专用评价/审批能力
 - **AND** 系统 MUST NOT 通过普通资料退回接口触发 `1.1 revision_required`
 
-#### Scenario: 1.2 节点退回触发固定 1.1 返工
+#### Scenario: 总经理不通过触发固定 1.1 返工
 
-- **WHEN** `1.2 项目立项审批表` 的商务评价、技术评价或总经理审批节点退回
-- **THEN** 系统 MUST 要求非空退回原因
-- **AND** 系统 MUST 按 A 类精准返工规则只允许选择 `1.1 项目需求表` 作为上游返工目标
-- **AND** 系统 MUST 只将 `1.1` 标记为 `revision_required`
-- **AND** 系统 MUST NOT 将 `1.2` 自身标记为 `revision_required`
-- **AND** 系统 MUST NOT 将 `1.2` 对应的 `project_stage_documents.status` 置为 `returned`
-- **AND** 节点退回 MUST 只更新专用节点状态，例如 `returned_blocked_by_rework`，并标记 `1.1 revision_required`
+- **WHEN** `1.2 项目立项审批表` 的总经理最终审批不通过
+- **THEN** 系统 MUST 要求非空审批意见或退回原因
+- **AND** 系统 MUST 只将 `1.1 项目需求表` 标记为 `revision_required`
 - **AND** 系统 MUST NOT 整阶段退回或自动退回全部前置资料
 
-#### Scenario: 1.1 返工未清除前不得通过退回节点
+#### Scenario: 总经理不通过要求 1.2 重新填写
 
-- **WHEN** `1.2` 任一节点退回后已标记 `1.1 revision_required = true`
+- **WHEN** `1.2 项目立项审批表` 的总经理最终审批不通过
+- **THEN** 系统 MUST 将 `1.2` 表达为需要原责任人重新填写
+- **AND** 系统 MUST NOT 因审批不通过自动清空或重新分配 `1.2` 责任人
+
+#### Scenario: 1.1 返工未清除前不得重新完成 1.2
+
+- **WHEN** `1.2` 总经理审批不通过后已标记 `1.1 revision_required = true`
 - **AND** `1.1 revision_required` 尚未清除
-- **THEN** 系统 MUST 拒绝该退回节点的审批通过动作
-- **AND** 系统 MUST NOT 将 `1.2` 派生为最终完成
+- **THEN** 系统 MUST 拒绝将 `1.2` 派生为最终完成
+- **AND** 系统 MUST 拒绝第 1 阶段推进和项目编号门禁通过
 
-#### Scenario: 1.1 返工清除后退回节点自动回到待审批
+#### Scenario: 1.1 返工清除后仍需 1.2 重新填写和审批
 
 - **WHEN** `1.1 revision_required` 已清除
-- **AND** `1.2` 存在被退回节点
-- **THEN** 后端 MUST 自动将被退回节点回到待审批或可审批状态
-- **AND** 该节点 MUST 回到对应节点审批人的待办
-- **AND** 系统 MUST NOT 仅因 `1.1` 返工清除就直接将该节点视为通过
-- **AND** 第一版 MUST NOT 新增 `1.2` 重提按钮或单独重提待办
-
-#### Scenario: 重跑节点及下游重新满足后才可完成
-
-- **WHEN** 被退回节点已自动回到待审批或可审批状态
-- **AND** 该节点由对应节点审批人重新审批通过
-- **THEN** 系统 MUST 继续检查该节点下游节点是否按确认规则重新满足
-- **AND** 只有重跑节点及其下游节点均重新满足后，`1.2` 才可恢复最终完成判断
+- **AND** `1.2` 因总经理审批不通过处于需重新填写状态
+- **THEN** 系统 MUST 要求 `1.2` 原责任人重新填写并提交
+- **AND** 系统 MUST 要求营销评价、研发评价和总经理最终审批按规则重新满足
+- **AND** 系统 MUST NOT 仅因 `1.1` 返工清除就直接将 `1.2` 视为通过
 
 ### Requirement: 手工状态流转边界
 
@@ -226,33 +227,33 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 系统 MUST 为每个阶段分组返回适用资料齐套摘要，并 MUST 只基于当前项目级阶段资料项、`completionMode`、基础状态、现有 `isApplicable` 适用性、`revision_required` 返工标记和特殊资料完成规则判断计算。
 
-#### Scenario: 1.2 按多节点最终通过计入齐套
+#### Scenario: 1.2 按评价和最终审批计入齐套
 
 - **WHEN** 系统计算第 1 阶段齐套摘要
 - **AND** 当前阶段包含适用的 `1.2 项目立项审批表`
-- **THEN** 系统 MUST 只有在 `business_review approved`、`technical_review approved`、`general_review approved` 且 `1.1` 不存在由 `1.2` NO 触发且未清除的 `revision_required` 后，才将 `1.2` 计入已完成数量
+- **THEN** 系统 MUST 只有在 `1.2` 在线表单已提交、营销评价完成、研发评价完成、总经理最终审批通过且 `1.1` 不存在由 `1.2` 审批不通过触发且未清除的 `revision_required` 后，才将 `1.2` 计入已完成数量
 
 #### Scenario: 1.2 未最终通过进入缺失列表
 
-- **WHEN** `1.2 项目立项审批表` 未完成所有必需审批节点
+- **WHEN** `1.2 项目立项审批表` 未完成营销评价、研发评价或总经理最终审批通过
 - **THEN** 系统 MUST 将 `1.2` 计入 `incompleteRequiredDocuments` 或等价未完成资料列表
-- **AND** 列表项 MUST 能表达未完成原因是 `1.2` 多节点审批未最终通过
+- **AND** 列表项 MUST 能表达未完成原因是 `1.2` 评价/审批未最终完成
 
-#### Scenario: 1.2 商务技术并行未全通过不完成
+#### Scenario: 两项评价未全完成不完成
 
-- **WHEN** `business_review` 或 `technical_review` 任一节点未 `approved`
+- **WHEN** 营销评价或研发评价任一项未完成
 - **THEN** 系统 MUST 将 `1.2` 派生为未完成
-- **AND** 系统 MUST NOT 因另一并行节点已通过而将 `1.2` 计入齐套完成
+- **AND** 系统 MUST NOT 因另一项评价已完成而将 `1.2` 计入齐套完成
 
-#### Scenario: 1.2 总经理未通过不完成
+#### Scenario: 总经理未通过不完成
 
-- **WHEN** `business_review` 和 `technical_review` 均已 `approved`
-- **AND** `general_review` 尚未 `approved`
+- **WHEN** 营销评价和研发评价均已完成
+- **AND** 总经理最终审批尚未通过
 - **THEN** 系统 MUST 将 `1.2` 派生为未完成
 
 #### Scenario: 1.2 返工未清除进入缺失列表
 
-- **WHEN** `1.2` 退回触发的 `1.1` 精准返工尚未清除
+- **WHEN** `1.2` 总经理审批不通过触发的 `1.1` 精准返工尚未清除
 - **THEN** 系统 MUST 将相关阻塞原因返回到第 1 阶段齐套摘要或缺失资料列表
 - **AND** 前端 MUST 能展示为需返工阻塞，而不是普通未提交
 
@@ -1866,42 +1867,112 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 
 ### Requirement: 1.3 项目立项通知提交前置门禁
 
-系统 MUST 在 `1.3 项目立项通知` 通过普通资料提交或等价完成路径达到 `submit_only` 完成点前，校验 `1.2 项目立项审批表` 已完成商务评价、技术评价和总经理审批的最终通过，且 `1.1 项目需求表` 不存在由 `1.2` 退回触发且未清除的 `revision_required`；门禁失败 MUST 拒绝本次完成动作，并返回稳定错误码和结构化阻塞原因。
+系统 MUST 在阶段资料层面阻止 `1.3 项目立项通知` 早于 `1.2 项目立项审批表` 最终通过提交。
 
-#### Scenario: 1.2 未提交或未最终通过时拒绝提交 1.3
-- **WHEN** 当前用户提交 `1.3 项目立项通知`
-- **AND** `1.2 项目立项审批表` 未提交、未激活多节点审批或任一必需节点尚未最终通过
-- **THEN** 系统 MUST 拒绝本次提交
-- **AND** 系统 MUST 返回稳定错误码，例如 `INITIATION_NOTICE_GATE_NOT_READY`
-- **AND** 阻塞 details MUST 包含 `1.2` 未最终通过或等价业务原因
+#### Scenario: 1.2 未通过时拒绝 1.3 提交
 
-#### Scenario: 1.2 商务技术已通过但总经理未通过时拒绝提交 1.3
-- **WHEN** 当前用户提交 `1.3 项目立项通知`
-- **AND** `1.2 项目立项审批表` 的商务评价和技术评价已通过
-- **AND** 总经理审批尚未最终通过
-- **THEN** 系统 MUST 拒绝本次提交
-- **AND** 阻塞 details MUST 包含 `1.2` 总经理审批未最终通过或等价业务原因
+- **WHEN** 用户提交 `1.3 项目立项通知`
+- **AND** `1.2 项目立项审批表` 尚未由总经理最终审批通过
+- **THEN** 系统 MUST 拒绝 `1.3` 提交
+- **AND** 系统 MUST 返回 `1.2` 未最终通过或等价阻塞原因
 
-#### Scenario: 1.1 由 1.2 触发的返工未清除时拒绝提交 1.3
-- **WHEN** 当前用户提交 `1.3 项目立项通知`
-- **AND** `1.1 项目需求表` 存在由 `1.2` 退回触发且未清除的 `revision_required = true`
-- **THEN** 系统 MUST 拒绝本次提交
-- **AND** 阻塞 details MUST 包含 `1.1` 返工未清除或等价业务原因
+#### Scenario: 1.2 通过后允许 1.3 按规则提交
 
-#### Scenario: 门禁满足后责任人可提交 1.3
-- **WHEN** `1.2 项目立项审批表` 商务评价、技术评价和总经理审批均已最终通过
-- **AND** `1.1 项目需求表` 不存在由 `1.2` 退回触发且未清除的 `revision_required`
-- **AND** 当前用户是 `1.3 项目立项通知` 责任人
-- **THEN** 系统 MUST 允许其继续按 `submit_only` 资料状态机提交 `1.3`
+- **WHEN** `1.2 项目立项审批表` 已由总经理最终审批通过
+- **AND** 当前用户是营销中心负责人或后端授权的等价处理人
+- **THEN** 系统 MUST 允许 `1.3` 按在线表单和 `completionMode` 规则提交
 
-#### Scenario: 附件上传触发完成时执行同一门禁
-- **WHEN** 阶段资料附件上传会使 `1.3 项目立项通知` 达到 `submit_only` 完成点
-- **AND** `1.2` 最终审批未完成或 `1.1` 仍存在由 `1.2` 触发且未清除的返工
-- **THEN** 系统 MUST 对附件上传完成路径执行与普通提交相同的前置门禁
-- **AND** 系统 MUST 拒绝导致 `1.3` 完成的上传动作
+### Requirement: 立项阶段在线表单产出
 
-#### Scenario: 不改变 1.2 节点退回后是否需要普通重提
-- **WHEN** `1.2 项目立项审批表` 节点退回触发 `1.1 revision_required`
-- **AND** 后续 `1.1 revision_required` 已清除
-- **THEN** 本 change MUST NOT 改变节点自动恢复待审的既有规则
-- **AND** 本 change MUST NOT 新增普通 `1.2` 资料重新提交要求
+系统 MUST 将立项阶段 `1.1 项目需求表`、`1.2 项目立项审批表` 和 `1.3 项目立项通知` 规划为在线表单产出，并继续复用当前阶段资料底座保存基础状态、责任人、提交追溯、`completionMode` 和精准返工字段。
+
+#### Scenario: 1.1 在线表单产出
+- **WHEN** 系统初始化或展示 `1.1 项目需求表`
+- **THEN** 系统 MUST 将其作为在线表单产出处理
+- **AND** 字段设计来源 MUST 为 `项目需求表-模板.xlsx`
+
+#### Scenario: 1.2 在线表单产出
+- **WHEN** 系统初始化或展示 `1.2 项目立项审批表`
+- **THEN** 系统 MUST 将其作为在线表单产出处理
+- **AND** 字段设计来源 MUST 为 `项目立项审批表-模板.xlsx`
+
+#### Scenario: 1.3 在线表单产出
+- **WHEN** 系统初始化或展示 `1.3 项目立项通知`
+- **THEN** 系统 MUST 将其作为在线表单产出处理
+- **AND** 字段设计来源 MUST 为 `关于确定项目名称及编号的通知-模板.docx`
+
+#### Scenario: 在线表单仍回到资料底座
+- **WHEN** 用户提交 `1.1`、`1.2` 或 `1.3` 在线表单
+- **THEN** 系统 MUST 将提交结果回写或派生到对应项目级阶段资料项完成状态
+- **AND** 系统 MUST NOT 建立脱离阶段资料清单的第二套产出完成状态
+
+#### Scenario: 普通资料提交接口不得提交立项在线表单产出
+- **WHEN** 用户通过普通阶段资料提交接口提交 `1.1 项目需求表`、`1.2 项目立项审批表` 或 `1.3 项目立项通知`
+- **THEN** 系统 MUST 拒绝该请求并返回 `ONLINE_FORM_SUBMISSION_REQUIRED` 或等价稳定错误码
+- **AND** 系统 MUST 返回 HTTP 409 或等价冲突状态
+- **AND** 错误详情 MUST 包含 `documentId` 和 `documentCode`
+- **AND** 系统 MUST NOT 更新资料基础状态、在线表单状态、`1.2` 评价/审批状态或写入提交成功日志
+- **AND** 系统 MUST NOT 因旧数据状态或旧资料清单入口允许绕过在线表单提交
+
+#### Scenario: 普通返工完成接口不得清除立项在线表单产出返工
+- **WHEN** 用户通过普通返工完成接口处理 `1.1 项目需求表`、`1.2 项目立项审批表` 或 `1.3 项目立项通知`
+- **THEN** 系统 MUST 拒绝该请求并返回 `ONLINE_FORM_REVISION_COMPLETION_REQUIRED` 或等价稳定错误码
+- **AND** 系统 MUST 返回 HTTP 409 或等价冲突状态
+- **AND** 错误详情 MUST 包含 `documentId` 和 `documentCode`
+- **AND** 系统 MUST NOT 清除 `revision_required`
+- **AND** 系统 MUST NOT 写入 `document.revision_completed` 成功日志
+- **AND** 系统 MUST NOT 因普通返工完成接口恢复或推进 `1.2` 评价/审批节点
+
+#### Scenario: 1.1 返工必须通过在线表单重提清除
+- **WHEN** `1.2` 总经理审批不通过触发 `1.1 项目需求表 revision_required = true`
+- **AND** `1.1` 责任人通过在线表单重新提交 `1.1`
+- **THEN** 系统 MUST 清除 `1.1 revision_required`
+- **AND** 系统 MUST 记录 `revision_completed_by_user_id` 和 `revision_completed_at` 或等价完成字段
+- **AND** 系统 MUST 在同一事务中写入在线表单提交日志和返工完成日志
+- **AND** 系统 MUST NOT 因 `1.1` 返工清除自动将 `1.2` 视为最终通过
+
+#### Scenario: 1.2 重填必须通过在线表单重新进入评价审批
+- **WHEN** `1.2 项目立项审批表` 因总经理审批不通过处于需重填状态
+- **AND** `1.2` 原责任人通过在线表单重新提交 `1.2`
+- **THEN** 系统 MUST 重新激活营销评价和研发评价待办
+- **AND** 系统 MUST 将总经理最终审批置为等待两项评价完成
+- **AND** 系统 MUST NOT 复用旧一轮评价或审批结果直接完成 `1.2`
+- **AND** 系统 MUST NOT 允许普通资料提交接口完成该重填
+
+#### Scenario: 1.1 返工未清除前不得保存或提交 1.2 重填
+- **WHEN** `1.2` 总经理审批不通过已触发 `1.1 项目需求表 revision_required = true`
+- **AND** `1.1 revision_required` 仍关联来源 `1.2 项目立项审批表` 且尚未清除
+- **THEN** 系统 MUST 拒绝 `1.2` 在线表单草稿保存和在线表单提交
+- **AND** 系统 MUST 返回 `INITIATION_REWORK_NOT_CLEARED` 或等价稳定错误码
+- **AND** 系统 MUST NOT 更新 `1.2` 在线表单数据或资料基础状态
+- **AND** 系统 MUST NOT 激活营销评价、研发评价或总经理审批待办
+- **AND** 系统 MUST NOT 写入 `1.2` 保存、提交或评价启动成功日志
+
+### Requirement: 立项阶段责任人规则
+
+系统 MUST 对立项阶段在线表单产出执行专用责任人规则：`1.1` 和 `1.2` 由营销中心负责人分配责任人，`1.3` 默认由营销中心负责人处理。
+
+#### Scenario: 1.1 责任人由营销中心负责人分配
+- **WHEN** `1.1 项目需求表` 需要填写或提交
+- **THEN** 系统 MUST 要求先由营销中心负责人分配责任人
+- **AND** 只有被分配责任人才能按权限填写或提交
+
+#### Scenario: 1.2 责任人由营销中心负责人分配
+- **WHEN** `1.2 项目立项审批表` 需要填写或提交
+- **THEN** 系统 MUST 要求先由营销中心负责人分配责任人
+- **AND** 只有被分配责任人才能按权限填写或提交
+
+#### Scenario: 无责任人不得提交 1.1 或 1.2
+- **WHEN** `1.1` 或 `1.2` 尚未分配责任人
+- **THEN** 系统 MUST 拒绝在线表单提交
+- **AND** 系统 MUST 返回可展示的责任人缺失原因
+
+#### Scenario: 管理身份不代替责任人提交
+- **WHEN** 中心负责人、项目经理、总经理、总经理助理或项目创建人不是 `1.1` 或 `1.2` 的责任人
+- **THEN** 系统 MUST NOT 仅因其查看或管理身份允许其代替责任人提交 `1.1` 或 `1.2`
+
+#### Scenario: 1.3 默认营销中心负责人处理
+- **WHEN** `1.3 项目立项通知` 需要填写或提交
+- **THEN** 系统 MUST 默认由营销中心负责人处理
+- **AND** 系统 MUST NOT 要求为 `1.3` 单独分配资料责任人
+

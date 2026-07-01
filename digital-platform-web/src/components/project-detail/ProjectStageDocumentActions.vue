@@ -27,7 +27,7 @@
 
       <template v-else>
         <button
-          v-if="canSubmitDocument && canCompleteRevisionDocument"
+          v-if="canSubmitDocument && canCompleteRevisionDocument && !isOnlineFormOnlyDocument"
           type="button"
           class="ghost-button"
           :disabled="isActionPending(document.id, 'complete-revision')"
@@ -37,7 +37,7 @@
         </button>
 
         <button
-          v-else-if="canSubmitDocument && canSubmit(document)"
+          v-else-if="canSubmitDocument && canSubmit(document) && !isOnlineFormOnlyDocument"
           type="button"
           class="ghost-button"
           :disabled="isActionPending(document.id, 'submit')"
@@ -145,6 +145,7 @@ import {
   formatDocumentCompletionMode,
   formatResponsibleUser,
   isApplicable,
+  isInitiationOnlineFormDocument,
   isReviewCompletionMode,
   isRevisionRequired,
   isRevisionResubmitted,
@@ -230,6 +231,7 @@ const designChangeCandidates = computed(() => props.document.designChangeCandida
 const reworkClass = computed(() => props.document.reworkClass || props.document.rework_class || 'b_class');
 const isAClassReturn = computed(() => reworkClass.value === 'a_class');
 const isCClassReturn = computed(() => props.document.documentCode === '5.12' || reworkClass.value === 'c_class');
+const isOnlineFormOnlyDocument = computed(() => isInitiationOnlineFormDocument(props.document));
 const selectedRevisionTargetIds = computed(() => revisionTargetSelections[props.document.id] || []);
 const selectedDesignChangeTargetIds = computed(() => designChangeTargetSelections[props.document.id] || []);
 const canSubmitReturn = computed(() => {
@@ -245,6 +247,7 @@ const canSubmitReturn = computed(() => {
 });
 const canCompleteRevisionDocument = computed(
   () =>
+    !isOnlineFormOnlyDocument.value &&
     isRevisionRequired(props.document) &&
     isSubmitCompletionMode(props.document) &&
     ['submitted', 'confirmed'].includes(props.document.status)
@@ -270,6 +273,14 @@ const submitButtonText = computed(() => {
 const emptyActionText = computed(() => {
   if (!isApplicable(props.document)) {
     return '条件未触发/不适用';
+  }
+
+  if (isOnlineFormOnlyDocument.value && isRevisionRequired(props.document)) {
+    return '请通过在线表单重提';
+  }
+
+  if (isOnlineFormOnlyDocument.value && canSubmit(props.document)) {
+    return props.document.status === 'returned' ? '请通过在线表单重提' : '请通过在线表单提交';
   }
 
   if (props.document.status === 'confirmed') {

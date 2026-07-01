@@ -17,10 +17,6 @@
 
     <form v-else class="panel form-grid" @submit.prevent="submitProject">
       <label>
-        <span>项目编号</span>
-        <input v-model.trim="form.projectCode" type="text" autocomplete="off" placeholder="待立项后生成，可留空" />
-      </label>
-      <label>
         <span>项目名称</span>
         <input v-model.trim="form.projectName" type="text" autocomplete="off" />
       </label>
@@ -29,53 +25,12 @@
         <input v-model.trim="form.customerName" type="text" autocomplete="off" />
       </label>
       <label>
-        <span>项目模式</span>
-        <select v-model="form.projectMode">
-          <option value="self_developed">自研模式</option>
-          <option value="outsourced">供应链/外包模式</option>
-        </select>
-      </label>
-      <label>
-        <span>项目经理</span>
-        <select v-model="form.projectManagerUserId" :disabled="managerCandidatesLoading">
-          <option value="">{{ managerCandidatesLoading ? '正在加载候选用户' : '请选择项目经理' }}</option>
-          <option v-for="user in managerCandidates" :key="user.id" :value="String(user.id)">
-            {{ formatManagerCandidate(user) }}
-          </option>
-        </select>
-      </label>
-      <label>
-        <span>参与部门</span>
-        <div class="department-checkbox-group">
-          <label
-            v-for="department in departmentOptions"
-            :key="department.value"
-            class="department-checkbox"
-          >
-            <input v-model="form.participatingDepartments" type="checkbox" :value="department.value" />
-            <span>{{ department.label }}</span>
-          </label>
-        </div>
-      </label>
-      <label>
-        <span>计划开始时间</span>
-        <input v-model="form.plannedStartDate" type="date" />
-      </label>
-      <label>
-        <span>计划完成时间</span>
-        <input v-model="form.plannedEndDate" type="date" />
-      </label>
-      <label class="form-grid__wide">
-        <span>备注</span>
-        <textarea v-model.trim="form.remark" rows="4"></textarea>
+        <span>客户联系方式</span>
+        <input v-model.trim="form.customerContact" type="text" autocomplete="off" />
       </label>
 
       <div v-if="clientError || serverError" class="state-panel state-panel--error form-grid__wide">
         <p>{{ clientError || serverError }}</p>
-      </div>
-
-      <div v-if="managerCandidatesError" class="state-panel state-panel--error form-grid__wide">
-        <p>{{ managerCandidatesError }}</p>
       </div>
 
       <div v-if="successMessage" class="state-panel state-panel--success form-grid__wide">
@@ -93,13 +48,9 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { createProject, toReadableApiError } from '../api/projects.js';
-import { listResponsibilityCandidates } from '../api/users.js';
-import {
-  formatBusinessUser,
-  formatUser
-} from '../utils/format.js';
+import { formatUser } from '../utils/format.js';
 
 const props = defineProps({
   authToken: {
@@ -119,45 +70,24 @@ const props = defineProps({
 const emit = defineEmits(['auth-expired']);
 
 const form = reactive({
-  projectCode: '',
   projectName: '',
   customerName: '',
-  projectMode: 'self_developed',
-  projectManagerUserId: '',
-  participatingDepartments: [],
-  plannedStartDate: '',
-  plannedEndDate: '',
-  remark: ''
+  customerContact: ''
 });
 
 const submitting = ref(false);
 const clientError = ref('');
 const serverError = ref('');
 const successMessage = ref('');
-const managerCandidates = ref([]);
-const managerCandidatesLoading = ref(false);
-const managerCandidatesError = ref('');
-const departmentOptions = [
-  { value: 'operations_center', label: '运营中心' },
-  { value: 'marketing_center', label: '营销中心' },
-  { value: 'manufacturing_center', label: '制造中心' },
-  { value: 'rd_center', label: '研发中心' }
-];
 const canCreateProject = computed(() =>
   ['general_manager', 'center_manager'].includes(props.currentUser?.organizationRole)
 );
-
-function formatManagerCandidate(user) {
-  return [formatBusinessUser(user), user.account ? `账号 ${user.account}` : '']
-    .filter(Boolean)
-    .join(' / ');
-}
 
 function validateForm() {
   const missing = [];
   if (!form.projectName) missing.push('项目名称');
   if (!form.customerName) missing.push('客户');
-  if (!form.projectManagerUserId) missing.push('项目经理');
+  if (!form.customerContact) missing.push('客户联系方式');
 
   if (missing.length > 0) {
     clientError.value = `请补充：${missing.join('、')}`;
@@ -166,27 +96,6 @@ function validateForm() {
 
   clientError.value = '';
   return true;
-}
-
-async function loadManagerCandidates() {
-  if (!canCreateProject.value) {
-    managerCandidates.value = [];
-    return;
-  }
-
-  managerCandidatesLoading.value = true;
-  managerCandidatesError.value = '';
-
-  try {
-    managerCandidates.value = await listResponsibilityCandidates(props.authToken);
-  } catch (error) {
-    managerCandidatesError.value = toReadableApiError(error);
-    if (error.code === 'UNAUTHENTICATED') {
-      emit('auth-expired', managerCandidatesError.value);
-    }
-  } finally {
-    managerCandidatesLoading.value = false;
-  }
 }
 
 async function submitProject() {
@@ -211,10 +120,7 @@ async function submitProject() {
   submitting.value = true;
 
   try {
-    const created = await createProject({
-      ...form,
-      participatingDepartments: [...form.participatingDepartments]
-    }, props.authToken);
+    const created = await createProject({ ...form }, props.authToken);
     successMessage.value = '项目创建成功。';
     props.navigate(`/projects/${created.project.id}`);
   } catch (error) {
@@ -227,6 +133,4 @@ async function submitProject() {
     submitting.value = false;
   }
 }
-
-onMounted(loadManagerCandidates);
 </script>

@@ -1,8 +1,14 @@
 import { pool } from '../../db/pool.js';
 import {
+  BUSINESS_DEPARTMENT,
   canBeResponsibleUser,
-  canManageProjectResponsibility
+  canManageProjectResponsibility,
+  isCenterManagerUser
 } from '../../domain/organization.js';
+import {
+  INITIATION_REVIEW_DOCUMENT_CODE,
+  INITIATION_REWORK_TARGET_DOCUMENT_CODE
+} from '../../domain/initiationReview.js';
 import {
   insertOperationLog,
   OPERATION_ACTION_TYPE,
@@ -38,6 +44,18 @@ function normalizeResponsibleUserId(value) {
 }
 
 function assertUserCanManageResponsibility({ user, project, currentDocument, targetResponsibleUser }) {
+  if ([INITIATION_REWORK_TARGET_DOCUMENT_CODE, INITIATION_REVIEW_DOCUMENT_CODE].includes(currentDocument.document_code)) {
+    if (!isCenterManagerUser(user) || user.department !== BUSINESS_DEPARTMENT.MARKETING_CENTER) {
+      throw new StageDocumentResponsibilityError(
+        'FORBIDDEN_OPERATION',
+        'Only marketing center manager can assign initiation stage document responsibility',
+        403,
+        ['organizationRole']
+      );
+    }
+    return;
+  }
+
   if (!canManageProjectResponsibility(user, project, {
     document: currentDocument,
     targetResponsibleUser

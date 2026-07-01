@@ -86,7 +86,12 @@ function normalizeDepartments(value) {
 }
 
 function normalizeProjectMode(value) {
-  const projectMode = normalizeEnumText(value) || PROJECT_MODE.SELF_DEVELOPED;
+  const text = normalizeEnumText(value);
+  if (!text) {
+    return null;
+  }
+
+  const projectMode = text;
   if (!isValidProjectMode(projectMode)) {
     throw new ValidationError('Invalid project mode', ['projectMode'], 'INVALID_PROJECT_MODE');
   }
@@ -96,6 +101,10 @@ function normalizeProjectMode(value) {
 
 function normalizeProjectManagerUserId(value) {
   const text = normalizeEnumText(value);
+  if (!text) {
+    return null;
+  }
+
   if (!/^[1-9]\d*$/.test(text)) {
     throw new ValidationError(
       'Invalid project manager user id',
@@ -122,6 +131,7 @@ export function normalizeCreateProjectInput(payload) {
     projectCode,
     projectName: normalizeText(firstValue(payload, 'projectName', 'project_name')),
     customerName: normalizeText(firstValue(payload, 'customerName', 'customer_name')),
+    customerContact: normalizeText(firstValue(payload, 'customerContact', 'customer_contact')),
     projectMode: normalizeProjectMode(firstValue(payload, 'projectMode', 'project_mode')),
     projectManagerUserId: normalizeProjectManagerUserId(
       firstValue(payload, 'projectManagerUserId', 'project_manager_user_id')
@@ -138,6 +148,7 @@ export function normalizeCreateProjectInput(payload) {
   const missing = [];
   if (!project.projectName) missing.push('projectName');
   if (!project.customerName) missing.push('customerName');
+  if (!project.customerContact) missing.push('customerContact');
 
   if (missing.length > 0) {
     throw new ValidationError('Missing required project fields', missing);

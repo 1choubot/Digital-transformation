@@ -23,10 +23,17 @@ export {
   completeProjectStageDocumentRevision,
   updateProjectStageDocumentStatus
 } from './stageDocuments/statusRepository.js';
+export {
+  getStageDocumentOnlineForm,
+  saveStageDocumentOnlineForm,
+  StageDocumentFormError,
+  submitStageDocumentOnlineForm
+} from './stageDocuments/onlineFormRepository.js';
 export { updateProjectStageDocumentApplicability } from './stageDocuments/applicabilityRepository.js';
 export {
   approveInitiationReviewNode,
   initializeInitiationReviewNodesForExistingProjects,
   initializeInitiationReviewNodesForProject,
+  InitiationReviewError,
   returnInitiationReviewNode
 } from './stageDocuments/initiationReviewRepository.js';

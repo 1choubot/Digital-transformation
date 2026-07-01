@@ -12,6 +12,8 @@ import {
   downloadStageDocumentAttachmentHandler,
   getProjectDetailHandler,
   getProjectOverviewDashboardHandler,
+  getProjectWorkspaceHandler,
+  getStageDocumentOnlineFormHandler,
   listStageApprovalHistoryHandler,
   getStageDocumentChecklistHandler,
   listProjectOperationLogsHandler,
@@ -23,7 +25,9 @@ import {
   returnInitiationReviewNodeHandler,
   returnStageDocumentHandler,
   resubmitStageApprovalHandler,
+  saveStageDocumentOnlineFormHandler,
   submitStageDocumentHandler,
+  submitStageDocumentOnlineFormHandler,
   submitStageApprovalHandler,
   updateProjectCodeHandler,
   updateStageDocumentResponsibleUserHandler,
@@ -57,6 +61,12 @@ projectsRouter.get(
   '/:projectId/stage-document-checklist',
   requireAuth,
   asyncHandler(getStageDocumentChecklistHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/workspace',
+  requireAuth,
+  asyncHandler(getProjectWorkspaceHandler)
 );
 
 projectsRouter.post(
@@ -117,6 +127,24 @@ projectsRouter.post(
   '/:projectId/stage-documents/:documentId/revision/complete',
   requireAuth,
   asyncHandler(completeStageDocumentRevisionHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/stage-documents/:documentId/online-form',
+  requireAuth,
+  asyncHandler(getStageDocumentOnlineFormHandler)
+);
+
+projectsRouter.put(
+  '/:projectId/stage-documents/:documentId/online-form',
+  requireAuth,
+  asyncHandler(saveStageDocumentOnlineFormHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/stage-documents/:documentId/online-form/submit',
+  requireAuth,
+  asyncHandler(submitStageDocumentOnlineFormHandler)
 );
 
 projectsRouter.post(

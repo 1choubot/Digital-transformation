@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { closePool, pool } from '../src/db/pool.js';
+import {
+  ensureProjectWorkspaceSchema,
+  inspectProjectWorkspaceSchema
+} from '../src/db/projectWorkspaceSchema.js';
 import { ensureStageDocumentSchema } from '../src/db/stageDocumentSchema.js';
 import {
   BUSINESS_DEPARTMENT,
@@ -34,6 +38,7 @@ import {
   assertProjectViewable,
   createProject,
   getProjectDetail,
+  getProjectWorkspace,
   getProjectOverviewDashboard,
   listStageApprovalHistory,
   listProjects,
@@ -48,11 +53,15 @@ import {
   approveInitiationReviewNode,
   completeProjectStageDocumentRevision,
   getProjectStageDocumentChecklist,
+  getStageDocumentOnlineForm,
   getMyWorkbench,
   initializeInitiationReviewNodesForExistingProjects,
   listMyStageDocumentTasks,
   normalizeStageDocumentTaskFilters,
   returnInitiationReviewNode,
+  saveStageDocumentOnlineForm,
+  submitStageDocumentOnlineForm,
+  updateProjectStageDocumentResponsibleUser,
   updateProjectStageDocumentStatus
 } from '../src/repositories/stageDocumentRepository.js';
 import {
@@ -291,11 +300,17 @@ async function completeInitiationGate(projectId, { submitterUser, marketingManag
   );
   const initiationDocument = await selectSmokeDocument(projectId, '1.2');
   if (initiationDocument.status !== DOCUMENT_STATUS.SUBMITTED) {
-    await updateProjectStageDocumentStatus({
+    await submitStageDocumentOnlineForm({
       projectId,
       documentId: initiationDocument.id,
-      action: DOCUMENT_STATUS_ACTION.SUBMIT,
-      user: submitterUser
+      user: submitterUser,
+      formData: {
+        projectOverview: 'smoke project overview',
+        marketAssessment: 'smoke market assessment',
+        technicalPlan: 'smoke technical plan',
+        budgetEstimate: 'smoke budget estimate',
+        riskAssessment: 'smoke risk assessment'
+      }
     });
   }
   await approveInitiationReviewNode({
@@ -588,6 +603,7 @@ async function createInitiationSmokeProject({
       projectCode: null,
       projectName: `1.2 多节点 smoke ${label} ${uniqueSuffix}`,
       customerName: 'Smoke 客户',
+      customerContact: '13800000000',
       projectMode: 'self_developed',
       projectManagerUserId: projectManagerUser.id,
       participatingDepartments: [RD_CENTER, MARKETING_CENTER],
@@ -625,17 +641,23 @@ async function prepareInitiationSmokeBase(projectId, submitterUser) {
     [
       DOCUMENT_STATUS.SUBMITTED,
       DOCUMENT_STATUS.NOT_SUBMITTED,
-      DOCUMENT_STATUS.SUBMITTED,
+      DOCUMENT_STATUS.NOT_SUBMITTED,
       submitterUser.id,
       projectId
     ]
   );
   const initiationDocument = await selectSmokeDocument(projectId, '1.2');
-  await updateProjectStageDocumentStatus({
+  await submitStageDocumentOnlineForm({
     projectId,
     documentId: initiationDocument.id,
-    action: DOCUMENT_STATUS_ACTION.SUBMIT,
-    user: submitterUser
+    user: submitterUser,
+    formData: {
+      projectOverview: 'smoke project overview',
+      marketAssessment: 'smoke market assessment',
+      technicalPlan: 'smoke technical plan',
+      budgetEstimate: 'smoke budget estimate',
+      riskAssessment: 'smoke risk assessment'
+    }
   });
 
   return selectSmokeDocument(projectId, '1.2');
@@ -688,7 +710,7 @@ async function resetInitiationNoticeForSubmit(projectId, user) {
        revision_completed_at = NULL,
        is_applicable = 1
      WHERE id = ?`,
-    [user.id, DOCUMENT_STATUS.NOT_SUBMITTED, notice.id]
+    [null, DOCUMENT_STATUS.NOT_SUBMITTED, notice.id]
   );
 
   return selectSmokeDocument(projectId, '1.3');
@@ -713,17 +735,123 @@ async function countDocumentSubmittedLogs(projectId, documentId) {
   return Number(rows[0].count);
 }
 
-async function assertInitiationNoticeSubmitGateRejects({ projectId, user, expectedDetails }) {
-  const notice = await resetInitiationNoticeForSubmit(projectId, user);
-  const submittedLogCountBefore = await countDocumentSubmittedLogs(projectId, notice.id);
+async function countOperationLogs({ projectId, actionType, targetType = null, targetId = null }) {
+  const conditions = ['project_id = ?', 'action_type = ?'];
+  const params = [projectId, actionType];
+  if (targetType !== null) {
+    conditions.push('target_type = ?');
+    params.push(targetType);
+  }
+  if (targetId !== null) {
+    conditions.push('target_id = ?');
+    params.push(targetId);
+  }
+
+  const [rows] = await pool.execute(
+    `SELECT COUNT(*) AS count
+     FROM business_operation_logs
+     WHERE ${conditions.join(' AND ')}`,
+    params
+  );
+
+  return Number(rows[0].count);
+}
+
+async function assertOrdinaryOnlineFormDocumentSubmitRejected({ projectId, documentCode, user }) {
+  const document = await selectSmokeDocument(projectId, documentCode);
+  const statusBefore = document.status;
+  const documentSubmittedLogCount = await countDocumentSubmittedLogs(projectId, document.id);
+  const initiationSubmittedLogCount = await countOperationLogs({
+    projectId,
+    actionType: OPERATION_ACTION_TYPE.INITIATION_REVIEW_SUBMITTED,
+    targetType: OPERATION_TARGET_TYPE.INITIATION_REVIEW,
+    targetId: document.id
+  });
+  const nodesBefore =
+    documentCode === '1.2'
+      ? (await selectInitiationReviewNodes(projectId)).map((node) => ({
+          nodeKey: node.node_key,
+          nodeStatus: node.node_status
+        }))
+      : [];
 
   await assert.rejects(
     () =>
       updateProjectStageDocumentStatus({
         projectId,
-        documentId: notice.id,
+        documentId: document.id,
         action: DOCUMENT_STATUS_ACTION.SUBMIT,
         user
+    }),
+    (error) =>
+      error.code === 'ONLINE_FORM_SUBMISSION_REQUIRED' &&
+      error.statusCode === 409 &&
+      error.details?.documentId === document.id &&
+      error.details?.documentCode === documentCode
+  );
+
+  const documentAfterReject = await selectSmokeDocument(projectId, documentCode);
+  assert.equal(documentAfterReject.status, statusBefore);
+  assert.equal(await countDocumentSubmittedLogs(projectId, document.id), documentSubmittedLogCount);
+  assert.equal(await countOperationLogs({
+    projectId,
+    actionType: OPERATION_ACTION_TYPE.INITIATION_REVIEW_SUBMITTED,
+    targetType: OPERATION_TARGET_TYPE.INITIATION_REVIEW,
+    targetId: document.id
+  }), initiationSubmittedLogCount);
+
+  if (documentCode === '1.2') {
+    const nodesAfter = (await selectInitiationReviewNodes(projectId)).map((node) => ({
+      nodeKey: node.node_key,
+      nodeStatus: node.node_status
+    }));
+    assert.deepEqual(nodesAfter, nodesBefore);
+  }
+}
+
+async function selectOnlineFormRow(documentId) {
+  const [rows] = await pool.execute(
+    `SELECT *
+     FROM project_stage_document_forms
+     WHERE stage_document_id = ?
+     LIMIT 1`,
+    [documentId]
+  );
+
+  return rows[0] || null;
+}
+
+function parseFormDataJson(row) {
+  const value = row?.form_data_json ?? null;
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return typeof value === 'string' ? JSON.parse(value) : value;
+}
+
+async function assertInitiationNoticeSubmitGateRejects({ projectId, user, expectedDetails }) {
+  const notice = await resetInitiationNoticeForSubmit(projectId, user);
+  const submittedLogCountBefore = await countDocumentSubmittedLogs(projectId, notice.id);
+  const formSubmittedLogCountBefore = await countOperationLogs({
+    projectId,
+    actionType: OPERATION_ACTION_TYPE.FORM_SUBMITTED,
+    targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+    targetId: notice.id
+  });
+
+  await assert.rejects(
+    () =>
+      submitStageDocumentOnlineForm({
+        projectId,
+        documentId: notice.id,
+        user,
+        formData: {
+          projectName: 'smoke project',
+          projectCode: 'SMOKE-PENDING',
+          noticeContent: 'smoke initiation notice blocked by gate',
+          effectiveDate: '2026-07-01'
+        }
       }),
     (error) =>
       error.code === 'INITIATION_NOTICE_GATE_NOT_READY' &&
@@ -736,21 +864,36 @@ async function assertInitiationNoticeSubmitGateRejects({ projectId, user, expect
   assert.equal(noticeAfterReject.status, DOCUMENT_STATUS.NOT_SUBMITTED);
   assert.equal(noticeAfterReject.submitted_by_user_id, null);
   assert.equal(await countDocumentSubmittedLogs(projectId, notice.id), submittedLogCountBefore);
+  assert.equal(await countOperationLogs({
+    projectId,
+    actionType: OPERATION_ACTION_TYPE.FORM_SUBMITTED,
+    targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+    targetId: notice.id
+  }), formSubmittedLogCountBefore);
 }
 
 async function submitInitiationNoticeAfterGateReady(projectId, user) {
   const notice = await resetInitiationNoticeForSubmit(projectId, user);
-  const submittedNotice = await updateProjectStageDocumentStatus({
+  const result = await submitStageDocumentOnlineForm({
     projectId,
     documentId: notice.id,
-    action: DOCUMENT_STATUS_ACTION.SUBMIT,
-    user
+    user,
+    formData: {
+      projectName: 'smoke project',
+      projectCode: 'SMOKE-PENDING',
+      noticeContent: 'smoke initiation notice',
+      effectiveDate: '2026-07-01'
+    }
   });
+  const submittedNotice = result.document;
 
   assert.equal(submittedNotice.documentCode, '1.3');
   assert.equal(submittedNotice.status, DOCUMENT_STATUS.SUBMITTED);
   assert.equal(submittedNotice.isComplete, true);
   assert.equal(submittedNotice.completionStatus, 'completed');
+  assert.equal(result.form.permissions.canEdit, false);
+  assert.equal(result.form.permissions.canSubmit, false);
+  assert.ok(result.form.blockingReasons.some((reason) => String(reason).includes('submitted')));
 
   return submittedNotice;
 }
@@ -758,12 +901,32 @@ async function submitInitiationNoticeAfterGateReady(projectId, user) {
 async function runInitiationReviewSmoke({
   uniqueSuffix,
   smokeProjectIds,
-  smokeUserIds,
   managerUser,
+  limitedEmployeeUser,
   marketingManagerUser,
   generalManagerUser,
   systemAdminUser
 }) {
+  const requirementFormData = {
+    projectBackground: 'smoke requirement background',
+    customerNeed: 'smoke customer need',
+    scope: 'smoke scope',
+    expectedValue: 'smoke expected value'
+  };
+  const initiationFormData = {
+    projectOverview: 'smoke project overview',
+    marketAssessment: 'smoke market assessment',
+    technicalPlan: 'smoke technical plan',
+    budgetEstimate: 'smoke budget estimate',
+    riskAssessment: 'smoke risk assessment'
+  };
+  const noticeFormData = {
+    projectName: 'smoke project',
+    projectCode: 'SMOKE-PENDING',
+    noticeContent: 'smoke initiation notice',
+    effectiveDate: '2026-07-01'
+  };
+
   const projectId = await createInitiationSmokeProject({
     uniqueSuffix,
     projectManagerUser: managerUser,
@@ -771,7 +934,321 @@ async function runInitiationReviewSmoke({
     label: 'gate',
     smokeProjectIds
   });
-  const initiationDocument = await prepareInitiationSmokeBase(projectId, managerUser);
+  const workspace = await getProjectWorkspace(projectId, managerUser);
+  assert.equal(workspace.scope.globalSkeleton, true);
+  assert.equal(workspace.stages.length, 8);
+  const initiationStage = workspace.stages.find((stage) => stage.stageKey === 'initiation');
+  assert.ok(initiationStage);
+  assert.equal(initiationStage.configured, true);
+  assert.deepEqual(
+    initiationStage.nodes.map((node) => node.nodeKey),
+    ['project_input', 'market_research', 'initiation_approval', 'initiation_notice']
+  );
+  assert.ok(
+    workspace.stages
+      .filter((stage) => stage.stageKey !== 'initiation')
+      .every(
+        (stage) =>
+          stage.configured === false &&
+          stage.placeholderStatus === 'legacy_checklist_available' &&
+          Array.isArray(stage.nodes) &&
+          stage.nodes.length === 0
+      )
+  );
+
+  const visibilityProjectId = await createInitiationSmokeProject({
+    uniqueSuffix,
+    projectManagerUser: managerUser,
+    createdByUserId: managerUser.id,
+    label: 'form-visibility',
+    smokeProjectIds
+  });
+  await pool.execute(
+    `UPDATE project_stage_documents
+     SET responsible_user_id = CASE document_code
+       WHEN '1.1' THEN ?
+       WHEN '1.2' THEN ?
+       ELSE responsible_user_id
+     END,
+       is_applicable = 1
+     WHERE project_id = ?
+       AND document_code IN ('1.1', '1.2')`,
+    [limitedEmployeeUser.id, managerUser.id, visibilityProjectId]
+  );
+  const visibilityRequirement = await selectSmokeDocument(visibilityProjectId, '1.1');
+  const visibilityInitiation = await selectSmokeDocument(visibilityProjectId, '1.2');
+  const visibilityNotice = await selectSmokeDocument(visibilityProjectId, '1.3');
+  const visibleForm = await getStageDocumentOnlineForm({
+    projectId: visibilityProjectId,
+    documentId: visibilityRequirement.id,
+    user: limitedEmployeeUser
+  });
+  assert.equal(visibleForm.documentCode, '1.1');
+  assert.equal(visibleForm.permissions.canView, true);
+  await assert.rejects(
+    () =>
+      getStageDocumentOnlineForm({
+        projectId: visibilityProjectId,
+        documentId: visibilityInitiation.id,
+        user: limitedEmployeeUser
+      }),
+    (error) =>
+      error.code === 'FORBIDDEN_OPERATION' &&
+      error.statusCode === 403 &&
+      Array.isArray(error.details) &&
+      error.details.includes('documentId')
+  );
+  await assert.rejects(
+    () =>
+      getStageDocumentOnlineForm({
+        projectId: visibilityProjectId,
+        documentId: visibilityNotice.id,
+        user: limitedEmployeeUser
+      }),
+    (error) =>
+      error.code === 'FORBIDDEN_OPERATION' &&
+      error.statusCode === 403 &&
+      Array.isArray(error.details) &&
+      error.details.includes('documentId')
+  );
+  await submitStageDocumentOnlineForm({
+    projectId: visibilityProjectId,
+    documentId: visibilityRequirement.id,
+    user: limitedEmployeeUser,
+    formData: requirementFormData
+  });
+
+  const requirementDocument = await selectSmokeDocument(projectId, '1.1');
+  await assert.rejects(
+    () =>
+      submitStageDocumentOnlineForm({
+        projectId,
+        documentId: requirementDocument.id,
+        user: managerUser,
+        formData: requirementFormData
+      }),
+    (error) => error.code === 'FORM_RESPONSIBLE_USER_REQUIRED'
+  );
+  await assert.rejects(
+    () =>
+      updateProjectStageDocumentResponsibleUser({
+        projectId,
+        documentId: requirementDocument.id,
+        responsibleUserId: managerUser.id,
+        user: managerUser
+      }),
+    (error) => error.code === 'FORBIDDEN_OPERATION'
+  );
+  await updateProjectStageDocumentResponsibleUser({
+    projectId,
+    documentId: requirementDocument.id,
+    responsibleUserId: managerUser.id,
+    user: marketingManagerUser
+  });
+  await assert.rejects(
+    () =>
+      submitStageDocumentOnlineForm({
+        projectId,
+        documentId: requirementDocument.id,
+        user: marketingManagerUser,
+        formData: requirementFormData
+      }),
+    (error) => error.code === 'FORBIDDEN_OPERATION'
+  );
+  await assertOrdinaryOnlineFormDocumentSubmitRejected({
+    projectId,
+    documentCode: '1.1',
+    user: managerUser
+  });
+  await saveStageDocumentOnlineForm({
+    projectId,
+    documentId: requirementDocument.id,
+    user: managerUser,
+    formData: requirementFormData
+  });
+  const submittedRequirementResult = await submitStageDocumentOnlineForm({
+    projectId,
+    documentId: requirementDocument.id,
+    user: managerUser,
+    formData: requirementFormData
+  });
+  assert.equal(submittedRequirementResult.form.permissions.canEdit, false);
+  assert.equal(submittedRequirementResult.form.permissions.canSubmit, false);
+  assert.ok(
+    submittedRequirementResult.form.blockingReasons.some((reason) => String(reason).includes('submitted'))
+  );
+  const submittedRequirementGet = await getStageDocumentOnlineForm({
+    projectId,
+    documentId: requirementDocument.id,
+    user: managerUser
+  });
+  assert.equal(submittedRequirementGet.permissions.canEdit, false);
+  assert.equal(submittedRequirementGet.permissions.canSubmit, false);
+  assert.ok(submittedRequirementGet.blockingReasons.some((reason) => String(reason).includes('submitted')));
+  const submittedRequirementFormRow = await selectOnlineFormRow(requirementDocument.id);
+  const submittedRequirementDocument = await selectSmokeDocument(projectId, '1.1');
+  const submittedRequirementFormData = parseFormDataJson(submittedRequirementFormRow);
+  const requirementFormUpdatedLogCount = await countOperationLogs({
+    projectId,
+    actionType: OPERATION_ACTION_TYPE.FORM_UPDATED,
+    targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+    targetId: requirementDocument.id
+  });
+  await assert.rejects(
+    () =>
+      saveStageDocumentOnlineForm({
+        projectId,
+        documentId: requirementDocument.id,
+        user: managerUser,
+        formData: {
+          ...requirementFormData,
+          customerNeed: 'tampered requirement after submit'
+        }
+      }),
+    (error) =>
+      error.code === 'FORM_DOCUMENT_NOT_EDITABLE' &&
+      error.statusCode === 409 &&
+      Array.isArray(error.details) &&
+      error.details.includes('documentId') &&
+      error.details.includes('status')
+  );
+  const requirementFormAfterRejectedSave = await selectOnlineFormRow(requirementDocument.id);
+  const requirementDocumentAfterRejectedSave = await selectSmokeDocument(projectId, '1.1');
+  assert.equal(requirementFormAfterRejectedSave.status, 'submitted');
+  assert.deepEqual(parseFormDataJson(requirementFormAfterRejectedSave), submittedRequirementFormData);
+  assert.equal(requirementDocumentAfterRejectedSave.status, submittedRequirementDocument.status);
+  assert.equal(await countOperationLogs({
+    projectId,
+    actionType: OPERATION_ACTION_TYPE.FORM_UPDATED,
+    targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+    targetId: requirementDocument.id
+  }), requirementFormUpdatedLogCount);
+
+  const initialInitiationDocument = await selectSmokeDocument(projectId, '1.2');
+  await assert.rejects(
+    () =>
+      submitStageDocumentOnlineForm({
+        projectId,
+        documentId: initialInitiationDocument.id,
+        user: managerUser,
+        formData: initiationFormData
+      }),
+    (error) => error.code === 'FORM_RESPONSIBLE_USER_REQUIRED'
+  );
+  await updateProjectStageDocumentResponsibleUser({
+    projectId,
+    documentId: initialInitiationDocument.id,
+    responsibleUserId: managerUser.id,
+    user: marketingManagerUser
+  });
+  await assert.rejects(
+    () =>
+      submitStageDocumentOnlineForm({
+        projectId,
+        documentId: initialInitiationDocument.id,
+        user: marketingManagerUser,
+        formData: initiationFormData
+      }),
+    (error) => error.code === 'FORBIDDEN_OPERATION'
+  );
+  await assertOrdinaryOnlineFormDocumentSubmitRejected({
+    projectId,
+    documentCode: '1.2',
+    user: managerUser
+  });
+  const submittedInitiationResult = await submitStageDocumentOnlineForm({
+    projectId,
+    documentId: initialInitiationDocument.id,
+    user: managerUser,
+    formData: initiationFormData
+  });
+  assert.equal(submittedInitiationResult.form.permissions.canEdit, false);
+  assert.equal(submittedInitiationResult.form.permissions.canSubmit, false);
+  assert.ok(submittedInitiationResult.form.blockingReasons.some((reason) => String(reason).includes('submitted')));
+  const submittedInitiationGet = await getStageDocumentOnlineForm({
+    projectId,
+    documentId: initialInitiationDocument.id,
+    user: managerUser
+  });
+  assert.equal(submittedInitiationGet.permissions.canEdit, false);
+  assert.equal(submittedInitiationGet.permissions.canSubmit, false);
+  assert.ok(submittedInitiationGet.blockingReasons.some((reason) => String(reason).includes('submitted')));
+  let initiationFormRow = await selectOnlineFormRow(initialInitiationDocument.id);
+  assert.equal(initiationFormRow.status, 'submitted');
+  const submittedInitiationFormData = parseFormDataJson(initiationFormRow);
+  const initiationDocument = await selectSmokeDocument(projectId, '1.2');
+  assert.equal(initiationDocument.status, DOCUMENT_STATUS.SUBMITTED);
+  const initiationFormUpdatedLogCount = await countOperationLogs({
+    projectId,
+    actionType: OPERATION_ACTION_TYPE.FORM_UPDATED,
+    targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+    targetId: initialInitiationDocument.id
+  });
+  const duplicateFormSubmittedLogCount = await countOperationLogs({
+    projectId,
+    actionType: OPERATION_ACTION_TYPE.FORM_SUBMITTED,
+    targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+    targetId: initialInitiationDocument.id
+  });
+  const duplicateDocumentSubmittedLogCount = await countDocumentSubmittedLogs(projectId, initialInitiationDocument.id);
+  const duplicateInitiationSubmittedLogCount = await countOperationLogs({
+    projectId,
+    actionType: OPERATION_ACTION_TYPE.INITIATION_REVIEW_SUBMITTED,
+    targetType: OPERATION_TARGET_TYPE.INITIATION_REVIEW,
+    targetId: initialInitiationDocument.id
+  });
+  await assert.rejects(
+    () =>
+      saveStageDocumentOnlineForm({
+        projectId,
+        documentId: initialInitiationDocument.id,
+        user: managerUser,
+        formData: {
+          ...initiationFormData,
+          projectOverview: 'tampered initiation after submit'
+        }
+      }),
+    (error) => error.code === 'FORM_DOCUMENT_NOT_EDITABLE' && error.statusCode === 409
+  );
+  initiationFormRow = await selectOnlineFormRow(initialInitiationDocument.id);
+  assert.equal(initiationFormRow.status, 'submitted');
+  assert.deepEqual(parseFormDataJson(initiationFormRow), submittedInitiationFormData);
+  assert.equal(await countOperationLogs({
+    projectId,
+    actionType: OPERATION_ACTION_TYPE.FORM_UPDATED,
+    targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+    targetId: initialInitiationDocument.id
+  }), initiationFormUpdatedLogCount);
+  await assert.rejects(
+    () =>
+      submitStageDocumentOnlineForm({
+        projectId,
+        documentId: initialInitiationDocument.id,
+        user: managerUser,
+        formData: {
+          ...initiationFormData,
+          projectOverview: 'duplicate submit should fail'
+        }
+      }),
+    (error) => error.code === 'FORM_DOCUMENT_NOT_EDITABLE' && error.statusCode === 409
+  );
+  initiationFormRow = await selectOnlineFormRow(initialInitiationDocument.id);
+  assert.equal(initiationFormRow.status, 'submitted');
+  assert.deepEqual(parseFormDataJson(initiationFormRow), submittedInitiationFormData);
+  assert.equal((await selectSmokeDocument(projectId, '1.2')).status, DOCUMENT_STATUS.SUBMITTED);
+  assert.equal(await countOperationLogs({
+    projectId,
+    actionType: OPERATION_ACTION_TYPE.FORM_SUBMITTED,
+    targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+    targetId: initialInitiationDocument.id
+  }), duplicateFormSubmittedLogCount);
+  assert.equal(await countDocumentSubmittedLogs(projectId, initialInitiationDocument.id), duplicateDocumentSubmittedLogCount);
+  assert.equal(await countOperationLogs({
+    projectId,
+    actionType: OPERATION_ACTION_TYPE.INITIATION_REVIEW_SUBMITTED,
+    targetType: OPERATION_TARGET_TYPE.INITIATION_REVIEW,
+    targetId: initialInitiationDocument.id
+  }), duplicateInitiationSubmittedLogCount);
   let nodes = await selectInitiationReviewNodes(projectId);
   assert.equal(nodes.length, 3);
   assertInitiationNodeStatus(nodes, 'business_review', 'pending');
@@ -784,11 +1261,95 @@ async function runInitiationReviewSmoke({
     departmentUser(9101, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER),
     projectId
   );
+  await pool.execute(
+    `UPDATE project_stage_documents
+     SET responsible_user_id = ?
+     WHERE project_id = ?
+       AND document_code = '1.3'`,
+    [marketingManagerUser.id, projectId]
+  );
+  const checklistBeforeInitiationApproval = await getProjectStageDocumentChecklist(projectId, marketingManagerUser);
+  const initiationOnlineFormDocumentsBeforeApproval = checklistBeforeInitiationApproval.stages
+    .flatMap((stage) => stage.documents)
+    .filter((document) => ['1.1', '1.2', '1.3'].includes(document.documentCode));
+  assert.equal(initiationOnlineFormDocumentsBeforeApproval.length, 3);
+  for (const onlineFormDocument of initiationOnlineFormDocumentsBeforeApproval) {
+    assert.equal(onlineFormDocument.permissions.canSubmitDocument, false);
+    assert.equal(onlineFormDocument.permissions.canUploadAttachment, false);
+  }
+  const noticeBeforeInitiationApproval = checklistBeforeInitiationApproval.stages
+    .flatMap((stage) => stage.documents)
+    .find((document) => document.documentCode === '1.3');
+  assert.equal(noticeBeforeInitiationApproval.permissions.canSubmitDocument, false);
+  const workbenchBeforeInitiationApproval = await getMyWorkbench(marketingManagerUser);
+  const noticeTodoBeforeInitiationApproval = workbenchBeforeInitiationApproval.items.find(
+    (item) => item.projectId === projectId && item.type === 'document_responsibility' && item.documentCode === '1.3'
+  );
+  assert.ok(noticeTodoBeforeInitiationApproval);
+  assert.equal(noticeTodoBeforeInitiationApproval.permissions.canSubmitDocument, false);
+  assert.equal(noticeTodoBeforeInitiationApproval.actionText.includes('提交'), false);
   await assertInitiationNoticeSubmitGateRejects({
     projectId,
-    user: managerUser,
+    user: marketingManagerUser,
     expectedDetails: ['1.2']
   });
+  const blockedNotice = await resetInitiationNoticeForSubmit(projectId, marketingManagerUser);
+  await assert.rejects(
+    () =>
+      submitStageDocumentOnlineForm({
+        projectId,
+        documentId: blockedNotice.id,
+        user: marketingManagerUser,
+        formData: noticeFormData
+      }),
+    (error) => error.code === 'INITIATION_NOTICE_GATE_NOT_READY' && error.details.includes('1.2')
+  );
+
+  const atomicFailureProjectId = await createInitiationSmokeProject({
+    uniqueSuffix,
+    projectManagerUser: managerUser,
+    createdByUserId: managerUser.id,
+    label: 'atomic-form-submit',
+    smokeProjectIds
+  });
+  const atomicFailureDocument = await selectSmokeDocument(atomicFailureProjectId, '1.2');
+  await pool.execute(
+    `UPDATE project_stage_documents
+     SET responsible_user_id = ?,
+       is_applicable = 0,
+       status = ?
+     WHERE id = ?`,
+    [managerUser.id, DOCUMENT_STATUS.NOT_SUBMITTED, atomicFailureDocument.id]
+  );
+  const atomicFormSubmittedLogBefore = await countOperationLogs({
+    projectId: atomicFailureProjectId,
+    actionType: OPERATION_ACTION_TYPE.FORM_SUBMITTED,
+    targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+    targetId: atomicFailureDocument.id
+  });
+  await assert.rejects(
+    () =>
+      submitStageDocumentOnlineForm({
+        projectId: atomicFailureProjectId,
+        documentId: atomicFailureDocument.id,
+        user: managerUser,
+        formData: initiationFormData
+      }),
+    (error) => error.code === 'STAGE_DOCUMENT_NOT_APPLICABLE'
+  );
+  const atomicFailureFormRow = await selectOnlineFormRow(atomicFailureDocument.id);
+  const atomicFailureDocumentAfter = await selectSmokeDocument(atomicFailureProjectId, '1.2');
+  const atomicFailureNodes = await selectInitiationReviewNodes(atomicFailureProjectId);
+  assert.equal(atomicFailureFormRow, null);
+  assert.equal(atomicFailureDocumentAfter.status, DOCUMENT_STATUS.NOT_SUBMITTED);
+  assertInitiationNodeStatus(atomicFailureNodes, 'business_review', 'waiting_document_submission');
+  assertInitiationNodeStatus(atomicFailureNodes, 'technical_review', 'waiting_document_submission');
+  assert.equal(await countOperationLogs({
+    projectId: atomicFailureProjectId,
+    actionType: OPERATION_ACTION_TYPE.FORM_SUBMITTED,
+    targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+    targetId: atomicFailureDocument.id
+  }), atomicFormSubmittedLogBefore);
 
   await assert.rejects(
     () =>
@@ -825,12 +1386,23 @@ async function runInitiationReviewSmoke({
     (error) => error.code === 'FORBIDDEN_OPERATION'
   );
 
+  await assert.rejects(
+    () =>
+      approveInitiationReviewNode({
+        projectId,
+        documentId: initiationDocument.id,
+        nodeKey: 'business_review',
+        user: marketingManagerUser,
+        comment: ''
+      }),
+    (error) => error.code === 'INITIATION_EVALUATION_TEXT_REQUIRED'
+  );
   await approveInitiationReviewNode({
     projectId,
     documentId: initiationDocument.id,
     nodeKey: 'business_review',
     user: marketingManagerUser,
-    comment: 'business only'
+    comment: 'marketing evaluation'
   });
   const checklistAfterBusiness = await getProjectStageDocumentChecklist(projectId, managerUser);
   const initiationAfterBusiness = checklistAfterBusiness.stages
@@ -854,9 +1426,22 @@ async function runInitiationReviewSmoke({
     (error) => error instanceof ProjectCodeUpdateError && error.code === 'PROJECT_CODE_GATE_NOT_READY'
   );
   await assertNoInitiationWorkbenchTask(generalManagerUser, projectId, 'general_review');
+  await assert.rejects(
+    () =>
+      approveInitiationReviewNode({
+        projectId,
+        documentId: initiationDocument.id,
+        nodeKey: 'general_review',
+        user: generalManagerUser,
+        comment: 'too early'
+      }),
+    (error) =>
+      error.code === 'INVALID_INITIATION_REVIEW_NODE_STATUS' ||
+      error.code === 'INITIATION_REVIEW_PREREQUISITE_NOT_READY'
+  );
   await assertInitiationNoticeSubmitGateRejects({
     projectId,
-    user: managerUser,
+    user: marketingManagerUser,
     expectedDetails: ['1.2']
   });
 
@@ -865,14 +1450,25 @@ async function runInitiationReviewSmoke({
     documentId: initiationDocument.id,
     nodeKey: 'technical_review',
     user: managerUser,
-    comment: 'technical approval'
+    comment: 'rd evaluation'
   });
   await assertHasInitiationWorkbenchTask(generalManagerUser, projectId, 'general_review');
   await assertInitiationNoticeSubmitGateRejects({
     projectId,
-    user: managerUser,
+    user: marketingManagerUser,
     expectedDetails: ['1.2']
   });
+  await assert.rejects(
+    () =>
+      approveInitiationReviewNode({
+        projectId,
+        documentId: initiationDocument.id,
+        nodeKey: 'general_review',
+        user: managerUser,
+        comment: 'unauthorized general approval'
+      }),
+    (error) => error.code === 'FORBIDDEN_OPERATION'
+  );
   await approveInitiationReviewNode({
     projectId,
     documentId: initiationDocument.id,
@@ -885,6 +1481,26 @@ async function runInitiationReviewSmoke({
     .flatMap((stage) => stage.documents)
     .find((document) => document.documentCode === '1.2');
   assert.equal(initiationAfterAll.isComplete, true);
+  const checklistAfterAllForMarketing = await getProjectStageDocumentChecklist(projectId, marketingManagerUser);
+  const noticeAfterInitiationApproval = checklistAfterAllForMarketing.stages
+    .flatMap((stage) => stage.documents)
+    .find((document) => document.documentCode === '1.3');
+  assert.equal(noticeAfterInitiationApproval.permissions.canSubmitDocument, false);
+  await pool.execute(
+    `UPDATE project_stage_documents
+     SET responsible_user_id = ?,
+       status = ?
+     WHERE project_id = ?
+       AND document_code = '1.3'`,
+    [marketingManagerUser.id, DOCUMENT_STATUS.NOT_SUBMITTED, projectId]
+  );
+  const workbenchAfterInitiationApproval = await getMyWorkbench(marketingManagerUser);
+  const noticeTodoAfterInitiationApproval = workbenchAfterInitiationApproval.items.find(
+    (item) => item.projectId === projectId && item.type === 'document_responsibility' && item.documentCode === '1.3'
+  );
+  assert.ok(noticeTodoAfterInitiationApproval);
+  assert.equal(noticeTodoAfterInitiationApproval.permissions.canSubmitDocument, false);
+  assert.match(noticeTodoAfterInitiationApproval.actionText, /在线表单/);
   await pool.execute(
     `UPDATE project_stage_documents
      SET revision_required = 1,
@@ -896,10 +1512,17 @@ async function runInitiationReviewSmoke({
        revision_resubmitted_at = NULL,
        revision_completed_by_user_id = NULL,
        revision_completed_at = NULL
-     WHERE project_id = ?
-       AND document_code = '1.1'`,
+      WHERE project_id = ?
+        AND document_code = '1.1'`,
     ['project-code gate rework smoke', initiationDocument.id, marketingManagerUser.id, projectId]
   );
+  const workbenchWithRequirementRework = await getMyWorkbench(marketingManagerUser);
+  const noticeTodoWithRequirementRework = workbenchWithRequirementRework.items.find(
+    (item) => item.projectId === projectId && item.type === 'document_responsibility' && item.documentCode === '1.3'
+  );
+  assert.ok(noticeTodoWithRequirementRework);
+  assert.equal(noticeTodoWithRequirementRework.permissions.canSubmitDocument, false);
+  assert.equal(noticeTodoWithRequirementRework.actionText.includes('提交'), false);
   await assert.rejects(
     () =>
       updateProjectCode({
@@ -915,7 +1538,7 @@ async function runInitiationReviewSmoke({
   );
   await assertInitiationNoticeSubmitGateRejects({
     projectId,
-    user: managerUser,
+    user: marketingManagerUser,
     expectedDetails: ['1.1']
   });
   await pool.execute(
@@ -930,10 +1553,91 @@ async function runInitiationReviewSmoke({
        revision_completed_by_user_id = NULL,
        revision_completed_at = NULL
       WHERE project_id = ?
-        AND document_code = '1.1'`,
+         AND document_code = '1.1'`,
     [projectId]
   );
-  await submitInitiationNoticeAfterGateReady(projectId, managerUser);
+  const gateReadyNotice = await resetInitiationNoticeForSubmit(projectId, marketingManagerUser);
+  await assert.rejects(
+    () =>
+      submitStageDocumentOnlineForm({
+        projectId,
+        documentId: gateReadyNotice.id,
+        user: managerUser,
+        formData: noticeFormData
+      }),
+    (error) => error.code === 'FORBIDDEN_OPERATION'
+  );
+  await assertOrdinaryOnlineFormDocumentSubmitRejected({
+    projectId,
+    documentCode: '1.3',
+    user: marketingManagerUser
+  });
+  const submittedNotice = await submitInitiationNoticeAfterGateReady(projectId, marketingManagerUser);
+  const submittedNoticeGet = await getStageDocumentOnlineForm({
+    projectId,
+    documentId: submittedNotice.id,
+    user: marketingManagerUser
+  });
+  assert.equal(submittedNoticeGet.permissions.canEdit, false);
+  assert.equal(submittedNoticeGet.permissions.canSubmit, false);
+  assert.ok(submittedNoticeGet.blockingReasons.some((reason) => String(reason).includes('submitted')));
+  const submittedNoticeFormRow = await selectOnlineFormRow(submittedNotice.id);
+  const submittedNoticeFormData = parseFormDataJson(submittedNoticeFormRow);
+  const noticeFormUpdatedLogCount = await countOperationLogs({
+    projectId,
+    actionType: OPERATION_ACTION_TYPE.FORM_UPDATED,
+    targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+    targetId: submittedNotice.id
+  });
+  const noticeFormSubmittedLogCount = await countOperationLogs({
+    projectId,
+    actionType: OPERATION_ACTION_TYPE.FORM_SUBMITTED,
+    targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+    targetId: submittedNotice.id
+  });
+  await assert.rejects(
+    () =>
+      saveStageDocumentOnlineForm({
+        projectId,
+        documentId: submittedNotice.id,
+        user: marketingManagerUser,
+        formData: {
+          ...noticeFormData,
+          noticeContent: 'tampered notice after submit'
+        }
+      }),
+    (error) => error.code === 'FORM_DOCUMENT_NOT_EDITABLE' && error.statusCode === 409
+  );
+  await assert.rejects(
+    () =>
+      submitStageDocumentOnlineForm({
+        projectId,
+        documentId: submittedNotice.id,
+        user: marketingManagerUser,
+        formData: {
+          ...noticeFormData,
+          noticeContent: 'duplicate notice submit should fail'
+        }
+      }),
+    (error) => error.code === 'FORM_DOCUMENT_NOT_EDITABLE' && error.statusCode === 409
+  );
+  const noticeFormAfterRejectedMutation = await selectOnlineFormRow(submittedNotice.id);
+  const noticeDocumentAfterRejectedMutation = await selectSmokeDocument(projectId, '1.3');
+  assert.equal(noticeFormAfterRejectedMutation.status, 'submitted');
+  assert.deepEqual(parseFormDataJson(noticeFormAfterRejectedMutation), submittedNoticeFormData);
+  assert.equal(noticeDocumentAfterRejectedMutation.status, DOCUMENT_STATUS.SUBMITTED);
+  assert.equal(await countOperationLogs({
+    projectId,
+    actionType: OPERATION_ACTION_TYPE.FORM_UPDATED,
+    targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+    targetId: submittedNotice.id
+  }), noticeFormUpdatedLogCount);
+  assert.equal(await countOperationLogs({
+    projectId,
+    actionType: OPERATION_ACTION_TYPE.FORM_SUBMITTED,
+    targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+    targetId: submittedNotice.id
+  }), noticeFormSubmittedLogCount);
   await assert.rejects(
     () =>
       updateProjectCode({
@@ -961,38 +1665,25 @@ async function runInitiationReviewSmoke({
   await approveInitiationReviewNode({
     projectId: returnProjectId,
     documentId: returnInitiationDocument.id,
+    nodeKey: 'business_review',
+    user: marketingManagerUser,
+    comment: 'marketing evaluation before return'
+  });
+  await approveInitiationReviewNode({
+    projectId: returnProjectId,
+    documentId: returnInitiationDocument.id,
     nodeKey: 'technical_review',
     user: managerUser,
-    comment: 'technical retained'
+    comment: 'rd evaluation before return'
   });
-  const checklistAfterTechnicalOnly = await getProjectStageDocumentChecklist(returnProjectId, managerUser);
-  const initiationAfterTechnicalOnly = checklistAfterTechnicalOnly.stages
-    .flatMap((stage) => stage.documents)
-    .find((document) => document.documentCode === '1.2');
-  assert.equal(initiationAfterTechnicalOnly.isComplete, false);
-  await assert.rejects(
-    () => advanceProjectStage(returnProjectId, managerUser),
-    (error) =>
-      error instanceof ProjectStageAdvanceError &&
-      error.code === 'PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE' &&
-      error.details.incompleteRequiredDocuments.some((document) => document.documentCode === '1.2')
-  );
-  await assert.rejects(
-    () =>
-      updateProjectCode({
-        projectId: returnProjectId,
-        projectCode: `SMOKE-INIT-TECH-ONLY-${uniqueSuffix}`,
-        user: managerUser
-      }),
-    (error) => error instanceof ProjectCodeUpdateError && error.code === 'PROJECT_CODE_GATE_NOT_READY'
-  );
+  await assertHasInitiationWorkbenchTask(generalManagerUser, returnProjectId, 'general_review');
   await assert.rejects(
     () =>
       returnInitiationReviewNode({
         projectId: returnProjectId,
         documentId: returnInitiationDocument.id,
-        nodeKey: 'business_review',
-        user: marketingManagerUser,
+        nodeKey: 'general_review',
+        user: generalManagerUser,
         returnReason: ''
       }),
     (error) => error.code === 'RETURN_REASON_REQUIRED'
@@ -1002,7 +1693,7 @@ async function runInitiationReviewSmoke({
       returnInitiationReviewNode({
         projectId: returnProjectId,
         documentId: returnInitiationDocument.id,
-        nodeKey: 'business_review',
+        nodeKey: 'general_review',
         user: departmentUser(9103, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER),
         returnReason: 'unauthorized return should fail'
       }),
@@ -1011,9 +1702,9 @@ async function runInitiationReviewSmoke({
   const returnedNodeDocument = await returnInitiationReviewNode({
     projectId: returnProjectId,
     documentId: returnInitiationDocument.id,
-    nodeKey: 'business_review',
-    user: marketingManagerUser,
-    returnReason: 'business return to 1.1'
+    nodeKey: 'general_review',
+    user: generalManagerUser,
+    returnReason: 'general return to 1.1 and 1.2 refill'
   });
   assert.equal(returnedNodeDocument.initiationReview.blockedByRework, true);
   assert.ok(
@@ -1027,12 +1718,116 @@ async function runInitiationReviewSmoke({
   assert.equal(Boolean(returnedRequirement.revision_required), true);
   assert.equal(String(returnedRequirement.revision_source_document_id), String(returnInitiationDocument.id));
   assert.equal(Boolean(returnedInitiation.revision_required), false);
-  assert.equal(returnedInitiation.status, DOCUMENT_STATUS.SUBMITTED);
-  assertInitiationNodeStatus(nodes, 'business_review', 'returned_blocked_by_rework');
-  assertInitiationNodeStatus(nodes, 'technical_review', 'approved');
-  assert.ok(['waiting_prerequisite', 'invalidated'].includes(
-    nodes.find((node) => node.node_key === 'general_review').node_status
-  ));
+  assert.equal(returnedInitiation.status, DOCUMENT_STATUS.RETURNED);
+  assert.equal(String(returnedInitiation.responsible_user_id), String(managerUser.id));
+  assertInitiationNodeStatus(nodes, 'business_review', 'waiting_document_submission');
+  assertInitiationNodeStatus(nodes, 'technical_review', 'waiting_document_submission');
+  assertInitiationNodeStatus(nodes, 'general_review', 'returned_blocked_by_rework');
+  await assertNoInitiationWorkbenchTask(marketingManagerUser, returnProjectId, 'business_review');
+  await assertNoInitiationWorkbenchTask(managerUser, returnProjectId, 'technical_review');
+  await assertNoInitiationWorkbenchTask(generalManagerUser, returnProjectId, 'general_review');
+  const blockedInitiationForm = await getStageDocumentOnlineForm({
+    projectId: returnProjectId,
+    documentId: returnInitiationDocument.id,
+    user: managerUser
+  });
+  assert.equal(blockedInitiationForm.permissions.canEdit, false);
+  assert.equal(blockedInitiationForm.permissions.canSubmit, false);
+  assert.ok(
+    blockedInitiationForm.blockingReasons.some((reason) =>
+      String(reason).includes('1.1 项目需求表返工')
+    )
+  );
+  const blockedInitiationFormRowBefore = await selectOnlineFormRow(returnInitiationDocument.id);
+  const blockedInitiationFormDataBefore = parseFormDataJson(blockedInitiationFormRowBefore);
+  const blockedInitiationDocumentBefore = await selectSmokeDocument(returnProjectId, '1.2');
+  const blockedInitiationNodesBefore = await selectInitiationReviewNodes(returnProjectId);
+  const blockedInitiationFormUpdatedLogsBefore = await countOperationLogs({
+    projectId: returnProjectId,
+    actionType: OPERATION_ACTION_TYPE.FORM_UPDATED,
+    targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+    targetId: returnInitiationDocument.id
+  });
+  const blockedInitiationFormSubmittedLogsBefore = await countOperationLogs({
+    projectId: returnProjectId,
+    actionType: OPERATION_ACTION_TYPE.FORM_SUBMITTED,
+    targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+    targetId: returnInitiationDocument.id
+  });
+  const blockedInitiationDocumentSubmittedLogsBefore = await countDocumentSubmittedLogs(
+    returnProjectId,
+    returnInitiationDocument.id
+  );
+  const blockedInitiationReviewSubmittedLogsBefore = await countOperationLogs({
+    projectId: returnProjectId,
+    actionType: OPERATION_ACTION_TYPE.INITIATION_REVIEW_SUBMITTED,
+    targetType: OPERATION_TARGET_TYPE.INITIATION_REVIEW,
+    targetId: returnInitiationDocument.id
+  });
+  await assert.rejects(
+    () =>
+      saveStageDocumentOnlineForm({
+        projectId: returnProjectId,
+        documentId: returnInitiationDocument.id,
+        user: managerUser,
+        formData: {
+          ...initiationFormData,
+          projectOverview: 'blocked refill before 1.1 rework clear'
+        }
+      }),
+    (error) =>
+      error.code === 'INITIATION_REWORK_NOT_CLEARED' &&
+      error.statusCode === 409 &&
+      error.details?.requirementDocumentCode === '1.1' &&
+      error.details?.initiationDocumentCode === '1.2'
+  );
+  await assert.rejects(
+    () =>
+      submitStageDocumentOnlineForm({
+        projectId: returnProjectId,
+        documentId: returnInitiationDocument.id,
+        user: managerUser,
+        formData: {
+          ...initiationFormData,
+          projectOverview: 'blocked submit before 1.1 rework clear'
+        }
+      }),
+    (error) =>
+      error.code === 'INITIATION_REWORK_NOT_CLEARED' &&
+      error.statusCode === 409 &&
+      error.details?.requirementDocumentCode === '1.1' &&
+      error.details?.initiationDocumentCode === '1.2'
+  );
+  const blockedInitiationFormRowAfter = await selectOnlineFormRow(returnInitiationDocument.id);
+  assert.equal(blockedInitiationFormRowAfter.status, blockedInitiationFormRowBefore.status);
+  assert.deepEqual(parseFormDataJson(blockedInitiationFormRowAfter), blockedInitiationFormDataBefore);
+  assert.equal((await selectSmokeDocument(returnProjectId, '1.2')).status, blockedInitiationDocumentBefore.status);
+  assert.deepEqual(
+    (await selectInitiationReviewNodes(returnProjectId)).map((node) => [node.node_key, node.node_status]),
+    blockedInitiationNodesBefore.map((node) => [node.node_key, node.node_status])
+  );
+  assert.equal(await countOperationLogs({
+    projectId: returnProjectId,
+    actionType: OPERATION_ACTION_TYPE.FORM_UPDATED,
+    targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+    targetId: returnInitiationDocument.id
+  }), blockedInitiationFormUpdatedLogsBefore);
+  assert.equal(await countOperationLogs({
+    projectId: returnProjectId,
+    actionType: OPERATION_ACTION_TYPE.FORM_SUBMITTED,
+    targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+    targetId: returnInitiationDocument.id
+  }), blockedInitiationFormSubmittedLogsBefore);
+  assert.equal(
+    await countDocumentSubmittedLogs(returnProjectId, returnInitiationDocument.id),
+    blockedInitiationDocumentSubmittedLogsBefore
+  );
+  assert.equal(await countOperationLogs({
+    projectId: returnProjectId,
+    actionType: OPERATION_ACTION_TYPE.INITIATION_REVIEW_SUBMITTED,
+    targetType: OPERATION_TARGET_TYPE.INITIATION_REVIEW,
+    targetId: returnInitiationDocument.id
+  }), blockedInitiationReviewSubmittedLogsBefore);
   await assert.rejects(
     () =>
       approveInitiationReviewNode({
@@ -1041,7 +1836,10 @@ async function runInitiationReviewSmoke({
         nodeKey: 'business_review',
         user: marketingManagerUser
       }),
-    (error) => error.code === 'INITIATION_REVIEW_REWORK_BLOCKED' || error.code === 'INVALID_INITIATION_REVIEW_NODE_STATUS'
+    (error) =>
+      error.code === 'INITIATION_REWORK_NOT_CLEARED' ||
+      error.code === 'INVALID_INITIATION_REVIEW_NODE_STATUS' ||
+      error.code === 'INITIATION_REVIEW_DOCUMENT_NOT_SUBMITTED'
   );
   await assert.rejects(
     () => advanceProjectStage(returnProjectId, managerUser),
@@ -1061,69 +1859,165 @@ async function runInitiationReviewSmoke({
   );
   await pool.execute(
     'UPDATE project_stage_documents SET responsible_user_id = ? WHERE id = ?',
-    [managerUser.id, returnedRequirement.id]
+      [managerUser.id, returnedRequirement.id]
   );
-  await completeProjectStageDocumentRevision({
+  const reworkWorkbench = await getMyWorkbench(managerUser);
+  const requirementReworkTodo = reworkWorkbench.items.find(
+    (item) =>
+      item.type === 'document_responsibility' &&
+      item.projectId === returnProjectId &&
+      item.documentCode === '1.1'
+  );
+  assert.ok(requirementReworkTodo);
+  assert.equal(requirementReworkTodo.permissions.canSubmitDocument, false);
+  assert.match(requirementReworkTodo.actionText, /在线表单/);
+  assert.equal(/提交资料|完成返工|返工重提/.test(requirementReworkTodo.actionText), false);
+  const initiationRefillTodo = reworkWorkbench.items.find(
+    (item) =>
+      item.type === 'document_responsibility' &&
+      item.projectId === returnProjectId &&
+      item.documentCode === '1.2'
+  );
+  assert.ok(initiationRefillTodo);
+  assert.equal(initiationRefillTodo.permissions.canSubmitDocument, false);
+  assert.match(initiationRefillTodo.actionText, /在线表单/);
+  assert.match(initiationRefillTodo.actionText, /前置状态/);
+  assert.equal(/提交资料|完成返工|返工重提/.test(initiationRefillTodo.actionText), false);
+  const revisionCompletedLogCountBefore = await countOperationLogs({
+    projectId: returnProjectId,
+    actionType: OPERATION_ACTION_TYPE.DOCUMENT_REVISION_COMPLETED,
+    targetType: OPERATION_TARGET_TYPE.STAGE_DOCUMENT,
+    targetId: returnedRequirement.id
+  });
+  const nodesBeforeRejectedRevisionComplete = await selectInitiationReviewNodes(returnProjectId);
+  await assert.rejects(
+    () =>
+      completeProjectStageDocumentRevision({
+        projectId: returnProjectId,
+        documentId: returnedRequirement.id,
+        user: managerUser
+      }),
+    (error) =>
+      error.code === 'ONLINE_FORM_REVISION_COMPLETION_REQUIRED' &&
+      error.statusCode === 409 &&
+      error.details?.documentId === returnedRequirement.id &&
+      error.details?.documentCode === '1.1'
+  );
+  assert.equal((await selectSmokeDocument(returnProjectId, '1.1')).revision_required, 1);
+  assert.equal(
+    await countOperationLogs({
+      projectId: returnProjectId,
+      actionType: OPERATION_ACTION_TYPE.DOCUMENT_REVISION_COMPLETED,
+      targetType: OPERATION_TARGET_TYPE.STAGE_DOCUMENT,
+      targetId: returnedRequirement.id
+    }),
+    revisionCompletedLogCountBefore
+  );
+  assert.deepEqual(
+    (await selectInitiationReviewNodes(returnProjectId)).map((node) => [node.node_key, node.node_status]),
+    nodesBeforeRejectedRevisionComplete.map((node) => [node.node_key, node.node_status])
+  );
+  const requirementReworkFormSubmittedLogCountBefore = await countOperationLogs({
+    projectId: returnProjectId,
+    actionType: OPERATION_ACTION_TYPE.FORM_SUBMITTED,
+    targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+    targetId: returnedRequirement.id
+  });
+  await submitStageDocumentOnlineForm({
     projectId: returnProjectId,
     documentId: returnedRequirement.id,
+    user: managerUser,
+    formData: {
+      ...requirementFormData,
+      projectBackground: 'smoke requirement rework via online form'
+    }
+  });
+  const requirementAfterOnlineRework = await selectSmokeDocument(returnProjectId, '1.1');
+  assert.equal(Boolean(requirementAfterOnlineRework.revision_required), false);
+  assert.equal(String(requirementAfterOnlineRework.revision_completed_by_user_id), String(managerUser.id));
+  assert.ok(requirementAfterOnlineRework.revision_completed_at);
+  assert.equal(
+    await countOperationLogs({
+      projectId: returnProjectId,
+      actionType: OPERATION_ACTION_TYPE.FORM_SUBMITTED,
+      targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
+      targetId: returnedRequirement.id
+    }),
+    requirementReworkFormSubmittedLogCountBefore + 1
+  );
+  assert.equal(
+    await countOperationLogs({
+      projectId: returnProjectId,
+      actionType: OPERATION_ACTION_TYPE.DOCUMENT_REVISION_COMPLETED,
+      targetType: OPERATION_TARGET_TYPE.STAGE_DOCUMENT,
+      targetId: returnedRequirement.id
+    }),
+    revisionCompletedLogCountBefore + 1
+  );
+  nodes = await selectInitiationReviewNodes(returnProjectId);
+  assertInitiationNodeStatus(nodes, 'business_review', 'waiting_document_submission');
+  assertInitiationNodeStatus(nodes, 'technical_review', 'waiting_document_submission');
+  assertInitiationNodeStatus(nodes, 'general_review', 'returned_blocked_by_rework');
+  await assertNoInitiationWorkbenchTask(marketingManagerUser, returnProjectId, 'business_review');
+  const checklistAfterReworkClear = await getProjectStageDocumentChecklist(returnProjectId, managerUser);
+  const initiationAfterReworkClear = checklistAfterReworkClear.stages
+    .flatMap((stage) => stage.documents)
+    .find((document) => document.documentCode === '1.2');
+  assert.equal(initiationAfterReworkClear.isComplete, false);
+  assert.equal(initiationAfterReworkClear.status, DOCUMENT_STATUS.RETURNED);
+  const refillReadyForm = await getStageDocumentOnlineForm({
+    projectId: returnProjectId,
+    documentId: returnInitiationDocument.id,
     user: managerUser
+  });
+  assert.equal(refillReadyForm.permissions.canEdit, true);
+  assert.equal(refillReadyForm.permissions.canSubmit, true);
+  await submitStageDocumentOnlineForm({
+    projectId: returnProjectId,
+    documentId: returnInitiationDocument.id,
+    user: managerUser,
+    formData: {
+      ...initiationFormData,
+      projectOverview: 'smoke project overview after general return'
+    }
   });
   nodes = await selectInitiationReviewNodes(returnProjectId);
   assertInitiationNodeStatus(nodes, 'business_review', 'pending');
-  assertInitiationNodeStatus(nodes, 'technical_review', 'approved');
-  assert.notEqual(
-    nodes.find((node) => node.node_key === 'business_review').node_status,
-    'approved'
-  );
+  assertInitiationNodeStatus(nodes, 'technical_review', 'pending');
+  assertInitiationNodeStatus(nodes, 'general_review', 'waiting_prerequisite');
   await assertHasInitiationWorkbenchTask(marketingManagerUser, returnProjectId, 'business_review');
+  await assertHasInitiationWorkbenchTask(managerUser, returnProjectId, 'technical_review');
   await approveInitiationReviewNode({
     projectId: returnProjectId,
     documentId: returnInitiationDocument.id,
     nodeKey: 'business_review',
     user: marketingManagerUser,
-    comment: 'business rerun approval'
+    comment: 'marketing evaluation rerun'
+  });
+  await approveInitiationReviewNode({
+    projectId: returnProjectId,
+    documentId: returnInitiationDocument.id,
+    nodeKey: 'technical_review',
+    user: managerUser,
+    comment: 'rd evaluation rerun'
   });
   await assertHasInitiationWorkbenchTask(generalManagerUser, returnProjectId, 'general_review');
-  await returnInitiationReviewNode({
+  await approveInitiationReviewNode({
     projectId: returnProjectId,
     documentId: returnInitiationDocument.id,
     nodeKey: 'general_review',
     user: generalManagerUser,
-    returnReason: 'general return preserves parallel'
+    comment: 'general approval after refill'
   });
   nodes = await selectInitiationReviewNodes(returnProjectId);
   assertInitiationNodeStatus(nodes, 'business_review', 'approved');
   assertInitiationNodeStatus(nodes, 'technical_review', 'approved');
-  assertInitiationNodeStatus(nodes, 'general_review', 'returned_blocked_by_rework');
-
-  const technicalReturnProjectId = await createInitiationSmokeProject({
-    uniqueSuffix,
-    projectManagerUser: managerUser,
-    createdByUserId: managerUser.id,
-    label: 'technical-return',
-    smokeProjectIds
-  });
-  const technicalReturnInitiation = await prepareInitiationSmokeBase(technicalReturnProjectId, managerUser);
-  await approveInitiationReviewNode({
-    projectId: technicalReturnProjectId,
-    documentId: technicalReturnInitiation.id,
-    nodeKey: 'business_review',
-    user: marketingManagerUser,
-    comment: 'business retained'
-  });
-  await returnInitiationReviewNode({
-    projectId: technicalReturnProjectId,
-    documentId: technicalReturnInitiation.id,
-    nodeKey: 'technical_review',
-    user: managerUser,
-    returnReason: 'technical return to 1.1'
-  });
-  nodes = await selectInitiationReviewNodes(technicalReturnProjectId);
-  assertInitiationNodeStatus(nodes, 'business_review', 'approved');
-  assertInitiationNodeStatus(nodes, 'technical_review', 'returned_blocked_by_rework');
-  assert.ok(['waiting_prerequisite', 'invalidated'].includes(
-    nodes.find((node) => node.node_key === 'general_review').node_status
-  ));
+  assertInitiationNodeStatus(nodes, 'general_review', 'approved');
+  const checklistAfterReturnRerun = await getProjectStageDocumentChecklist(returnProjectId, managerUser);
+  const initiationAfterReturnRerun = checklistAfterReturnRerun.stages
+    .flatMap((stage) => stage.documents)
+    .find((document) => document.documentCode === '1.2');
+  assert.equal(initiationAfterReturnRerun.isComplete, true);
 
   const notSubmittedProjectId = await createInitiationSmokeProject({
     uniqueSuffix,
@@ -1139,7 +2033,7 @@ async function runInitiationReviewSmoke({
   await assertNoInitiationWorkbenchTask(managerUser, notSubmittedProjectId, 'technical_review');
   await assertInitiationNoticeSubmitGateRejects({
     projectId: notSubmittedProjectId,
-    user: managerUser,
+    user: marketingManagerUser,
     expectedDetails: ['1.2']
   });
 
@@ -1181,6 +2075,19 @@ async function runInitiationReviewSmoke({
   assert.equal(nodes.length, 3);
   assertInitiationNodeStatus(nodes, 'business_review', 'pending');
   assertInitiationNodeStatus(nodes, 'technical_review', 'pending');
+  await pool.execute(
+    `UPDATE project_initiation_review_nodes
+     SET node_status = ?,
+       comment = NULL,
+       reviewed_by_user_id = ?
+     WHERE project_id = ?`,
+    ['approved', generalManagerUser.id, legacyProjectId]
+  );
+  const legacyChecklist = await getProjectStageDocumentChecklist(legacyProjectId, managerUser);
+  const legacyInitiation = legacyChecklist.stages
+    .flatMap((stage) => stage.documents)
+    .find((document) => document.documentCode === '1.2');
+  assert.equal(legacyInitiation.isComplete, false);
   await assert.rejects(
     () => advanceProjectStage(legacyProjectId, managerUser),
     (error) =>
@@ -1223,11 +2130,11 @@ async function runInitiationReviewSmoke({
   assertInitiationNodeStatus(nodes, 'technical_review', 'waiting_document_submission');
   await assertNoInitiationWorkbenchTask(marketingManagerUser, returnedBaseProjectId, 'business_review');
   const returnedBaseInitiation = await selectSmokeDocument(returnedBaseProjectId, '1.2');
-  await updateProjectStageDocumentStatus({
+  await submitStageDocumentOnlineForm({
     projectId: returnedBaseProjectId,
     documentId: returnedBaseInitiation.id,
-    action: DOCUMENT_STATUS_ACTION.SUBMIT,
-    user: managerUser
+    user: managerUser,
+    formData: initiationFormData
   });
   nodes = await selectInitiationReviewNodes(returnedBaseProjectId);
   assertInitiationNodeStatus(nodes, 'business_review', 'pending');
@@ -1240,17 +2147,30 @@ async function runInitiationReviewSmoke({
     `SELECT action_type AS actionType, COUNT(*) AS count
      FROM business_operation_logs
      WHERE project_id IN (?, ?)
-       AND action_type LIKE 'initiation_review.%'
+       AND action_type IN (?, ?, ?, ?, ?, ?, ?, ?)
      GROUP BY action_type`,
-    [projectId, returnProjectId]
+    [
+      projectId,
+      returnProjectId,
+      'initiation_review.submitted',
+      'initiation.evaluation.submitted',
+      'initiation.approval.approved',
+      'initiation.approval.returned',
+      'initiation_review.completed',
+      'form.updated',
+      'form.submitted',
+      'document.revision_requested'
+    ]
   );
   const logCounts = Object.fromEntries(logRows.map((row) => [row.actionType, Number(row.count)]));
   assert.ok(logCounts['initiation_review.submitted'] >= 2);
-  assert.ok(logCounts['initiation_review.business_approved'] >= 1);
-  assert.ok(logCounts['initiation_review.technical_approved'] >= 2);
-  assert.ok(logCounts['initiation_review.business_returned'] >= 1);
-  assert.ok(logCounts['initiation_review.general_returned'] >= 1);
-  assert.ok(logCounts['initiation_review.completed'] >= 1);
+  assert.ok(logCounts['initiation.evaluation.submitted'] >= 6);
+  assert.ok(logCounts['initiation.approval.approved'] >= 2);
+  assert.ok(logCounts['initiation.approval.returned'] >= 1);
+  assert.ok(logCounts['initiation_review.completed'] >= 2);
+  assert.ok(logCounts['form.updated'] >= 1);
+  assert.ok(logCounts['form.submitted'] >= 4);
+  assert.ok(logCounts['document.revision_requested'] >= 1);
 }
 
 async function runProjectLifecycleSmoke() {
@@ -1320,11 +2240,27 @@ async function runProjectLifecycleSmoke() {
     });
     smokeUserIds.push(generalManagerAssistantUser.id);
 
+    const lightweightProjectInput = normalizeCreateProjectInput({
+      projectName: `轻量创建 smoke ${uniqueSuffix}`,
+      customerName: 'Smoke 轻量客户',
+      customerContact: '13800000005'
+    });
+    const lightweightCreated = await createProject(lightweightProjectInput, marketingManagerUser.id);
+    const lightweightProjectId = lightweightCreated.project.id;
+    smokeProjectIds.push(lightweightProjectId);
+    assert.equal(lightweightCreated.project.projectCode, null);
+    assert.equal(lightweightCreated.project.customerContact, '13800000005');
+    assert.equal(lightweightCreated.project.projectManagerUserId, null);
+    assert.equal(lightweightCreated.project.projectMode, null);
+    assert.equal(lightweightCreated.stages.length, 8);
+    assert.equal((await countSmokeProjectObjects(lightweightProjectId)).documents, EXPECTED_STAGE_DOCUMENT_ITEM_COUNT);
+
     const createdA = await createProject(
       {
         projectCode: null,
         projectName: `空编号 smoke A ${uniqueSuffix}`,
         customerName: 'Smoke 客户',
+        customerContact: '13800000001',
         projectMode: 'self_developed',
         projectManagerUserId: managerUser.id,
         participatingDepartments: [RD_CENTER],
@@ -1344,6 +2280,7 @@ async function runProjectLifecycleSmoke() {
         projectCode: null,
         projectName: `空编号 smoke B ${uniqueSuffix}`,
         customerName: 'Smoke 客户',
+        customerContact: '13800000002',
         projectMode: 'self_developed',
         projectManagerUserId: managerUser.id,
         participatingDepartments: [RD_CENTER],
@@ -1363,6 +2300,7 @@ async function runProjectLifecycleSmoke() {
         projectCode: null,
         projectName: `创建人可见 smoke ${uniqueSuffix}`,
         customerName: 'Smoke 客户',
+        customerContact: '13800000003',
         projectMode: 'self_developed',
         projectManagerUserId: managerUser.id,
         participatingDepartments: [RD_CENTER],
@@ -1381,6 +2319,7 @@ async function runProjectLifecycleSmoke() {
         projectCode: null,
         projectName: `受限总览 smoke ${uniqueSuffix}`,
         customerName: 'Smoke 客户',
+        customerContact: '13800000004',
         projectMode: 'self_developed',
         projectManagerUserId: managerUser.id,
         participatingDepartments: [RD_CENTER],
@@ -1422,6 +2361,7 @@ async function runProjectLifecycleSmoke() {
       smokeProjectIds,
       smokeUserIds,
       managerUser,
+      limitedEmployeeUser,
       marketingManagerUser,
       generalManagerUser,
       systemAdminUser: smokeSystemAdminUser
@@ -1520,29 +2460,29 @@ async function runProjectLifecycleSmoke() {
     assert.equal(unassignedForAssistant.canUploadAttachment, false);
     assert.equal(unassignedForAssistant.canDownloadAttachment, true);
     assert.equal(unassignedForAssistant.canSubmitDocument, false);
-    await assertStageDocumentSubmitForbidden({
+    await assertOrdinaryOnlineFormDocumentSubmitRejected({
       projectId: projectAId,
-      documentId: unassignedSubmitDocument.id,
+      documentCode: '1.1',
       user: managerUser
     });
-    await assertStageDocumentSubmitForbidden({
+    await assertOrdinaryOnlineFormDocumentSubmitRejected({
       projectId: projectAId,
-      documentId: unassignedSubmitDocument.id,
+      documentCode: '1.1',
       user: generalManagerUser
     });
-    await assertStageDocumentSubmitForbidden({
+    await assertOrdinaryOnlineFormDocumentSubmitRejected({
       projectId: projectAId,
-      documentId: unassignedSubmitDocument.id,
+      documentCode: '1.1',
       user: marketingManagerUser
     });
-    await assertStageDocumentSubmitForbidden({
+    await assertOrdinaryOnlineFormDocumentSubmitRejected({
       projectId: projectAId,
-      documentId: unassignedSubmitDocument.id,
+      documentCode: '1.1',
       user: generalManagerAssistantUser
     });
-    await assertStageDocumentSubmitForbidden({
+    await assertOrdinaryOnlineFormDocumentSubmitRejected({
       projectId: projectAId,
-      documentId: unassignedSubmitDocument.id,
+      documentCode: '1.1',
       user: smokeSystemAdminUser
     });
     const unchangedUnassignedSubmitDocument = await selectSmokeDocument(projectAId, '1.1');
@@ -1678,13 +2618,13 @@ async function runProjectLifecycleSmoke() {
       (error) => error.code === 'FORBIDDEN_OPERATION'
     );
 
-    const attachmentDocument = await selectSmokeDocument(projectAId, '1.1');
+    const attachmentDocument = await selectSmokeDocument(projectAId, '2.1');
     await pool.execute(
       'UPDATE project_stage_documents SET responsible_user_id = ? WHERE id = ?',
       [managerUser.id, attachmentDocument.id]
     );
     const managerResponsibleChecklist = await getProjectStageDocumentChecklist(projectAId, managerUser);
-    const managerResponsibleDocument = findChecklistDocument(managerResponsibleChecklist, '1.1');
+    const managerResponsibleDocument = findChecklistDocument(managerResponsibleChecklist, '2.1');
     assert.equal(managerResponsibleDocument.canUploadAttachment, true);
     assert.equal(managerResponsibleDocument.canSubmitDocument, true);
     const uploadedAttachment = await uploadStageDocumentAttachment({
@@ -2449,6 +3389,7 @@ assert.equal(
   normalizeCreateProjectInput({
     projectName: '空编号项目',
     customerName: '客户',
+    customerContact: '13800000000',
     projectManagerUserId: '1'
   }).projectCode,
   null
@@ -2458,6 +3399,7 @@ assert.equal(
     projectCode: '',
     projectName: '空编号项目',
     customerName: '客户',
+    customerContact: '13800000000',
     projectManagerUserId: '1'
   }).projectCode,
   null
@@ -3017,6 +3959,14 @@ assert.equal(canAdvanceProjectStage(systemAdmin, project), false);
 
 const [databaseRows] = await pool.query('SELECT DATABASE() AS currentDatabase');
 assert.equal(databaseRows[0].currentDatabase, 'digital_platform');
+await ensureProjectWorkspaceSchema(pool);
+const projectWorkspaceSchemaStatus = await inspectProjectWorkspaceSchema(pool);
+assert.deepEqual(projectWorkspaceSchemaStatus, {
+  projectsCustomerContact: true,
+  projectsProjectManagerNullable: true,
+  projectsProjectModeNullable: true,
+  projectStageDocumentFormsTable: true
+});
 await ensureStageDocumentSchema(pool);
 await initializeInitiationReviewNodesForExistingProjects(pool);
 

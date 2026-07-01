@@ -20,22 +20,27 @@ export const operationActionText = {
   'document.responsible_changed': '资料责任人变更',
   'document.attachment_uploaded': '资料附件上传',
   'document.attachment_deleted': '资料附件删除',
+  'form.updated': '保存在线表单',
+  'form.submitted': '提交在线表单',
   'approval.submitted': '提交阶段关口审批',
   'approval.center_approved': '中心负责人关口审批通过',
   'approval.center_returned': '中心负责人关口审批退回',
   'approval.general_approved': '总经理关口审批通过',
   'approval.general_returned': '总经理关口审批退回',
   'approval.resubmitted': '重新提交阶段关口审批',
-  'initiation_review.submitted': '启动 1.2 多节点审批',
-  'initiation_review.business_approved': '商务评价审批通过',
-  'initiation_review.business_returned': '商务评价审批退回',
-  'initiation_review.technical_approved': '技术评价审批通过',
-  'initiation_review.technical_returned': '技术评价审批退回',
+  'initiation_review.submitted': '启动 1.2 评价/最终审批',
+  'initiation_review.business_approved': '营销评价提交',
+  'initiation_review.business_returned': '营销评价退回',
+  'initiation_review.technical_approved': '研发评价提交',
+  'initiation_review.technical_returned': '研发评价退回',
   'initiation_review.general_approved': '总经理审批通过',
-  'initiation_review.general_returned': '总经理审批退回',
+  'initiation_review.general_returned': '总经理审批不通过',
   'initiation_review.general_activated': '总经理审批待办生成',
-  'initiation_review.restored': '1.2 审批节点恢复待审',
-  'initiation_review.completed': '1.2 多节点审批最终完成',
+  'initiation_review.restored': '1.2 节点恢复待审',
+  'initiation_review.completed': '1.2 评价与最终审批完成',
+  'initiation.evaluation.submitted': '1.2 评价提交',
+  'initiation.approval.approved': '1.2 总经理审批通过',
+  'initiation.approval.returned': '1.2 总经理审批不通过',
   'stage.advanced': '阶段推进',
   'project.completed': '项目完成'
 };
@@ -73,6 +78,10 @@ export function isReviewCompletionMode(document) {
 export function isSubmitCompletionMode(document) {
   const completionMode = getCompletionMode(document);
   return completionMode === 'submit_only' || completionMode === 'conditional_submit';
+}
+
+export function isInitiationOnlineFormDocument(document) {
+  return ['1.1', '1.2', '1.3'].includes(document?.documentCode ?? document?.document_code);
 }
 
 export function getCompletionStatus(document) {

@@ -15,6 +15,8 @@ import {
 } from '../repositories/projectRepository.js';
 import { OperationLogLimitError } from '../repositories/operationLogRepository.js';
 import {
+  StageDocumentFormError,
+  InitiationReviewError,
   StageDocumentNotFoundError,
   StageDocumentResponsibilityError,
   StageDocumentTaskQueryError
@@ -182,6 +184,28 @@ export function errorHandler(error, req, res, next) {
   }
 
   if (error instanceof StageDocumentTaskQueryError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      }
+    });
+    return;
+  }
+
+  if (error instanceof StageDocumentFormError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      }
+    });
+    return;
+  }
+
+  if (error instanceof InitiationReviewError) {
     res.status(error.statusCode).json({
       error: {
         code: error.code,

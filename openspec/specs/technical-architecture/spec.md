@@ -261,71 +261,181 @@ TBD - created by archiving change define-technical-architecture. Update Purpose 
 
 ### Requirement: 1.2 专用多节点审批架构
 
-系统 MUST 使用专用架构规划 `1.2 项目立项审批表` 多节点审批，不得复用 legacy 阶段审批流作为当前主路径，也不得引入通用审批流引擎。
+系统 MUST 使用专用架构规划 `1.2 项目立项审批表` 的评价/最终审批，不得复用 legacy 阶段审批流作为当前主路径，也不得引入通用审批流引擎。该架构 MUST 从旧 approval nodes 口径调整为营销评价、研发评价和总经理最终审批。
 
-#### Scenario: 使用专用节点结构
+#### Scenario: 使用专用评价审批结构
 
-- **WHEN** 后续实现 `1.2 项目立项审批表` 多节点审批
-- **THEN** 系统 SHOULD 新增 `project_initiation_review_nodes` 或等价专用结构保存节点状态
-- **AND** 节点结构 MUST 能表达商务评价、技术评价和总经理审批状态
+- **WHEN** 后续实现 `1.2 项目立项审批表` 评价/审批
+- **THEN** 系统 SHOULD 新增 `project_initiation_evaluations`、`project_initiation_approval`、扩展 `project_initiation_review_nodes` 或等价专用结构保存评价和最终审批状态
+- **AND** 结构 MUST 能表达营销评价文本、研发评价文本、总经理审批结果、意见、操作人和时间
 
-#### Scenario: 节点状态枚举不引入节点提交状态
+#### Scenario: 不再用商务技术通过状态表达评价
 
-- **WHEN** 后续实现 `1.2 项目立项审批表` 专用节点状态
-- **THEN** 节点状态 MUST 至少能表达 `waiting_document_submission`
-- **AND** 节点状态 MUST 能表达 `pending`
-- **AND** 节点状态 MUST 能表达 `approved`
-- **AND** 节点状态 MUST 能表达 `returned_blocked_by_rework`
-- **AND** 节点状态 MUST 能表达 `not_started` 或 `waiting_prerequisite`
-- **AND** 节点状态 MAY 能表达 `invalidated`，用于总经理节点因商务或技术退回而失效
-- **AND** 节点状态 MUST NOT 使用需要前端 `1.2` 节点提交按钮才能继续审批的 `submitted` 状态
-- **AND** `submitted_by_user_id` / `submitted_at` 若保留，MUST 只作为普通 `1.2` 资料提交触发多节点激活的追溯字段
+- **WHEN** 系统保存营销评价或研发评价
+- **THEN** 系统 MUST 保存评价文本、评价人和评价时间
+- **AND** 系统 MUST NOT 要求营销评价或研发评价保存通过/不通过结果
 
-#### Scenario: 既有项目幂等初始化 1.2 审批节点
+#### Scenario: 总经理审批状态
 
-- **WHEN** 后续 migration 或幂等初始化逻辑处理既有项目中适用的 `1.2 项目立项审批表`
-- **THEN** 系统 MUST 为其创建 `business_review`、`technical_review` 和 `general_review` 三类专用节点
-- **AND** 当 `1.2 status = not_submitted` 时，`business_review` 和 `technical_review` MUST 等待资料提交且不得生成审批待办
-- **AND** 当 `1.2 status = submitted` 时，`business_review` 和 `technical_review` MUST 初始化为待处理或可处理状态
-- **AND** 当既有 `1.2 status = confirmed` 时，系统 MUST 将其作为资料已提交过的兼容输入，使 `business_review` 和 `technical_review` 初始化为待处理或可处理状态
-- **AND** 当 `1.2 status = returned` 时，`business_review` 和 `technical_review` MUST 等待普通 `1.2` 资料重新提交且不得生成审批待办
-- **AND** `general_review` MUST 初始化为未开始或等待前置状态，直到商务评价和技术评价均通过
-- **AND** 既有普通 `1.2 status = confirmed` MUST NOT 被回填或解释为多节点最终通过
-- **AND** 旧 confirmed 状态 MUST NOT 绕过第 1 阶段推进或项目编号门禁
+- **WHEN** 系统保存总经理最终审批
+- **THEN** 系统 MUST 保存审批结果、审批意见、审批人和审批时间
+- **AND** 系统 MUST 支持审批通过和审批不通过
 
-#### Scenario: 普通资料提交激活 1.2 节点
+#### Scenario: 总经理审批前置校验
 
-- **WHEN** 普通 `1.2 项目立项审批表` 资料提交或上传使基础状态达到 `submitted`
-- **THEN** 系统 MUST 激活 `business_review` 和 `technical_review` 并进入并行待审批
-- **AND** 第一版 MUST NOT 新增独立节点提交按钮或独立节点提交流程
+- **WHEN** 总经理尝试审批 `1.2 项目立项审批表`
+- **THEN** 后端 MUST 校验营销评价和研发评价均已完成
+- **AND** 后端 MUST 在两项评价完成前拒绝审批动作
+
+#### Scenario: 总经理不通过事务
+
+- **WHEN** 总经理审批不通过 `1.2 项目立项审批表`
+- **THEN** 系统 MUST 在同一事务中保存审批不通过状态、触发 `1.1` 精准返工、标记 `1.2` 需重新填写并记录业务日志
+
+#### Scenario: 项目阶段资料状态仍保留
+
+- **WHEN** 系统保存 `1.2` 评价和审批状态
+- **THEN** `project_stage_documents.status` MUST 仍保留资料基础状态
+- **AND** `1.2` 最终完成 MUST 由基础状态、在线表单、评价、审批和精准返工状态共同派生
 
 #### Scenario: 不复用 legacy 阶段审批主路径
 
-- **WHEN** 系统实现 `1.2` 多节点审批
+- **WHEN** 系统实现 `1.2` 评价/审批
 - **THEN** 系统 MUST NOT 将 legacy 阶段审批流作为当前主路径
 - **AND** legacy 阶段审批历史不得成为第 1 阶段推进或项目编号门禁依据
 
 #### Scenario: 不做通用审批流引擎
 
-- **WHEN** 系统实现 `1.2` 多节点审批
+- **WHEN** 系统实现 `1.2` 评价/审批
 - **THEN** 系统 MUST 将能力限定为 `1.2 项目立项审批表` 专用流程
 - **AND** 系统 MUST NOT 新增 BPM、可视化流程编排、任意节点配置器或通用审批流引擎
 
-#### Scenario: 项目阶段资料状态仍保留
-
-- **WHEN** 系统保存 `1.2` 多节点审批状态
-- **THEN** `project_stage_documents.status` MUST 仍保留资料基础状态
-- **AND** `1.2` 最终完成 MUST 由基础状态、多节点状态和精准返工状态共同派生
-
 #### Scenario: 文件平台仍暂停
 
-- **WHEN** 系统处理 `1.2` 多节点审批、节点日志、精准返工或阶段推进门禁
+- **WHEN** 系统处理 `1.2` 在线表单、评价、审批、业务日志、精准返工或阶段推进门禁
 - **THEN** 系统 MUST NOT 调用文件管理平台 API
 - **AND** 系统 MUST NOT 恢复文件平台 folder mapping、归档状态或文件平台下载入口
 
-#### Scenario: 已确认规则必须按本 change 实现
+### Requirement: 项目阶段节点工作区架构
 
-- **WHEN** 后续实现 `1.2 项目立项审批表` 多节点审批
-- **THEN** 系统 MUST 按本 change 已确认规则实现商务/技术并行、营销中心负责人商务审批、研发中心负责人技术审批、总经理待办后置生成和退回节点及后续节点重跑
-- **AND** 系统 MUST NOT 因这些固定规则引入通用审批流引擎
+系统 MUST 支持以稳定后端配置或稳定枚举提供项目阶段节点视图，并 MUST 将节点状态从关联产出和业务状态派生，而不是为蓝色节点建立独立完成状态。第一版后端节点配置/稳定枚举只必须覆盖立项阶段完整映射；8 阶段导航框架是全局骨架，不等同于 8 阶段全部节点映射一次性完成。
+
+#### Scenario: 节点配置来源
+- **WHEN** 后端提供项目工作区阶段节点视图
+- **THEN** 系统 MUST 使用后端配置、稳定枚举或等价受控结构表达 8 阶段导航框架和已配置节点
+- **AND** 系统 MUST NOT 依赖前端硬编码完整业务流程作为权威来源
+
+#### Scenario: 节点到产出映射
+- **WHEN** 后端返回节点工作区数据
+- **THEN** 系统 MUST 返回节点与一个或多个阶段资料产出的映射
+- **AND** 第一版 MUST 支持立项阶段节点到 `1.1`、`1.2`、`1.3` 的映射
+
+#### Scenario: 其他阶段映射可暂缺
+- **WHEN** 后端返回方案设计、合同签订、详细设计、生产制作、预验收、终验收或结题阶段的节点视图
+- **THEN** 这些阶段的节点映射 MAY 为空、占位或指向旧资料清单入口
+- **AND** 系统 MUST NOT 要求本 change 一次性补齐其他 7 个阶段的全部节点和产出映射
+- **AND** 后续阶段节点和产出映射 MUST 通过后续 change 逐步补齐
+
+#### Scenario: 节点状态派生
+- **WHEN** 系统计算节点状态
+- **THEN** 系统 MUST 从阶段资料项、在线表单、评价/审批记录、精准返工和 `completionMode` 派生状态
+- **AND** 系统 MUST NOT 为蓝色节点保存独立完成状态
+
+#### Scenario: 节点状态派生第一版范围
+- **WHEN** 系统实现节点状态派生逻辑
+- **THEN** 第一版只 MUST 完整覆盖立项阶段节点状态派生规则
+- **AND** 系统 MUST NOT 因其他阶段节点状态派生尚未完整实现而阻塞立项阶段规则
+
+#### Scenario: 节点视图不替代资料清单
+- **WHEN** 系统实现项目工作区
+- **THEN** 系统 MUST 保留 64 项阶段资料作为产出数据底座
+- **AND** 系统 MUST NOT 建立脱离阶段资料体系的第二套产出状态
+
+### Requirement: 在线表单架构规划
+
+系统 MUST 为立项阶段在线表单规划 schema、表单数据、提交记录和权限校验能力，并 MUST 将表单提交结果与阶段资料完成状态保持一致。
+
+#### Scenario: 表单 schema
+- **WHEN** 系统实现 `1.1`、`1.2` 或 `1.3` 在线表单
+- **THEN** 系统 MUST 有结构化 form schema 或等价字段定义
+- **AND** 字段定义 SHOULD 来源于对应 xlsx/docx 模板的业务字段设计
+
+#### Scenario: 表单数据
+- **WHEN** 用户保存在线表单草稿或提交在线表单
+- **THEN** 系统 MUST 保存结构化表单数据、操作人和操作时间
+- **AND** 系统 MUST 能关联项目、阶段和阶段资料项
+
+#### Scenario: 表单提交回写资料状态
+- **WHEN** 用户提交 `1.1`、`1.2` 或 `1.3` 在线表单
+- **THEN** 系统 MUST 将提交结果回写或派生到对应阶段资料项基础状态和完成状态
+- **AND** 系统 MUST 保持阶段推进和项目编号门禁读取同一派生完成口径
+
+#### Scenario: 在线表单是立项表单产出的唯一提交入口
+- **WHEN** 系统处理 `1.1 项目需求表`、`1.2 项目立项审批表` 或 `1.3 项目立项通知` 的提交
+- **THEN** 系统 MUST 只允许在线表单提交服务驱动对应资料基础状态变化
+- **AND** 普通阶段资料提交接口 MUST 被后端拒绝，除非调用方是在线表单提交事务内部的受控服务路径
+- **AND** 受控内部路径 MUST 使用明确的内部标记或等价机制，普通路由不得传递该标记
+- **AND** 系统 MUST NOT 为旧数据状态保留绕过在线表单提交的兼容路径
+
+#### Scenario: 立项在线表单产出写入口收敛
+- **WHEN** 系统处理 `1.1 项目需求表`、`1.2 项目立项审批表` 或 `1.3 项目立项通知` 的基础状态、完成状态或精准返工状态
+- **THEN** 系统 MUST 将这些资料视为 initiation online form only documents
+- **AND** 普通资料提交接口 MUST NOT 改变这些资料的提交或完成状态
+- **AND** 普通返工完成接口 MUST NOT 清除这些资料的 `revision_required` 或写入返工完成状态
+- **AND** 旧资料确认/退回接口 MUST NOT 承载 `1.2` 评价或最终审批
+- **AND** 允许写入口 MUST 限定为在线表单提交、`1.2` 专用评价/审批、总经理审批不通过触发的 `1.1` 精准返工和必要的责任人分配/适用性维护
+- **AND** 系统 MUST NOT 因旧资料清单、工作台 target route 或旧数据状态绕过这些写入口边界
+
+#### Scenario: 在线表单重提清除返工
+- **WHEN** `1.1` 或 `1.3` 这类在线表单专用 submit-only 资料存在 `revision_required`
+- **AND** 责任人按权限重新提交在线表单
+- **THEN** 系统 MUST 在在线表单提交事务内清除返工标记并写入返工完成追溯字段
+- **AND** 系统 MUST 写入在线表单提交日志和返工完成日志
+- **AND** 系统 MUST NOT 允许普通返工完成接口完成同一状态变化
+
+#### Scenario: 在线表单提交事务一致性
+- **WHEN** 用户提交 `1.1`、`1.2` 或 `1.3` 在线表单
+- **THEN** 表单 upsert、资料状态更新、`1.2` 评价/审批激活或重置、业务日志 MUST 在同一事务中提交或回滚
+- **AND** 系统 MUST NOT 出现表单已提交但资料基础状态未提交的半状态
+- **AND** 提交成功响应 MUST 基于提交后的最新资料状态重新计算在线表单权限
+- **AND** 当资料状态已为 `submitted`、`confirmed` 或等价完成状态时，响应中的 `canEdit` 和 `canSubmit` MUST 为 false
+
+#### Scenario: 表单权限校验
+- **WHEN** 用户填写、编辑或提交在线表单
+- **THEN** 系统 MUST 按资料责任人、营销中心负责人、总经理或后端权限字段校验
+- **AND** 系统 MUST NOT 因项目查看权限、日志查看权限或节点查看权限放宽表单操作权限
+
+#### Scenario: canSubmitDocument 不表达立项在线表单提交能力
+- **WHEN** 后端返回阶段资料清单、工作台资料责任待办或其他通用资料权限字段
+- **THEN** `canSubmitDocument` MUST 只表示普通资料提交接口的可用性
+- **AND** `1.1 项目需求表`、`1.2 项目立项审批表` 和 `1.3 项目立项通知` 的 `canSubmitDocument` MUST 为 false
+- **AND** 这些资料的填写、保存和提交能力 MUST 由在线表单接口返回的 `permissions.canEdit` 和 `permissions.canSubmit` 表达
+- **AND** 前端 MUST NOT 用 `canSubmitDocument` 决定这些资料是否可以在线表单提交
+
+#### Scenario: 1.2 重填前置由服务端统一校验
+- **WHEN** 系统处理 `1.2 项目立项审批表` 在线表单保存、在线表单提交或评价/审批节点激活
+- **AND** 同项目 `1.1 项目需求表` 存在关联来源为该 `1.2` 的未清除返工
+- **THEN** 后端 MUST 拒绝保存、提交或激活评价节点
+- **AND** 后端 MUST 使用稳定错误码表达需先完成 `1.1` 返工
+- **AND** 工作台查询 MUST NOT 返回可处理的 `1.2` 评价或最终审批待办
+
+### Requirement: 旧字段和旧审批数据兼容策略
+
+系统 MUST 兼容已有项目字段，并 MUST 在实现新 `1.2` 评价/审批模型前设计旧三节点审批数据的迁移或解释策略。
+
+#### Scenario: 旧项目字段保留
+- **WHEN** 既有项目包含项目经理、项目模式、参与中心、计划时间或立项日期
+- **THEN** 系统 MUST 继续读取和展示这些字段
+- **AND** 系统 MUST NOT 因新建项目轻量化而删除既有字段
+
+#### Scenario: 新项目创建字段放宽
+- **WHEN** 新项目创建请求只包含项目名称、客户和客户联系方式
+- **THEN** 系统 MUST 支持创建项目
+- **AND** 系统 MUST NOT 要求项目经理、项目模式、参与中心、计划时间或立项日期作为创建必填字段
+- **AND** 第二阶段补录能力 MUST 通过后续 change 另行规划和实现
+
+#### Scenario: 旧三节点审批数据不得直接视为新模型完成
+- **WHEN** 既有项目存在 `business_review`、`technical_review` 或 `general_review` 等旧三节点审批数据
+- **THEN** 系统 MUST 在实现前明确迁移或解释策略
+- **AND** 系统 MUST NOT 直接将旧三节点审批通过解释为新模型中的营销评价完成、研发评价完成和总经理最终审批通过，除非迁移规则显式确认
 

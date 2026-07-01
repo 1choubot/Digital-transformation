@@ -45,6 +45,216 @@
 
       <ProjectStageTimeline :stages="detail.stages" />
 
+      <section class="panel project-workspace">
+        <div class="panel-heading">
+          <div>
+            <span class="section-eyebrow">项目工作区</span>
+            <h3>阶段节点工作区</h3>
+          </div>
+        </div>
+
+        <section v-if="workspaceLoading" class="state-panel state-panel--inline">
+          <p>正在加载项目工作区...</p>
+        </section>
+        <section v-else-if="workspaceErrorMessage" class="state-panel state-panel--inline state-panel--error">
+          <p>{{ workspaceErrorMessage }}</p>
+        </section>
+        <div v-else-if="workspace" class="project-workspace__layout">
+          <nav class="project-workspace__nav" aria-label="阶段节点导航">
+            <article
+              v-for="stage in workspace.stages"
+              :key="stage.stageKey"
+              class="project-workspace__stage"
+            >
+              <button
+                type="button"
+                class="project-workspace__stage-button"
+                :class="{ 'project-workspace__stage-button--active': selectedWorkspaceStageKey === stage.stageKey && !selectedWorkspaceNodeKey }"
+                @click="selectWorkspaceStage(stage)"
+              >
+                <span>{{ stage.stageOrder }}. {{ stage.stageName }}</span>
+                <small>{{ stage.configured ? '已配置节点' : '旧清单入口' }}</small>
+              </button>
+              <div v-if="stage.nodes.length > 0" class="project-workspace__node-list">
+                <button
+                  v-for="node in stage.nodes"
+                  :key="node.nodeKey"
+                  type="button"
+                  class="project-workspace__node-button"
+                  :class="{ 'project-workspace__node-button--active': selectedWorkspaceNodeKey === node.nodeKey }"
+                  @click="selectWorkspaceNode(stage, node)"
+                >
+                  <span>{{ node.nodeName }}</span>
+                  <small>{{ formatWorkspaceNodeStatus(node.nodeStatus) }}</small>
+                </button>
+              </div>
+            </article>
+          </nav>
+
+          <section class="project-workspace__detail">
+            <template v-if="activeWorkspaceNode">
+              <div class="project-workspace__detail-heading">
+                <div>
+                  <span class="section-eyebrow">{{ activeWorkspaceStage?.stageName || '阶段节点' }}</span>
+                  <h3>{{ activeWorkspaceNode.nodeName }}</h3>
+                </div>
+                <span class="stage-document-pill">{{ formatWorkspaceNodeStatus(activeWorkspaceNode.nodeStatus) }}</span>
+              </div>
+
+              <dl v-if="activeWorkspaceNode.projectInput" class="stage-document-meta">
+                <div>
+                  <dt>项目名称</dt>
+                  <dd>{{ activeWorkspaceNode.projectInput.projectName || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>客户</dt>
+                  <dd>{{ activeWorkspaceNode.projectInput.customerName || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>客户联系方式</dt>
+                  <dd>{{ activeWorkspaceNode.projectInput.customerContact || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>项目编号</dt>
+                  <dd>{{ activeWorkspaceNode.projectInput.projectCode || '待后置生成' }}</dd>
+                </div>
+              </dl>
+
+              <div v-if="activeWorkspaceNode.blockingReasons?.length" class="stage-document-missing">
+                <strong>阻塞原因</strong>
+                <ul>
+                  <li v-for="reason in activeWorkspaceNode.blockingReasons" :key="reason">{{ reason }}</li>
+                </ul>
+              </div>
+
+              <div v-if="activeWorkspaceNode.outputs?.length" class="project-workspace__outputs">
+                <article
+                  v-for="output in activeWorkspaceNode.outputs"
+                  :key="output.documentId || output.documentCode"
+                  class="project-workspace__output"
+                >
+                  <div class="stage-document-card__main">
+                    <div class="stage-document-card__identity">
+                      <span class="stage-document-code mono">{{ output.documentCode }}</span>
+                      <strong>{{ output.documentName }}</strong>
+                    </div>
+                    <div class="stage-document-card__badges">
+                      <span class="stage-document-pill">{{ formatWorkspaceNodeStatus(output.status) }}</span>
+                    </div>
+                  </div>
+                  <dl class="stage-document-meta">
+                    <div>
+                      <dt>责任人</dt>
+                      <dd>{{ formatWorkspaceResponsible(output) }}</dd>
+                    </div>
+                    <div>
+                      <dt>资料状态</dt>
+                      <dd>{{ output.baseStatus || '-' }}</dd>
+                    </div>
+                    <div>
+                      <dt>完成状态</dt>
+                      <dd>{{ output.completionStatus || '-' }}</dd>
+                    </div>
+                  </dl>
+                  <div v-if="output.blockingReasons?.length" class="stage-document-missing">
+                    <strong>产出阻塞</strong>
+                    <ul>
+                      <li v-for="reason in output.blockingReasons" :key="reason">{{ reason }}</li>
+                    </ul>
+                  </div>
+                  <div class="form-actions">
+                    <button
+                      v-if="output.formAvailable"
+                      type="button"
+                      class="ghost-button"
+                      :disabled="onlineFormLoading"
+                      @click="openOnlineForm(output)"
+                    >
+                      {{ activeOnlineFormDocumentId === output.documentId ? '正在编辑' : '填写/编辑' }}
+                    </button>
+                  </div>
+                  <ProjectInitiationReviewPanel
+                    v-if="getOutputDocument(output)?.initiationReview"
+                    :document="getOutputDocument(output)"
+                    :is-action-pending="isActionPending"
+                    @approve-node="approveInitiationNode"
+                    @return-node="returnInitiationNode"
+                  />
+                </article>
+              </div>
+
+              <section v-if="activeOnlineForm" class="online-form-editor">
+                <div class="project-workspace__detail-heading">
+                  <div>
+                    <span class="section-eyebrow">在线表单</span>
+                    <h3>{{ activeOnlineForm.documentCode }} {{ activeOnlineForm.documentName }}</h3>
+                  </div>
+                  <span class="stage-document-pill">{{ activeOnlineForm.status }}</span>
+                </div>
+                <section v-if="onlineFormErrorMessage" class="state-panel state-panel--inline state-panel--error">
+                  <p>{{ onlineFormErrorMessage }}</p>
+                </section>
+                <div v-if="activeOnlineForm.blockingReasons?.length" class="stage-document-missing">
+                  <strong>表单阻塞</strong>
+                  <ul>
+                    <li v-for="reason in activeOnlineForm.blockingReasons" :key="reason">{{ reason }}</li>
+                  </ul>
+                </div>
+                <form class="form-grid" @submit.prevent="submitOnlineForm">
+                  <label
+                    v-for="field in activeOnlineForm.schema.fields"
+                    :key="field.key"
+                    :class="{ 'form-grid__wide': field.type === 'textarea' }"
+                  >
+                    <span>{{ field.label }}{{ field.required ? ' *' : '' }}</span>
+                    <textarea
+                      v-if="field.type === 'textarea'"
+                      v-model.trim="onlineFormData[field.key]"
+                      rows="3"
+                      :disabled="!activeOnlineForm.permissions.canEdit || onlineFormSubmitting"
+                    ></textarea>
+                    <input
+                      v-else
+                      v-model.trim="onlineFormData[field.key]"
+                      :type="field.type === 'date' ? 'date' : 'text'"
+                      :disabled="!activeOnlineForm.permissions.canEdit || onlineFormSubmitting"
+                    />
+                  </label>
+                  <div class="form-actions form-grid__wide">
+                    <button
+                      type="button"
+                      class="ghost-button"
+                      :disabled="!activeOnlineForm.permissions.canEdit || onlineFormSaving"
+                      @click="saveOnlineForm"
+                    >
+                      {{ onlineFormSaving ? '保存中...' : '保存草稿' }}
+                    </button>
+                    <button
+                      type="submit"
+                      class="primary-button"
+                      :disabled="!activeOnlineForm.permissions.canSubmit || onlineFormSubmitting"
+                    >
+                      {{ onlineFormSubmitting ? '提交中...' : '提交表单' }}
+                    </button>
+                  </div>
+                </form>
+              </section>
+            </template>
+
+            <template v-else-if="activeWorkspaceStage">
+              <div class="project-workspace__detail-heading">
+                <div>
+                  <span class="section-eyebrow">阶段占位</span>
+                  <h3>{{ activeWorkspaceStage.stageName }}</h3>
+                </div>
+                <span class="stage-document-pill">{{ activeWorkspaceStage.placeholderStatus || '待配置' }}</span>
+              </div>
+              <p>{{ activeWorkspaceStage.placeholderText || '本阶段节点映射后续配置。' }}</p>
+            </template>
+          </section>
+        </div>
+      </section>
+
       <ProjectOperationLogPanel
         v-if="canViewProjectAudit"
         :loading="operationLogsLoading"
@@ -114,12 +324,16 @@ import {
   getProjectDetail,
   getProjectOperationLogs,
   getProjectStageDocumentChecklist,
+  getProjectWorkspace,
+  getStageDocumentOnlineForm,
   listStageDocumentAttachments,
   markStageDocumentNotApplicable,
   markStageDocumentSubmitted,
   restoreStageDocumentApplicable,
   returnInitiationReviewNode,
   returnStageDocument,
+  saveStageDocumentOnlineForm,
+  submitStageDocumentOnlineForm,
   toReadableApiError,
   updateProjectCode,
   updateStageDocumentResponsibleUser,
@@ -128,6 +342,7 @@ import {
 import { listResponsibilityCandidates } from '../api/users.js';
 import ProjectDetailHeader from '../components/project-detail/ProjectDetailHeader.vue';
 import ProjectOperationLogPanel from '../components/project-detail/ProjectOperationLogPanel.vue';
+import ProjectInitiationReviewPanel from '../components/project-detail/ProjectInitiationReviewPanel.vue';
 import ProjectStageAdvancePanel from '../components/project-detail/ProjectStageAdvancePanel.vue';
 import ProjectStageDocumentChecklist from '../components/project-detail/ProjectStageDocumentChecklist.vue';
 import ProjectStageTimeline from '../components/project-detail/ProjectStageTimeline.vue';
@@ -136,6 +351,7 @@ import {
   getCompletionMode,
   getSelectedResponsibleUserId,
   isDocumentRelatedToDepartmentByOwnership,
+  isInitiationOnlineFormDocument,
   stageCompleteness
 } from '../components/project-detail/stageDocumentViewHelpers.js';
 import { formatUser } from '../utils/format.js';
@@ -181,6 +397,18 @@ const checklist = ref(null);
 const operationLogsLoading = ref(false);
 const operationLogsErrorMessage = ref('');
 const operationLogs = ref([]);
+const workspaceLoading = ref(false);
+const workspaceErrorMessage = ref('');
+const workspace = ref(null);
+const selectedWorkspaceStageKey = ref('');
+const selectedWorkspaceNodeKey = ref('');
+const activeOnlineFormDocumentId = ref(null);
+const activeOnlineForm = ref(null);
+const onlineFormData = reactive({});
+const onlineFormLoading = ref(false);
+const onlineFormSaving = ref(false);
+const onlineFormSubmitting = ref(false);
+const onlineFormErrorMessage = ref('');
 const responsibilityCandidatesLoading = ref(false);
 const responsibilityCandidatesErrorMessage = ref('');
 const responsibilityCandidates = ref([]);
@@ -246,6 +474,12 @@ const isCurrentUserSystemAdmin = computed(() => currentUserOrganizationRole.valu
 const currentUserDepartment = computed(() => props.currentUser?.department || '');
 const allStageDocuments = computed(() =>
   (checklist.value?.stages || []).flatMap((stage) => stage.documents || [])
+);
+const activeWorkspaceStage = computed(
+  () => (workspace.value?.stages || []).find((stage) => stage.stageKey === selectedWorkspaceStageKey.value) || null
+);
+const activeWorkspaceNode = computed(
+  () => (activeWorkspaceStage.value?.nodes || []).find((node) => node.nodeKey === selectedWorkspaceNodeKey.value) || null
 );
 const isProjectRelatedToCurrentCenter = computed(() => {
   if (!isCurrentUserCenterManager.value || !currentUserDepartment.value) {
@@ -317,6 +551,73 @@ const isTaskMode = computed(() => Boolean(props.taskMode || props.focusDocumentI
 
 function isActionPending(documentId, action) {
   return pendingAction.value === actionKey(documentId, action);
+}
+
+function formatWorkspaceNodeStatus(status) {
+  return {
+    completed: '已完成',
+    in_progress: '处理中',
+    waiting_submission: '待提交',
+    pending_review: '待处理',
+    blocked_by_rework: '返工阻塞',
+    returned_for_rework: '需重填',
+    not_configured: '未配置',
+    legacy_checklist_available: '旧清单入口'
+  }[status] || status || '-';
+}
+
+function formatWorkspaceResponsible(output) {
+  if (!output?.responsibleUser) {
+    return output?.documentCode === '1.3' ? '营销中心负责人' : '未分配';
+  }
+
+  return output.responsibleUser.name || output.responsibleUser.account || `用户 ${output.responsibleUser.id}`;
+}
+
+function getOutputDocument(output) {
+  return (
+    allStageDocuments.value.find((document) => String(document.id) === String(output?.documentId)) ||
+    allStageDocuments.value.find((document) => document.documentCode === output?.documentCode) ||
+    null
+  );
+}
+
+function selectWorkspaceStage(stage) {
+  selectedWorkspaceStageKey.value = stage.stageKey;
+  selectedWorkspaceNodeKey.value = stage.nodes?.[0]?.nodeKey || '';
+  clearOnlineFormState();
+}
+
+function selectWorkspaceNode(stage, node) {
+  selectedWorkspaceStageKey.value = stage.stageKey;
+  selectedWorkspaceNodeKey.value = node.nodeKey;
+  clearOnlineFormState();
+}
+
+function selectDefaultWorkspaceNode() {
+  const initiationStage = (workspace.value?.stages || []).find((stage) => stage.stageKey === 'initiation');
+  const firstStage = initiationStage || workspace.value?.stages?.[0] || null;
+  selectedWorkspaceStageKey.value = firstStage?.stageKey || '';
+  selectedWorkspaceNodeKey.value = firstStage?.nodes?.[0]?.nodeKey || '';
+}
+
+function clearOnlineFormState() {
+  activeOnlineFormDocumentId.value = null;
+  activeOnlineForm.value = null;
+  onlineFormErrorMessage.value = '';
+  Object.keys(onlineFormData).forEach((key) => {
+    delete onlineFormData[key];
+  });
+}
+
+function syncOnlineFormData(form) {
+  Object.keys(onlineFormData).forEach((key) => {
+    delete onlineFormData[key];
+  });
+  const data = form?.formData || {};
+  for (const field of form?.schema?.fields || []) {
+    onlineFormData[field.key] = data[field.key] ?? '';
+  }
 }
 
 function getAttachmentState(documentId) {
@@ -438,6 +739,11 @@ async function runDocumentAction(document, action, runner, successText, onSucces
 }
 
 async function submitDocument(document) {
+  if (isInitiationOnlineFormDocument(document)) {
+    actionErrorMessage.value = '请通过在线表单提交或重提该资料。';
+    return;
+  }
+
   const completionMode = getCompletionMode(document);
   const requiresReview = completionMode === 'approval_required' || completionMode === 'conditional_approval';
   const isSubmitOnlyMode = completionMode === 'submit_only' || completionMode === 'conditional_submit';
@@ -463,6 +769,11 @@ async function submitDocument(document) {
 }
 
 async function completeRevisionDocument(document) {
+  if (isInitiationOnlineFormDocument(document)) {
+    actionErrorMessage.value = '该资料返工必须通过在线表单重提完成。';
+    return;
+  }
+
   await runDocumentAction(
     document,
     'complete-revision',
@@ -522,6 +833,10 @@ async function returnDocument(payload) {
 }
 
 async function approveInitiationNode({ document, node, comment }) {
+  const successText =
+    node.nodeKey === 'general_review'
+      ? '总经理审批已通过。'
+      : `${node.nodeName || '评价'}已提交。`;
   await runDocumentAction(
     document,
     `initiation-${node.nodeKey}-approve`,
@@ -533,14 +848,14 @@ async function approveInitiationNode({ document, node, comment }) {
         comment || '',
         props.authToken
       ),
-    `${node.nodeName || '1.2 审批节点'}已通过。`
+    successText
   );
 }
 
 async function returnInitiationNode({ document, node, returnReason }) {
   const reason = String(returnReason || '').trim();
   if (!reason) {
-    actionErrorMessage.value = '请填写 1.2 审批节点退回原因。';
+    actionErrorMessage.value = '请填写总经理审批不通过意见。';
     return;
   }
 
@@ -555,7 +870,7 @@ async function returnInitiationNode({ document, node, returnReason }) {
         reason,
         props.authToken
       ),
-    `${node.nodeName || '1.2 审批节点'}已退回，1.1 项目需求表进入返工。`
+    `${node.nodeName || '总经理审批'}已不通过，1.1 项目需求表进入返工，1.2 需要重新填写。`
   );
 }
 
@@ -806,6 +1121,95 @@ async function loadChecklist() {
   }
 }
 
+async function loadWorkspace() {
+  workspaceLoading.value = true;
+  workspaceErrorMessage.value = '';
+  workspace.value = null;
+  clearOnlineFormState();
+
+  try {
+    workspace.value = await getProjectWorkspace(props.projectId, props.authToken);
+    selectDefaultWorkspaceNode();
+  } catch (error) {
+    workspaceErrorMessage.value = toReadableApiError(error);
+  } finally {
+    workspaceLoading.value = false;
+  }
+}
+
+async function openOnlineForm(output) {
+  if (!output?.documentId) {
+    onlineFormErrorMessage.value = '关联资料未初始化，无法打开在线表单。';
+    return;
+  }
+
+  onlineFormLoading.value = true;
+  onlineFormErrorMessage.value = '';
+
+  try {
+    const response = await getStageDocumentOnlineForm(props.projectId, output.documentId, props.authToken);
+    activeOnlineFormDocumentId.value = output.documentId;
+    activeOnlineForm.value = response.form || response;
+    syncOnlineFormData(activeOnlineForm.value);
+  } catch (error) {
+    onlineFormErrorMessage.value = toReadableApiError(error);
+  } finally {
+    onlineFormLoading.value = false;
+  }
+}
+
+async function saveOnlineForm() {
+  if (!activeOnlineForm.value) {
+    return;
+  }
+
+  onlineFormSaving.value = true;
+  onlineFormErrorMessage.value = '';
+
+  try {
+    const response = await saveStageDocumentOnlineForm(
+      props.projectId,
+      activeOnlineForm.value.stageDocumentId,
+      { ...onlineFormData },
+      props.authToken
+    );
+    activeOnlineForm.value = response.form || response;
+    syncOnlineFormData(activeOnlineForm.value);
+    actionMessage.value = '在线表单草稿已保存。';
+    await loadOperationLogs();
+  } catch (error) {
+    onlineFormErrorMessage.value = toReadableApiError(error);
+  } finally {
+    onlineFormSaving.value = false;
+  }
+}
+
+async function submitOnlineForm() {
+  if (!activeOnlineForm.value) {
+    return;
+  }
+
+  onlineFormSubmitting.value = true;
+  onlineFormErrorMessage.value = '';
+
+  try {
+    const response = await submitStageDocumentOnlineForm(
+      props.projectId,
+      activeOnlineForm.value.stageDocumentId,
+      { ...onlineFormData },
+      props.authToken
+    );
+    activeOnlineForm.value = response.form;
+    syncOnlineFormData(activeOnlineForm.value);
+    actionMessage.value = '在线表单已提交。';
+    await Promise.all([loadChecklist(), loadWorkspace(), loadOperationLogs()]);
+  } catch (error) {
+    onlineFormErrorMessage.value = toReadableApiError(error);
+  } finally {
+    onlineFormSubmitting.value = false;
+  }
+}
+
 async function loadResponsibilityCandidates() {
   responsibilityCandidatesLoading.value = true;
   responsibilityCandidatesErrorMessage.value = '';
@@ -847,7 +1251,9 @@ async function loadDetail(options = {}) {
   errorCode.value = '';
   detail.value = null;
   checklist.value = null;
+  workspace.value = null;
   checklistErrorMessage.value = '';
+  workspaceErrorMessage.value = '';
   operationLogs.value = [];
   operationLogsErrorMessage.value = '';
   responsibilityCandidates.value = [];
@@ -872,6 +1278,7 @@ async function loadDetail(options = {}) {
   if (detail.value) {
     await Promise.all([
       loadChecklist(),
+      loadWorkspace(),
       loadOperationLogs(),
       loadResponsibilityCandidates()
     ]);

@@ -10,6 +10,7 @@ import {
   createProject,
   getProjectDetail,
   getProjectOverviewDashboard,
+  getProjectWorkspace,
   listStageApprovalHistory,
   listProjects,
   normalizeProjectOverviewDashboardFilters,
@@ -29,7 +30,10 @@ import {
   approveInitiationReviewNode,
   getProjectStageDocumentChecklist,
   completeProjectStageDocumentRevision,
+  getStageDocumentOnlineForm,
   returnInitiationReviewNode,
+  saveStageDocumentOnlineForm,
+  submitStageDocumentOnlineForm,
   updateProjectStageDocumentApplicability,
   updateProjectStageDocumentResponsibleUser,
   updateProjectStageDocumentStatus
@@ -231,6 +235,15 @@ export async function getStageDocumentChecklistHandler(req, res) {
   });
 }
 
+export async function getProjectWorkspaceHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workspace = await getProjectWorkspace(projectId, req.auth.user);
+
+  res.json({
+    data: workspace
+  });
+}
+
 export async function advanceProjectStageHandler(req, res) {
   const projectId = parseProjectId(req.params.projectId);
   const detail = await advanceProjectStage(projectId, req.auth.user);
@@ -323,6 +336,54 @@ export async function completeStageDocumentRevisionHandler(req, res) {
     data: {
       document
     }
+  });
+}
+
+export async function getStageDocumentOnlineFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const documentId = parseDocumentId(req.params.documentId);
+  const form = await getStageDocumentOnlineForm({
+    projectId,
+    documentId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: {
+      form
+    }
+  });
+}
+
+export async function saveStageDocumentOnlineFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const documentId = parseDocumentId(req.params.documentId);
+  const form = await saveStageDocumentOnlineForm({
+    projectId,
+    documentId,
+    user: req.auth.user,
+    formData: req.body?.formData
+  });
+
+  res.json({
+    data: {
+      form
+    }
+  });
+}
+
+export async function submitStageDocumentOnlineFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const documentId = parseDocumentId(req.params.documentId);
+  const result = await submitStageDocumentOnlineForm({
+    projectId,
+    documentId,
+    user: req.auth.user,
+    formData: req.body?.formData
+  });
+
+  res.json({
+    data: result
   });
 }
 

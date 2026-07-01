@@ -40,6 +40,10 @@ export async function getProjectDetail(projectId, authToken = '') {
   return request(`/api/projects/${projectId}`, { authToken });
 }
 
+export async function getProjectWorkspace(projectId, authToken = '') {
+  return request(`/api/projects/${projectId}/workspace`, { authToken });
+}
+
 export async function updateProjectCode(projectId, projectCode, authToken) {
   return request(`/api/projects/${projectId}/project-code`, {
     method: 'PUT',
@@ -50,6 +54,26 @@ export async function updateProjectCode(projectId, projectCode, authToken) {
 
 export async function getProjectStageDocumentChecklist(projectId, authToken = '') {
   return request(`/api/projects/${projectId}/stage-document-checklist`, { authToken });
+}
+
+export async function getStageDocumentOnlineForm(projectId, documentId, authToken = '') {
+  return request(`/api/projects/${projectId}/stage-documents/${documentId}/online-form`, { authToken });
+}
+
+export async function saveStageDocumentOnlineForm(projectId, documentId, formData, authToken) {
+  return request(`/api/projects/${projectId}/stage-documents/${documentId}/online-form`, {
+    method: 'PUT',
+    authToken,
+    body: JSON.stringify({ formData })
+  });
+}
+
+export async function submitStageDocumentOnlineForm(projectId, documentId, formData, authToken) {
+  return request(`/api/projects/${projectId}/stage-documents/${documentId}/online-form/submit`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ formData })
+  });
 }
 
 export async function getProjectOperationLogs(projectId, authToken = '') {

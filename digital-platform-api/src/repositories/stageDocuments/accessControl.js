@@ -12,7 +12,10 @@ import {
   isValidBusinessDepartment
 } from '../../domain/organization.js';
 import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
-import { isInitiationReviewDocument } from '../../domain/initiationReview.js';
+import {
+  isInitiationOnlineFormDocument,
+  isInitiationReviewDocument
+} from '../../domain/initiationReview.js';
 import {
   getDocumentCompletionMode,
   isReviewCompletionMode,
@@ -170,6 +173,10 @@ export function canDownloadStageDocumentAttachment(user, { project, document }) 
 }
 
 export function canUploadStageDocumentAttachment(user, { document }) {
+  if (isInitiationOnlineFormDocument(document)) {
+    return false;
+  }
+
   return isDocumentApplicable(document) && isCurrentUserResponsible(user, document);
 }
 
@@ -209,14 +216,16 @@ export function canDeleteStageDocumentAttachment(user, { project = null, documen
   );
 }
 
-export function buildStageDocumentPermissions({ user, project, document }) {
+export function buildStageDocumentPermissions({ user, project, document, relatedDocumentsByCode = null }) {
   const canViewAttachments = canViewStageDocumentAttachments(user, { project, document });
   const canDownloadAttachment = canDownloadStageDocumentAttachment(user, { project, document });
   const canUploadAttachment = canUploadStageDocumentAttachment(user, { document });
   const canReviewDocument = canReviewStageDocument(user, document);
+  const isOnlineFormOnlyDocument = isInitiationOnlineFormDocument(document);
   const canSubmitDocument =
     !isGeneralManagerAssistantUser(user) &&
     !isSystemAdminUser(user) &&
+    !isOnlineFormOnlyDocument &&
     canSubmitStageDocument(user, { project, document });
   const canManageResponsibility =
     !isGeneralManagerAssistantUser(user) &&
@@ -240,8 +249,8 @@ export function buildStageDocumentPermissions({ user, project, document }) {
   };
 }
 
-export function attachStageDocumentPermissions({ user, project, document }) {
-  const permissions = buildStageDocumentPermissions({ user, project, document });
+export function attachStageDocumentPermissions({ user, project, document, relatedDocumentsByCode = null }) {
+  const permissions = buildStageDocumentPermissions({ user, project, document, relatedDocumentsByCode });
 
   return {
     ...document,

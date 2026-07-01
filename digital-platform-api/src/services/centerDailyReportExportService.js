@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import ExcelJS from 'exceljs';
 import { env } from '../config/env.js';
@@ -150,10 +151,10 @@ function fillCompletedSection(worksheet, { startRow, rowCount }, rows, emptyMess
   }
 }
 
-// Build a deterministic output path under REPORT_EXPORT_ROOT/department/yyyy/mm.
+// 手动导出只需要临时文件供下载，暂停写入 REPORT_EXPORT_ROOT 的持久目录。
 function buildCenterDailyReportExportPath(reportDto) {
   const [year, month] = String(reportDto.reportDate).split('-');
-  const directory = path.resolve(env.reports.exportRoot, 'department', year, month);
+  const directory = path.resolve(os.tmpdir(), 'digital-platform-report-downloads', 'department', year, month);
   const safeDepartment = sanitizeFileNamePart(formatDepartment(reportDto.department), reportDto.department);
   const fileName = `部门工作日报-${safeDepartment}${formatCompactDate(reportDto.reportDate)}.xlsx`;
 

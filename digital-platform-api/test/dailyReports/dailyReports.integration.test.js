@@ -22,6 +22,10 @@ function buildDailyReportPayload(projectId, overrides = {}) {
     status: ReportStatus.SUBMITTED,
     items: [
       {
+        // Existing integration flow represents new unplanned work under the structured source model.
+        sourceType: 'ad_hoc',
+        sourcePlanTaskKey: null,
+        executionStatus: 'completed',
         workContent: 'Complete backend validation',
         completionProgress: '100%',
         completedAt: '17:30',
@@ -124,6 +128,7 @@ async function cleanupTestRows() {
   const [userRows] = await pool.execute('SELECT id FROM users WHERE account LIKE ?', [`${testPrefix}%`]);
   const userIds = userRows.map((row) => row.id);
   if (userIds.length > 0) {
+    await pool.query('DELETE FROM weekly_reports WHERE user_id IN (?)', [userIds]);
     await pool.query('DELETE FROM daily_reports WHERE user_id IN (?)', [userIds]);
     await pool.query('DELETE FROM auth_sessions WHERE user_id IN (?)', [userIds]);
     await pool.query('DELETE FROM users WHERE id IN (?)', [userIds]);
@@ -172,7 +177,7 @@ test('M2 daily report backend flow enforces validation and ownership', async () 
       method: 'POST',
       token: employee.token,
       body: buildDailyReportPayload(projectA, {
-        items: [{ workContent: '', completionProgress: '', completedAt: '' }]
+        items: [{ sourceType: 'ad_hoc', executionStatus: 'completed', workContent: '', completionProgress: '', completedAt: '' }]
       })
     });
     assert.equal(missingFields.status, 400);
@@ -218,7 +223,124 @@ test('M2 daily report backend flow enforces validation and ownership', async () 
     });
     assert.equal(exportDto.status, 200);
     assert.equal(exportDto.body.data.report.items.length, 1);
+    assert.equal(exportDto.body.data.report.items[0].projectId, projectA);
+    assert.equal(exportDto.body.data.report.plans[0].projectId, projectA);
     assert.equal(exportDto.body.data.user.id, employee.id);
+
+    const [weeklyResult] = await pool.execute(
+      `INSERT INTO weekly_reports (
+        user_id,
+        week_start,
+        week_end,
+        status
+      ) VALUES (?, '2026-06-22', '2026-06-28', ?)`,
+      [employee.id, ReportStatus.DRAFT]
+    );
+    await pool.execute(
+      `INSERT INTO weekly_report_plans (
+        weekly_report_id,
+        task_key,
+        sort_order,
+        project_id,
+        work_task,
+        work_target,
+        planned_date,
+        responsible_person
+      ) VALUES (?, ?, 1, ?, ?, 'Finish precise project linkage', '2026-06-24', 'Tester')`,
+      [
+        weeklyResult.insertId,
+        '11111111-1111-4111-8111-111111111111',
+        projectA,
+        `${testPrefix}_A / ${testPrefix}_A name`
+      ]
+    );
+    await pool.execute(
+      `INSERT INTO weekly_report_plans (
+        weekly_report_id,
+        task_key,
+        sort_order,
+        project_id,
+        work_task,
+        work_target,
+        planned_date,
+        responsible_person
+      ) VALUES (?, ?, 2, NULL, 'Free text task', 'Should not match without project id', '2026-06-24', 'Tester')`,
+      [weeklyResult.insertId, '22222222-2222-4222-8222-222222222222']
+    );
+    const [otherWeeklyResult] = await pool.execute(
+      `INSERT INTO weekly_reports (
+        user_id,
+        week_start,
+        week_end,
+        status
+      ) VALUES (?, '2026-06-22', '2026-06-28', ?)`,
+      [otherEmployee.id, ReportStatus.DRAFT]
+    );
+    await pool.execute(
+      `INSERT INTO weekly_report_plans (
+        weekly_report_id,
+        task_key,
+        sort_order,
+        project_id,
+        work_task,
+        work_target,
+        planned_date,
+        responsible_person
+      ) VALUES (?, ?, 1, ?, 'Other user task', 'Should not cross users', '2026-06-24', 'Tester')`,
+      [otherWeeklyResult.insertId, '33333333-3333-4333-8333-333333333333', projectA]
+    );
+
+    const suggestion = await requestJson(
+      server.baseUrl,
+      `/api/daily-reports/plan-suggestion?reportDate=2026-06-24&projectId=${projectA}`,
+      { token: employee.token }
+    );
+    assert.equal(suggestion.status, 200);
+    assert.equal(suggestion.body.data.suggestion.items.length, 1);
+    assert.equal(suggestion.body.data.suggestion.items[0].workTarget, 'Finish precise project linkage');
+
+    const dateMismatchSuggestion = await requestJson(
+      server.baseUrl,
+      `/api/daily-reports/plan-suggestion?reportDate=2026-06-25&projectId=${projectA}`,
+      { token: employee.token }
+    );
+    assert.equal(dateMismatchSuggestion.status, 200);
+    assert.equal(dateMismatchSuggestion.body.data.suggestion.items.length, 0);
+
+    const projectMismatchSuggestion = await requestJson(
+      server.baseUrl,
+      `/api/daily-reports/plan-suggestion?reportDate=2026-06-24&projectId=${projectB}`,
+      { token: employee.token }
+    );
+    assert.equal(projectMismatchSuggestion.status, 200);
+    assert.equal(projectMismatchSuggestion.body.data.suggestion.items.length, 0);
+
+    await pool.execute(
+      `INSERT INTO weekly_report_plans (
+        weekly_report_id,
+        task_key,
+        sort_order,
+        project_id,
+        work_task,
+        work_target,
+        planned_date,
+        responsible_person
+      ) VALUES (?, ?, 3, ?, ?, 'Carry next-week plan into daily report', '2026-06-30', 'Tester')`,
+      [
+        weeklyResult.insertId,
+        '44444444-4444-4444-8444-444444444444',
+        projectA,
+        `${testPrefix}_A / ${testPrefix}_A name`
+      ]
+    );
+    const nextWeekSuggestion = await requestJson(
+      server.baseUrl,
+      `/api/daily-reports/plan-suggestion?reportDate=2026-06-30&projectId=${projectA}`,
+      { token: employee.token }
+    );
+    assert.equal(nextWeekSuggestion.status, 200);
+    assert.equal(nextWeekSuggestion.body.data.suggestion.items.length, 1);
+    assert.equal(nextWeekSuggestion.body.data.suggestion.items[0].workTarget, 'Carry next-week plan into daily report');
 
     const attachment = await uploadDailyReportAttachment({
       reportId: reportA.id,

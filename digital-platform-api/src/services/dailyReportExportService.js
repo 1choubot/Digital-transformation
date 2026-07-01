@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import ExcelJS from 'exceljs';
 import { env } from '../config/env.js';
@@ -179,10 +180,10 @@ async function fillPhotoBlock(worksheet, workbook, report, itemExtraRows) {
   }
 }
 
-// Build a deterministic output path under REPORT_EXPORT_ROOT/daily/yyyy/mm.
+// 手动导出只需要临时文件供下载，暂停写入 REPORT_EXPORT_ROOT 的持久目录。
 function buildDailyReportExportPath({ report, user }) {
   const [year, month] = String(report.reportDate).split('-');
-  const directory = path.resolve(env.reports.exportRoot, 'daily', year, month);
+  const directory = path.resolve(os.tmpdir(), 'digital-platform-report-downloads', 'daily', year, month);
   const safeName = sanitizeFileNamePart(user.name, user.account || 'employee');
   const fileName = `项目工作日报-${safeName}${formatCompactDate(report.reportDate)}.xlsx`;
 

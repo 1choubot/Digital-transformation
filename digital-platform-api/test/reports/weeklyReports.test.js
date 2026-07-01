@@ -11,6 +11,10 @@ import {
   calculateRuleWeeklyScore,
   evaluateWeeklyReportScore
 } from '../../src/services/weeklyReportEvaluationService.js';
+import {
+  buildWeeklyPrefillAiInput,
+  composeWeeklyPrefillWithAi
+} from '../../src/services/weeklyReportPrefillAiService.js';
 
 // A compact submitted weekly report fixture reused by scoring tests.
 function weeklyReportFixture(overrides = {}) {
@@ -124,6 +128,40 @@ test('weekly report payload validates natural week and submit-required rows', ()
   );
 });
 
+test('weekly report payload preserves source metadata and allows open completion dates', () => {
+  const normalized = normalizeWeeklyReportPayload(
+    weeklyReportFixture({
+      summaries: [
+        {
+          sourceType: 'weekly_plan',
+          sourcePlanTaskKey: '11111111-1111-4111-8111-111111111111',
+          workTask: '接口联调',
+          workTarget: '完成联调',
+          plannedDate: '2026-06-16',
+          completionStatus: 'in_progress',
+          completionDescription: '仍在推进',
+          completedDate: null
+        }
+      ],
+      plans: [
+        {
+          taskKey: '22222222-2222-4222-8222-222222222222',
+          workTask: '周报预填',
+          workTarget: '完成规则草稿',
+          plannedDate: '2026-06-22',
+          responsiblePerson: 'Tester'
+        }
+      ]
+    })
+  );
+
+  // Source fields are persisted so generated weekly summaries remain auditable after user edits.
+  assert.equal(normalized.summaries[0].sourceType, 'weekly_plan');
+  assert.equal(normalized.summaries[0].sourcePlanTaskKey, '11111111-1111-4111-8111-111111111111');
+  assert.equal(normalized.summaries[0].completedDate, null);
+  assert.equal(normalized.plans[0].taskKey, '22222222-2222-4222-8222-222222222222');
+});
+
 test('previous weekly period resolves to the prior natural week', () => {
   assert.deepEqual(getPreviousWeeklyPeriod('2026-06-24'), {
     weekStart: '2026-06-15',
@@ -228,4 +266,83 @@ test('AI non-json and invalid schema responses fall back to rule score', async (
     assert.equal(result.score.restModeAnchorWeekStart, '2026-06-15');
     assert.equal(result.score.workdaySource, 'alternating_manual_rest_mode');
   }
+});
+
+test('weekly prefill AI input excludes mutable fact fields from output control', () => {
+  const input = buildWeeklyPrefillAiInput({
+    weekStart: '2026-06-22',
+    weekEnd: '2026-06-28',
+    summaries: [
+      {
+        suggestionKey: 'plan:11111111-1111-4111-8111-111111111111',
+        sourceType: 'weekly_plan',
+        projectLabel: 'P-001 / 数字化平台',
+        workTask: '接口联调',
+        workTarget: '完成接口联调',
+        plannedDate: '2026-06-23',
+        completionStatus: 'completed',
+        completedDate: '2026-06-24',
+        missingDailyEvidence: false,
+        dailyEvidence: [
+          {
+            reportDate: '2026-06-24',
+            workContent: '接口联调完成',
+            completionProgress: '100%',
+            executionStatus: 'completed'
+          }
+        ]
+      }
+    ]
+  });
+
+  // AI receives facts for context, but compose validation later only accepts wording fields back.
+  assert.equal(input.items[0].executionStatus, 'completed');
+  assert.equal(input.items[0].completedDate, '2026-06-24');
+  assert.equal(input.items[0].dailyEvidence.length, 1);
+});
+
+test('weekly prefill AI compose only applies wording fields and degrades on invalid keys', async () => {
+  const suggestion = {
+    weekStart: '2026-06-22',
+    weekEnd: '2026-06-28',
+    summaries: [
+      {
+        suggestionKey: 'plan:11111111-1111-4111-8111-111111111111',
+        sourceType: 'weekly_plan',
+        sourcePlanTaskKey: '11111111-1111-4111-8111-111111111111',
+        projectId: 1,
+        workTask: '接口联调',
+        workTarget: '完成接口联调',
+        plannedDate: '2026-06-23',
+        completionStatus: 'completed',
+        completionDescription: '接口联调完成',
+        completedDate: '2026-06-24',
+        dailyEvidence: []
+      }
+    ]
+  };
+
+  const composed = await composeWeeklyPrefillWithAi(suggestion, async () => ({
+    items: [
+      {
+        suggestionKey: 'plan:11111111-1111-4111-8111-111111111111',
+        workTarget: '完成接口联调与回归验证',
+        completionDescription: '已完成接口联调，并完成回归验证。',
+        completionStatus: 'not_completed',
+        completedDate: null
+      }
+    ]
+  }));
+
+  assert.equal(composed.ai.applied, true);
+  assert.equal(composed.summaries[0].workTarget, '完成接口联调与回归验证');
+  assert.equal(composed.summaries[0].completionDescription, '已完成接口联调，并完成回归验证。');
+  assert.equal(composed.summaries[0].completionStatus, 'completed');
+  assert.equal(composed.summaries[0].completedDate, '2026-06-24');
+
+  const degraded = await composeWeeklyPrefillWithAi(suggestion, async () => ({
+    items: [{ suggestionKey: 'unknown', workTarget: 'x', completionDescription: 'x' }]
+  }));
+  assert.equal(degraded.ai.applied, false);
+  assert.equal(degraded.summaries[0].workTarget, '完成接口联调');
 });

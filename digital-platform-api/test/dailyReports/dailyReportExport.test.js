@@ -71,6 +71,10 @@ function buildReportPayload(projectId, status = ReportStatus.DRAFT) {
     status,
     items: [
       {
+        // Export tests use ad hoc completed work so the new source model is explicit.
+        sourceType: 'ad_hoc',
+        sourcePlanTaskKey: null,
+        executionStatus: 'completed',
         workContent: '完成接口联调',
         completionProgress: '100%',
         completedAt: '17:30',
@@ -78,6 +82,10 @@ function buildReportPayload(projectId, status = ReportStatus.DRAFT) {
         deviationAndCorrectiveAction: '无偏差'
       },
       {
+        // Each completed-work line needs its own structured source and execution status.
+        sourceType: 'ad_hoc',
+        sourcePlanTaskKey: null,
+        executionStatus: 'completed',
         workContent: '完成页面草稿保存',
         completionProgress: '80%',
         completedAt: '18:10',
@@ -85,6 +93,10 @@ function buildReportPayload(projectId, status = ReportStatus.DRAFT) {
         deviationAndCorrectiveAction: '继续补齐附件'
       },
       {
+        // The export layout remains unchanged even though source metadata is stored.
+        sourceType: 'ad_hoc',
+        sourcePlanTaskKey: null,
+        executionStatus: 'completed',
         workContent: '完成导出快照',
         completionProgress: '已完成',
         completedAt: '18:30',
@@ -92,6 +104,10 @@ function buildReportPayload(projectId, status = ReportStatus.DRAFT) {
         deviationAndCorrectiveAction: '无'
       },
       {
+        // This final row exercises extra-row rendering with explicit task state.
+        sourceType: 'ad_hoc',
+        sourcePlanTaskKey: null,
+        executionStatus: 'completed',
         workContent: '校验模板扩展行',
         completionProgress: '50%',
         completedAt: '19:00',

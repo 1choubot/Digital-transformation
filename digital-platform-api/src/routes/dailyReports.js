@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import fs from 'node:fs/promises';
 import {
   requireAuth,
   requireDailyReportWriter
@@ -9,7 +10,8 @@ import {
   DAILY_REPORT_ERROR,
   parsePositiveInteger,
   normalizeDailyReportListFilters,
-  normalizeDailyReportPayload
+  normalizeDailyReportPayload,
+  normalizeReportDate
 } from '../domain/dailyReports.js';
 import { DAILY_REPORT_ATTACHMENT_MAX_FILE_SIZE } from '../storage/dailyReportAttachmentStorage.js';
 import {
@@ -20,6 +22,8 @@ import {
   getDailyReportAttachmentDownload,
   getDailyReportById,
   getDailyReportExportDto,
+  getDailyReportPlanSuggestion,
+  listAvailableWeeklyPlansForDailyReport,
   listDailyReportAttachments,
   listDailyReports,
   updateDailyReport,
@@ -63,6 +67,37 @@ dailyReportsRouter.post(
     res.status(201).json({
       data: {
         report: created
+      }
+    });
+  })
+);
+
+dailyReportsRouter.get(
+  '/available-weekly-plans',
+  asyncHandler(async (req, res) => {
+    const reportDate = normalizeReportDate(req.query.reportDate);
+    const projectId = parsePositiveInteger(req.query.projectId, 'projectId', DAILY_REPORT_ERROR.INVALID_PROJECT_ID);
+    const suggestion = await listAvailableWeeklyPlansForDailyReport({ user: req.auth.user, reportDate, projectId });
+
+    // The response mirrors plan-suggestion naming so the daily page can switch APIs cleanly.
+    res.json({
+      data: {
+        suggestion
+      }
+    });
+  })
+);
+
+dailyReportsRouter.get(
+  '/plan-suggestion',
+  asyncHandler(async (req, res) => {
+    const reportDate = normalizeReportDate(req.query.reportDate);
+    const projectId = parsePositiveInteger(req.query.projectId, 'projectId', DAILY_REPORT_ERROR.INVALID_PROJECT_ID);
+    const suggestion = await getDailyReportPlanSuggestion({ user: req.auth.user, reportDate, projectId });
+
+    res.json({
+      data: {
+        suggestion
       }
     });
   })
@@ -137,6 +172,9 @@ dailyReportsRouter.get(
           }
         },
         (error) => {
+          // 导出文件现在只作为下载临时文件，响应结束后立即清理。
+          fs.unlink(download.filePath).catch(() => {});
+          fs.unlink(download.filePath).catch(() => {});
           if (error && !res.headersSent) {
             reject(error);
             return;

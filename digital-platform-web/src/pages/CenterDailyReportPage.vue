@@ -1,207 +1,178 @@
 <template>
-  <section class="page-stack center-daily-report-page animate-fadeIn">
-    <!-- 无权限警告 -->
-    <section v-if="!canUseCenterDailyReport" class="state-panel state-panel--error panel">
-      <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10" />
-        <line x1="12" y1="8" x2="12" y2="12" />
-        <line x1="12" y1="16" x2="12.01" y2="16" />
-      </svg>
+  <section class="page-section">
+    <div class="page-header">
+      <div>
+        <p class="page-eyebrow">中心日报</p>
+        <h2>部门工作日报汇总</h2>
+        <span class="page-user">{{ currentUser.name }} / {{ formatOrganizationRole(currentUser.organizationRole) }}</span>
+      </div>
+      <button type="button" class="primary-button" :disabled="loading || exporting" @click="handleExport">
+        {{ exporting ? '正在导出...' : '导出中心日报' }}
+      </button>
+    </div>
+
+    <section v-if="!canUseCenterDailyReport" class="state-panel state-panel--error">
       <h3>无权访问中心日报</h3>
       <p>当前账号不能查看中心日报。</p>
     </section>
 
     <template v-else>
-      <!-- 筛选面板（含导出按钮） -->
-      <section class="panel filter-panel">
-        <div class="panel-body">
-          <div class="filter-grid">
-            <!-- 报告日期 -->
-            <div class="filter-group">
-              <span class="filter-label">报告日期</span>
-              <div class="input-wrapper">
-                <input v-model="filters.date" type="date" />
-              </div>
-            </div>
-            <!-- 中心 -->
-            <div class="filter-group">
-              <span class="filter-label">中心</span>
-              <div class="input-wrapper">
-                <select v-model="filters.department" :disabled="isCenterManager">
-                  <option v-for="department in departments" :key="department" :value="department">
-                    {{ formatBusinessDepartment(department) }}
-                  </option>
-                </select>
-              </div>
-            </div>
-            <!-- 查询按钮（紧挨着中心） -->
-            <div class="filter-query">
-              <button type="button" class="primary-button" :disabled="loading" @click="loadReport">
-                查询
-              </button>
-            </div>
-            <!-- 导出按钮（靠右） -->
-            <div class="filter-export">
-              <button
-                type="button"
-                class="primary-button"
-                :disabled="loading || exporting"
-                @click="handleExport"
-              >
-                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-                {{ exporting ? '正在导出...' : '导出中心日报' }}
-              </button>
-            </div>
+      <section class="filter-panel">
+        <label>
+          报告日期
+          <input v-model="filters.date" type="date" />
+        </label>
+        <label>
+          中心
+          <select v-model="filters.department" :disabled="isCenterManager">
+            <option v-for="department in departments" :key="department" :value="department">
+              {{ formatBusinessDepartment(department) }}
+            </option>
+          </select>
+        </label>
+        <button type="button" class="secondary-button" :disabled="loading" @click="loadReport">查询</button>
+      </section>
+
+      <section class="form-card">
+        <div class="section-title-row">
+          <div>
+            <h3>自动生成计划</h3>
+            <p>生产默认每日 18:00 自动生成；中心负责人只能配置本中心。</p>
           </div>
+          <button
+            v-if="canManageSchedule"
+            type="button"
+            class="secondary-button"
+            :disabled="savingSchedule"
+            @click="handleSaveSchedule"
+          >
+            {{ savingSchedule ? '正在保存...' : '保存计划' }}
+          </button>
+        </div>
+        <div class="form-grid">
+          <label>
+            是否启用
+            <select v-model="schedule.isEnabled" :disabled="!canManageSchedule">
+              <option :value="true">启用</option>
+              <option :value="false">停用</option>
+            </select>
+          </label>
+          <label>
+            生成时间
+            <input v-model="schedule.generateTime" type="time" :disabled="!canManageSchedule" />
+          </label>
         </div>
       </section>
 
-      <!-- 错误信息 -->
-      <section v-if="errorMessage" class="state-panel state-panel--error panel state-panel--compact">
+      <section v-if="errorMessage" class="state-panel state-panel--error">
         <p>{{ errorMessage }}</p>
       </section>
 
-      <!-- 加载状态 -->
-      <section v-if="loading" class="state-panel panel">
-        <div class="loading-spinner"></div>
+      <section v-if="loading" class="state-panel">
         <p>正在加载中心日报...</p>
       </section>
 
-      <!-- 日报内容 -->
-      <section v-else-if="report" class="panel report-content-panel">
-        <!-- 报告头部信息 -->
+      <section v-else-if="report" class="center-report-layout">
+        <!-- Header info row matching template row 2 -->
         <div class="report-header-info">
-          <span class="report-meta">
-            <svg class="meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-            部门：{{ formatBusinessDepartment(report.department) }}
-          </span>
-          <span class="report-meta">
-            <svg class="meta-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-            报告时间：{{ dottedDate(report.reportDate) }}
-          </span>
+          <span>部门：{{ formatBusinessDepartment(report.department) }}</span>
+          <span>报告时间：{{ dottedDate(report.reportDate) }}</span>
         </div>
 
-        <!-- 一、昨日工作计划 -->
+        <!-- Section 1: 昨日工作计划 -->
         <div class="section-block section-yesterday">
-          <div class="section-banner section-banner--yellow">
-            <span class="banner-number">一</span>
-            昨日工作计划
-          </div>
-          <div class="table-wrapper">
-            <table class="center-report-table" v-if="yesterdayGroups.length">
-              <thead>
-                <tr>
-                  <th class="col-seq">序号</th>
-                  <th class="col-project">项目</th>
-                  <th class="col-content">工作内容</th>
-                  <th class="col-person">责任人</th>
-                  <th class="col-collab-dept">协同部门</th>
-                  <th class="col-collab-item">协同事项</th>
-                </tr>
-              </thead>
-              <tbody>
-                <template v-for="(project, pIdx) in yesterdayGroups" :key="`y-p-${project.projectId}-${pIdx}`">
-                  <template v-for="(item, iIdx) in project.items" :key="`y-${pIdx}-${iIdx}`">
-                    <tr>
-                      <td v-if="iIdx === 0" class="col-seq" :rowspan="project.items.length">{{ pIdx + 1 }}</td>
-                      <td v-if="iIdx === 0" class="col-project" :rowspan="project.items.length">{{ project.projectLabel }}</td>
-                      <td class="col-content">{{ item.workContent || '' }}</td>
-                      <td class="col-person">{{ item.responsiblePerson || item.personName || '' }}</td>
-                      <td class="col-collab-dept">{{ item.collaboratingCenter || '' }}</td>
-                      <td class="col-collab-item">{{ item.collaborationItem || '' }}</td>
-                    </tr>
-                  </template>
+          <div class="section-banner section-banner--yellow">一、昨日工作计划</div>
+          <table class="center-report-table" v-if="yesterdayGroups.length">
+            <thead>
+              <tr>
+                <th class="col-seq">序号</th>
+                <th class="col-project">项目</th>
+                <th class="col-content">工作内容</th>
+                <th class="col-person">责任人</th>
+                <th class="col-collab-dept">协同部门</th>
+                <th class="col-collab-item">协同事项</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="(project, pIdx) in yesterdayGroups" :key="`y-p-${project.projectId}-${pIdx}`">
+                <template v-for="(item, iIdx) in project.items" :key="`y-${pIdx}-${iIdx}`">
+                  <tr>
+                    <td v-if="iIdx === 0" class="col-seq" :rowspan="project.items.length">{{ pIdx + 1 }}</td>
+                    <td v-if="iIdx === 0" class="col-project" :rowspan="project.items.length">{{ project.projectLabel }}</td>
+                    <td class="col-content">{{ item.workContent || '' }}</td>
+                    <td class="col-person">{{ item.responsiblePerson || item.personName || '' }}</td>
+                    <td class="col-collab-dept">{{ item.collaboratingCenter || '' }}</td>
+                    <td class="col-collab-item">{{ item.collaborationItem || '' }}</td>
+                  </tr>
                 </template>
-              </tbody>
-            </table>
-            <p v-else class="empty-section-note">暂无昨日工作计划数据</p>
-          </div>
+              </template>
+            </tbody>
+          </table>
+          <p v-else class="empty-section-note">暂无昨日工作计划数据</p>
         </div>
 
-        <!-- 二、今日工作完成情况 -->
+        <!-- Section 2: 今日工作完成情况 -->
         <div class="section-block section-today">
-          <div class="section-banner section-banner--green">
-            <span class="banner-number">二</span>
-            今日工作完成情况
-          </div>
-          <div class="table-wrapper">
-            <table class="center-report-table" v-if="todayGroups.length">
-              <thead>
-                <tr>
-                  <th class="col-seq">序号</th>
-                  <th class="col-project">项目</th>
-                  <th class="col-content">工作内容</th>
-                  <th class="col-progress">完成进度</th>
-                  <th class="col-person">责任人</th>
-                  <th class="col-deviation">偏差分析及纠偏措施</th>
-                </tr>
-              </thead>
-              <tbody>
-                <template v-for="(project, pIdx) in todayGroups" :key="`t-p-${project.projectId}-${pIdx}`">
-                  <template v-for="(item, iIdx) in project.items" :key="`t-${pIdx}-${iIdx}`">
-                    <tr>
-                      <td v-if="iIdx === 0" class="col-seq" :rowspan="project.items.length">{{ pIdx + 1 }}</td>
-                      <td v-if="iIdx === 0" class="col-project" :rowspan="project.items.length">{{ project.projectLabel }}</td>
-                      <td class="col-content">{{ item.workContent || '' }}</td>
-                      <td class="col-progress">{{ formatProgress(item.completionProgress) }}</td>
-                      <td class="col-person">{{ item.responsiblePerson || item.personName || '' }}</td>
-                      <td class="col-deviation">{{ item.deviationAndCorrectiveAction || '' }}</td>
-                    </tr>
-                  </template>
+          <div class="section-banner section-banner--green">二、今日工作完成情况</div>
+          <table class="center-report-table" v-if="todayGroups.length">
+            <thead>
+              <tr>
+                <th class="col-seq">序号</th>
+                <th class="col-project">项目</th>
+                <th class="col-content">工作内容</th>
+                <th class="col-progress">完成进度</th>
+                <th class="col-person">责任人</th>
+                <th class="col-deviation">偏差分析及纠偏措施</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="(project, pIdx) in todayGroups" :key="`t-p-${project.projectId}-${pIdx}`">
+                <template v-for="(item, iIdx) in project.items" :key="`t-${pIdx}-${iIdx}`">
+                  <tr>
+                    <td v-if="iIdx === 0" class="col-seq" :rowspan="project.items.length">{{ pIdx + 1 }}</td>
+                    <td v-if="iIdx === 0" class="col-project" :rowspan="project.items.length">{{ project.projectLabel }}</td>
+                    <td class="col-content">{{ item.workContent || '' }}</td>
+                    <td class="col-progress">{{ formatProgress(item.completionProgress) }}</td>
+                    <td class="col-person">{{ item.responsiblePerson || item.personName || '' }}</td>
+                    <td class="col-deviation">{{ item.deviationAndCorrectiveAction || '' }}</td>
+                  </tr>
                 </template>
-              </tbody>
-            </table>
-            <p v-else class="empty-section-note">暂无今日工作完成数据</p>
-          </div>
+              </template>
+            </tbody>
+          </table>
+          <p v-else class="empty-section-note">暂无今日工作完成数据</p>
         </div>
 
-        <!-- 三、明日工作计划 -->
+        <!-- Section 3: 明日工作计划 -->
         <div class="section-block section-tomorrow">
-          <div class="section-banner section-banner--red">
-            <span class="banner-number">三</span>
-            明日工作计划
-          </div>
-          <div class="table-wrapper">
-            <table class="center-report-table" v-if="tomorrowGroups.length">
-              <thead>
-                <tr>
-                  <th class="col-seq">序号</th>
-                  <th class="col-project">项目</th>
-                  <th class="col-content">工作内容</th>
-                  <th class="col-person">责任人</th>
-                  <th class="col-collab-dept">协同部门</th>
-                  <th class="col-collab-item">协同事项</th>
-                </tr>
-              </thead>
-              <tbody>
-                <template v-for="(project, pIdx) in tomorrowGroups" :key="`m-p-${project.projectId}-${pIdx}`">
-                  <template v-for="(item, iIdx) in project.items" :key="`m-${pIdx}-${iIdx}`">
-                    <tr>
-                      <td v-if="iIdx === 0" class="col-seq" :rowspan="project.items.length">{{ pIdx + 1 }}</td>
-                      <td v-if="iIdx === 0" class="col-project" :rowspan="project.items.length">{{ project.projectLabel }}</td>
-                      <td class="col-content">{{ item.workContent || '' }}</td>
-                      <td class="col-person">{{ item.responsiblePerson || item.personName || '' }}</td>
-                      <td class="col-collab-dept">{{ item.collaboratingCenter || '' }}</td>
-                      <td class="col-collab-item">{{ item.collaborationItem || '' }}</td>
-                    </tr>
-                  </template>
+          <div class="section-banner section-banner--red">三、明日工作计划</div>
+          <table class="center-report-table" v-if="tomorrowGroups.length">
+            <thead>
+              <tr>
+                <th class="col-seq">序号</th>
+                <th class="col-project">项目</th>
+                <th class="col-content">工作内容</th>
+                <th class="col-person">责任人</th>
+                <th class="col-collab-dept">协同部门</th>
+                <th class="col-collab-item">协同事项</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="(project, pIdx) in tomorrowGroups" :key="`m-p-${project.projectId}-${pIdx}`">
+                <template v-for="(item, iIdx) in project.items" :key="`m-${pIdx}-${iIdx}`">
+                  <tr>
+                    <td v-if="iIdx === 0" class="col-seq" :rowspan="project.items.length">{{ pIdx + 1 }}</td>
+                    <td v-if="iIdx === 0" class="col-project" :rowspan="project.items.length">{{ project.projectLabel }}</td>
+                    <td class="col-content">{{ item.workContent || '' }}</td>
+                    <td class="col-person">{{ item.responsiblePerson || item.personName || '' }}</td>
+                    <td class="col-collab-dept">{{ item.collaboratingCenter || '' }}</td>
+                    <td class="col-collab-item">{{ item.collaborationItem || '' }}</td>
+                  </tr>
                 </template>
-              </tbody>
-            </table>
-            <p v-else class="empty-section-note">暂无明日工作计划数据</p>
-          </div>
+              </template>
+            </tbody>
+          </table>
+          <p v-else class="empty-section-note">暂无明日工作计划数据</p>
         </div>
       </section>
     </template>
@@ -269,12 +240,14 @@ const canManageSchedule = computed(
 
 // ── Data transformation: person-first → project-first grouping ──
 
+// Flatten all items from all employees, attaching personName for fallback display.
 function flattenWithPerson(employees, sectionKey) {
   return employees.flatMap(emp =>
     emp[sectionKey].map(item => ({ ...item, personName: emp.name }))
   );
 }
 
+// Group flat items by project, preserving order of first appearance.
 function groupByProject(items) {
   const map = new Map();
   for (const item of items) {
@@ -315,6 +288,7 @@ function formatProgress(value) {
   if (value === null || value === undefined) return '';
   const num = Number(value);
   if (!Number.isFinite(num)) return String(value);
+  // 1 = 100%, 0.5 = 50%, etc.
   return num >= 1 ? '100%' : `${Math.round(num * 100)}%`;
 }
 
@@ -359,6 +333,7 @@ async function loadReport() {
   try {
     const result = await getCenterDailyReport({ date: filters.date, department: filters.department }, props.authToken);
     report.value = result.report;
+    await loadSchedule();
   } catch (error) {
     handleApiError(error);
   } finally {
@@ -416,368 +391,3 @@ onMounted(async () => {
   }
 });
 </script>
-
-<style scoped>
-/* ===== 全局页面容器 ===== */
-.page-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  padding: 1.5rem;
-  max-width: 1400px;
-  margin: 0 auto;
-  min-height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  color: #333333;
-  background: transparent;
-}
-
-/* ===== 页面进入动画 ===== */
-.animate-fadeIn {
-  animation: fadeIn 0.4s ease-out;
-}
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* ===== 面板 ===== */
-.panel {
-  background: #ffffff;
-  border-radius: 8px;
-  border: none;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.04);
-  overflow: hidden;
-}
-.panel-body {
-  padding: 1.5rem;
-}
-
-/* ===== 按钮基础 ===== */
-.primary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  background: #3e63dd;
-  color: #ffffff;
-  border: none;
-  font-weight: 500;
-  padding: 0.5rem 1.25rem;
-  border-radius: 4px;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  height: 48px;          /* 与输入框等高 */
-  white-space: nowrap;
-}
-.primary-button:hover:not(:disabled) {
-  background: #5275e7;
-}
-.primary-button:disabled {
-  opacity: 0.6;
-  background: #a0cfff;
-  cursor: not-allowed;
-}
-.btn-icon {
-  width: 16px;
-  height: 16px;
-  stroke: currentColor;
-  flex-shrink: 0;
-}
-
-/* ===== 状态面板（错误、空、加载） ===== */
-.state-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem 1.5rem;
-  text-align: center;
-  border-radius: 8px;
-}
-.state-panel--compact {
-  padding: 0.75rem 1.5rem;
-  margin: 0;
-}
-.state-panel--error {
-  background: #fef0f0;
-  color: #f56c6c;
-}
-.state-panel--error h3 {
-  margin: 0.5rem 0;
-  font-weight: 600;
-}
-.state-panel--success {
-  background: #f0f9eb;
-  color: #67c23a;
-}
-.state-panel p {
-  font-size: 0.9rem;
-  margin: 0;
-}
-.error-icon {
-  width: 32px;
-  height: 32px;
-  stroke: #f56c6c;
-  margin-bottom: 0.75rem;
-}
-
-/* ===== 加载动画 ===== */
-.loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid #ebeef5;
-  border-top-color: #3e63dd;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin-bottom: 1rem;
-}
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* ===== 筛选面板 ===== */
-.filter-grid {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 1.5rem;
-}
-
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-.filter-label {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: #606266;
-}
-
-.input-wrapper {
-  position: relative;
-  border-radius: 4px;
-  border: 1px solid #dcdfe6;
-  background: #ffffff;
-  transition: border-color 0.2s ease;
-  overflow: hidden;
-}
-.input-wrapper:focus-within {
-  border-color: #3e63dd;
-}
-.input-wrapper input,
-.input-wrapper select {
-  width: 100%;
-  padding: 0.5rem 1rem;
-  border: none;
-  background: transparent;
-  font-size: 0.9rem;
-  color: #303133;
-  outline: none;
-  height: 48px;
-  box-sizing: border-box;
-  font-family: inherit;
-}
-.input-wrapper input[type="date"] {
-  cursor: pointer;
-}
-.input-wrapper input::placeholder {
-  color: #c0c4cc;
-}
-.input-wrapper select {
-  appearance: auto;
-  cursor: pointer;
-}
-.input-wrapper select:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* 查询按钮（紧挨中心） */
-.filter-query {
-  display: flex;
-  align-items: flex-end;
-  padding-bottom: 0;   /* 与输入框底部对齐 */
-}
-
-/* 导出按钮（靠右） */
-.filter-export {
-  display: flex;
-  align-items: flex-end;
-  margin-left: auto;   /* 推到最右 */
-  padding-bottom: 0;
-}
-
-/* ===== 报告内容面板 ===== */
-.report-content-panel {
-  padding: 1.5rem;
-}
-
-.report-header-info {
-  display: flex;
-  gap: 2rem;
-  padding: 0.75rem 1rem;
-  background: #fafafa;
-  border-radius: 4px;
-  margin-bottom: 1.5rem;
-  flex-wrap: wrap;
-  border: 1px solid #ebeef5;
-}
-.report-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.9rem;
-  color: #606266;
-}
-.meta-icon {
-  width: 16px;
-  height: 16px;
-  stroke: #909399;
-}
-
-/* ===== 区块（昨日 / 今日 / 明日） ===== */
-.section-block {
-  margin-bottom: 2rem;
-}
-.section-block:last-child {
-  margin-bottom: 0;
-}
-
-.section-banner {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  font-size: 1rem;
-  font-weight: 600;
-  padding: 0.6rem 1rem;
-  border-radius: 4px;
-  margin-bottom: 1rem;
-}
-.banner-number {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.5);
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-.section-banner--yellow {
-  background: #fdf6ec;
-  color: #b88230;
-  border: 1px solid #faecd8;
-}
-.section-banner--green {
-  background: #f0f9eb;
-  color: #529b2e;
-  border: 1px solid #e1f3d8;
-}
-.section-banner--red {
-  background: #fef0f0;
-  color: #c45656;
-  border: 1px solid #fde2e2;
-}
-
-.table-wrapper {
-  overflow-x: auto;
-  width: 100%;
-}
-
-/* ===== 中心日报表格 ===== */
-.center-report-table {
-  width: 100%;
-  table-layout: fixed;
-  border-collapse: collapse;
-  font-size: 0.85rem;
-}
-.center-report-table td,
-.center-report-table th {
-  word-break: break-word;
-  overflow-wrap: break-word;
-}
-.center-report-table thead th {
-  padding: 0.6rem 0.75rem;
-  background: #fafafa;
-  border-bottom: 2px solid #ebeef5;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #909399;
-  text-align: left;
-  white-space: nowrap;
-}
-.center-report-table tbody td {
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #f0f0f2;
-  vertical-align: middle;
-  line-height: 1.5;
-}
-.center-report-table tbody tr:hover {
-  background: #fdfdfe;
-}
-
-/* 列宽定义 */
-.col-seq {
-  width: 50px;
-  text-align: center;
-}
-.col-project {
-  width: 140px;
-  font-weight: 500;
-  color: #303133;
-}
-.col-content {
-  width: 200px;
-}
-.col-person {
-  width: 80px;
-}
-.col-progress {
-  width: 70px;
-  text-align: center;
-}
-.col-deviation {
-  width: 130px;
-}
-.col-collab-dept {
-  width: 80px;
-}
-.col-collab-item {
-  width: 120px;
-}
-
-.empty-section-note {
-  padding: 1.5rem;
-  text-align: center;
-  color: #909399;
-  font-size: 0.85rem;
-  background: #fafafa;
-  border-radius: 4px;
-  border: 1px dashed #dcdfe6;
-}
-
-/* ===== 响应式 ===== */
-@media (max-width: 900px) {
-  .page-stack {
-    padding: 1rem;
-  }
-  .filter-grid {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .filter-export {
-    margin-left: 0;
-  }
-  .report-header-info {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-  .center-report-table {
-    font-size: 0.8rem;
-  }
-}
-</style>

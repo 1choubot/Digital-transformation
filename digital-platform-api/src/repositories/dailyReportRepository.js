@@ -1,6 +1,7 @@
 import { pool } from '../db/pool.js';
-import { DAILY_REPORT_ERROR, DailyReportError } from '../domain/dailyReports.js';
+import { DAILY_REPORT_ERROR, DailyReportError, DailyTaskSourceType } from '../domain/dailyReports.js';
 import { ReportStatus } from '../domain/reports.js';
+import { formatIsoDate, getWeekStart, parseIsoDate } from '../domain/reportWorkdays.js';
 import { buildProjectVisibilityCondition } from './projects/visibility.js';
 import {
   assertDailyReportAttachmentFileReadable,
@@ -67,6 +68,9 @@ function mapDailyReportItem(row) {
     id: row.id,
     sortOrder: row.sort_order,
     projectId: row.project_id,
+    sourceType: row.source_type || DailyTaskSourceType.LEGACY_UNKNOWN,
+    sourcePlanTaskKey: row.source_plan_task_key,
+    executionStatus: row.execution_status,
     workContent: row.work_content,
     completionProgress: row.completion_progress,
     completedAt: String(row.completed_at).slice(0, 5),
@@ -200,16 +204,22 @@ async function replaceDailyReportRows(executor, reportId, { projectId, items, pl
         daily_report_id,
         sort_order,
         project_id,
+        source_type,
+        source_plan_task_key,
+        execution_status,
         work_content,
         completion_progress,
         completed_at,
         responsible_person,
         deviation_and_corrective_action
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         reportId,
         item.sortOrder,
         projectId,
+        item.sourceType,
+        item.sourcePlanTaskKey,
+        item.executionStatus,
         item.workContent,
         item.completionProgress,
         item.completedAt,
@@ -317,6 +327,7 @@ export async function getDailyReportPlanSuggestion({ user, reportDate, projectId
   const [rows] = await executor.execute(
     `SELECT
       wrp.id,
+      wrp.task_key,
       wrp.weekly_report_id,
       wrp.sort_order,
       wrp.project_id,
@@ -337,6 +348,7 @@ export async function getDailyReportPlanSuggestion({ user, reportDate, projectId
     projectId,
     items: rows.map((row) => ({
       id: row.id,
+      taskKey: row.task_key,
       weeklyReportId: row.weekly_report_id,
       sortOrder: row.sort_order,
       projectId: row.project_id,
@@ -347,6 +359,111 @@ export async function getDailyReportPlanSuggestion({ user, reportDate, projectId
   };
 }
 
+// Derive the current and previous week windows used by daily-to-weekly plan links.
+function resolveDailyReportPlanWindow(reportDate) {
+  const weekStart = getWeekStart(reportDate);
+  const weekStartDate = parseIsoDate(weekStart);
+  const weekEndDate = new Date(weekStartDate.getTime() + 6 * 24 * 60 * 60 * 1000);
+  const previousWeekStartDate = new Date(weekStartDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  return {
+    weekStart,
+    weekEnd: formatIsoDate(weekEndDate),
+    previousWeekStart: formatIsoDate(previousWeekStartDate)
+  };
+}
+
+// List the selectable weekly plans for one daily report's project and natural week.
+export async function listAvailableWeeklyPlansForDailyReport({ user, reportDate, projectId }, executor = pool) {
+  await assertProjectAvailable(executor, { projectId, user, forUpdate: false });
+  const window = resolveDailyReportPlanWindow(reportDate);
+  const [rows] = await executor.execute(
+    `SELECT
+      wrp.id,
+      wrp.task_key,
+      wrp.weekly_report_id,
+      wr.status AS weekly_report_status,
+      wrp.sort_order,
+      wrp.project_id,
+      wrp.work_task,
+      wrp.work_target,
+      wrp.planned_date,
+      (
+        SELECT dri.execution_status
+        FROM daily_reports dr
+        INNER JOIN daily_report_items dri ON dri.daily_report_id = dr.id
+        WHERE dr.user_id = wr.user_id
+          AND dr.status = 'submitted'
+          AND dr.report_date BETWEEN ? AND ?
+          AND dri.source_plan_task_key = wrp.task_key
+        ORDER BY dr.report_date DESC, dri.sort_order DESC, dri.id DESC
+        LIMIT 1
+      ) AS latest_execution_status
+    FROM weekly_report_plans wrp
+    INNER JOIN weekly_reports wr ON wr.id = wrp.weekly_report_id
+    WHERE wr.user_id = ?
+      AND wr.week_start = ?
+      AND wr.status IN ('draft', 'submitted')
+      AND wrp.project_id = ?
+      AND wrp.planned_date BETWEEN ? AND ?
+      AND wrp.task_key IS NOT NULL
+      AND wrp.task_key <> ''
+    ORDER BY wrp.planned_date ASC, wrp.sort_order ASC, wrp.id ASC`,
+    [
+      window.weekStart,
+      window.weekEnd,
+      user.id,
+      window.previousWeekStart,
+      projectId,
+      window.weekStart,
+      window.weekEnd
+    ]
+  );
+
+  return {
+    reportDate,
+    projectId,
+    weekStart: window.weekStart,
+    weekEnd: window.weekEnd,
+    items: rows.map((row) => ({
+      id: row.id,
+      taskKey: row.task_key,
+      weeklyReportId: row.weekly_report_id,
+      weeklyReportStatus: row.weekly_report_status,
+      sortOrder: row.sort_order,
+      projectId: row.project_id,
+      workTask: row.work_task,
+      workTarget: row.work_target,
+      plannedDate: formatDateOnly(row.planned_date),
+      latestExecutionStatus: row.latest_execution_status || null
+    }))
+  };
+}
+
+// Submitted daily rows must reference only source plans available in the same scoped list.
+async function assertDailyReportItemTaskSources(executor, { user, report }) {
+  if (report.status !== ReportStatus.SUBMITTED) {
+    return;
+  }
+
+  const suggestion = await listAvailableWeeklyPlansForDailyReport(
+    { user, reportDate: report.reportDate, projectId: report.projectId },
+    executor
+  );
+  const availableTaskKeys = new Set(suggestion.items.map((item) => item.taskKey));
+
+  report.items.forEach((item, index) => {
+    if (item.sourceType === DailyTaskSourceType.WEEKLY_PLAN && !availableTaskKeys.has(item.sourcePlanTaskKey)) {
+      throw new DailyReportError(
+        DAILY_REPORT_ERROR.INVALID_TASK_SOURCE,
+        'Daily report item source plan is not available for this project and week',
+        409,
+        [`items.${index}.sourcePlanTaskKey`]
+      );
+    }
+  });
+}
+
 // Create a draft or submitted report for the authenticated employee.
 export async function createDailyReport({ user, report }) {
   const userId = user.id;
@@ -355,6 +472,7 @@ export async function createDailyReport({ user, report }) {
   try {
     await connection.beginTransaction();
     await assertProjectAvailable(connection, { projectId: report.projectId, user });
+    await assertDailyReportItemTaskSources(connection, { user, report });
 
     const [result] = await connection.execute(
       `INSERT INTO daily_reports (
@@ -395,6 +513,7 @@ export async function updateDailyReport({ reportId, user, report }) {
     await connection.beginTransaction();
     await selectDailyReportHeader(connection, { reportId, userId, forUpdate: true });
     await assertProjectAvailable(connection, { projectId: report.projectId, user });
+    await assertDailyReportItemTaskSources(connection, { user, report });
 
     await connection.execute(
       `UPDATE daily_reports

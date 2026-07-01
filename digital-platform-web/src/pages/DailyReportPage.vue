@@ -120,24 +120,25 @@
             </button>
           </div>
 
-          <div v-if="planSuggestion.items.length" class="daily-plan-suggestion">
+          <div v-if="form.projectId && form.reportDate" class="daily-plan-suggestion">
             <div class="daily-plan-suggestion__content">
-              <strong>周报计划匹配</strong>
-              <ul>
-                <li v-for="item in planSuggestion.items" :key="item.id">
-                  {{ item.workTarget }}
+              <strong>本周可关联周计划</strong>
+              <ul v-if="planSuggestion.items.length">
+                <li v-for="item in planSuggestion.items" :key="item.taskKey">
+                  {{ item.plannedDate }}｜{{ item.workTarget }}｜{{ executionStatusLabel(item.latestExecutionStatus) }}
                 </li>
               </ul>
+              <p v-else class="inline-muted">当前项目在本周没有可关联的周计划，请选择新增临时工作。</p>
             </div>
-            <button type="button" class="ghost-button" @click="applyPlanSuggestion">
-              填入今日完成情况
-            </button>
           </div>
 
           <div class="table-container">
             <div class="daily-edit-table daily-edit-table--items">
               <div class="daily-edit-table__head">
                 <span>工作内容</span>
+                <span>任务来源</span>
+                <span>关联周计划</span>
+                <span>执行状态</span>
                 <span>完成进度</span>
                 <span>完成时间</span>
                 <span>负责人</span>
@@ -151,6 +152,38 @@
                   class="form-control form-textarea"
                   :class="{ invalid: itemErrors[item.localId]?.workContent }"
                 />
+                <select
+                  v-model="item.sourceType"
+                  class="form-control"
+                  :class="{ invalid: itemErrors[item.localId]?.sourceType }"
+                  @change="onItemSourceTypeChange(item)"
+                >
+                  <option value="">请选择来源</option>
+                  <option value="weekly_plan">执行本周计划</option>
+                  <option value="ad_hoc">新增临时工作</option>
+                </select>
+                <select
+                  v-model="item.sourcePlanTaskKey"
+                  class="form-control"
+                  :disabled="item.sourceType !== 'weekly_plan'"
+                  :class="{ invalid: itemErrors[item.localId]?.sourcePlanTaskKey }"
+                  @change="applySelectedPlanToItem(item)"
+                >
+                  <option value="">请选择计划</option>
+                  <option v-for="plan in planSuggestion.items" :key="plan.taskKey" :value="plan.taskKey">
+                    {{ plan.plannedDate }}｜{{ plan.workTarget }}
+                  </option>
+                </select>
+                <select
+                  v-model="item.executionStatus"
+                  class="form-control"
+                  :class="{ invalid: itemErrors[item.localId]?.executionStatus }"
+                >
+                  <option value="">请选择状态</option>
+                  <option value="completed">已完成</option>
+                  <option value="in_progress">进行中</option>
+                  <option value="not_completed">未完成</option>
+                </select>
                 <input
                   v-model="item.completionProgress"
                   required
@@ -306,8 +339,8 @@ import {
   deleteDailyReportAttachment,
   downloadDailyReportAttachment,
   exportDailyReport,
+  getAvailableWeeklyPlansForDailyReport,
   getDailyReport,
-  getDailyReportPlanSuggestion,
   searchDailyReportProjects,
   toReadableApiError,
   updateDailyReport,
@@ -361,6 +394,8 @@ const planSuggestion = reactive({
   items: []
 });
 let planSuggestionRequestSeq = 0;
+let lastProjectIdForPlanScope = '';
+let lastWeekStartForPlanScope = '';
 
 // ===== 缩略图缓存 =====
 const thumbnails = reactive({});
@@ -403,6 +438,9 @@ const isBackfill = computed(() => form.reportDate && form.reportDate !== today);
 // 判断今日完成行是否为空
 function isBlankCompletedItem(item) {
   return !String(item?.workContent || '').trim() &&
+    !String(item?.sourceType || '').trim() &&
+    !String(item?.sourcePlanTaskKey || '').trim() &&
+    !String(item?.executionStatus || '').trim() &&
     !String(item?.completionProgress || '').trim() &&
     !String(item?.completedAt || '').trim();
 }
@@ -419,6 +457,8 @@ function prepareSubmittedItems() {
     }
     errors[firstItem.localId] = {
       workContent: true,
+      sourceType: true,
+      executionStatus: true,
       completionProgress: true,
       completedAt: true
     };
@@ -427,17 +467,27 @@ function prepareSubmittedItems() {
   for (const item of nonBlankItems) {
     const rowErrors = {
       workContent: !String(item.workContent || '').trim(),
+      sourceType: !String(item.sourceType || '').trim(),
+      sourcePlanTaskKey: item.sourceType === 'weekly_plan' && !String(item.sourcePlanTaskKey || '').trim(),
+      executionStatus: !String(item.executionStatus || '').trim(),
       completionProgress: !String(item.completionProgress || '').trim(),
       completedAt: !String(item.completedAt || '').trim()
     };
-    if (rowErrors.workContent || rowErrors.completionProgress || rowErrors.completedAt) {
+    if (
+      rowErrors.workContent ||
+      rowErrors.sourceType ||
+      rowErrors.sourcePlanTaskKey ||
+      rowErrors.executionStatus ||
+      rowErrors.completionProgress ||
+      rowErrors.completedAt
+    ) {
       errors[item.localId] = rowErrors;
     }
   }
 
   itemErrors.value = errors;
   if (Object.keys(errors).length > 0) {
-    errorMessage.value = '请补全高亮的今日完成情况：工作内容、完成进度、完成时间。';
+    errorMessage.value = '请补全高亮的今日完成情况：来源、计划、状态、工作内容、完成进度、完成时间。';
     return false;
   }
 
@@ -453,6 +503,9 @@ function buildLocalId() {
 function createEmptyItem() {
   return {
     localId: buildLocalId(),
+    sourceType: '',
+    sourcePlanTaskKey: '',
+    executionStatus: '',
     workContent: '',
     completionProgress: '100%',
     completedAt: '17:30',
@@ -472,6 +525,25 @@ function createEmptyPlan() {
   };
 }
 
+// Resolve the Monday for the selected report date without UTC drift.
+function getWeekStart(dateText) {
+  const date = new Date(`${dateText}T00:00:00`);
+  const day = date.getDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + offset);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const dayOfMonth = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${dayOfMonth}`;
+}
+
+function executionStatusLabel(status) {
+  if (status === 'completed') return '已完成';
+  if (status === 'in_progress') return '进行中';
+  if (status === 'not_completed') return '未完成';
+  return '暂无关联日报';
+}
+
 function saveBlob(download, fallbackName) {
   const url = URL.createObjectURL(download.blob);
   const link = globalThis.document.createElement('a');
@@ -489,6 +561,9 @@ function buildPayload(status) {
     projectId: Number(form.projectId),
     status,
     items: form.items.map((item) => ({
+      sourceType: item.sourceType || null,
+      sourcePlanTaskKey: item.sourceType === 'weekly_plan' ? item.sourcePlanTaskKey || null : null,
+      executionStatus: item.executionStatus || null,
       workContent: item.workContent,
       completionProgress: item.completionProgress,
       completedAt: item.completedAt,
@@ -505,7 +580,7 @@ function buildPayload(status) {
   };
 }
 
-// 根据报告日期和项目刷新可带入的周报计划。
+// 根据报告日期和项目刷新当前项目本周可执行的周报计划。
 async function refreshPlanSuggestion() {
   const requestSeq = ++planSuggestionRequestSeq;
   planSuggestion.items = [];
@@ -515,7 +590,7 @@ async function refreshPlanSuggestion() {
   }
 
   try {
-    const result = await getDailyReportPlanSuggestion(
+    const result = await getAvailableWeeklyPlansForDailyReport(
       { reportDate: form.reportDate, projectId: form.projectId },
       props.authToken
     );
@@ -523,6 +598,7 @@ async function refreshPlanSuggestion() {
       return;
     }
     planSuggestion.items = result.suggestion?.items || [];
+    clearInvalidPlanTaskKeys();
   } catch (error) {
     if (requestSeq !== planSuggestionRequestSeq) {
       return;
@@ -535,26 +611,37 @@ async function refreshPlanSuggestion() {
   }
 }
 
-function applyPlanSuggestion() {
-  const suggestionText = planSuggestion.items
-    .map((item) => String(item.workTarget || '').trim())
-    .filter(Boolean)
-    .join('\n');
-  if (!suggestionText) {
+function clearInvalidPlanTaskKeys() {
+  const availableTaskKeys = new Set(planSuggestion.items.map((item) => item.taskKey));
+  form.items.forEach((item) => {
+    if (item.sourceType === 'weekly_plan' && item.sourcePlanTaskKey && !availableTaskKeys.has(item.sourcePlanTaskKey)) {
+      item.sourcePlanTaskKey = '';
+    }
+  });
+}
+
+function clearAllPlanTaskKeysForScopeChange() {
+  form.items.forEach((item) => {
+    if (item.sourceType === 'weekly_plan') {
+      item.sourcePlanTaskKey = '';
+    }
+  });
+}
+
+function onItemSourceTypeChange(item) {
+  if (item.sourceType !== 'weekly_plan') {
+    item.sourcePlanTaskKey = '';
+  }
+}
+
+function applySelectedPlanToItem(item) {
+  const plan = planSuggestion.items.find((candidate) => candidate.taskKey === item.sourcePlanTaskKey);
+  if (!plan) {
     return;
   }
-
-  const firstItem = form.items[0] || createEmptyItem();
-  if (form.items.length === 0) {
-    form.items = [firstItem];
+  if (!String(item.workContent || '').trim()) {
+    item.workContent = plan.workTarget || plan.workTask || '';
   }
-  if (String(firstItem.workContent || '').trim()) {
-    const confirmed = window.confirm('当前工作内容已有填写，是否用周报计划内容覆盖？');
-    if (!confirmed) {
-      return;
-    }
-  }
-  firstItem.workContent = suggestionText;
 }
 
 // ===== 缩略图加载函数 =====
@@ -670,6 +757,9 @@ function hydrateForm(report) {
     ? report.items.map((item) => ({
         ...item,
         localId: buildLocalId(),
+        sourceType: item.sourceType === 'legacy_unknown' ? '' : item.sourceType || '',
+        sourcePlanTaskKey: item.sourcePlanTaskKey || '',
+        executionStatus: item.executionStatus || '',
         responsiblePerson: item.responsiblePerson || currentUserDisplayName.value
       }))
     : [createEmptyItem()];
@@ -757,6 +847,9 @@ function onInputSearch() {
 }
 
 function selectProject(project) {
+  if (String(form.projectId || '') !== String(project.id || '')) {
+    clearAllPlanTaskKeysForScopeChange();
+  }
   form.projectId = project.id;
   projectKeyword.value = `${project.projectCode} / ${project.projectName}`;
   projectSearchMessage.value = '';
@@ -765,6 +858,7 @@ function selectProject(project) {
 }
 
 function clearProjectSelection() {
+  clearAllPlanTaskKeysForScopeChange();
   projectKeyword.value = '';
   form.projectId = '';
   showDropdown.value = false;
@@ -905,7 +999,21 @@ onMounted(async () => {
 });
 
 watch(() => props.reportId, loadReport);
-watch(() => [form.reportDate, form.projectId], refreshPlanSuggestion, { immediate: true });
+watch(
+  () => [form.reportDate, form.projectId],
+  () => {
+    const currentWeekStart = form.reportDate ? getWeekStart(form.reportDate) : '';
+    const projectChanged = String(lastProjectIdForPlanScope || '') !== String(form.projectId || '');
+    const weekChanged = String(lastWeekStartForPlanScope || '') !== String(currentWeekStart || '');
+    if ((projectChanged || weekChanged) && (lastProjectIdForPlanScope || lastWeekStartForPlanScope)) {
+      clearAllPlanTaskKeysForScopeChange();
+    }
+    lastProjectIdForPlanScope = form.projectId || '';
+    lastWeekStartForPlanScope = currentWeekStart;
+    void refreshPlanSuggestion();
+  },
+  { immediate: true }
+);
 
 // 组件卸载时清理 object URL
 onBeforeUnmount(() => {
@@ -1309,7 +1417,7 @@ onBeforeUnmount(() => {
   width: 100%;
 }
 .daily-edit-table {
-  min-width: 800px;
+  min-width: 1320px;
   width: 100%;
 }
 .daily-edit-table__head {
@@ -1323,7 +1431,7 @@ onBeforeUnmount(() => {
   gap: 0.75rem;
 }
 .daily-edit-table--items .daily-edit-table__head {
-  grid-template-columns: 2fr 1.2fr 1fr 1fr 1.5fr 0.8fr;
+  grid-template-columns: 1.8fr 1.1fr 1.8fr 1.1fr 1fr 0.9fr 1fr 1.4fr 0.7fr;
 }
 .daily-edit-table--plans .daily-edit-table__head {
   grid-template-columns: 2fr 1fr 1fr 1.2fr 1.5fr 0.8fr;
@@ -1341,7 +1449,7 @@ onBeforeUnmount(() => {
   transition: background 0.2s ease;
 }
 .daily-edit-table--items .daily-edit-table__row {
-  grid-template-columns: 2fr 1.2fr 1fr 1fr 1.5fr 0.8fr;
+  grid-template-columns: 1.8fr 1.1fr 1.8fr 1.1fr 1fr 0.9fr 1fr 1.4fr 0.7fr;
 }
 .daily-edit-table--plans .daily-edit-table__row {
   grid-template-columns: 2fr 1fr 1fr 1.2fr 1.5fr 0.8fr;

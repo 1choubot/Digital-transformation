@@ -22,6 +22,10 @@ function buildDailyReportPayload(projectId, overrides = {}) {
     status: ReportStatus.SUBMITTED,
     items: [
       {
+        // Existing integration flow represents new unplanned work under the structured source model.
+        sourceType: 'ad_hoc',
+        sourcePlanTaskKey: null,
+        executionStatus: 'completed',
         workContent: 'Complete backend validation',
         completionProgress: '100%',
         completedAt: '17:30',
@@ -173,7 +177,7 @@ test('M2 daily report backend flow enforces validation and ownership', async () 
       method: 'POST',
       token: employee.token,
       body: buildDailyReportPayload(projectA, {
-        items: [{ workContent: '', completionProgress: '', completedAt: '' }]
+        items: [{ sourceType: 'ad_hoc', executionStatus: 'completed', workContent: '', completionProgress: '', completedAt: '' }]
       })
     });
     assert.equal(missingFields.status, 400);
@@ -235,26 +239,33 @@ test('M2 daily report backend flow enforces validation and ownership', async () 
     await pool.execute(
       `INSERT INTO weekly_report_plans (
         weekly_report_id,
+        task_key,
         sort_order,
         project_id,
         work_task,
         work_target,
         planned_date,
         responsible_person
-      ) VALUES (?, 1, ?, ?, 'Finish precise project linkage', '2026-06-24', 'Tester')`,
-      [weeklyResult.insertId, projectA, `${testPrefix}_A / ${testPrefix}_A name`]
+      ) VALUES (?, ?, 1, ?, ?, 'Finish precise project linkage', '2026-06-24', 'Tester')`,
+      [
+        weeklyResult.insertId,
+        '11111111-1111-4111-8111-111111111111',
+        projectA,
+        `${testPrefix}_A / ${testPrefix}_A name`
+      ]
     );
     await pool.execute(
       `INSERT INTO weekly_report_plans (
         weekly_report_id,
+        task_key,
         sort_order,
         project_id,
         work_task,
         work_target,
         planned_date,
         responsible_person
-      ) VALUES (?, 2, NULL, 'Free text task', 'Should not match without project id', '2026-06-24', 'Tester')`,
-      [weeklyResult.insertId]
+      ) VALUES (?, ?, 2, NULL, 'Free text task', 'Should not match without project id', '2026-06-24', 'Tester')`,
+      [weeklyResult.insertId, '22222222-2222-4222-8222-222222222222']
     );
     const [otherWeeklyResult] = await pool.execute(
       `INSERT INTO weekly_reports (
@@ -268,14 +279,15 @@ test('M2 daily report backend flow enforces validation and ownership', async () 
     await pool.execute(
       `INSERT INTO weekly_report_plans (
         weekly_report_id,
+        task_key,
         sort_order,
         project_id,
         work_task,
         work_target,
         planned_date,
         responsible_person
-      ) VALUES (?, 1, ?, 'Other user task', 'Should not cross users', '2026-06-24', 'Tester')`,
-      [otherWeeklyResult.insertId, projectA]
+      ) VALUES (?, ?, 1, ?, 'Other user task', 'Should not cross users', '2026-06-24', 'Tester')`,
+      [otherWeeklyResult.insertId, '33333333-3333-4333-8333-333333333333', projectA]
     );
 
     const suggestion = await requestJson(
@@ -306,14 +318,20 @@ test('M2 daily report backend flow enforces validation and ownership', async () 
     await pool.execute(
       `INSERT INTO weekly_report_plans (
         weekly_report_id,
+        task_key,
         sort_order,
         project_id,
         work_task,
         work_target,
         planned_date,
         responsible_person
-      ) VALUES (?, 3, ?, ?, 'Carry next-week plan into daily report', '2026-06-30', 'Tester')`,
-      [weeklyResult.insertId, projectA, `${testPrefix}_A / ${testPrefix}_A name`]
+      ) VALUES (?, ?, 3, ?, ?, 'Carry next-week plan into daily report', '2026-06-30', 'Tester')`,
+      [
+        weeklyResult.insertId,
+        '44444444-4444-4444-8444-444444444444',
+        projectA,
+        `${testPrefix}_A / ${testPrefix}_A name`
+      ]
     );
     const nextWeekSuggestion = await requestJson(
       server.baseUrl,

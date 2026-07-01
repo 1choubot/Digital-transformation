@@ -23,6 +23,7 @@ import {
   getDailyReportById,
   getDailyReportExportDto,
   getDailyReportPlanSuggestion,
+  listAvailableWeeklyPlansForDailyReport,
   listDailyReportAttachments,
   listDailyReports,
   updateDailyReport,
@@ -66,6 +67,22 @@ dailyReportsRouter.post(
     res.status(201).json({
       data: {
         report: created
+      }
+    });
+  })
+);
+
+dailyReportsRouter.get(
+  '/available-weekly-plans',
+  asyncHandler(async (req, res) => {
+    const reportDate = normalizeReportDate(req.query.reportDate);
+    const projectId = parsePositiveInteger(req.query.projectId, 'projectId', DAILY_REPORT_ERROR.INVALID_PROJECT_ID);
+    const suggestion = await listAvailableWeeklyPlansForDailyReport({ user: req.auth.user, reportDate, projectId });
+
+    // The response mirrors plan-suggestion naming so the daily page can switch APIs cleanly.
+    res.json({
+      data: {
+        suggestion
       }
     });
   })

@@ -17,6 +17,7 @@ import {
   normalizeComparisonOverviewFilters,
   normalizeWeeklyFinalReviewPayload,
   normalizeWeeklyReportPayload,
+  normalizeIsoDate,
   parsePositiveInteger,
   WEEKLY_REPORT_ERROR,
   WeeklyReportError
@@ -36,6 +37,8 @@ import {
   resolveWeeklyReportWorkdayContext
 } from '../repositories/weeklyReportRepository.js';
 import { evaluateWeeklyReportScore } from '../services/weeklyReportEvaluationService.js';
+import { buildWeeklyReportPrefillSuggestion } from '../services/weeklyReportPrefillService.js';
+import { composeWeeklyPrefillWithAi } from '../services/weeklyReportPrefillAiService.js';
 import { generateWeeklyReportWorkbook } from '../services/weeklyReportExportService.js';
 import { upsertWeeklyRestModeAnchor, findLatestWeeklyRestModeAnchor } from '../repositories/reportSettingsRepository.js';
 import { resolveWeeklyRestMode, getWeekStart } from '../domain/reportWorkdays.js';
@@ -144,6 +147,62 @@ weeklyReportsRouter.put(
 );
 
 // ── Comparison overview ──
+
+weeklyReportsRouter.get(
+  '/prefill-suggestion',
+  requireWeeklyReportWriter,
+  asyncHandler(async (req, res) => {
+    const weekStart = normalizeIsoDate(req.query.weekStart, 'weekStart');
+    if (getWeekStart(weekStart) !== weekStart) {
+      throw new WeeklyReportError(WEEKLY_REPORT_ERROR.INVALID_WEEK, 'weekStart must be a Monday', 400, ['weekStart']);
+    }
+    const suggestion = await buildWeeklyReportPrefillSuggestion({ user: req.auth.user, weekStart });
+
+    // Prefill is a read-only suggestion and never creates or updates weekly report rows.
+    res.json({
+      data: {
+        suggestion
+      }
+    });
+  })
+);
+
+weeklyReportsRouter.post(
+  '/prefill-suggestion/ai-compose',
+  requireWeeklyReportWriter,
+  asyncHandler(async (req, res) => {
+    const weekStart = normalizeIsoDate(req.body?.weekStart, 'weekStart');
+    if (getWeekStart(weekStart) !== weekStart) {
+      throw new WeeklyReportError(WEEKLY_REPORT_ERROR.INVALID_WEEK, 'weekStart must be a Monday', 400, ['weekStart']);
+    }
+
+    const currentSuggestion = await buildWeeklyReportPrefillSuggestion({ user: req.auth.user, weekStart });
+    if (String(req.body?.basisHash || '') !== String(currentSuggestion.basisHash || '')) {
+      res.status(409).json({
+        error: {
+          code: WEEKLY_REPORT_ERROR.PREFILL_BASIS_CHANGED,
+          message: 'Weekly prefill basis changed'
+        },
+        data: {
+          suggestion: currentSuggestion
+        }
+      });
+      return;
+    }
+
+    const suggestion = await composeWeeklyPrefillWithAi(
+      currentSuggestion,
+      req.app.locals.weeklyReportPrefillAiClient
+    );
+
+    // AI compose is intentionally not persisted; the user must save the weekly report explicitly.
+    res.json({
+      data: {
+        suggestion
+      }
+    });
+  })
+);
 
 weeklyReportsRouter.get(
   '/comparison-overview',

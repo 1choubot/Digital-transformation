@@ -13,6 +13,24 @@ const TEXT_LIMITS = {
   longText: 5000
 };
 
+// Daily completed-work rows distinguish where the task came from.
+export const DailyTaskSourceType = {
+  WEEKLY_PLAN: 'weekly_plan',
+  AD_HOC: 'ad_hoc',
+  LEGACY_UNKNOWN: 'legacy_unknown'
+};
+
+// Daily execution status is the structured source of truth for weekly rollups.
+export const DailyExecutionStatus = {
+  COMPLETED: 'completed',
+  IN_PROGRESS: 'in_progress',
+  NOT_COMPLETED: 'not_completed'
+};
+
+const DAILY_TASK_SOURCE_TYPES = new Set(Object.values(DailyTaskSourceType));
+const DAILY_EXECUTION_STATUSES = new Set(Object.values(DailyExecutionStatus));
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export const DAILY_REPORT_ERROR = {
   INVALID_ID: 'INVALID_DAILY_REPORT_ID',
   INVALID_PROJECT_ID: 'INVALID_PROJECT_ID',
@@ -26,7 +44,9 @@ export const DAILY_REPORT_ERROR = {
   DELETE_SUBMITTED: 'DAILY_REPORT_DELETE_SUBMITTED',
   INVALID_ATTACHMENT_FILE: 'DAILY_REPORT_INVALID_ATTACHMENT_FILE',
   ATTACHMENT_NOT_FOUND: 'DAILY_REPORT_ATTACHMENT_NOT_FOUND',
-  ATTACHMENT_FILE_MISSING: 'DAILY_REPORT_ATTACHMENT_FILE_MISSING'
+  ATTACHMENT_FILE_MISSING: 'DAILY_REPORT_ATTACHMENT_FILE_MISSING',
+  INVALID_TASK_SOURCE: 'DAILY_REPORT_INVALID_TASK_SOURCE',
+  INVALID_EXECUTION_STATUS: 'DAILY_REPORT_INVALID_EXECUTION_STATUS'
 };
 
 export class DailyReportError extends Error {
@@ -108,13 +128,68 @@ function normalizeTime(value, fieldName, missing, { required = false } = {}) {
   return `${text}:00`;
 }
 
+// Normalize optional UUID task keys while preserving null for ad hoc and draft rows.
+function normalizeTaskKey(value, fieldName, missing, { required = false } = {}) {
+  const text = String(value ?? '').trim();
+  if (!text) {
+    if (required) {
+      missing.push(fieldName);
+    }
+    return null;
+  }
+
+  if (!UUID_PATTERN.test(text)) {
+    missing.push(fieldName);
+    return null;
+  }
+
+  return text;
+}
+
+// Normalize the source/status pair; submit mode enforces the new structured fields.
+function normalizeItemTracking(item, prefix, missing, isSubmit) {
+  const rawSourceType = String(item?.sourceType ?? '').trim();
+  const sourceType = rawSourceType || (isSubmit ? '' : DailyTaskSourceType.LEGACY_UNKNOWN);
+  if (!sourceType || !DAILY_TASK_SOURCE_TYPES.has(sourceType)) {
+    missing.push(`${prefix}.sourceType`);
+  }
+
+  const rawExecutionStatus = String(item?.executionStatus ?? '').trim();
+  const executionStatus = rawExecutionStatus || null;
+  if (isSubmit && !executionStatus) {
+    missing.push(`${prefix}.executionStatus`);
+  }
+  if (executionStatus && !DAILY_EXECUTION_STATUSES.has(executionStatus)) {
+    missing.push(`${prefix}.executionStatus`);
+  }
+
+  const sourcePlanTaskKey = normalizeTaskKey(
+    item?.sourcePlanTaskKey,
+    `${prefix}.sourcePlanTaskKey`,
+    missing,
+    { required: isSubmit && sourceType === DailyTaskSourceType.WEEKLY_PLAN }
+  );
+
+  if (sourceType === DailyTaskSourceType.AD_HOC && sourcePlanTaskKey) {
+    missing.push(`${prefix}.sourcePlanTaskKey`);
+  }
+
+  return {
+    sourceType: DAILY_TASK_SOURCE_TYPES.has(sourceType) ? sourceType : DailyTaskSourceType.LEGACY_UNKNOWN,
+    sourcePlanTaskKey,
+    executionStatus
+  };
+}
+
 // Normalize one completed-work row.
 function normalizeItem(item, index, isSubmit) {
   const missing = [];
   const prefix = `items.${index}`;
+  const tracking = normalizeItemTracking(item, prefix, missing, isSubmit);
 
   const normalized = {
     sortOrder: index + 1,
+    ...tracking,
     workContent: normalizeRequiredText(item?.workContent, `${prefix}.workContent`, missing),
     completionProgress: normalizeRequiredText(item?.completionProgress, `${prefix}.completionProgress`, missing).slice(
       0,
@@ -124,6 +199,18 @@ function normalizeItem(item, index, isSubmit) {
     responsiblePerson: normalizeNullableText(item?.responsiblePerson, TEXT_LIMITS.shortText),
     deviationAndCorrectiveAction: normalizeNullableText(item?.deviationAndCorrectiveAction)
   };
+
+  if (isSubmit && normalized.executionStatus === DailyExecutionStatus.COMPLETED && !normalized.completedAt) {
+    missing.push(`${prefix}.completedAt`);
+  }
+
+  if (
+    isSubmit &&
+    normalized.executionStatus === DailyExecutionStatus.NOT_COMPLETED &&
+    !normalized.deviationAndCorrectiveAction
+  ) {
+    missing.push(`${prefix}.deviationAndCorrectiveAction`);
+  }
 
   if (isSubmit && missing.length > 0) {
     throw new DailyReportError(DAILY_REPORT_ERROR.REQUIRED_FIELDS, 'Missing daily report item fields', 400, missing);

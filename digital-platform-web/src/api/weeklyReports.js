@@ -31,6 +31,20 @@ export async function getWeeklyReportComparisonTable(reportId, authToken = '') {
   return request(`/api/weekly-reports/${reportId}/comparison-table`, { authToken });
 }
 
+// Load a read-only weekly summary draft generated from previous plans and submitted daily reports.
+export async function getWeeklyReportPrefillSuggestion({ weekStart }, authToken = '') {
+  return request(`/api/weekly-reports/prefill-suggestion${buildQuery({ weekStart })}`, { authToken });
+}
+
+// Ask the backend to compose wording with AI while preserving rule-derived facts.
+export async function composeWeeklyReportPrefillWithAi({ weekStart, basisHash }, authToken = '') {
+  return request('/api/weekly-reports/prefill-suggestion/ai-compose', {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ weekStart, basisHash })
+  });
+}
+
 // Create a draft or submitted weekly report.
 export async function createWeeklyReport(payload, authToken = '') {
   return request('/api/weekly-reports', {

@@ -1,4 +1,5 @@
 import { pool } from '../db/pool.js';
+import { randomUUID } from 'node:crypto';
 import {
   canEvaluateWeeklyReport,
   canFinalizeWeeklyReport,
@@ -92,12 +93,14 @@ function mapSummaryRow(row) {
     weeklyReportId: row.weekly_report_id,
     sortOrder: row.sort_order,
     projectId: row.project_id,
+    sourceType: row.source_type || 'legacy_unknown',
+    sourcePlanTaskKey: row.source_plan_task_key,
     workTask: row.work_task,
     workTarget: row.work_target,
     plannedDate: dateOnly(row.planned_date),
     completionStatus: row.completion_status,
     completionDescription: row.completion_description,
-    completedDate: dateOnly(row.completed_date)
+    completedDate: row.completed_date ? dateOnly(row.completed_date) : null
   };
 }
 
@@ -107,6 +110,7 @@ function mapPlanRow(row) {
     id: row.id,
     weeklyReportId: row.weekly_report_id,
     sortOrder: row.sort_order,
+    taskKey: row.task_key,
     projectId: row.project_id,
     workTask: row.work_task,
     workTarget: row.work_target,
@@ -291,17 +295,21 @@ async function insertWeeklyReportSummaries(executor, weeklyReportId, summaries) 
         weekly_report_id,
         sort_order,
         project_id,
+        source_type,
+        source_plan_task_key,
         work_task,
         work_target,
         planned_date,
         completion_status,
         completion_description,
         completed_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         weeklyReportId,
         item.sortOrder,
         item.projectId,
+        item.sourceType,
+        item.sourcePlanTaskKey,
         item.workTask,
         item.workTarget,
         item.plannedDate,
@@ -315,18 +323,40 @@ async function insertWeeklyReportSummaries(executor, weeklyReportId, summaries) 
 
 // Write child plan rows in a stable display order.
 async function insertWeeklyReportPlans(executor, weeklyReportId, plans) {
+  const seenTaskKeys = new Set();
   for (const item of plans) {
+    const taskKey = item.taskKey || randomUUID();
+    if (seenTaskKeys.has(taskKey)) {
+      throw new WeeklyReportError(
+        WEEKLY_REPORT_ERROR.REQUIRED_FIELDS,
+        'Duplicate weekly plan taskKey in payload',
+        400,
+        ['plans.taskKey']
+      );
+    }
+    seenTaskKeys.add(taskKey);
+
     await executor.execute(
       `INSERT INTO weekly_report_plans (
         weekly_report_id,
+        task_key,
         sort_order,
         project_id,
         work_task,
         work_target,
         planned_date,
         responsible_person
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [weeklyReportId, item.sortOrder, item.projectId, item.workTask, item.workTarget, item.plannedDate, item.responsiblePerson]
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        weeklyReportId,
+        taskKey,
+        item.sortOrder,
+        item.projectId,
+        item.workTask,
+        item.workTarget,
+        item.plannedDate,
+        item.responsiblePerson
+      ]
     );
   }
 }

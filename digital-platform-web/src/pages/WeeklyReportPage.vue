@@ -55,13 +55,24 @@
           <section class="weekly-section">
             <div class="weekly-section__heading">
               <h3>本周工作总结</h3>
-              <button type="button" class="ghost-button" @click="addSummary">
-                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                新增行
-              </button>
+              <div class="section-actions">
+                <button type="button" class="ghost-button" :disabled="saving" @click="refreshPrefillSuggestion">
+                  刷新日报数据
+                </button>
+                <button type="button" class="ghost-button" :disabled="saving || aiComposing || !prefillState.basisHash" @click="composePrefillWithAi">
+                  {{ aiComposing ? 'AI 整理中' : 'AI 整理草稿' }}
+                </button>
+                <button type="button" class="ghost-button" @click="addSummary">
+                  <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  新增行
+                </button>
+              </div>
+            </div>
+            <div v-if="prefillState.message" class="weekly-prefill-banner">
+              {{ prefillState.message }}
             </div>
             <div class="table-container">
               <div class="weekly-edit-table weekly-edit-table--summaries">
@@ -80,14 +91,26 @@
                   class="weekly-edit-table__row"
                 >
                   <div class="form-field">
-                    <input
-                      :value="summary.workTask"
-                      list="weekly-project-options"
+                    <div class="source-chip-row">
+                      <span class="source-chip" :class="sourceChipClass(summary)">
+                        {{ sourceTypeLabel(summary) }}
+                      </span>
+                      <span v-if="summary.missingDailyEvidence" class="source-chip source-chip--warning">
+                        缺少日报证据
+                      </span>
+                    </div>
+                    <select
+                      v-model="summary.projectId"
                       class="form-control"
                       :class="{ invalid: fieldErrors[`summaries.${index}.workTask`] }"
-                      @input="onProjectTaskInput(summary, $event.target.value)"
-                      placeholder="输入或选择项目名称"
-                    />
+                      @focus="refreshProjectOptionsForPicker"
+                      @change="onProjectTaskSelect(summary)"
+                    >
+                      <option value="">请选择项目</option>
+                      <option v-for="project in projectOptions" :key="project.id" :value="project.id">
+                        {{ projectOptionLabel(project) }}
+                      </option>
+                    </select>
                     <small v-if="fieldErrors[`summaries.${index}.workTask`]" class="field-error">
                       {{ fieldErrors[`summaries.${index}.workTask`] }}
                     </small>
@@ -123,7 +146,6 @@
                       <option value="completed">已完成</option>
                       <option value="in_progress">进行中</option>
                       <option value="not_completed">未完成</option>
-                      <option value="added">新增</option>
                     </select>
                     <small v-if="fieldErrors[`summaries.${index}.completionStatus`]" class="field-error">
                       {{ fieldErrors[`summaries.${index}.completionStatus`] }}
@@ -145,11 +167,19 @@
                       v-model="summary.completedDate"
                       type="date"
                       class="form-control"
+                      :disabled="summary.completionStatus !== 'completed'"
                       :class="{ invalid: fieldErrors[`summaries.${index}.completedDate`] }"
                     />
+                    <small v-if="summary.completionStatus !== 'completed'" class="field-hint">
+                      进行中/未完成无需填写实际完成日期
+                    </small>
                     <small v-if="fieldErrors[`summaries.${index}.completedDate`]" class="field-error">
                       {{ fieldErrors[`summaries.${index}.completedDate`] }}
                     </small>
+                  </div>
+                  <div v-if="summary.missingDailyEvidence" class="summary-evidence-hint">
+                    本周未发现关联的已提交日报，暂记未完成。
+                    <button type="button" class="link-button" @click="openDailyBackfill(summary)">补填日报</button>
                   </div>
                   <button
                     type="button"
@@ -191,14 +221,18 @@
                   class="weekly-edit-table__row"
                 >
                   <div class="form-field">
-                    <input
-                      :value="plan.workTask"
-                      list="weekly-project-options"
+                    <select
+                      v-model="plan.projectId"
                       class="form-control"
                       :class="{ invalid: fieldErrors[`plans.${index}.workTask`] }"
-                      @input="onProjectTaskInput(plan, $event.target.value)"
-                      placeholder="输入或选择项目名称"
-                    />
+                      @focus="refreshProjectOptionsForPicker"
+                      @change="onProjectTaskSelect(plan)"
+                    >
+                      <option value="">请选择项目</option>
+                      <option v-for="project in projectOptions" :key="project.id" :value="project.id">
+                        {{ projectOptionLabel(project) }}
+                      </option>
+                    </select>
                     <small v-if="fieldErrors[`plans.${index}.workTask`]" class="field-error">
                       {{ fieldErrors[`plans.${index}.workTask`] }}
                     </small>
@@ -245,10 +279,6 @@
             </div>
           </section>
 
-          <datalist id="weekly-project-options">
-            <option v-for="project in projectOptions" :key="project.id" :value="projectOptionLabel(project)" />
-          </datalist>
-
           <!-- 消息提示 -->
           <section v-if="message" class="state-panel state-panel--success state-panel--compact">
             <p>{{ message }}</p>
@@ -282,12 +312,14 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { OrganizationRole, ReportStatus } from '../constants/reports.js';
 import {
   createWeeklyReport,
+  composeWeeklyReportPrefillWithAi,
   exportWeeklyReport,
   getWeeklyReport,
+  getWeeklyReportPrefillSuggestion,
   listWeeklyReports,
   toReadableApiError,
   updateWeeklyReport
@@ -319,10 +351,17 @@ const activeTab = ref('form');
 const savedReport = ref(null);
 const saving = ref(false);
 const exporting = ref(false);
+const aiComposing = ref(false);
 const message = ref('');
 const errorMessage = ref('');
 const fieldErrors = reactive({});
 const projectOptions = ref([]);
+const prefillState = reactive({
+  basisHash: '',
+  message: ''
+});
+const prefillDirty = ref(false);
+const applyingGeneratedSummaries = ref(false);
 let projectSearchTimer = null;
 
 const form = reactive({
@@ -391,6 +430,12 @@ function withLocalId(row = {}) {
 function blankSummary() {
   return withLocalId({
     projectId: null,
+    sourceType: 'legacy_unknown',
+    sourcePlanTaskKey: null,
+    missingDailyEvidence: false,
+    dailyEvidence: [],
+    dailyFillContext: null,
+    generation: 'manual',
     workTask: '',
     workTarget: '',
     plannedDate: form.weekStart,
@@ -403,6 +448,7 @@ function blankSummary() {
 // Create one blank next-week plan row.
 function blankPlan() {
   return withLocalId({
+    taskKey: null,
     projectId: null,
     workTask: '',
     workTarget: '',
@@ -415,19 +461,35 @@ function projectOptionLabel(project) {
   return [project.projectCode, project.projectName].filter(Boolean).join(' / ');
 }
 
-function resolveProjectIdFromTask(workTask) {
-  const text = String(workTask || '').trim();
-  const matched = projectOptions.value.find((project) =>
-    [projectOptionLabel(project), project.projectCode, project.projectName].filter(Boolean).includes(text)
-  );
+function ensureProjectOptionFromRow(row) {
+  if (!row?.projectId || projectOptions.value.some((project) => String(project.id) === String(row.projectId))) {
+    return;
+  }
 
-  return matched ? matched.id : null;
+  projectOptions.value = [
+    ...projectOptions.value,
+    {
+      id: row.projectId,
+      projectCode: row.workTask,
+      projectName: ''
+    }
+  ];
 }
 
-function onProjectTaskInput(row, value) {
-  row.workTask = value;
-  row.projectId = resolveProjectIdFromTask(value);
-  scheduleProjectSearch(value);
+function onProjectTaskSelect(row) {
+  const selectedProjectId = String(row.projectId || '');
+  const matched = projectOptions.value.find((project) => String(project.id) === selectedProjectId);
+  row.projectId = matched ? matched.id : null;
+  row.workTask = matched ? projectOptionLabel(matched) : '';
+}
+
+// Reload the full project candidate list whenever a task input is opened for selection.
+function refreshProjectOptionsForPicker() {
+  if (projectSearchTimer) {
+    clearTimeout(projectSearchTimer);
+    projectSearchTimer = null;
+  }
+  void loadProjectOptions('');
 }
 
 async function loadProjectOptions(keyword = '') {
@@ -447,17 +509,6 @@ async function loadProjectOptions(keyword = '') {
   }
 }
 
-// 输入关键词后延迟刷新候选项目，避免每个按键都请求接口。
-function scheduleProjectSearch(keyword) {
-  if (projectSearchTimer) {
-    clearTimeout(projectSearchTimer);
-  }
-
-  projectSearchTimer = setTimeout(() => {
-    void loadProjectOptions(keyword);
-  }, 250);
-}
-
 // Reset the form around the default previous week.
 function initializeEmptyForm() {
   const period = getPreviousWeekPeriod();
@@ -468,24 +519,46 @@ function initializeEmptyForm() {
   form.plans = [blankPlan()];
 }
 
-function prefillSummariesFromPreviousPlans(previousReport) {
-  const previousPlans = previousReport?.plans || [];
-  if (previousPlans.length === 0) {
+// Apply backend-generated rule/AI suggestions without writing them to the database.
+function applyPrefillSuggestion(suggestion, { force = false } = {}) {
+  if (!suggestion?.shouldPrefill) {
+    prefillState.basisHash = '';
+    prefillState.message = suggestion?.reason === 'weekly_report_exists' ? '已存在周报，未自动生成草稿。' : '';
     return;
   }
 
-  // 首次填写本周周报时，将上个周报的下周计划带入本周工作总结。
-  form.summaries = previousPlans.map((plan) =>
+  if (prefillDirty.value && !force) {
+    const confirmed = window.confirm('当前周报已有手工修改，刷新会替换自动生成的总结内容，是否继续？');
+    if (!confirmed) {
+      return;
+    }
+  }
+
+  const generatedRows = (suggestion.summaries || []).map((item) =>
     withLocalId({
-      projectId: plan.projectId || null,
-      workTask: plan.workTask || '',
-      workTarget: plan.workTarget || '',
-      plannedDate: plan.plannedDate || form.weekStart,
-      completionStatus: 'completed',
-      completionDescription: '',
-      completedDate: plan.plannedDate || form.weekEnd
+      projectId: item.projectId || null,
+      sourceType: item.sourceType || 'legacy_unknown',
+      sourcePlanTaskKey: item.sourcePlanTaskKey || null,
+      missingDailyEvidence: Boolean(item.missingDailyEvidence),
+      dailyEvidence: item.dailyEvidence || [],
+      dailyFillContext: item.dailyFillContext || null,
+      generation: item.generation || 'rule',
+      workTask: item.workTask || '',
+      workTarget: item.workTarget || '',
+      plannedDate: item.plannedDate || form.weekStart,
+      completionStatus: item.completionStatus || 'not_completed',
+      completionDescription: item.completionDescription || '',
+      completedDate: item.completedDate || null
     })
   );
+
+  applyingGeneratedSummaries.value = true;
+  form.summaries = generatedRows.length ? generatedRows : [blankSummary()];
+  form.summaries.forEach(ensureProjectOptionFromRow);
+  prefillState.basisHash = suggestion.basisHash || '';
+  prefillState.message = `已根据上周计划和本周已提交日报生成 ${generatedRows.length} 条草稿，其中 ${suggestion.meta?.missingDailyEvidenceCount || 0} 条缺少日报证据。`;
+  prefillDirty.value = false;
+  applyingGeneratedSummaries.value = false;
 }
 
 // Copy a backend report into the editable form state.
@@ -497,23 +570,34 @@ function applyReport(report) {
   form.summaries = (report.summaries?.length ? report.summaries : [{}]).map((item) =>
     withLocalId({
       projectId: item.projectId || null,
+      sourceType: item.sourceType || 'legacy_unknown',
+      sourcePlanTaskKey: item.sourcePlanTaskKey || null,
+      missingDailyEvidence: false,
+      dailyEvidence: [],
+      dailyFillContext: null,
+      generation: 'manual',
       workTask: item.workTask || '',
       workTarget: item.workTarget || '',
       plannedDate: item.plannedDate || report.weekStart,
       completionStatus: item.completionStatus || 'completed',
       completionDescription: item.completionDescription || '',
-      completedDate: item.completedDate || report.weekEnd
+      completedDate: item.completedDate || null
     })
   );
   form.plans = (report.plans?.length ? report.plans : [{}]).map((item) =>
     withLocalId({
       projectId: item.projectId || null,
+      taskKey: item.taskKey || null,
       workTask: item.workTask || '',
       workTarget: item.workTarget || '',
       plannedDate: item.plannedDate || report.weekEnd,
       responsiblePerson: item.responsiblePerson || currentUserDisplayName.value
     })
   );
+  [...form.summaries, ...form.plans].forEach(ensureProjectOptionFromRow);
+  prefillDirty.value = false;
+  prefillState.basisHash = '';
+  prefillState.message = '';
 }
 
 // Clear stale validation errors between attempts.
@@ -535,7 +619,9 @@ function validateSubmitFields() {
     if (!item.plannedDate) fieldErrors[`summaries.${index}.plannedDate`] = '必填';
     if (!item.completionStatus) fieldErrors[`summaries.${index}.completionStatus`] = '必填';
     if (!item.completionDescription.trim()) fieldErrors[`summaries.${index}.completionDescription`] = '必填';
-    if (!item.completedDate) fieldErrors[`summaries.${index}.completedDate`] = '必填';
+    if (item.completionStatus === 'completed' && !item.completedDate) {
+      fieldErrors[`summaries.${index}.completedDate`] = '必填';
+    }
   });
   form.plans.forEach((item, index) => {
     if (!item.workTask.trim()) fieldErrors[`plans.${index}.workTask`] = '必填';
@@ -554,14 +640,17 @@ function buildPayload(status) {
     status,
     summaries: form.summaries.map((item) => ({
       projectId: item.projectId || null,
+      sourceType: item.sourceType || 'legacy_unknown',
+      sourcePlanTaskKey: item.sourcePlanTaskKey || null,
       workTask: item.workTask,
       workTarget: item.workTarget,
       plannedDate: item.plannedDate,
       completionStatus: item.completionStatus,
       completionDescription: item.completionDescription,
-      completedDate: item.completedDate
+      completedDate: item.completionStatus === 'completed' ? item.completedDate : null
     })),
     plans: form.plans.map((item) => ({
+      taskKey: item.taskKey || null,
       projectId: item.projectId || null,
       workTask: item.workTask,
       workTarget: item.workTarget,
@@ -569,6 +658,73 @@ function buildPayload(status) {
       responsiblePerson: item.responsiblePerson
     }))
   };
+}
+
+function sourceTypeLabel(summary) {
+  if (summary.sourceType === 'weekly_plan') return '执行周计划';
+  if (summary.sourceType === 'ad_hoc') return '新增临时工作';
+  return '历史待确认';
+}
+
+function sourceChipClass(summary) {
+  if (summary.sourceType === 'weekly_plan') return 'source-chip--plan';
+  if (summary.sourceType === 'ad_hoc') return 'source-chip--adhoc';
+  return 'source-chip--legacy';
+}
+
+async function refreshPrefillSuggestion({ force = false } = {}) {
+  if (savedReport.value && !force) {
+    const confirmed = window.confirm('当前周报已保存，刷新只会更新页面草稿预览，保存前请确认是否覆盖现有内容。是否继续？');
+    if (!confirmed) {
+      return;
+    }
+  }
+
+  try {
+    const result = await getWeeklyReportPrefillSuggestion({ weekStart: form.weekStart }, props.authToken);
+    applyPrefillSuggestion(result.suggestion, { force });
+  } catch (error) {
+    if (error.code === 'UNAUTHENTICATED') {
+      emit('auth-expired');
+      return;
+    }
+    errorMessage.value = toReadableApiError(error);
+  }
+}
+
+async function composePrefillWithAi() {
+  aiComposing.value = true;
+  errorMessage.value = '';
+
+  try {
+    const result = await composeWeeklyReportPrefillWithAi(
+      { weekStart: form.weekStart, basisHash: prefillState.basisHash },
+      props.authToken
+    );
+    applyPrefillSuggestion(result.suggestion, { force: true });
+    prefillState.message = result.suggestion?.ai?.message || prefillState.message;
+  } catch (error) {
+    if (error.code === 'UNAUTHENTICATED') {
+      emit('auth-expired');
+      return;
+    }
+    if (error.status === 409 || error.code === 'WEEKLY_PREFILL_BASIS_CHANGED') {
+      errorMessage.value = '日报或计划数据已变化，请先刷新规则草稿。';
+      return;
+    }
+    errorMessage.value = toReadableApiError(error);
+  } finally {
+    aiComposing.value = false;
+  }
+}
+
+function openDailyBackfill(summary) {
+  const context = summary.dailyFillContext || {};
+  const query = new URLSearchParams();
+  if (context.reportDate) query.set('date', context.reportDate);
+  if (context.projectId) query.set('projectId', context.projectId);
+  if (context.sourcePlanTaskKey) query.set('taskKey', context.sourcePlanTaskKey);
+  props.navigate(`/daily-report${query.toString() ? `?${query.toString()}` : ''}`);
 }
 
 function addSummary() {
@@ -673,12 +829,7 @@ async function loadInitialReport() {
       return;
     }
 
-    const previousPeriod = shiftWeekPeriod(form.weekStart, -1);
-    const previousReports = await listWeeklyReports({ weekStart: previousPeriod.weekStart }, props.authToken);
-    if (previousReports.reports?.[0]?.id) {
-      const previousDetail = await getWeeklyReport(previousReports.reports[0].id, props.authToken);
-      prefillSummariesFromPreviousPlans(previousDetail.report);
-    }
+    await refreshPrefillSuggestion({ force: true });
   } catch (error) {
     if (error.code === 'UNAUTHENTICATED') {
       emit('auth-expired');
@@ -692,6 +843,16 @@ onMounted(() => {
   void loadProjectOptions();
   void loadInitialReport();
 });
+
+watch(
+  () => form.summaries,
+  () => {
+    if (!applyingGeneratedSummaries.value) {
+      prefillDirty.value = true;
+    }
+  },
+  { deep: true }
+);
 </script>
 
 <style scoped>
@@ -974,11 +1135,93 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 0.75rem;
 }
+.section-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
 .weekly-section__heading h3 {
   font-size: 1rem;
   font-weight: 600;
   color: #303133;
   margin: 0;
+}
+
+.weekly-prefill-banner {
+  padding: 0.75rem 1rem;
+  border: 1px solid #d9ecff;
+  border-radius: 4px;
+  background: #f5faff;
+  color: #303133;
+  font-size: 0.9rem;
+}
+
+.source-chip-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.4rem;
+  padding: 0 0.45rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  background: #eef2ff;
+  color: #334155;
+}
+
+.source-chip--plan {
+  background: #ecfdf3;
+  color: #166534;
+}
+
+.source-chip--adhoc {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.source-chip--legacy {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.source-chip--warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.field-hint {
+  display: block;
+  margin-top: 0.25rem;
+  color: #909399;
+  font-size: 0.75rem;
+}
+
+.summary-evidence-hint {
+  align-self: stretch;
+  padding: 0.5rem;
+  border: 1px dashed #f59e0b;
+  border-radius: 4px;
+  color: #92400e;
+  font-size: 0.8rem;
+  background: #fffbeb;
+}
+
+.link-button {
+  margin-left: 0.35rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #1d4ed8;
+  cursor: pointer;
+  font: inherit;
 }
 
 .table-container {

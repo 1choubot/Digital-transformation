@@ -36,6 +36,11 @@ export async function getDailyReportPlanSuggestion({ reportDate, projectId }, au
   return request(`/api/daily-reports/plan-suggestion${buildQuery({ reportDate, projectId })}`, { authToken });
 }
 
+// Load selectable weekly plans scoped to the current daily report project and natural week.
+export async function getAvailableWeeklyPlansForDailyReport({ reportDate, projectId }, authToken = '') {
+  return request(`/api/daily-reports/available-weekly-plans${buildQuery({ reportDate, projectId })}`, { authToken });
+}
+
 // Create a daily report as draft or submitted.
 export async function createDailyReport(payload, authToken = '') {
   return request('/api/daily-reports', {

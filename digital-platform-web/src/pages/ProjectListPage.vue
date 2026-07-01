@@ -79,7 +79,23 @@
       </button>
     </section>
 
-    <!-- 过滤面板（含新建按钮） -->
+    <!-- 项目列表顶栏（含新建按钮） -->
+    <header class="list-header-card">
+      <div class="toolbar-info">
+        <strong class="toolbar-title">项目列表</strong>
+        <span class="toolbar-subtitle">共 {{ filteredProjects.length }} 个项目</span>
+      </div>
+      <!-- 修改：新建项目按钮从下方移至此处 -->
+      <button type="button" class="primary-button create-btn" @click="navigate('/projects/new')">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+        <span>新建项目</span>
+      </button>
+    </header>
+
+    <!-- 过滤面板（仅保留应用筛选和清除筛选） -->
     <section class="panel overview-filter-panel">
       <form class="overview-filters" @submit.prevent="applyFilters">
         <label class="filter-group">
@@ -126,36 +142,16 @@
           <button type="submit" class="primary-button apply-btn" :disabled="loading">
             <span>应用筛选</span>
           </button>
-          <button type="button" class="primary-button create-btn" @click="navigate('/projects/new')">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            <span>新建项目</span>
-          </button>
-          <button type="button" class="ghost-button reload-btn" :disabled="loading" @click="loadDashboard">
-            <svg v-if="loading" class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-              <circle cx="12" cy="12" r="10" stroke="rgba(0,0,0,0.1)" />
-            </svg>
-            <span>{{ loading ? '加载中...' : '重新加载' }}</span>
+          <!-- 删除：重新加载按钮已移除 -->
+          <button type="button" class="ghost-button clear-btn" :disabled="loading" @click="clearFilters">
+            <span>清除筛选</span>
           </button>
         </div>
       </form>
     </section>
 
-    <!-- 全新独立堆叠卡片式列表容器 -->
+    <!-- 项目列表容器（未改动） -->
     <section class="overview-list-container">
-      <!-- 独立顶栏卡片（含提示，右对齐） -->
-      <header class="list-header-card">
-        <div class="toolbar-info">
-          <strong class="toolbar-title">项目列表</strong>
-          <span class="toolbar-subtitle">共 {{ filteredProjects.length }} 个项目</span>
-        </div>
-        <p class="manual-status-note">
-          提示：齐套率基于当前手工状态和人工适用性判断，不代表物理文件已全部完成上传或在线表单已真实填写完毕。
-        </p>
-      </header>
-
       <!-- 加载中 -->
       <div v-if="loading" class="state-card state-card--inline">
         <div class="loading-wave">
@@ -198,7 +194,7 @@
           @click="navigate(`/projects/${project.projectId}`)"
         >
           <div class="overview-project__main">
-            <!-- 身份区：编号、名称、客户名称 -->
+            <!-- 身份区 -->
             <div class="overview-project__identity">
               <span class="mono-badge">{{ project.projectCode || '暂无项目编号' }}</span>
               <strong class="project-name">{{ project.projectName }}</strong>
@@ -244,7 +240,7 @@
             </div>
           </div>
 
-          <!-- 未完成资料清单（阻止冒泡） -->
+          <!-- 未完成资料清单 -->
           <div class="overview-project__documents" @click.stop>
             <div class="docs-summary-header">
               <div class="docs-count-pill" :class="{ 'docs-count-pill--alert': project.currentStageIncompleteRequiredDocuments.length > 0 }">
@@ -281,7 +277,7 @@
         </article>
       </div>
 
-      <!-- 独立底部分页卡片 -->
+      <!-- 底部分页卡片 -->
       <footer v-if="filteredProjects.length > 0" class="pagination-card">
         <div class="pagination-info">
           <span>当前第</span>
@@ -454,6 +450,14 @@ function applyFilters() {
   loadDashboard();
 }
 
+// 清除筛选：重置三个筛选字段并重新加载
+function clearFilters() {
+  statusFilter.value = '';
+  stageOrderFilter.value = '';
+  keywordFilter.value = '';
+  applyFilters();
+}
+
 function formatCurrentStage(project) {
   if (project.currentStageName) {
     return project.currentStageOrder
@@ -544,10 +548,6 @@ onMounted(loadDashboard);
   transition: all 0.3s ease;
   cursor: default;
   text-align: left;
-}
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(0, 21, 41, 0.08);
 }
 .stat-card--todo {
   cursor: pointer;
@@ -728,6 +728,7 @@ onMounted(loadDashboard);
 .ghost-button:hover:not(:disabled) { border-color: #c6e2ff; background: #ecf5ff; color: #3e63dd; }
 .ghost-button:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn-icon { width: 16px; height: 16px; }
+/* 注：spinner 样式虽已移除按钮，但保留以免影响其他可能使用的地方 */
 .spinner { width: 16px; height: 16px; animation: spin 0.8s linear infinite; stroke: currentColor; }
 
 /* ===== 列表容器 ===== */
@@ -737,7 +738,7 @@ onMounted(loadDashboard);
   gap: 1rem;
 }
 
-/* ===== 独立顶栏卡片（含提示） ===== */
+/* ===== 独立顶栏卡片（含新建按钮） ===== */
 .list-header-card {
   background: #ffffff;
   border-radius: 8px;
@@ -761,23 +762,7 @@ onMounted(loadDashboard);
   color: #909399;
   margin-top: 0.2rem;
 }
-.list-header-card .manual-status-note {
-  margin: 0;
-  padding: 0.2rem 0.8rem;
-  font-size: 0.8rem;
-  color: #3e63dd;
-  background: #ecf5ff;
-  border-left: 3px solid #a4b3ff;
-  border-radius: 4px;
-  white-space: nowrap;
-  max-width: 55%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex-shrink: 1;
-  text-align: right;
-  line-height: 1.4;
-  font-weight: 500;
-}
+/* 移除了 .manual-status-note 样式（不再使用） */
 
 /* ===== 状态占位卡片 ===== */
 .state-card {
@@ -820,7 +805,7 @@ onMounted(loadDashboard);
 
 /* ===== 单个项目卡片 ===== */
 .overview-project {
-  border: 1px solid #d6dee7;
+  border: 1px solid #ebeef5;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.02);
@@ -829,12 +814,12 @@ onMounted(loadDashboard);
   cursor: pointer;
 }
 .overview-project:hover {
-  border-color: #c4d0e2; 
+  border-color: #ebeef5; 
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
   transform: translateY(-2px);
 }
 
-/* --- 主网格：6列均匀分布（模式、经理独立） --- */
+/* --- 主网格：6列均匀分布 --- */
 .overview-project__main {
   display: grid;
   grid-template-columns: 2fr 0.8fr 0.8fr 0.8fr 1.5fr 2fr;
@@ -871,7 +856,6 @@ onMounted(loadDashboard);
   font-weight: 400;
 }
 
-/* 新增模式列、经理列样式 */
 .overview-project__mode,
 .overview-project__manager {
   display: flex;
@@ -885,7 +869,6 @@ onMounted(loadDashboard);
   color: #303133;
 }
 
-/* 公共列标签 */
 .column-lbl {
   display: block;
   font-size: 0.75rem;
@@ -894,10 +877,6 @@ onMounted(loadDashboard);
   margin-bottom: 0.2rem;
 }
 
-/* 状态、阶段、齐套率保持原有样式 */
-.cell-status {
-  /* 保持原有，不额外改动 */
-}
 .stage-name-text {
   font-size: 0.85rem;
   font-weight: 500;
@@ -1184,10 +1163,7 @@ onMounted(loadDashboard);
   .dashboard-stats-grid { grid-template-columns: 1fr; }
   .page-stack { padding: 1rem; }
   .overview-project__main { padding: 0.75rem; }
-  .list-header-card .manual-status-note {
-    max-width: 100%;
-    font-size: 0.7rem;
-    padding: 0.1rem 0.6rem;
-  }
+  .list-header-card { flex-direction: column; align-items: stretch; }
+  .list-header-card .primary-button { align-self: flex-start; }
 }
 </style>

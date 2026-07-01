@@ -11,6 +11,7 @@ export {
   ProjectStageAdvanceError
 } from './projects/shared.js';
 export {
+  assertProjectAuditViewable,
   assertProjectViewable,
   createProject,
   getProjectDetail,

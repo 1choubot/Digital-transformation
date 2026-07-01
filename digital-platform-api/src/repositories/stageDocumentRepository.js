@@ -17,6 +17,7 @@ export {
   listMyStageDocumentTasks,
   normalizeStageDocumentTaskFilters
 } from './stageDocuments/taskRepository.js';
+export { getMyWorkbench } from './stageDocuments/workbenchRepository.js';
 export { updateProjectStageDocumentResponsibleUser } from './stageDocuments/responsibilityRepository.js';
 export {
   completeProjectStageDocumentRevision,

@@ -14,9 +14,9 @@ import {
   getProjectOverviewDashboardHandler,
   listStageApprovalHistoryHandler,
   getStageDocumentChecklistHandler,
-  listMyActiveProjectsHandler,
   listProjectOperationLogsHandler,
   listProjectsHandler,
+  listMyActiveProjectsHandler,
   listStageDocumentAttachmentsHandler,
   markStageDocumentNotApplicableHandler,
   restoreStageDocumentApplicableHandler,
@@ -34,8 +34,14 @@ import {
 export const projectsRouter = Router();
 
 projectsRouter.get('/', requireAuth, asyncHandler(listProjectsHandler));
-projectsRouter.get('/my-active', requireAuth, requireReportProjectSearchUser, asyncHandler(listMyActiveProjectsHandler));
 projectsRouter.post('/', requireAuth, asyncHandler(createProjectHandler));
+
+projectsRouter.get(
+  '/my-active',
+  requireAuth,
+  requireReportProjectSearchUser,
+  asyncHandler(listMyActiveProjectsHandler)
+);
 
 projectsRouter.put(
   '/:projectId/project-code',

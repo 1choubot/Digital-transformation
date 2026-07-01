@@ -244,7 +244,6 @@ export function selectProjectWithCreatorById(connection, projectId) {
         u.department AS creator_department,
         u.organization_role AS creator_organization_role,
         u.role AS creator_role,
-        u.job_title AS creator_job_title,
         u.is_enabled AS creator_is_enabled,
         u.file_platform_user_id AS creator_file_platform_user_id,
         pm.account AS project_manager_account,

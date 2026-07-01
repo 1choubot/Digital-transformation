@@ -170,6 +170,7 @@ export async function listProjectsHandler(req, res) {
   });
 }
 
+// 日报和周报共用当前用户可见且未完成的项目搜索结果。
 export async function listMyActiveProjectsHandler(req, res) {
   const projects = await searchActiveProjectsForDailyReports({
     q: req.query.q,

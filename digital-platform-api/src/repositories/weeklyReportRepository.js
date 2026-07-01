@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { pool } from '../db/pool.js';
 import {
   canEvaluateWeeklyReport,
@@ -230,14 +231,15 @@ async function insertWeeklyReportPlans(executor, weeklyReportId, plans) {
   for (const item of plans) {
     await executor.execute(
       `INSERT INTO weekly_report_plans (
+        task_key,
         weekly_report_id,
         sort_order,
         work_task,
         work_target,
         planned_date,
         responsible_person
-      ) VALUES (?, ?, ?, ?, ?, ?)`,
-      [weeklyReportId, item.sortOrder, item.workTask, item.workTarget, item.plannedDate, item.responsiblePerson]
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [crypto.randomUUID(), weeklyReportId, item.sortOrder, item.workTask, item.workTarget, item.plannedDate, item.responsiblePerson]
     );
   }
 }

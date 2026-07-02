@@ -20,6 +20,7 @@ import {
   EXPECTED_COMPLETION_MODE_COUNTS,
   EXPECTED_STAGE_DOCUMENT_ITEM_COUNT,
   STAGE_DOCUMENT_TEMPLATE_VERSION,
+  V20260629_TARGET_TEMPLATE_OUTPUT_COUNT,
   loadStageDocumentTemplateItems
 } from '../src/domain/stageDocumentTemplates.js';
 import { normalizeCreateProjectInput } from '../src/domain/projects.js';
@@ -84,6 +85,8 @@ const {
   OPERATIONS_CENTER,
   RD_CENTER
 } = BUSINESS_DEPARTMENT;
+
+const LEGACY_CONTRACT_REVIEW_COMPATIBILITY_OUTPUT_CODES = new Set(['LC33', 'LC54']);
 
 function departmentUser(id, organizationRole, department) {
   return {
@@ -963,7 +966,23 @@ async function runInitiationReviewSmoke({
   const workspaceOutputs = workspace.stages
     .flatMap((stage) => stage.nodes || [])
     .flatMap((node) => node.outputs || []);
-  assert.equal(new Set(workspaceOutputs.map((output) => output.targetOutputCode)).size, 71);
+  const workspaceOutputCodes = new Set(workspaceOutputs.map((output) => output.targetOutputCode));
+  assert.equal(
+    workspaceOutputCodes.size,
+    V20260629_TARGET_TEMPLATE_OUTPUT_COUNT + LEGACY_CONTRACT_REVIEW_COMPATIBILITY_OUTPUT_CODES.size
+  );
+  assert.equal(
+    workspaceOutputs.filter(
+      (output) => !LEGACY_CONTRACT_REVIEW_COMPATIBILITY_OUTPUT_CODES.has(output.targetOutputCode)
+    ).length,
+    V20260629_TARGET_TEMPLATE_OUTPUT_COUNT
+  );
+  for (const compatibilityOutputCode of LEGACY_CONTRACT_REVIEW_COMPATIBILITY_OUTPUT_CODES) {
+    assert.ok(
+      workspaceOutputCodes.has(compatibilityOutputCode),
+      `Workspace compatibility output missing: ${compatibilityOutputCode}`
+    );
+  }
   const nonInitiationOutputs = workspaceOutputs.filter((output) => output.stageKey !== 'initiation');
   assert.ok(nonInitiationOutputs.length > 0);
   assert.ok(
@@ -1001,6 +1020,14 @@ async function runInitiationReviewSmoke({
   assert.equal(tenderOutput.status, 'shell_placeholder');
   assert.equal(tenderOutput.legacyChecklistTarget.available, false);
   assert.equal(tenderOutput.actionHints.length, 0);
+  const salesContractReviewOutput = findWorkspaceOutput(workspace, '3.3');
+  assert.equal(salesContractReviewOutput.targetOutputCode, 'LC33');
+  assert.equal(salesContractReviewOutput.stageKey, 'contract');
+  assert.equal(salesContractReviewOutput.legacyChecklistTarget.available, true);
+  const purchaseContractReviewOutput = findWorkspaceOutput(workspace, '5.4');
+  assert.equal(purchaseContractReviewOutput.targetOutputCode, 'LC54');
+  assert.equal(purchaseContractReviewOutput.stageKey, 'manufacturing');
+  assert.equal(purchaseContractReviewOutput.legacyChecklistTarget.available, true);
 
   const marketingResponsibilityChecklist = await getProjectStageDocumentChecklist(projectId, marketingManagerUser);
   assert.equal(findChecklistDocument(marketingResponsibilityChecklist, '1.1').canManageResponsibility, true);

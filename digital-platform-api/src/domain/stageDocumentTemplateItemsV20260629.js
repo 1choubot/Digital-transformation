@@ -10,6 +10,7 @@ const {
 
 export const V20260629_TARGET_TEMPLATE_VERSION = 'v20260629';
 export const V20260629_TARGET_TEMPLATE_OUTPUT_COUNT = 71;
+export const V20260629_WORKSPACE_COMPATIBILITY_OUTPUT_COUNT = 2;
 
 export const V20260629_TEMPLATE_SWITCH_METADATA = Object.freeze({
   templateVersion: V20260629_TARGET_TEMPLATE_VERSION,
@@ -62,6 +63,7 @@ function targetOutput({
   requirementType = REQUIREMENT_TYPE.REQUIRED,
   isRequired = requirementType === REQUIREMENT_TYPE.REQUIRED,
   formKey = null,
+  workspaceCompatibility = false,
   notes = ''
 }) {
   const stage = stageByOrder.get(stageOrder);
@@ -88,6 +90,7 @@ function targetOutput({
     requirementType,
     isRequired,
     formKey,
+    workspaceCompatibility,
     notes
   });
 }
@@ -987,6 +990,37 @@ export const V20260629_TARGET_TEMPLATE_OUTPUTS = Object.freeze([
   })
 ]);
 
+export const V20260629_WORKSPACE_COMPATIBILITY_OUTPUTS = Object.freeze([
+  targetOutput({
+    targetOutputCode: 'LC33',
+    stageOrder: 3,
+    nodeKey: 'legacy_sales_contract_review',
+    documentName: '合同审核记录表（销售合同）（旧模板兼容项）',
+    legacyDocumentCode: '3.3',
+    sourceNode: '销售合同审核记录兼容项',
+    responsibleRole: '合同审核人员',
+    ownerDepartment: OPERATIONS_CENTER,
+    reviewDepartment: OPERATIONS_CENTER,
+    completionMode: COMPLETION_MODE.APPROVAL_REQUIRED,
+    workspaceCompatibility: true,
+    notes: '旧模板兼容输出，仅用于覆盖当前运行 64 项资料主入口，不计入 v20260629 71 项目标模板。'
+  }),
+  targetOutput({
+    targetOutputCode: 'LC54',
+    stageOrder: 5,
+    nodeKey: 'legacy_purchase_contract_review',
+    documentName: '采购合同审核记录表（旧模板兼容项）',
+    legacyDocumentCode: '5.4',
+    sourceNode: '采购合同审核记录兼容项',
+    responsibleRole: '合同审核人员',
+    ownerDepartment: OPERATIONS_CENTER,
+    reviewDepartment: OPERATIONS_CENTER,
+    completionMode: COMPLETION_MODE.APPROVAL_REQUIRED,
+    workspaceCompatibility: true,
+    notes: '旧模板兼容输出，仅用于覆盖当前运行 64 项资料主入口，不计入 v20260629 71 项目标模板。'
+  })
+]);
+
 function blueModule({ stageOrder, nodeKey, nodeName, outputCodes = [], notes = '' }) {
   const stage = stageByOrder.get(stageOrder);
   if (!stage) {
@@ -1022,6 +1056,13 @@ export const V20260629_WORKSPACE_BLUE_MODULES = Object.freeze([
   blueModule({ stageOrder: 3, nodeKey: 'sign_technical_agreement', nodeName: '签订技术协议', outputCodes: ['C21'] }),
   blueModule({ stageOrder: 3, nodeKey: 'prepare_sales_contract', nodeName: '准备销售合同', outputCodes: ['C22'] }),
   blueModule({ stageOrder: 3, nodeKey: 'sign_sales_contract', nodeName: '签订销售合同', outputCodes: ['C23'] }),
+  blueModule({
+    stageOrder: 3,
+    nodeKey: 'legacy_sales_contract_review',
+    nodeName: '销售合同审核记录兼容项',
+    outputCodes: ['LC33'],
+    notes: '旧模板兼容资料，当前运行 64 项覆盖用，不计入 v20260629 71 项目标模板。'
+  }),
   blueModule({ stageOrder: 3, nodeKey: 'advance_payment_invoice', nodeName: '项目预付款交付', outputCodes: ['C24'] }),
   blueModule({ stageOrder: 3, nodeKey: 'project_start_notice', nodeName: '项目启动通知', notes: '过程节点，第一版不形成目标资料。' }),
   blueModule({ stageOrder: 4, nodeKey: 'project_kickoff_meeting', nodeName: '召开项目启动会', outputCodes: ['C25'] }),
@@ -1039,6 +1080,13 @@ export const V20260629_WORKSPACE_BLUE_MODULES = Object.freeze([
   blueModule({ stageOrder: 5, nodeKey: 'sign_supplier_technical_agreement', nodeName: '签订技术协议', outputCodes: ['C46'] }),
   blueModule({ stageOrder: 5, nodeKey: 'prepare_purchase_contract', nodeName: '准备采购合同', outputCodes: ['C47'] }),
   blueModule({ stageOrder: 5, nodeKey: 'sign_purchase_contract', nodeName: '签订采购合同', outputCodes: ['C48'] }),
+  blueModule({
+    stageOrder: 5,
+    nodeKey: 'legacy_purchase_contract_review',
+    nodeName: '采购合同审核记录兼容项',
+    outputCodes: ['LC54'],
+    notes: '旧模板兼容资料，当前运行 64 项覆盖用，不计入 v20260629 71 项目标模板。'
+  }),
   blueModule({ stageOrder: 5, nodeKey: 'manufacturing_record', nodeName: '生产制作', outputCodes: ['C49'] }),
   blueModule({ stageOrder: 5, nodeKey: 'random_documents_preparation', nodeName: '准备随机资料', outputCodes: ['C50', 'C51', 'C52', 'C53'] }),
   blueModule({ stageOrder: 5, nodeKey: 'incoming_inspection', nodeName: '来料检验', outputCodes: ['C54'] }),
@@ -1061,13 +1109,21 @@ export const V20260629_WORKSPACE_BLUE_MODULES = Object.freeze([
 ]);
 
 const outputsByCode = new Map(
-  V20260629_TARGET_TEMPLATE_OUTPUTS.map((output) => [output.targetOutputCode, output])
+  [...V20260629_TARGET_TEMPLATE_OUTPUTS, ...V20260629_WORKSPACE_COMPATIBILITY_OUTPUTS].map((output) => [
+    output.targetOutputCode,
+    output
+  ])
 );
 
 function assertV20260629TargetTemplate() {
   if (V20260629_TARGET_TEMPLATE_OUTPUTS.length !== V20260629_TARGET_TEMPLATE_OUTPUT_COUNT) {
     throw new Error(
       `Expected ${V20260629_TARGET_TEMPLATE_OUTPUT_COUNT} v20260629 target outputs, got ${V20260629_TARGET_TEMPLATE_OUTPUTS.length}`
+    );
+  }
+  if (V20260629_WORKSPACE_COMPATIBILITY_OUTPUTS.length !== V20260629_WORKSPACE_COMPATIBILITY_OUTPUT_COUNT) {
+    throw new Error(
+      `Expected ${V20260629_WORKSPACE_COMPATIBILITY_OUTPUT_COUNT} v20260629 workspace compatibility outputs, got ${V20260629_WORKSPACE_COMPATIBILITY_OUTPUTS.length}`
     );
   }
 
@@ -1095,6 +1151,14 @@ function assertV20260629TargetTemplate() {
       throw new Error(`Unmapped v20260629 target output: ${output.targetOutputCode}`);
     }
   }
+  for (const output of V20260629_WORKSPACE_COMPATIBILITY_OUTPUTS) {
+    if (!output.workspaceCompatibility || !output.legacyDocumentCode) {
+      throw new Error(`Invalid v20260629 workspace compatibility output: ${output.targetOutputCode}`);
+    }
+    if (!mappedOutputCodes.has(output.targetOutputCode)) {
+      throw new Error(`Unmapped v20260629 workspace compatibility output: ${output.targetOutputCode}`);
+    }
+  }
 }
 
 assertV20260629TargetTemplate();
@@ -1111,6 +1175,7 @@ export function getV20260629WorkspaceShellConfig() {
       ...stage,
       modules: V20260629_WORKSPACE_BLUE_MODULES.filter((module) => module.stageKey === stage.stageKey)
     })),
-    outputs: V20260629_TARGET_TEMPLATE_OUTPUTS
+    outputs: V20260629_TARGET_TEMPLATE_OUTPUTS,
+    compatibilityOutputs: V20260629_WORKSPACE_COMPATIBILITY_OUTPUTS
   };
 }

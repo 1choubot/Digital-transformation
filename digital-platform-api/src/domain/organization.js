@@ -89,12 +89,12 @@ export function canBeProjectManagerUser(user) {
   return Boolean(user?.isEnabled) && isDepartmentUser(user);
 }
 
-export function canBeResponsibleUser(user) {
-  return Boolean(user?.isEnabled) && isDepartmentUser(user);
-}
-
 export function canCreateProject(user) {
   return isGeneralManagerUser(user) || isCenterManagerUser(user);
+}
+
+export function canBeResponsibleUser(user) {
+  return Boolean(user?.isEnabled) && isDepartmentUser(user);
 }
 
 export function isProjectManagerForProject(user, project) {

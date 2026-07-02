@@ -1,10 +1,11 @@
 <template>
-  <section class="panel stage-documents">
+  <section class="panel stage-documents stage-documents--legacy">
     <div class="panel-heading">
       <div>
-        <span class="section-eyebrow">阶段资料清单</span>
-        <h3>资料级审核状态</h3>
+        <span class="section-eyebrow">辅助兼容区</span>
+        <h3>旧资料清单与资料级状态</h3>
         <p class="manual-status-note">
+          本区域用于查看资料级状态和处理尚未配置完整蓝色节点的阶段；立项阶段 1.1 / 1.2 / 1.3 主操作请在上方节点产出卡片完成。
           阶段资料按 completionMode 计算完成状态：提交即完成资料提交后完成，需审核资料审核通过后完成，条件资料未触发时不阻塞。
           附件保存在在线平台，不展示文件平台归档状态。
           不适用是人工业务判断，用于说明该项目当前不需要该资料。

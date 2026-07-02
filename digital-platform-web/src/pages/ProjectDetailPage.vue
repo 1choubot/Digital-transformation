@@ -1,13 +1,15 @@
 <template>
   <section class="page-stack">
-    <div class="page-title-row">
-      <div>
-        <span class="section-eyebrow">项目详情</span>
-        <h2>{{ detail?.project.projectName || '项目基础状态' }}</h2>
-        <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
-      </div>
-      <button type="button" class="ghost-button" @click="navigate('/projects')">返回项目总览</button>
-    </div>
+    <PageHeader
+      eyebrow="项目工作区"
+      :title="detail?.project.projectName || '项目基础状态'"
+      :current-user="currentUser"
+      subtitle="单项目主操作区：先选阶段，再选蓝色节点，最后处理节点产出、在线表单或评价审批。"
+    >
+      <template #actions>
+        <button type="button" class="ghost-button" @click="navigate('/projects')">返回项目总览</button>
+      </template>
+    </PageHeader>
 
     <section v-if="loading" class="state-panel">
       <p>正在加载项目详情...</p>
@@ -45,11 +47,14 @@
 
       <ProjectStageTimeline :stages="detail.stages" />
 
-      <section class="panel project-workspace">
+      <section class="panel project-workspace project-workspace--primary">
         <div class="panel-heading">
           <div>
             <span class="section-eyebrow">项目工作区</span>
-            <h3>阶段节点工作区</h3>
+            <h3>阶段节点与产出工作区</h3>
+            <p class="manual-status-note">
+              固定层级为阶段说明、蓝色节点、节点产出、在线表单或评价审批动作；点击蓝色节点不会自动打开在线表单。
+            </p>
           </div>
         </div>
 
@@ -197,6 +202,7 @@ import ProjectStageTimeline from '../components/project-detail/ProjectStageTimel
 import ProjectWorkspaceNodeList from '../components/project-workspace/ProjectWorkspaceNodeList.vue';
 import ProjectWorkspaceOutputPanel from '../components/project-workspace/ProjectWorkspaceOutputPanel.vue';
 import ProjectWorkspaceStageNav from '../components/project-workspace/ProjectWorkspaceStageNav.vue';
+import PageHeader from '../components/PageHeader.vue';
 import {
   actionKey,
   getCompletionMode,
@@ -205,7 +211,6 @@ import {
   isInitiationOnlineFormDocument,
   stageCompleteness
 } from '../components/project-detail/stageDocumentViewHelpers.js';
-import { formatUser } from '../utils/format.js';
 
 const props = defineProps({
   authToken: {

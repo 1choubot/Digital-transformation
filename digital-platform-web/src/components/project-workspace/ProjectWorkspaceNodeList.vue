@@ -2,8 +2,9 @@
   <section class="project-workspace__node-section">
     <div class="project-workspace__section-heading">
       <div>
-        <span class="section-eyebrow">当前阶段</span>
+        <span class="section-eyebrow">阶段说明</span>
         <h3>{{ stage?.stageName || '阶段内容' }}</h3>
+        <p class="manual-status-note">{{ formatStageDescription(stage) }}</p>
       </div>
       <span class="stage-document-pill">{{ formatStageStatus(stage) }}</span>
     </div>
@@ -80,5 +81,21 @@ function formatStageStatus(stage) {
   }
 
   return stage.legacyChecklistAvailable ? '旧清单入口' : '后续配置';
+}
+
+function formatStageDescription(stage) {
+  if (!stage) {
+    return '请选择左侧阶段查看阶段说明和节点配置。';
+  }
+
+  if (stage.configured) {
+    return '本阶段按蓝色节点组织业务语境，选择节点后在下方查看关联产出。';
+  }
+
+  if (stage.legacyChecklistAvailable) {
+    return '本阶段暂未配置完整蓝色节点，可使用下方旧资料清单辅助处理。';
+  }
+
+  return '本阶段节点和产出映射后续配置。';
 }
 </script>

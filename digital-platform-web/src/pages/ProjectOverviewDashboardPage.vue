@@ -1,15 +1,12 @@
 <template>
   <section class="page-stack">
-    <div class="page-title-row">
-      <div>
-        <span class="section-eyebrow">跨项目只读视图</span>
-        <h2>项目总览</h2>
-        <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
-        <p class="manual-status-note">
-          齐套率基于资料 completionMode、基础状态和适用性派生完成状态计算。
-        </p>
-      </div>
-      <div class="page-title-actions">
+    <PageHeader
+      eyebrow="跨项目入口"
+      title="项目总览"
+      :current-user="currentUser"
+      subtitle="齐套率基于资料 completionMode、基础状态和适用性派生完成状态计算。"
+    >
+      <template #actions>
         <button
           v-if="canCreateProject"
           type="button"
@@ -21,8 +18,8 @@
         <button type="button" class="ghost-button" :disabled="loading" @click="loadDashboard">
           {{ loading ? '加载中...' : '重新加载' }}
         </button>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
     <section class="overview-summary-grid" aria-label="项目总览指标">
       <div class="overview-metric">
@@ -107,7 +104,12 @@
       </div>
 
       <div v-else class="overview-list">
-        <article v-for="project in projects" :key="project.projectId" class="overview-project">
+        <article
+          v-for="project in projects"
+          :key="project.projectId"
+          class="overview-project"
+          @click="handleProjectCardClick($event, project)"
+        >
           <div class="overview-project__main">
             <div class="overview-project__identity">
               <span class="mono">{{ formatProjectCode(project.projectCode) }}</span>
@@ -133,7 +135,7 @@
               <strong>{{ formatDate(project.plannedStartDate) }} 至 {{ formatDate(project.plannedEndDate) }}</strong>
               <small>创建人：{{ formatUser(project.createdBy) }}</small>
             </div>
-            <button type="button" class="ghost-button" @click="navigate(`/projects/${project.projectId}`)">
+            <button type="button" class="ghost-button" @click.stop="navigateToProject(project)">
               进入工作区
             </button>
           </div>
@@ -172,6 +174,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { getProjectOverviewDashboard } from '../api/projects.js';
 import { toReadableApiError } from '../api/http.js';
+import PageHeader from '../components/PageHeader.vue';
 import StatusBadge from '../components/StatusBadge.vue';
 import {
   formatCompletionMode,
@@ -276,6 +279,22 @@ function formatCompletionSummary(summaryValue) {
 
   const completed = summaryValue.completedRequiredCount ?? summaryValue.confirmedRequiredCount;
   return `适用资料 ${summaryValue.requiredTotal} 项，已完成 ${completed} 项，未完成 ${summaryValue.incompleteRequiredCount} 项`;
+}
+
+function navigateToProject(project) {
+  props.navigate(`/projects/${project.projectId}`);
+}
+
+function isInteractiveElement(element) {
+  return Boolean(element?.closest?.('button, a, input, select, textarea, summary, details'));
+}
+
+function handleProjectCardClick(event, project) {
+  if (isInteractiveElement(event.target)) {
+    return;
+  }
+
+  navigateToProject(project);
 }
 
 async function loadDashboard() {

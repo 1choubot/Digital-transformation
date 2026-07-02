@@ -1,18 +1,17 @@
 <template>
   <section class="page-stack">
-    <div class="page-title-row">
-      <div>
-        <span class="section-eyebrow">我的待办</span>
-        <h2>我的工作台</h2>
-        <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
-        <p class="manual-status-note">
-          工作台汇总需要当前账号处理的资料责任、资料审核（含 1.2 节点审批）和阶段推进事项。
-        </p>
-      </div>
-      <button type="button" class="ghost-button" :disabled="loading" @click="loadWorkbench">
-        {{ loading ? '加载中...' : '重新加载' }}
-      </button>
-    </div>
+    <PageHeader
+      eyebrow="我的待办"
+      title="我的工作台"
+      :current-user="currentUser"
+      subtitle="工作台汇总待我填写资料、待我评价/审批和待我推进阶段事项，进入项目工作区后只定位目标，不自动打开在线表单。"
+    >
+      <template #actions>
+        <button type="button" class="ghost-button" :disabled="loading" @click="loadWorkbench">
+          {{ loading ? '加载中...' : '重新加载' }}
+        </button>
+      </template>
+    </PageHeader>
 
     <section class="panel task-filter-panel">
       <div class="stage-advance-summary">
@@ -71,40 +70,55 @@
         <p>当前筛选下没有需要你处理的事项。</p>
       </div>
 
-      <div v-else class="task-table">
-        <div class="task-table__head">
-          <span>项目</span>
-          <span>阶段</span>
-          <span>资料项</span>
-          <span>类型</span>
-          <span>完成规则</span>
-          <span>状态</span>
-          <span>动作</span>
-          <span>更新时间</span>
-          <span>操作</span>
-        </div>
+      <div v-else class="task-list">
+        <article
+          v-for="item in filteredItems"
+          :key="itemKey(item)"
+          class="task-card"
+          :class="`task-card--${taskTone(item)}`"
+        >
+          <div class="task-card__header">
+            <div class="task-cell task-cell--project">
+              <span class="mono">{{ formatProjectCode(item.projectCode) }}</span>
+              <strong>{{ item.projectName }}</strong>
+            </div>
+            <span class="stage-document-pill">{{ formatTodoType(item.type, item) }}</span>
+          </div>
 
-        <article v-for="item in filteredItems" :key="itemKey(item)" class="task-table__row">
-          <div class="task-cell task-cell--project">
-            <span class="mono">{{ formatProjectCode(item.projectCode) }}</span>
-            <strong>{{ item.projectName }}</strong>
+          <div class="task-card__meta">
+            <div>
+              <span>阶段</span>
+              <strong>{{ item.stageName || `第 ${item.stageOrder} 阶段` }}</strong>
+              <small>第 {{ item.stageOrder }} 阶段</small>
+            </div>
+            <div>
+              <span>资料项</span>
+              <strong>{{ item.documentName || '-' }}</strong>
+              <small class="mono">{{ item.documentCode || '-' }}</small>
+            </div>
+            <div>
+              <span>完成规则</span>
+              <strong>{{ item.completionMode ? formatCompletionMode(item.completionMode) : '-' }}</strong>
+            </div>
+            <div>
+              <span>状态</span>
+              <strong>{{ item.completionStatus ? formatCompletionStatus(item.completionStatus) : formatStatus(item.status) }}</strong>
+            </div>
+            <div>
+              <span>更新时间</span>
+              <time>{{ formatDateTime(item.updatedAt || item.createdAt) }}</time>
+            </div>
           </div>
-          <div class="task-cell">
-            <span>{{ item.stageName || `第 ${item.stageOrder} 阶段` }}</span>
-            <small>第 {{ item.stageOrder }} 阶段</small>
+
+          <div class="task-card__footer">
+            <div>
+              <span>入口动作</span>
+              <strong>{{ formatActionText(item) }}</strong>
+            </div>
+            <button type="button" class="primary-button" @click="openTodo(item)">
+              进入项目工作区
+            </button>
           </div>
-          <div class="task-cell task-cell--document">
-            <span class="mono">{{ item.documentCode || '-' }}</span>
-            <strong>{{ item.documentName || '-' }}</strong>
-          </div>
-          <span>{{ formatTodoType(item.type, item) }}</span>
-          <span>{{ item.completionMode ? formatCompletionMode(item.completionMode) : '-' }}</span>
-          <span>{{ item.completionStatus ? formatCompletionStatus(item.completionStatus) : formatStatus(item.status) }}</span>
-          <span>{{ formatActionText(item) }}</span>
-          <time>{{ formatDateTime(item.updatedAt || item.createdAt) }}</time>
-          <button type="button" class="ghost-button" @click="openTodo(item)">
-            处理
-          </button>
         </article>
       </div>
     </section>
@@ -115,13 +129,13 @@
 import { computed, onMounted, ref } from 'vue';
 import { getMyWorkbench } from '../api/me.js';
 import { toReadableApiError } from '../api/http.js';
+import PageHeader from '../components/PageHeader.vue';
 import {
   formatCompletionMode,
   formatCompletionStatus,
   formatDateTime,
   formatProjectCode,
-  formatStatus,
-  formatUser
+  formatStatus
 } from '../utils/format.js';
 
 const props = defineProps({
@@ -142,8 +156,8 @@ const props = defineProps({
 const emit = defineEmits(['auth-expired']);
 
 const typeOptions = [
-  { value: 'document_responsibility', label: '我负责的资料' },
-  { value: 'document_review', label: '待我审核的资料' },
+  { value: 'document_responsibility', label: '待我填写资料' },
+  { value: 'document_review', label: '待我评价/审批' },
   { value: 'stage_advance', label: '待我推进阶段' }
 ];
 
@@ -191,14 +205,26 @@ function itemKey(item) {
 
 function formatTodoType(type, item = null) {
   if (type === 'initiation_review') {
-    return '待我审核的资料';
+    return '待我评价/审批';
   }
 
   if (item?.revisionRequired && type === 'document_responsibility') {
-    return '需返工资料';
+    return '待我填写资料';
   }
 
   return typeOptions.find((option) => option.value === type)?.label || type || '-';
+}
+
+function taskTone(item) {
+  if (item.type === 'stage_advance') {
+    return 'stage';
+  }
+
+  if (item.type === 'document_review' || item.type === 'initiation_review') {
+    return 'review';
+  }
+
+  return 'document';
 }
 
 function formatActionText(item) {

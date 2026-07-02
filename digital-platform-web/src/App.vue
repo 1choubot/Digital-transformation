@@ -11,50 +11,52 @@
 
   <div v-else class="app-shell">
     <header class="app-header">
-      <div>
-        <span class="app-header__eyebrow">数字化管理平台</span>
-        <h1>项目核心管理</h1>
-      </div>
-      <nav class="app-nav">
-        <button
-          type="button"
-          :class="{ active: route.name === 'project-overview-dashboard' }"
-          @click="navigate('/projects')"
-        >
-          项目总览
-        </button>
-        <button
-          v-if="canCurrentUserCreateProject"
-          type="button"
-          :class="{ active: route.name === 'project-create' }"
-          @click="navigate('/projects/new')"
-        >
-          新建项目
-        </button>
-        <button
-          type="button"
-          :class="{ active: route.name === 'my-workbench' }"
-          @click="navigate('/my-workbench')"
-        >
-          我的工作台
-        </button>
-        <button
-          v-if="canAccessUserManagement"
-          type="button"
-          :class="{ active: route.name === 'users' }"
-          @click="navigate('/users')"
-        >
-          用户管理
-        </button>
-      </nav>
-      <div class="current-user">
-        <div>
-          <strong>{{ formatUserName(currentUser) }}</strong>
-          <span>{{ formatUserMeta(currentUser) || '未记录部门岗位' }}</span>
+      <div class="app-header__inner">
+        <div class="app-header__brand">
+          <span class="app-header__eyebrow">数字化管理平台</span>
+          <h1>项目核心管理</h1>
         </div>
-        <button type="button" class="ghost-button" :disabled="loggingOut" @click="handleLogout">
-          {{ loggingOut ? '正在退出...' : '退出登录' }}
-        </button>
+        <nav class="app-nav" aria-label="主导航">
+          <button
+            type="button"
+            :class="{ active: isProjectOverviewEntryActive }"
+            @click="navigate('/projects')"
+          >
+            项目总览
+          </button>
+          <button
+            v-if="canCurrentUserCreateProject"
+            type="button"
+            :class="{ active: route.name === 'project-create' }"
+            @click="navigate('/projects/new')"
+          >
+            新建项目
+          </button>
+          <button
+            type="button"
+            :class="{ active: route.name === 'my-workbench' }"
+            @click="navigate('/my-workbench')"
+          >
+            我的工作台
+          </button>
+          <button
+            v-if="canAccessUserManagement"
+            type="button"
+            :class="{ active: route.name === 'users' }"
+            @click="navigate('/users')"
+          >
+            用户管理
+          </button>
+        </nav>
+        <div class="current-user">
+          <div>
+            <strong>{{ formatUserName(currentUser) }}</strong>
+            <span>{{ formatUserMeta(currentUser) || '未记录部门岗位' }}</span>
+          </div>
+          <button type="button" class="ghost-button" :disabled="loggingOut" @click="handleLogout">
+            {{ loggingOut ? '正在退出...' : '退出登录' }}
+          </button>
+        </div>
       </div>
     </header>
 
@@ -137,6 +139,9 @@ const canAccessUserManagement = computed(
 );
 const canCurrentUserCreateProject = computed(() =>
   ['general_manager', 'center_manager'].includes(currentUser.value?.organizationRole)
+);
+const isProjectOverviewEntryActive = computed(() =>
+  ['project-overview-dashboard', 'project-detail'].includes(route.value.name)
 );
 
 function setAuth(token, user) {

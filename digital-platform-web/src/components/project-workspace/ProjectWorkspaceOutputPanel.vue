@@ -35,7 +35,11 @@
         </ul>
       </div>
 
-      <div v-if="node.outputs?.length" class="project-workspace__outputs">
+      <div v-if="node.outputs?.length" class="project-workspace__outputs" aria-label="节点产出区">
+        <div class="project-workspace__subheading">
+          <span class="section-eyebrow">节点产出区</span>
+          <strong>产出、责任人、状态和动作入口</strong>
+        </div>
         <article
           v-for="output in node.outputs"
           :key="output.documentId || output.documentCode"
@@ -133,7 +137,7 @@
         <p>{{ onlineFormErrorMessage }}</p>
       </section>
 
-      <section v-if="activeOnlineForm" class="online-form-editor">
+      <section v-if="activeOnlineForm" class="online-form-editor" aria-label="在线表单动作区">
         <div class="project-workspace__detail-heading">
           <div>
             <span class="section-eyebrow">在线表单</span>

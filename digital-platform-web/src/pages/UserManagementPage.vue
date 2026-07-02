@@ -1,13 +1,15 @@
 <template>
   <section class="page-stack">
-    <div class="page-title-row">
-      <div>
-        <span class="section-eyebrow">基础用户管理</span>
-        <h2>用户管理</h2>
-        <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
-      </div>
-      <button type="button" class="ghost-button" @click="navigate('/projects')">返回项目总览</button>
-    </div>
+    <PageHeader
+      eyebrow="基础配置"
+      title="用户管理"
+      :current-user="currentUser"
+      subtitle="维护数字化平台账号、组织角色和基础状态；不代表文件平台权限。"
+    >
+      <template #actions>
+        <button type="button" class="ghost-button" @click="navigate('/projects')">返回项目总览</button>
+      </template>
+    </PageHeader>
 
     <section v-if="!canAccessUserManagement" class="state-panel state-panel--error">
       <h3>无权限访问</h3>
@@ -188,10 +190,10 @@ import {
   updateUser
 } from '../api/users.js';
 import { toReadableApiError } from '../api/http.js';
+import PageHeader from '../components/PageHeader.vue';
 import {
   formatBusinessDepartment,
-  formatOrganizationRole,
-  formatUser
+  formatOrganizationRole
 } from '../utils/format.js';
 
 const props = defineProps({

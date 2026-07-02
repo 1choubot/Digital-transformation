@@ -53,13 +53,23 @@ p {
 }
 
 .app-header {
+  padding: 0 32px;
+  border-bottom: 1px solid #d9e1ea;
+  background: #ffffff;
+}
+
+.app-header__inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  padding: 24px 32px;
-  border-bottom: 1px solid #d9e1ea;
-  background: #ffffff;
+  width: min(1280px, 100%);
+  min-height: 92px;
+  margin: 0 auto;
+}
+
+.app-header__brand {
+  min-width: 190px;
 }
 
 .app-header h1 {
@@ -83,6 +93,7 @@ p {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  min-width: 0;
 }
 
 .current-user {
@@ -113,12 +124,17 @@ p {
 .app-nav button,
 .ghost-button,
 .primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 36px;
   border-radius: 6px;
   border: 1px solid transparent;
   padding: 0 14px;
   font-weight: 700;
   line-height: 1.2;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .app-nav button {
@@ -199,11 +215,19 @@ p {
   gap: 18px;
 }
 
+.page-header,
 .page-title-row {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
+  min-width: 0;
+}
+
+.page-header__content {
+  display: grid;
+  gap: 0;
+  min-width: 0;
 }
 
 .page-title-actions {
@@ -213,11 +237,13 @@ p {
   gap: 10px;
 }
 
+.page-header h2,
 .page-title-row h2 {
   margin-top: 4px;
   color: #17212f;
   font-size: 22px;
   line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .page-user {
@@ -245,6 +271,7 @@ p {
 .panel-toolbar div {
   display: grid;
   gap: 3px;
+  min-width: 0;
 }
 
 .panel-toolbar strong,
@@ -467,6 +494,83 @@ p {
   overflow: hidden;
 }
 
+.task-list {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px 18px;
+}
+
+.task-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  border: 1px solid #e0e8ef;
+  border-left-width: 4px;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.task-card--document {
+  border-left-color: #226d68;
+}
+
+.task-card--review {
+  border-left-color: #2563eb;
+}
+
+.task-card--stage {
+  border-left-color: #a16207;
+}
+
+.task-card__header,
+.task-card__footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.task-card__header .stage-document-pill {
+  flex: 0 0 auto;
+}
+
+.task-card__meta {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.task-card__meta div,
+.task-card__footer div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.task-card__meta span,
+.task-card__footer span {
+  color: #667789;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.task-card__meta strong,
+.task-card__meta small,
+.task-card__meta time,
+.task-card__footer strong {
+  min-width: 0;
+  color: #334252;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.task-card__footer {
+  border-top: 1px solid #eef2f6;
+  padding-top: 12px;
+}
+
 .task-table {
   display: grid;
 }
@@ -643,10 +747,21 @@ p {
   gap: 12px;
   padding: 16px 18px;
   border-top: 1px solid #eef2f6;
+  cursor: pointer;
+  transition:
+    background 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
 .overview-project:first-child {
   border-top: 0;
+}
+
+.overview-project:hover,
+.overview-project:focus-visible {
+  background: #f8fbfc;
+  outline: none;
+  box-shadow: inset 3px 0 0 #226d68;
 }
 
 .overview-project__main {
@@ -1049,6 +1164,15 @@ p {
 
 .stage-documents {
   overflow: hidden;
+}
+
+.stage-documents--legacy {
+  border-color: #dce4ec;
+  background: #fbfcfe;
+}
+
+.stage-documents--legacy > .panel-heading {
+  background: #f8fafc;
 }
 
 .operation-log-panel {
@@ -1743,6 +1867,10 @@ p {
   padding: 16px 18px 18px;
 }
 
+.project-workspace--primary {
+  border-color: #cddfdb;
+}
+
 .project-workspace__stage-nav {
   display: grid;
   gap: 8px;
@@ -1880,6 +2008,18 @@ p {
   display: grid;
   gap: 12px;
   min-width: 0;
+}
+
+.project-workspace__subheading {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.project-workspace__subheading strong {
+  color: #17212f;
+  font-size: 14px;
+  overflow-wrap: anywhere;
 }
 
 .project-workspace__output {
@@ -2106,11 +2246,20 @@ p {
 }
 
 @media (max-width: 900px) {
-  .app-header,
+  .app-header__inner,
+  .page-header,
   .page-title-row,
   .panel-toolbar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .app-header {
+    padding: 18px 20px;
+  }
+
+  .app-header__inner {
+    min-height: 0;
   }
 
   .app-main {
@@ -2154,7 +2303,8 @@ p {
   }
 
   .overview-summary-grid,
-  .overview-filters {
+  .overview-filters,
+  .task-card__meta {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -2175,6 +2325,10 @@ p {
   }
 
   .task-table__row .ghost-button {
+    width: fit-content;
+  }
+
+  .task-card__footer .primary-button {
     width: fit-content;
   }
 
@@ -2262,6 +2416,7 @@ p {
     font-size: 21px;
   }
 
+  .page-header h2,
   .page-title-row h2 {
     font-size: 20px;
   }
@@ -2290,6 +2445,7 @@ p {
   .stage-document-completeness__summary,
   .overview-summary-grid,
   .overview-filters,
+  .task-card__meta,
   .project-workspace__stage-nav,
   .project-workspace__node-grid,
   .project-workspace__output-meta,
@@ -2331,6 +2487,16 @@ p {
   }
 
   .task-table__row .ghost-button {
+    width: 100%;
+  }
+
+  .task-card__header,
+  .task-card__footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .task-card__footer .primary-button {
     width: 100%;
   }
 

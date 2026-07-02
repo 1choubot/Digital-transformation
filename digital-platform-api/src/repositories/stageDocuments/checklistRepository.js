@@ -301,10 +301,13 @@ export async function getProjectStageDocumentChecklist(projectId, user = null) {
     };
   });
   const documentsWithReworkContext = attachReworkCandidatesToDocuments(documentsWithRevisionSource);
+  const relatedDocumentsByCode = new Map(
+    documentsWithReworkContext.map((document) => [document.documentCode, document])
+  );
   const visibleDocuments =
     user && project
       ? filterStageDocumentsForUser({ user, project, documents: documentsWithReworkContext }).map((document) =>
-          attachStageDocumentPermissions({ user, project, document })
+          attachStageDocumentPermissions({ user, project, document, relatedDocumentsByCode })
         )
       : documentsWithReworkContext;
 

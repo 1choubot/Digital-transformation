@@ -4,6 +4,12 @@ import {
   canManageProjectResponsibility
 } from '../../domain/organization.js';
 import {
+  INITIATION_NOTICE_DOCUMENT_CODE,
+  INITIATION_REVIEW_DOCUMENT_CODE,
+  INITIATION_REWORK_TARGET_DOCUMENT_CODE,
+  isInitiationOnlineFormDocument
+} from '../../domain/initiationReview.js';
+import {
   insertOperationLog,
   OPERATION_ACTION_TYPE,
   OPERATION_TARGET_TYPE
@@ -19,6 +25,7 @@ import {
   selectProjectPermissionContext,
   selectResponsibleUserPermissionContext
 } from './permissionContext.js';
+import { canManageInitiationOnlineFormResponsibility } from './accessControl.js';
 
 function normalizeResponsibleUserId(value) {
   if (value === null) {
@@ -38,6 +45,27 @@ function normalizeResponsibleUserId(value) {
 }
 
 function assertUserCanManageResponsibility({ user, project, currentDocument, targetResponsibleUser }) {
+  if ([INITIATION_REWORK_TARGET_DOCUMENT_CODE, INITIATION_REVIEW_DOCUMENT_CODE].includes(currentDocument.document_code)) {
+    if (!canManageInitiationOnlineFormResponsibility(user, currentDocument)) {
+      throw new StageDocumentResponsibilityError(
+        'FORBIDDEN_OPERATION',
+        'Only marketing center manager can assign initiation stage document responsibility',
+        403,
+        ['organizationRole']
+      );
+    }
+    return;
+  }
+
+  if (currentDocument.document_code === INITIATION_NOTICE_DOCUMENT_CODE || isInitiationOnlineFormDocument(currentDocument)) {
+    throw new StageDocumentResponsibilityError(
+      'FORBIDDEN_OPERATION',
+      'Initiation notice does not support separate stage document responsibility assignment',
+      403,
+      ['documentId']
+    );
+  }
+
   if (!canManageProjectResponsibility(user, project, {
     document: currentDocument,
     targetResponsibleUser

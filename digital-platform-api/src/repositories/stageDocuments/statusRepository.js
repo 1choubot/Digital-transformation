@@ -1,6 +1,8 @@
 import { pool } from '../../db/pool.js';
 import {
+  BUSINESS_DEPARTMENT,
   canSubmitStageDocument,
+  isCenterManagerUser,
   isGeneralManagerAssistantUser,
   isSystemAdminUser
 } from '../../domain/organization.js';
@@ -12,7 +14,11 @@ import {
   StageDocumentStatusError
 } from '../../domain/stageDocumentStatus.js';
 import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
-import { isInitiationReviewDocument } from '../../domain/initiationReview.js';
+import {
+  INITIATION_NOTICE_DOCUMENT_CODE,
+  isInitiationOnlineFormDocument,
+  isInitiationReviewDocument
+} from '../../domain/initiationReview.js';
 import {
   DESIGN_CHANGE_SOURCE_DOCUMENT_CODE,
   DESIGN_CHANGE_TARGET_DOCUMENT_CODES,
@@ -39,9 +45,50 @@ import { isStageDocumentReviewAuthority } from './accessControl.js';
 import { selectProjectPermissionContext } from './permissionContext.js';
 import {
   activateInitiationReviewNodesForDocument,
+  assertInitiationNoticeSubmitGateReady,
   attachInitiationReviewToStageDocumentRows,
   restoreInitiationReviewNodesAfterReworkCleared
 } from './initiationReviewRepository.js';
+
+function isInitiationNoticeDocument(document) {
+  return String(document?.document_code ?? document?.documentCode ?? '') === INITIATION_NOTICE_DOCUMENT_CODE;
+}
+
+function assertOnlineFormDocumentSubmitSource({ action, currentDocument, allowOnlineFormDocumentSubmit }) {
+  if (
+    action !== DOCUMENT_STATUS_ACTION.SUBMIT ||
+    !isInitiationOnlineFormDocument(currentDocument) ||
+    allowOnlineFormDocumentSubmit
+  ) {
+    return;
+  }
+
+  throw new StageDocumentStatusError(
+    'ONLINE_FORM_SUBMISSION_REQUIRED',
+    'This stage document must be submitted through the online form endpoint',
+    409,
+    {
+      documentId: currentDocument.id,
+      documentCode: currentDocument.document_code ?? currentDocument.documentCode ?? null
+    }
+  );
+}
+
+function assertOnlineFormDocumentRevisionCompletionSource(currentDocument) {
+  if (!isInitiationOnlineFormDocument(currentDocument)) {
+    return;
+  }
+
+  throw new StageDocumentStatusError(
+    'ONLINE_FORM_REVISION_COMPLETION_REQUIRED',
+    'This stage document revision must be completed by resubmitting the online form',
+    409,
+    {
+      documentId: currentDocument.id,
+      documentCode: currentDocument.document_code ?? currentDocument.documentCode ?? null
+    }
+  );
+}
 
 function assertUserCanUpdateDocumentStatus({ user, action, currentDocument, project }) {
   if (isGeneralManagerAssistantUser(user) || isSystemAdminUser(user)) {
@@ -66,6 +113,18 @@ function assertUserCanUpdateDocumentStatus({ user, action, currentDocument, proj
   }
 
   if (action === DOCUMENT_STATUS_ACTION.SUBMIT) {
+    if (isInitiationNoticeDocument(currentDocument)) {
+      if (!isCenterManagerUser(user) || user.department !== BUSINESS_DEPARTMENT.MARKETING_CENTER) {
+        throw new StageDocumentStatusError(
+          'FORBIDDEN_OPERATION',
+          'Only marketing center manager can submit initiation notice',
+          403,
+          ['organizationRole']
+        );
+      }
+      return;
+    }
+
     if (!canSubmitStageDocument(user, { project, document: currentDocument })) {
       throw new StageDocumentStatusError(
         'FORBIDDEN_OPERATION',
@@ -161,7 +220,7 @@ function assertReviewActionAllowedForRevision(action, currentDocument) {
   }
 }
 
-function buildRevisionSubmitTransition(currentDocument) {
+function buildRevisionSubmitTransition(currentDocument, { allowOnlineFormDocumentSubmit = false } = {}) {
   if (
     isRevisionRequired(currentDocument) &&
     isReviewCompletionMode(getDocumentCompletionMode(currentDocument))
@@ -174,11 +233,47 @@ function buildRevisionSubmitTransition(currentDocument) {
     };
   }
 
+  if (
+    allowOnlineFormDocumentSubmit &&
+    isRevisionRequired(currentDocument) &&
+    isInitiationOnlineFormDocument(currentDocument) &&
+    isSubmitCompletionMode(getDocumentCompletionMode(currentDocument))
+  ) {
+    return {
+      nextStatus: DOCUMENT_STATUS.SUBMITTED,
+      returnReason: null,
+      clearReturnTrace: true,
+      clearRevision: true,
+      isRevisionCompleteBySubmit: true
+    };
+  }
+
   return null;
 }
 
 async function applyDocumentStatusUpdate(connection, projectId, documentId, action, userId, transition) {
   if (action === DOCUMENT_STATUS_ACTION.SUBMIT) {
+    if (transition.clearRevision) {
+      await connection.execute(
+        `UPDATE project_stage_documents
+        SET status = ?,
+          submitted_by_user_id = ?,
+          submitted_at = CURRENT_TIMESTAMP,
+          revision_required = 0,
+          revision_completed_by_user_id = ?,
+          revision_completed_at = CURRENT_TIMESTAMP,
+          revision_resubmitted_by_user_id = NULL,
+          revision_resubmitted_at = NULL,
+          returned_by_user_id = NULL,
+          returned_at = NULL,
+          return_reason = NULL
+        WHERE project_id = ?
+          AND id = ?`,
+        [transition.nextStatus, userId, userId, projectId, documentId]
+      );
+      return;
+    }
+
     if (transition.isRevisionResubmit) {
       await connection.execute(
         `UPDATE project_stage_documents
@@ -575,9 +670,9 @@ function buildRevisionCompletedOperationLogPayload({ projectId, documentId, user
   };
 }
 
-function buildTransitionForAction({ action, currentDocument, returnReason }) {
+function buildTransitionForAction({ action, currentDocument, returnReason, allowOnlineFormDocumentSubmit = false }) {
   if (action === DOCUMENT_STATUS_ACTION.SUBMIT) {
-    const revisionTransition = buildRevisionSubmitTransition(currentDocument);
+    const revisionTransition = buildRevisionSubmitTransition(currentDocument, { allowOnlineFormDocumentSubmit });
     if (revisionTransition) {
       return revisionTransition;
     }
@@ -607,21 +702,27 @@ function buildTransitionForAction({ action, currentDocument, returnReason }) {
 }
 
 export async function updateProjectStageDocumentStatus({
+  connection: providedConnection = null,
   projectId,
   documentId,
   action,
   user,
+  allowOnlineFormDocumentSubmit = false,
   returnReason = '',
   revisionTargetDocumentIds: rawRevisionTargetDocumentIds,
   designChangeTargetDocumentIds: rawDesignChangeTargetDocumentIds
 }) {
-  const connection = await pool.getConnection();
+  const connection = providedConnection || (await pool.getConnection());
+  const ownsConnection = !providedConnection;
 
   try {
-    await connection.beginTransaction();
+    if (ownsConnection) {
+      await connection.beginTransaction();
+    }
     const currentDocument = await selectProjectStageDocumentForUpdate(connection, projectId, documentId);
     const project = await selectProjectPermissionContext(connection, projectId, user);
     assertDocumentCompletionModeAllowsAction(action, currentDocument);
+    assertOnlineFormDocumentSubmitSource({ action, currentDocument, allowOnlineFormDocumentSubmit });
     assertUserCanUpdateDocumentStatus({ user, action, currentDocument, project });
     assertReviewActionAllowedForRevision(action, currentDocument);
     assertDocumentIsApplicable(
@@ -630,8 +731,12 @@ export async function updateProjectStageDocumentStatus({
     const transition = buildTransitionForAction({
       action,
       currentDocument,
-      returnReason
+      returnReason,
+      allowOnlineFormDocumentSubmit
     });
+    if (action === DOCUMENT_STATUS_ACTION.SUBMIT && isInitiationNoticeDocument(currentDocument)) {
+      await assertInitiationNoticeSubmitGateReady(connection, projectId);
+    }
 
     if (action === DOCUMENT_STATUS_ACTION.RETURN) {
       const normalizedReason = normalizeReturnReason(returnReason);
@@ -688,19 +793,25 @@ export async function updateProjectStageDocumentStatus({
         buildRevisionCompletedOperationLogPayload({ projectId, documentId, userId: user.id, currentDocument })
       );
     }
-    await connection.commit();
+    if (ownsConnection) {
+      await connection.commit();
+    }
 
     const [updatedDocumentWithInitiationReview] = await attachInitiationReviewToStageDocumentRows(
-      pool,
+      connection,
       [updatedDocument],
       user
     );
     return mapDocument(updatedDocumentWithInitiationReview);
   } catch (error) {
-    await connection.rollback();
+    if (ownsConnection) {
+      await connection.rollback();
+    }
     throw error;
   } finally {
-    connection.release();
+    if (ownsConnection) {
+      connection.release();
+    }
   }
 }
 
@@ -713,6 +824,7 @@ export async function completeProjectStageDocumentRevision({ projectId, document
     const project = await selectProjectPermissionContext(connection, projectId, user);
     const completionMode = getDocumentCompletionMode(currentDocument);
 
+    assertOnlineFormDocumentRevisionCompletionSource(currentDocument);
     assertUserCanUpdateDocumentStatus({
       user,
       action: DOCUMENT_STATUS_ACTION.SUBMIT,

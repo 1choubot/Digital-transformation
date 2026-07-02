@@ -9,6 +9,7 @@ export async function selectProjectPermissionContext(connection, projectId, user
       `SELECT
         p.id,
         p.project_manager_user_id,
+        p.created_by_user_id,
         p.participating_departments,
         EXISTS (
           SELECT 1
@@ -39,6 +40,7 @@ export async function selectProjectPermissionContext(connection, projectId, user
     `SELECT
       id,
       project_manager_user_id,
+      created_by_user_id,
       participating_departments,
       0 AS has_department_responsible
     FROM projects

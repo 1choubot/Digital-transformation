@@ -44,6 +44,8 @@
           v-for="output in node.outputs"
           :key="output.outputKey || output.documentId || output.documentCode || output.targetOutputCode"
           class="project-workspace__output"
+          :data-workspace-output-document-id="getBoundDocument(output)?.id || null"
+          :data-workspace-output-document-code="getBoundDocument(output)?.documentCode || output.documentCode || null"
         >
           <div class="stage-document-card__main">
             <div class="stage-document-card__identity">
@@ -123,6 +125,44 @@
             </ul>
           </div>
 
+          <div v-if="getOutputPermissionHints(output).length" class="stage-document-missing project-workspace__permission-hints">
+            <strong>权限提示</strong>
+            <ul>
+              <li v-for="reason in getOutputPermissionHints(output)" :key="reason">{{ reason }}</li>
+            </ul>
+          </div>
+
+          <section v-if="isGenericMigratedOutput(output)" class="project-workspace__output-body" aria-label="产出卡片通用资料操作">
+            <ProjectStageDocumentAttachments
+              :document="getBoundDocument(output)"
+              :state="getOutputAttachmentState(output)"
+              @upload="$emit('upload-attachment', $event)"
+              @download="$emit('download-attachment', $event)"
+              @delete="$emit('delete-attachment', $event)"
+            />
+            <ProjectStageDocumentActions
+              :document="getBoundDocument(output)"
+              :responsibility-candidates="responsibilityCandidates"
+              :responsibility-candidates-loading="responsibilityCandidatesLoading"
+              :responsibility-selections="responsibilitySelections"
+              :can-submit-document="canSubmitDocument(getBoundDocument(output))"
+              :can-confirm-return-document="canConfirmReturnDocument(getBoundDocument(output))"
+              :can-manage-responsibility="canManageResponsibility(getBoundDocument(output))"
+              :can-change-applicability="canChangeApplicability(getBoundDocument(output))"
+              :return-reasons="returnReasons"
+              :not-applicable-reasons="notApplicableReasons"
+              :is-action-pending="isActionPending"
+              @submit-document="$emit('submit-document', $event)"
+              @confirm-document="$emit('confirm-document', $event)"
+              @return-document="$emit('return-document', $event)"
+              @complete-revision-document="$emit('complete-revision-document', $event)"
+              @mark-not-applicable="$emit('mark-not-applicable', $event)"
+              @restore-applicable="$emit('restore-applicable', $event)"
+              @save-responsible-user="$emit('save-responsible-user', $event)"
+              @clear-responsible-user="$emit('clear-responsible-user', $event)"
+            />
+          </section>
+
           <div class="project-workspace__output-actions">
             <button
               v-if="output.formAvailable"
@@ -133,6 +173,7 @@
             >
               {{ activeOnlineFormDocumentId === output.documentId ? '正在查看在线表单' : '填写资料/查看在线表单' }}
             </button>
+            <span v-else-if="isGenericMigratedOutput(output)" class="inline-muted">通用资料操作已迁移到本产出卡片。</span>
             <button
               v-else-if="canLocateLegacyChecklist(output)"
               type="button"
@@ -239,8 +280,11 @@
 
 <script setup>
 import ProjectInitiationReviewPanel from '../project-detail/ProjectInitiationReviewPanel.vue';
+import ProjectStageDocumentActions from '../project-detail/ProjectStageDocumentActions.vue';
+import ProjectStageDocumentAttachments from '../project-detail/ProjectStageDocumentAttachments.vue';
 import ProjectStageDocumentResponsibility from '../project-detail/ProjectStageDocumentResponsibility.vue';
 import { formatCompletionStatus as formatCompletionStatusLabel } from '../../utils/format.js';
+import { isInitiationOnlineFormDocument } from '../project-detail/stageDocumentViewHelpers.js';
 
 defineEmits([
   'open-online-form',
@@ -250,8 +294,17 @@ defineEmits([
   'update-online-form-field',
   'approve-node',
   'return-node',
+  'submit-document',
+  'confirm-document',
+  'return-document',
+  'complete-revision-document',
+  'mark-not-applicable',
+  'restore-applicable',
   'save-responsible-user',
-  'clear-responsible-user'
+  'clear-responsible-user',
+  'upload-attachment',
+  'download-attachment',
+  'delete-attachment'
 ]);
 
 const props = defineProps({
@@ -314,6 +367,34 @@ const props = defineProps({
   responsibilitySelections: {
     type: Object,
     required: true
+  },
+  canSubmitDocument: {
+    type: Function,
+    required: true
+  },
+  canConfirmReturnDocument: {
+    type: Function,
+    required: true
+  },
+  canManageResponsibility: {
+    type: Function,
+    required: true
+  },
+  canChangeApplicability: {
+    type: Function,
+    required: true
+  },
+  returnReasons: {
+    type: Object,
+    required: true
+  },
+  notApplicableReasons: {
+    type: Object,
+    required: true
+  },
+  getAttachmentState: {
+    type: Function,
+    required: true
   }
 });
 
@@ -340,6 +421,25 @@ function responsibilityDisabledReason(output) {
 function isResponsibleActionPending(output) {
   const document = props.getOutputDocument(output);
   return Boolean(document) && props.isActionPending(document.id, 'responsible-user');
+}
+
+function getBoundDocument(output) {
+  return props.getOutputDocument(output);
+}
+
+function hasOutputDocumentBinding(output) {
+  const document = getBoundDocument(output);
+  return Boolean(document?.id || document?.documentCode || output?.documentId || output?.documentCode);
+}
+
+function isGenericMigratedOutput(output) {
+  const document = getBoundDocument(output);
+  return Boolean(document) && hasOutputDocumentBinding(output) && !isInitiationOnlineFormDocument(document);
+}
+
+function getOutputAttachmentState(output) {
+  const document = getBoundDocument(output);
+  return document ? props.getAttachmentState(document.id) : null;
 }
 
 function hasConfiguredStageNodes() {
@@ -430,6 +530,10 @@ function formatPermissionSummary(output) {
     return '在线表单';
   }
 
+  if (isGenericMigratedOutput(output)) {
+    return '本卡片处理';
+  }
+
   if (canLocateLegacyChecklist(output)) {
     return '定位旧清单';
   }
@@ -439,14 +543,52 @@ function formatPermissionSummary(output) {
 
 function canLocateLegacyChecklist(output) {
   return (
+    !isGenericMigratedOutput(output) &&
     !output?.formAvailable &&
     output?.legacyChecklistTarget?.available === true &&
     (output?.actionHints || []).includes('locate_legacy_checklist')
   );
 }
 
+function getOutputPermissionHints(output) {
+  const document = getBoundDocument(output);
+  if (!document) {
+    return output?.blockingReasons || [];
+  }
+
+  if (!isGenericMigratedOutput(output)) {
+    return [];
+  }
+
+  const permissions = document.permissions || {};
+  const hints = [];
+  if (permissions.canManageResponsibility !== true) {
+    hints.push('当前账号无权分配或清空该资料责任人');
+  }
+  if (permissions.canViewAttachments !== true) {
+    hints.push('当前账号无权查看该资料附件');
+  } else if (permissions.canUploadAttachment !== true) {
+    hints.push('当前账号无权上传该资料附件');
+  }
+  if (permissions.canSubmitDocument !== true && ['not_submitted', 'returned'].includes(document.status)) {
+    hints.push('当前账号无权提交该资料');
+  }
+  if (permissions.canReviewDocument !== true && document.status === 'submitted') {
+    hints.push('当前账号无权审核通过或退回该资料');
+  }
+  if (permissions.canChangeApplicability !== true) {
+    hints.push('当前账号无权标记不适用或恢复适用');
+  }
+
+  return [...new Set(hints)];
+}
+
 function formatLegacyDocumentTarget(output) {
   const target = output?.legacyChecklistTarget;
+  if (isGenericMigratedOutput(output)) {
+    return target?.documentCode ? `${target.documentCode} 兼容区只读` : '兼容区只读';
+  }
+
   if (target?.available) {
     return target.documentCode ? `${target.documentCode} 可定位` : '可定位';
   }

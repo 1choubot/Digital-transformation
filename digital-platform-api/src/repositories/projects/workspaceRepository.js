@@ -20,7 +20,14 @@ function buildDocumentActionHints(document, outputConfig) {
     ].filter(Boolean);
   }
 
-  return [document && outputConfig?.legacyDocumentCode ? 'locate_legacy_checklist' : null].filter(Boolean);
+  return [
+    permissions.canManageResponsibility || document?.canManageResponsibility ? 'assign_responsible_user' : null,
+    permissions.canViewAttachments || document?.canViewAttachments ? 'view_attachments' : null,
+    permissions.canUploadAttachment || document?.canUploadAttachment ? 'upload_attachment' : null,
+    permissions.canSubmitDocument || document?.canSubmitDocument ? 'submit_document' : null,
+    permissions.canReviewDocument || document?.canReviewDocument ? 'review_document' : null,
+    permissions.canChangeApplicability || document?.canChangeApplicability ? 'change_applicability' : null
+  ].filter(Boolean);
 }
 
 function buildDocumentBlockingReasons(document, outputConfig) {
@@ -260,8 +267,8 @@ export async function getProjectWorkspace(projectId, user) {
       defaultProjectInitializationEnabled: false,
       legacyProjectMigrationEnabled: false,
       writesProjectStageDocuments: false,
-      genericActionsMigratedToOutputCards: false,
-      nonInitiationOutputAction: 'locate_legacy_checklist'
+      genericActionsMigratedToOutputCards: true,
+      nonInitiationOutputAction: 'workspace_output_card'
     }
   };
 }

@@ -956,8 +956,8 @@ async function runInitiationReviewSmoke({
   assert.equal(workspace.scope.defaultProjectInitializationEnabled, false);
   assert.equal(workspace.scope.legacyProjectMigrationEnabled, false);
   assert.equal(workspace.scope.writesProjectStageDocuments, false);
-  assert.equal(workspace.scope.genericActionsMigratedToOutputCards, false);
-  assert.equal(workspace.scope.nonInitiationOutputAction, 'locate_legacy_checklist');
+  assert.equal(workspace.scope.genericActionsMigratedToOutputCards, true);
+  assert.equal(workspace.scope.nonInitiationOutputAction, 'workspace_output_card');
   assert.equal(workspace.stages.length, 8);
   assert.ok(workspace.stages.every((stage) => stage.configured === true && Array.isArray(stage.nodes) && stage.nodes.length > 0));
   const workspaceOutputs = workspace.stages
@@ -972,16 +972,15 @@ async function runInitiationReviewSmoke({
       .every(
         (output) =>
           output.formAvailable === false &&
-          output.actionHints.length === 1 &&
-          output.actionHints.includes('locate_legacy_checklist')
+          output.actionHints.length > 0 &&
+          !output.actionHints.includes('locate_legacy_checklist')
       )
   );
   assert.ok(
     nonInitiationOutputs.every(
       (output) =>
         !output.actionHints.includes('edit_or_submit_form') &&
-        !output.actionHints.includes('handle_initiation_review') &&
-        !output.actionHints.includes('assign_responsible_user')
+        !output.actionHints.includes('handle_initiation_review')
     )
   );
   const initiationStage = workspace.stages.find((stage) => stage.stageKey === 'initiation');
@@ -996,12 +995,12 @@ async function runInitiationReviewSmoke({
   const solutionPlanOutput = findWorkspaceOutput(workspace, '2.1');
   assert.equal(solutionPlanOutput.formAvailable, false);
   assert.equal(solutionPlanOutput.legacyChecklistTarget.available, true);
-  assert.ok(solutionPlanOutput.actionHints.includes('locate_legacy_checklist'));
+  assert.ok(solutionPlanOutput.actionHints.includes('view_attachments'));
   const tenderOutput = findWorkspaceOutput(workspace, 'C19');
   assert.equal(tenderOutput.documentId, null);
   assert.equal(tenderOutput.status, 'shell_placeholder');
   assert.equal(tenderOutput.legacyChecklistTarget.available, false);
-  assert.equal(tenderOutput.actionHints.includes('locate_legacy_checklist'), false);
+  assert.equal(tenderOutput.actionHints.length, 0);
 
   const marketingResponsibilityChecklist = await getProjectStageDocumentChecklist(projectId, marketingManagerUser);
   assert.equal(findChecklistDocument(marketingResponsibilityChecklist, '1.1').canManageResponsibility, true);

@@ -1665,6 +1665,11 @@ p {
   outline-offset: 3px;
 }
 
+.stage-document-card--compatibility {
+  border-color: #d5e5f6;
+  background: #fbfdff;
+}
+
 .stage-document-card__main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1774,6 +1779,19 @@ p {
 .stage-document-card__actions {
   grid-column: 2;
   grid-row: 1;
+}
+
+.stage-document-card__actions--compatibility {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #dbe8f6;
+  border-radius: 6px;
+  background: #f8fbff;
+}
+
+.stage-document-card__actions--compatibility p {
+  margin: 0;
 }
 
 .stage-document-attachments {
@@ -2035,8 +2053,30 @@ p {
   gap: 12px;
 }
 
+.project-workspace__output--focused {
+  outline: 3px solid rgba(34, 109, 104, 0.28);
+  outline-offset: 3px;
+}
+
 .project-workspace__output-meta {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.project-workspace__output-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.72fr);
+  gap: 14px;
+  align-items: start;
+  min-width: 0;
+}
+
+.project-workspace__output-body .stage-document-attachments {
+  grid-column: 1;
+}
+
+.project-workspace__output-body .stage-document-card__actions {
+  grid-column: 2;
+  grid-row: 1;
 }
 
 .project-workspace__output-actions {
@@ -2372,7 +2412,8 @@ p {
   }
 
   .stage-document-card__main,
-  .stage-document-card__body {
+  .stage-document-card__body,
+  .project-workspace__output-body {
     grid-template-columns: 1fr;
   }
 
@@ -2382,7 +2423,9 @@ p {
 
   .stage-document-card__actions,
   .initiation-review-panel,
-  .stage-document-attachments {
+  .stage-document-attachments,
+  .project-workspace__output-body .stage-document-card__actions,
+  .project-workspace__output-body .stage-document-attachments {
     grid-column: auto;
     grid-row: auto;
   }

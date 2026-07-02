@@ -94,6 +94,13 @@
               :responsibility-candidates-loading="responsibilityCandidatesLoading"
               :responsibility-candidates-error-message="responsibilityCandidatesErrorMessage"
               :responsibility-selections="responsibilitySelections"
+              :can-submit-document="canSubmitDocument"
+              :can-confirm-return-document="canConfirmReturnDocument"
+              :can-manage-responsibility="canManageResponsibility"
+              :can-change-applicability="canChangeApplicability"
+              :return-reasons="returnReasons"
+              :not-applicable-reasons="notApplicableReasons"
+              :get-attachment-state="getAttachmentState"
               @open-online-form="openOnlineForm"
               @open-legacy-checklist="scrollToStageDocumentChecklist"
               @save-online-form="saveOnlineForm"
@@ -101,8 +108,17 @@
               @update-online-form-field="updateOnlineFormField"
               @approve-node="approveInitiationNode"
               @return-node="returnInitiationNode"
+              @submit-document="submitDocument"
+              @confirm-document="confirmDocument"
+              @return-document="returnDocument"
+              @complete-revision-document="completeRevisionDocument"
+              @mark-not-applicable="markNotApplicable"
+              @restore-applicable="restoreApplicable"
               @save-responsible-user="saveResponsibleUser"
               @clear-responsible-user="clearResponsibleUser"
+              @upload-attachment="uploadAttachment"
+              @download-attachment="downloadAttachment"
+              @delete-attachment="deleteAttachment"
             />
           </div>
         </div>
@@ -148,6 +164,7 @@
         :not-applicable-reasons="notApplicableReasons"
         :is-action-pending="isActionPending"
         :get-attachment-state="getAttachmentState"
+        :migrated-workspace-document-keys="migratedWorkspaceDocumentKeys"
         @submit-document="submitDocument"
         @confirm-document="confirmDocument"
         @return-document="returnDocument"
@@ -161,13 +178,14 @@
         @upload-attachment="uploadAttachment"
         @download-attachment="downloadAttachment"
         @delete-attachment="deleteAttachment"
+        @locate-output-card="locateWorkspaceOutputCard"
       />
     </template>
   </section>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import {
   advanceProjectStage,
   approveInitiationReviewNode,
@@ -343,6 +361,26 @@ const activeWorkspaceStage = computed(
 const activeWorkspaceNode = computed(
   () => (activeWorkspaceStage.value?.nodes || []).find((node) => node.nodeKey === selectedWorkspaceNodeKey.value) || null
 );
+const migratedWorkspaceDocumentKeys = computed(() => {
+  const keys = new Set();
+  for (const stage of workspace.value?.stages || []) {
+    for (const node of stage.nodes || []) {
+      for (const output of node.outputs || []) {
+        const document = getOutputDocument(output);
+        if (!document || isInitiationOnlineFormDocument(document)) {
+          continue;
+        }
+        if (document.id) {
+          keys.add(`id:${document.id}`);
+        }
+        if (document.documentCode) {
+          keys.add(`code:${document.documentCode}`);
+        }
+      }
+    }
+  }
+  return [...keys];
+});
 const isProjectRelatedToCurrentCenter = computed(() => {
   if (!isCurrentUserCenterManager.value || !currentUserDepartment.value) {
     return false;
@@ -460,6 +498,72 @@ function focusStageDocumentChecklistCard(card) {
   globalThis.setTimeout?.(() => {
     card.classList.remove('stage-document-card--focused');
   }, 1800);
+}
+
+function findWorkspaceOutputCard(target = null) {
+  const documentId = target?.id ?? target?.documentId ?? target?.output?.documentId ?? null;
+  const documentCode = target?.documentCode ?? target?.output?.documentCode ?? target?.output?.legacyDocumentCode ?? null;
+  const cards = Array.from(globalThis.document?.querySelectorAll?.('[data-workspace-output-document-id], [data-workspace-output-document-code]') || []);
+
+  return (
+    cards.find((card) => documentId && card.dataset.workspaceOutputDocumentId === String(documentId)) ||
+    cards.find((card) => documentCode && card.dataset.workspaceOutputDocumentCode === String(documentCode)) ||
+    null
+  );
+}
+
+function focusWorkspaceOutputCard(card) {
+  if (!card) {
+    return;
+  }
+
+  card.classList.add('project-workspace__output--focused');
+  globalThis.setTimeout?.(() => {
+    card.classList.remove('project-workspace__output--focused');
+  }, 1800);
+}
+
+function findWorkspaceTargetByDocument(document) {
+  if (!document) {
+    return null;
+  }
+
+  for (const stage of workspace.value?.stages || []) {
+    for (const node of stage.nodes || []) {
+      for (const output of node.outputs || []) {
+        const boundDocument = getOutputDocument(output);
+        if (
+          (document.id && String(boundDocument?.id) === String(document.id)) ||
+          (document.documentCode && boundDocument?.documentCode === document.documentCode)
+        ) {
+          return { stage, node, output };
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+async function locateWorkspaceOutputCard(document) {
+  const target = findWorkspaceTargetByDocument(document);
+  if (target) {
+    manualWorkspaceSelectionRouteKey.value = getWorkspaceRouteKey();
+    selectedWorkspaceStageKey.value = target.stage.stageKey;
+    selectedWorkspaceNodeKey.value = target.node.nodeKey;
+    clearOnlineFormState();
+    await nextTick();
+  }
+
+  const card = findWorkspaceOutputCard(target?.output || document);
+  if (card) {
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    focusWorkspaceOutputCard(card);
+    return;
+  }
+
+  const workspaceElement = globalThis.document?.querySelector?.('.project-workspace--primary');
+  workspaceElement?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function scrollToStageDocumentChecklist(target = null) {
@@ -1061,7 +1165,7 @@ async function uploadAttachment({ document, file }) {
   try {
     await uploadStageDocumentAttachment(props.projectId, document.id, file, props.authToken);
     actionMessage.value = '资料附件已上传。';
-    await Promise.all([loadDocumentAttachments(document), loadOperationLogs()]);
+    await refreshProjectWorkspaceState();
   } catch (error) {
     state.errorMessage = toReadableApiError(error);
     actionErrorMessage.value = state.errorMessage;
@@ -1122,7 +1226,7 @@ async function deleteAttachment({ document, attachment }) {
   try {
     await deleteStageDocumentAttachment(props.projectId, document.id, attachment.id, props.authToken);
     actionMessage.value = '资料附件已删除。';
-    await Promise.all([loadDocumentAttachments(document), loadOperationLogs()]);
+    await refreshProjectWorkspaceState();
   } catch (error) {
     state.errorMessage = toReadableApiError(error);
     actionErrorMessage.value = state.errorMessage;

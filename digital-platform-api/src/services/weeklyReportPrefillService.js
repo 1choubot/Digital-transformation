@@ -73,7 +73,7 @@ function buildAdHocSuggestion(item) {
     sourcePlanTaskKey: null,
     projectId: item.projectId,
     projectLabel: item.projectLabel,
-    workTask: 'Ad hoc work',
+    workTask: item.projectLabel || '新增临时工作',
     workTarget: item.workContent,
     plannedDate: item.reportDate,
     completionStatus,

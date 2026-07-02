@@ -85,7 +85,7 @@
         <div class="table-container">
           <div class="weekly-readonly-table weekly-readonly-table--summaries">
             <div class="weekly-readonly-table__head">
-              <span>工作任务</span>
+              <span>项目</span>
               <span>工作目标</span>
               <span>计划日期</span>
               <span>完成状态</span>
@@ -97,14 +97,21 @@
               :key="summary.id || summary.sortOrder"
               class="weekly-readonly-table__row"
             >
-              <strong>{{ summary.workTask }}</strong>
+              <div class="summary-project-cell">
+                <div class="source-chip-row source-chip-row--readonly">
+                  <span class="source-chip" :class="sourceChipClass(summary)">
+                    {{ sourceTypeLabel(summary) }}
+                  </span>
+                </div>
+                <strong>{{ summaryProjectLabel(summary) }}</strong>
+              </div>
               <span>{{ summary.workTarget }}</span>
               <span>{{ summary.plannedDate }}</span>
               <span class="completion-status" :class="completionStatusClass(summary.completionStatus)">
                 {{ completionStatusLabel(summary.completionStatus) }}
               </span>
               <span>{{ summary.completionDescription }}</span>
-              <span>{{ summary.completedDate }}</span>
+              <span>{{ summary.completedDate || '-' }}</span>
             </div>
           </div>
         </div>
@@ -140,8 +147,8 @@
         </div>
       </section>
 
-      <!-- 周vs日对照表（仅中心负责人查看员工周报时显示） -->
-      <section v-if="showEmployeeReviewTools" class="panel weekly-comparison-panel">
+      <!-- 周日报对比暂时注释隐藏，保留代码便于后续恢复。 -->
+      <section v-if="showWeeklyComparisonPanel" class="panel weekly-comparison-panel">
         <div class="panel-toolbar">
           <div class="toolbar-info">
             <strong class="toolbar-title">周vs日对照表</strong>
@@ -200,8 +207,8 @@
         </div>
       </section>
 
-      <!-- AI/规则参考评分 -->
-      <section v-if="showEmployeeReviewTools" class="panel weekly-evaluation-panel">
+      <!-- AI评分暂时注释隐藏，保留代码便于后续恢复。 -->
+      <section v-if="showWeeklyEvaluationPanel" class="panel weekly-evaluation-panel">
         <div class="panel-toolbar">
           <div class="toolbar-info">
             <strong class="toolbar-title">AI/规则参考评分</strong>
@@ -420,6 +427,9 @@ const pageTitleDisplay = computed(() => {
 const showEmployeeReviewTools = computed(
   () => props.currentUser.organizationRole === OrganizationRole.CENTER_MANAGER && isEmployeeTarget.value
 );
+// These panels are intentionally disabled for the weekly attendance review page.
+const showWeeklyComparisonPanel = computed(() => false && showEmployeeReviewTools.value);
+const showWeeklyEvaluationPanel = computed(() => false && showEmployeeReviewTools.value);
 const canEditFinalReview = computed(() => {
   if (props.currentUser.organizationRole === OrganizationRole.CENTER_MANAGER) {
     return isEmployeeTarget.value;
@@ -474,6 +484,28 @@ function completionStatusClass(status) {
     added: 'status--added'
   };
   return classes[status] || '';
+}
+
+// Mirror the weekly edit page source labels in the read-only review table.
+function sourceTypeLabel(summary) {
+  if (summary?.sourceType === 'weekly_plan') return '执行周计划';
+  if (summary?.sourceType === 'ad_hoc') return '新增临时工作';
+  return '历史待确认';
+}
+
+// Keep source chips visually aligned with the weekly edit table.
+function sourceChipClass(summary) {
+  if (summary?.sourceType === 'weekly_plan') return 'source-chip--plan';
+  if (summary?.sourceType === 'ad_hoc') return 'source-chip--adhoc';
+  return 'source-chip--legacy';
+}
+
+// Ad hoc summaries may have old saved workTask text, so prefer the joined project label.
+function summaryProjectLabel(summary) {
+  if (summary?.sourceType === 'ad_hoc' && summary?.projectLabel) {
+    return summary.projectLabel;
+  }
+  return summary?.workTask || '-';
 }
 
 function matchStatusLabel(status) {
@@ -538,7 +570,8 @@ async function loadReport() {
   try {
     const result = await getWeeklyReport(props.reportId, props.authToken);
     applyReport(result);
-    if (showEmployeeReviewTools.value) {
+    // Skip weekly-vs-daily loading while the comparison panel is hidden.
+    if (showWeeklyComparisonPanel.value) {
       await loadComparisonTable();
     }
   } catch (error) {
@@ -910,6 +943,51 @@ onMounted(loadReport);
 .weekly-readonly-table__row strong {
   font-weight: 500;
   color: #303133;
+}
+
+/* Read-only summary rows reuse the weekly edit page project/source layout. */
+.summary-project-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.summary-project-cell strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.source-chip-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.source-chip-row--readonly {
+  margin-bottom: 0;
+}
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.4rem;
+  padding: 0 0.45rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  background: #eef2ff;
+  color: #334155;
+}
+.source-chip--plan {
+  background: #ecfdf3;
+  color: #166534;
+}
+.source-chip--adhoc {
+  background: #fff7ed;
+  color: #9a3412;
+}
+.source-chip--legacy {
+  background: #f1f5f9;
+  color: #475569;
 }
 
 /* 完成状态标签 */

@@ -93,6 +93,7 @@ function mapSummaryRow(row) {
     weeklyReportId: row.weekly_report_id,
     sortOrder: row.sort_order,
     projectId: row.project_id,
+    projectLabel: [row.project_code, row.project_name].filter(Boolean).join(' / '),
     sourceType: row.source_type || 'legacy_unknown',
     sourcePlanTaskKey: row.source_plan_task_key,
     workTask: row.work_task,
@@ -259,10 +260,14 @@ async function assertWeeklyReportProjectsAvailable(executor, { report, user }) {
 // Fetch summary and plan children after a weekly report row is known.
 async function attachWeeklyReportChildren(report, executor = pool) {
   const [summaryRows] = await executor.execute(
-    `SELECT *
-    FROM weekly_report_summaries
-    WHERE weekly_report_id = ?
-    ORDER BY sort_order ASC`,
+    `SELECT
+      wrs.*,
+      p.project_code,
+      p.project_name
+    FROM weekly_report_summaries wrs
+    LEFT JOIN projects p ON p.id = wrs.project_id
+    WHERE wrs.weekly_report_id = ?
+    ORDER BY wrs.sort_order ASC`,
     [report.id]
   );
   const [planRows] = await executor.execute(

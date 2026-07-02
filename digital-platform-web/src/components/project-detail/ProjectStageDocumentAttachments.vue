@@ -17,6 +17,9 @@
         </label>
         <span class="inline-muted">单文件 50MB 以内，0 字节文件会被拒绝。</span>
       </template>
+      <template v-else-if="isOnlineFormOnlyDocument">
+        <span class="inline-muted">该资料通过在线表单提交，不使用附件上传入口。</span>
+      </template>
       <template v-else-if="isApplicable(document)">
         <span class="inline-muted">当前账号无权上传该资料项附件。</span>
       </template>
@@ -83,7 +86,11 @@
 <script setup>
 import { computed } from 'vue';
 import { formatDateTime, formatFileSize } from '../../utils/format.js';
-import { formatAttachmentUploader, isApplicable } from './stageDocumentViewHelpers.js';
+import {
+  formatAttachmentUploader,
+  isApplicable,
+  isInitiationOnlineFormDocument
+} from './stageDocumentViewHelpers.js';
 
 const emit = defineEmits(['upload', 'download', 'delete']);
 
@@ -113,6 +120,7 @@ function handleFileSelected(event) {
 }
 
 const permissions = computed(() => props.document.permissions || {});
+const isOnlineFormOnlyDocument = computed(() => isInitiationOnlineFormDocument(props.document));
 const canViewAttachments = computed(
   () => permissions.value.canViewAttachments ?? props.document.canViewAttachments ?? false
 );

@@ -23,6 +23,7 @@ export {
   getProjectOverviewDashboard,
   normalizeProjectOverviewDashboardFilters
 } from './projects/overviewDashboardRepository.js';
+export { getProjectWorkspace } from './projects/workspaceRepository.js';
 export { advanceProjectStage } from './projects/stageAdvanceRepository.js';
 export {
   approveStageApproval,

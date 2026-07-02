@@ -1,13 +1,15 @@
 <template>
   <section class="page-stack">
-    <div class="page-title-row">
-      <div>
-        <span class="section-eyebrow">项目详情</span>
-        <h2>{{ detail?.project.projectName || '项目基础状态' }}</h2>
-        <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
-      </div>
-      <button type="button" class="ghost-button" @click="navigate('/projects')">返回列表</button>
-    </div>
+    <PageHeader
+      eyebrow="项目工作区"
+      :title="detail?.project.projectName || '项目基础状态'"
+      :current-user="currentUser"
+      subtitle="单项目主操作区：先选阶段，再选蓝色节点，最后处理节点产出、在线表单或评价审批。"
+    >
+      <template #actions>
+        <button type="button" class="ghost-button" @click="navigate('/projects')">返回项目总览</button>
+      </template>
+    </PageHeader>
 
     <section v-if="loading" class="state-panel">
       <p>正在加载项目详情...</p>
@@ -16,7 +18,7 @@
     <section v-else-if="errorMessage" class="state-panel state-panel--error">
       <h3>{{ notFound ? '项目不存在' : '项目详情加载失败' }}</h3>
       <p>{{ errorMessage }}</p>
-      <button type="button" class="primary-button" @click="navigate('/projects')">返回项目列表</button>
+      <button type="button" class="primary-button" @click="navigate('/projects')">返回项目总览</button>
     </section>
 
     <template v-else-if="detail">
@@ -45,6 +47,67 @@
 
       <ProjectStageTimeline :stages="detail.stages" />
 
+      <section class="panel project-workspace project-workspace--primary">
+        <div class="panel-heading">
+          <div>
+            <span class="section-eyebrow">项目工作区</span>
+            <h3>阶段节点与产出工作区</h3>
+            <p class="manual-status-note">
+              固定层级为阶段说明、蓝色节点、节点产出、在线表单或评价审批动作；点击蓝色节点不会自动打开在线表单。
+            </p>
+          </div>
+        </div>
+
+        <section v-if="workspaceLoading" class="state-panel state-panel--inline">
+          <p>正在加载项目工作区...</p>
+        </section>
+        <section v-else-if="workspaceErrorMessage" class="state-panel state-panel--inline state-panel--error">
+          <p>{{ workspaceErrorMessage }}</p>
+        </section>
+        <div v-else-if="workspace" class="project-workspace__layout">
+          <ProjectWorkspaceStageNav
+            :stages="workspace.stages"
+            :selected-stage-key="selectedWorkspaceStageKey"
+            @select-stage="selectWorkspaceStage"
+          />
+
+          <div class="project-workspace__main">
+            <ProjectWorkspaceNodeList
+              :stage="activeWorkspaceStage"
+              :active-node-key="selectedWorkspaceNodeKey"
+              @select-node="selectWorkspaceNode(activeWorkspaceStage, $event)"
+              @open-legacy-checklist="scrollToStageDocumentChecklist"
+            />
+            <ProjectWorkspaceOutputPanel
+              :stage="activeWorkspaceStage"
+              :node="activeWorkspaceNode"
+              :active-online-form="activeOnlineForm"
+              :active-online-form-document-id="activeOnlineFormDocumentId"
+              :online-form-data="onlineFormData"
+              :online-form-loading="onlineFormLoading"
+              :online-form-saving="onlineFormSaving"
+              :online-form-submitting="onlineFormSubmitting"
+              :online-form-error-message="onlineFormErrorMessage"
+              :is-action-pending="isActionPending"
+              :get-output-document="getOutputDocument"
+              :responsibility-candidates="visibleResponsibilityCandidates"
+              :responsibility-candidates-loading="responsibilityCandidatesLoading"
+              :responsibility-candidates-error-message="responsibilityCandidatesErrorMessage"
+              :responsibility-selections="responsibilitySelections"
+              @open-online-form="openOnlineForm"
+              @open-legacy-checklist="scrollToStageDocumentChecklist"
+              @save-online-form="saveOnlineForm"
+              @submit-online-form="submitOnlineForm"
+              @update-online-form-field="updateOnlineFormField"
+              @approve-node="approveInitiationNode"
+              @return-node="returnInitiationNode"
+              @save-responsible-user="saveResponsibleUser"
+              @clear-responsible-user="clearResponsibleUser"
+            />
+          </div>
+        </div>
+      </section>
+
       <ProjectOperationLogPanel
         v-if="canViewProjectAudit"
         :loading="operationLogsLoading"
@@ -66,6 +129,7 @@
       />
 
       <ProjectStageDocumentChecklist
+        id="stage-document-checklist"
         :checklist="checklist"
         :loading="checklistLoading"
         :error-message="checklistErrorMessage"
@@ -114,12 +178,16 @@ import {
   getProjectDetail,
   getProjectOperationLogs,
   getProjectStageDocumentChecklist,
+  getProjectWorkspace,
+  getStageDocumentOnlineForm,
   listStageDocumentAttachments,
   markStageDocumentNotApplicable,
   markStageDocumentSubmitted,
   restoreStageDocumentApplicable,
   returnInitiationReviewNode,
   returnStageDocument,
+  saveStageDocumentOnlineForm,
+  submitStageDocumentOnlineForm,
   toReadableApiError,
   updateProjectCode,
   updateStageDocumentResponsibleUser,
@@ -131,14 +199,18 @@ import ProjectOperationLogPanel from '../components/project-detail/ProjectOperat
 import ProjectStageAdvancePanel from '../components/project-detail/ProjectStageAdvancePanel.vue';
 import ProjectStageDocumentChecklist from '../components/project-detail/ProjectStageDocumentChecklist.vue';
 import ProjectStageTimeline from '../components/project-detail/ProjectStageTimeline.vue';
+import ProjectWorkspaceNodeList from '../components/project-workspace/ProjectWorkspaceNodeList.vue';
+import ProjectWorkspaceOutputPanel from '../components/project-workspace/ProjectWorkspaceOutputPanel.vue';
+import ProjectWorkspaceStageNav from '../components/project-workspace/ProjectWorkspaceStageNav.vue';
+import PageHeader from '../components/PageHeader.vue';
 import {
   actionKey,
   getCompletionMode,
   getSelectedResponsibleUserId,
   isDocumentRelatedToDepartmentByOwnership,
+  isInitiationOnlineFormDocument,
   stageCompleteness
 } from '../components/project-detail/stageDocumentViewHelpers.js';
-import { formatUser } from '../utils/format.js';
 
 const props = defineProps({
   authToken: {
@@ -165,6 +237,10 @@ const props = defineProps({
     type: String,
     default: ''
   },
+  focusNodeKey: {
+    type: String,
+    default: ''
+  },
   navigate: {
     type: Function,
     required: true
@@ -181,6 +257,20 @@ const checklist = ref(null);
 const operationLogsLoading = ref(false);
 const operationLogsErrorMessage = ref('');
 const operationLogs = ref([]);
+const workspaceLoading = ref(false);
+const workspaceErrorMessage = ref('');
+const workspace = ref(null);
+const selectedWorkspaceStageKey = ref('');
+const selectedWorkspaceNodeKey = ref('');
+const lastAppliedWorkspaceRouteKey = ref('');
+const manualWorkspaceSelectionRouteKey = ref('');
+const activeOnlineFormDocumentId = ref(null);
+const activeOnlineForm = ref(null);
+const onlineFormData = reactive({});
+const onlineFormLoading = ref(false);
+const onlineFormSaving = ref(false);
+const onlineFormSubmitting = ref(false);
+const onlineFormErrorMessage = ref('');
 const responsibilityCandidatesLoading = ref(false);
 const responsibilityCandidatesErrorMessage = ref('');
 const responsibilityCandidates = ref([]);
@@ -246,6 +336,12 @@ const isCurrentUserSystemAdmin = computed(() => currentUserOrganizationRole.valu
 const currentUserDepartment = computed(() => props.currentUser?.department || '');
 const allStageDocuments = computed(() =>
   (checklist.value?.stages || []).flatMap((stage) => stage.documents || [])
+);
+const activeWorkspaceStage = computed(
+  () => (workspace.value?.stages || []).find((stage) => stage.stageKey === selectedWorkspaceStageKey.value) || null
+);
+const activeWorkspaceNode = computed(
+  () => (activeWorkspaceStage.value?.nodes || []).find((node) => node.nodeKey === selectedWorkspaceNodeKey.value) || null
 );
 const isProjectRelatedToCurrentCenter = computed(() => {
   if (!isCurrentUserCenterManager.value || !currentUserDepartment.value) {
@@ -313,10 +409,217 @@ const canAdvanceCurrentStage = computed(
     Boolean(currentStageCompleteness.value) &&
     currentStageCompleteness.value.incompleteRequiredCount === 0
 );
-const isTaskMode = computed(() => Boolean(props.taskMode || props.focusDocumentId || props.focusStageId));
+const isTaskMode = computed(() =>
+  Boolean(props.taskMode || props.focusDocumentId || props.focusStageId || props.focusNodeKey)
+);
 
 function isActionPending(documentId, action) {
   return pendingAction.value === actionKey(documentId, action);
+}
+
+function getOutputDocument(output) {
+  return (
+    allStageDocuments.value.find((document) => String(document.id) === String(output?.documentId)) ||
+    allStageDocuments.value.find((document) => document.documentCode === output?.documentCode) ||
+    null
+  );
+}
+
+function selectWorkspaceStage(stage) {
+  manualWorkspaceSelectionRouteKey.value = getWorkspaceRouteKey();
+  selectedWorkspaceStageKey.value = stage.stageKey;
+  selectedWorkspaceNodeKey.value = '';
+  clearOnlineFormState();
+}
+
+function selectWorkspaceNode(stage, node) {
+  manualWorkspaceSelectionRouteKey.value = getWorkspaceRouteKey();
+  selectedWorkspaceStageKey.value = stage.stageKey;
+  selectedWorkspaceNodeKey.value = node.nodeKey;
+  clearOnlineFormState();
+}
+
+function scrollToStageDocumentChecklist() {
+  const checklistElement = globalThis.document?.getElementById?.('stage-document-checklist');
+  checklistElement?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function selectDefaultWorkspaceNode() {
+  const initiationStage = (workspace.value?.stages || []).find((stage) => stage.stageKey === 'initiation');
+  const firstStage = initiationStage || workspace.value?.stages?.[0] || null;
+  selectedWorkspaceStageKey.value = firstStage?.stageKey || '';
+  selectedWorkspaceNodeKey.value = '';
+}
+
+function findWorkspaceTargetByDocumentId(documentId) {
+  if (!documentId) {
+    return null;
+  }
+
+  const focusNodeKey = String(props.focusNodeKey || '').trim();
+  let fallbackTarget = null;
+
+  for (const stage of workspace.value?.stages || []) {
+    for (const node of stage.nodes || []) {
+      for (const output of node.outputs || []) {
+        if (String(output.documentId) !== String(documentId)) {
+          continue;
+        }
+
+        const target = { stage, node, output };
+        if (!fallbackTarget) {
+          fallbackTarget = target;
+        }
+
+        // nodeKey from workbench initiationReview routes is a 1.2 review node key,
+        // not a blue workspace node key. It still resolves to the 1.2 output node.
+        if (!focusNodeKey) {
+          return target;
+        }
+
+        const hasReviewNode = (output.initiationReview?.nodes || []).some(
+          (reviewNode) => reviewNode.nodeKey === focusNodeKey
+        );
+        if (hasReviewNode) {
+          return target;
+        }
+      }
+    }
+  }
+
+  return fallbackTarget;
+}
+
+function findWorkspaceStageByStageId(stageId) {
+  if (!stageId) {
+    return null;
+  }
+
+  return (workspace.value?.stages || []).find((stage) => String(stage.stageId) === String(stageId)) || null;
+}
+
+function findWorkspaceStageByDocumentIdFromChecklist(documentId) {
+  if (!documentId) {
+    return null;
+  }
+
+  const document = allStageDocuments.value.find((item) => String(item.id) === String(documentId));
+  if (!document) {
+    return null;
+  }
+
+  const stages = workspace.value?.stages || [];
+  return (
+    stages.find((stage) => document.stageKey && stage.stageKey === document.stageKey) ||
+    stages.find((stage) => document.stageId && String(stage.stageId) === String(document.stageId)) ||
+    stages.find((stage) => document.projectStageId && String(stage.stageId) === String(document.projectStageId)) ||
+    stages.find((stage) => document.stageOrder && Number(stage.stageOrder) === Number(document.stageOrder)) ||
+    null
+  );
+}
+
+function getWorkspaceRouteKey() {
+  return [
+    props.projectId || '',
+    props.taskMode || '',
+    props.focusDocumentId || '',
+    props.focusStageId || '',
+    props.focusNodeKey || ''
+  ].join('|');
+}
+
+function hasWorkspaceRouteFocus() {
+  return Boolean(props.taskMode || props.focusDocumentId || props.focusStageId || props.focusNodeKey);
+}
+
+function markWorkspaceRouteApplied(routeKey) {
+  if (routeKey) {
+    lastAppliedWorkspaceRouteKey.value = routeKey;
+  }
+}
+
+function clearWorkspaceOnlineForm(options = {}) {
+  if (!options.preserveOnlineFormState) {
+    clearOnlineFormState();
+  }
+}
+
+function selectWorkspaceTargetFromRoute(options = {}) {
+  if (!workspace.value) {
+    return false;
+  }
+
+  const routeKey = getWorkspaceRouteKey();
+  if (hasWorkspaceRouteFocus()) {
+    if (manualWorkspaceSelectionRouteKey.value === routeKey || lastAppliedWorkspaceRouteKey.value === routeKey) {
+      return true;
+    }
+  }
+
+  const documentTarget = findWorkspaceTargetByDocumentId(props.focusDocumentId);
+  if (documentTarget) {
+    selectedWorkspaceStageKey.value = documentTarget.stage.stageKey;
+    selectedWorkspaceNodeKey.value = documentTarget.node.nodeKey;
+    clearWorkspaceOnlineForm(options);
+    markWorkspaceRouteApplied(routeKey);
+    return true;
+  }
+
+  const documentStageTarget = findWorkspaceStageByDocumentIdFromChecklist(props.focusDocumentId);
+  if (documentStageTarget) {
+    selectedWorkspaceStageKey.value = documentStageTarget.stageKey;
+    selectedWorkspaceNodeKey.value = '';
+    clearWorkspaceOnlineForm(options);
+    markWorkspaceRouteApplied(routeKey);
+    return true;
+  }
+
+  const stageTarget = findWorkspaceStageByStageId(props.focusStageId);
+  if (stageTarget) {
+    selectedWorkspaceStageKey.value = stageTarget.stageKey;
+    selectedWorkspaceNodeKey.value = '';
+    clearWorkspaceOnlineForm(options);
+    markWorkspaceRouteApplied(routeKey);
+    return true;
+  }
+
+  if (props.focusDocumentId) {
+    selectDefaultWorkspaceNode();
+    clearWorkspaceOnlineForm(options);
+    return false;
+  }
+
+  selectDefaultWorkspaceNode();
+  clearWorkspaceOnlineForm(options);
+  markWorkspaceRouteApplied(routeKey);
+  return true;
+}
+
+function clearOnlineFormState() {
+  activeOnlineFormDocumentId.value = null;
+  activeOnlineForm.value = null;
+  onlineFormErrorMessage.value = '';
+  Object.keys(onlineFormData).forEach((key) => {
+    delete onlineFormData[key];
+  });
+}
+
+function syncOnlineFormData(form) {
+  Object.keys(onlineFormData).forEach((key) => {
+    delete onlineFormData[key];
+  });
+  const data = form?.formData || {};
+  for (const field of form?.schema?.fields || []) {
+    onlineFormData[field.key] = data[field.key] ?? '';
+  }
+}
+
+function updateOnlineFormField({ key, value }) {
+  if (!key) {
+    return;
+  }
+
+  onlineFormData[key] = value;
 }
 
 function getAttachmentState(documentId) {
@@ -418,6 +721,25 @@ function syncResponsibilitySelectionsFromChecklist() {
   }
 }
 
+function restoreWorkspaceSelection(stageKey, nodeKey) {
+  const stage = (workspace.value?.stages || []).find((item) => item.stageKey === stageKey);
+  if (!stage) {
+    return false;
+  }
+
+  selectedWorkspaceStageKey.value = stage.stageKey;
+  selectedWorkspaceNodeKey.value = (stage.nodes || []).some((node) => node.nodeKey === nodeKey) ? nodeKey : '';
+  return true;
+}
+
+async function refreshProjectWorkspaceState(options = {}) {
+  await Promise.all([
+    loadChecklist(options),
+    loadWorkspace({ preserveSelection: true, ...options }),
+    loadOperationLogs()
+  ]);
+}
+
 async function runDocumentAction(document, action, runner, successText, onSuccess = null) {
   clearActionState();
   pendingAction.value = actionKey(document.id, action);
@@ -429,7 +751,7 @@ async function runDocumentAction(document, action, runner, successText, onSucces
     }
     clearStageAdvanceState();
     actionMessage.value = successText;
-    await Promise.all([loadChecklist(), loadOperationLogs()]);
+    await refreshProjectWorkspaceState();
   } catch (error) {
     actionErrorMessage.value = toReadableApiError(error);
   } finally {
@@ -438,6 +760,11 @@ async function runDocumentAction(document, action, runner, successText, onSucces
 }
 
 async function submitDocument(document) {
+  if (isInitiationOnlineFormDocument(document)) {
+    actionErrorMessage.value = '请通过在线表单提交或重提该资料。';
+    return;
+  }
+
   const completionMode = getCompletionMode(document);
   const requiresReview = completionMode === 'approval_required' || completionMode === 'conditional_approval';
   const isSubmitOnlyMode = completionMode === 'submit_only' || completionMode === 'conditional_submit';
@@ -463,6 +790,11 @@ async function submitDocument(document) {
 }
 
 async function completeRevisionDocument(document) {
+  if (isInitiationOnlineFormDocument(document)) {
+    actionErrorMessage.value = '该资料返工必须通过在线表单重提完成。';
+    return;
+  }
+
   await runDocumentAction(
     document,
     'complete-revision',
@@ -522,6 +854,10 @@ async function returnDocument(payload) {
 }
 
 async function approveInitiationNode({ document, node, comment }) {
+  const successText =
+    node.nodeKey === 'general_review'
+      ? '总经理审批已通过。'
+      : `${node.nodeName || '评价'}已提交。`;
   await runDocumentAction(
     document,
     `initiation-${node.nodeKey}-approve`,
@@ -533,14 +869,14 @@ async function approveInitiationNode({ document, node, comment }) {
         comment || '',
         props.authToken
       ),
-    `${node.nodeName || '1.2 审批节点'}已通过。`
+    successText
   );
 }
 
 async function returnInitiationNode({ document, node, returnReason }) {
   const reason = String(returnReason || '').trim();
   if (!reason) {
-    actionErrorMessage.value = '请填写 1.2 审批节点退回原因。';
+    actionErrorMessage.value = '请填写总经理审批不通过意见。';
     return;
   }
 
@@ -555,7 +891,7 @@ async function returnInitiationNode({ document, node, returnReason }) {
         reason,
         props.authToken
       ),
-    `${node.nodeName || '1.2 审批节点'}已退回，1.1 项目需求表进入返工。`
+    `${node.nodeName || '总经理审批'}已不通过，1.1 项目需求表进入返工，1.2 需要重新填写。`
   );
 }
 
@@ -790,7 +1126,7 @@ async function advanceCurrentStage() {
   }
 }
 
-async function loadChecklist() {
+async function loadChecklist(options = {}) {
   checklistLoading.value = true;
   checklistErrorMessage.value = '';
   checklist.value = null;
@@ -799,10 +1135,112 @@ async function loadChecklist() {
     checklist.value = await getProjectStageDocumentChecklist(props.projectId, props.authToken);
     syncResponsibilitySelectionsFromChecklist();
     await loadAttachmentsForChecklist();
+    if (workspace.value && props.focusDocumentId) {
+      selectWorkspaceTargetFromRoute(options);
+    }
   } catch (error) {
     checklistErrorMessage.value = toReadableApiError(error);
   } finally {
     checklistLoading.value = false;
+  }
+}
+
+async function loadWorkspace(options = {}) {
+  const previousStageKey = selectedWorkspaceStageKey.value;
+  const previousNodeKey = selectedWorkspaceNodeKey.value;
+  workspaceLoading.value = true;
+  workspaceErrorMessage.value = '';
+  workspace.value = null;
+  clearWorkspaceOnlineForm(options);
+
+  try {
+    workspace.value = await getProjectWorkspace(props.projectId, props.authToken);
+    if (
+      options.preserveSelection &&
+      !hasWorkspaceRouteFocus() &&
+      restoreWorkspaceSelection(previousStageKey, previousNodeKey)
+    ) {
+      return;
+    }
+
+    selectWorkspaceTargetFromRoute(options);
+  } catch (error) {
+    workspaceErrorMessage.value = toReadableApiError(error);
+  } finally {
+    workspaceLoading.value = false;
+  }
+}
+
+async function openOnlineForm(output) {
+  if (!output?.documentId) {
+    onlineFormErrorMessage.value = '关联资料未初始化，无法打开在线表单。';
+    return;
+  }
+
+  onlineFormLoading.value = true;
+  onlineFormErrorMessage.value = '';
+
+  try {
+    const response = await getStageDocumentOnlineForm(props.projectId, output.documentId, props.authToken);
+    activeOnlineFormDocumentId.value = output.documentId;
+    activeOnlineForm.value = response.form || response;
+    syncOnlineFormData(activeOnlineForm.value);
+  } catch (error) {
+    onlineFormErrorMessage.value = toReadableApiError(error);
+  } finally {
+    onlineFormLoading.value = false;
+  }
+}
+
+async function saveOnlineForm() {
+  if (!activeOnlineForm.value) {
+    return;
+  }
+
+  onlineFormSaving.value = true;
+  onlineFormErrorMessage.value = '';
+
+  try {
+    const response = await saveStageDocumentOnlineForm(
+      props.projectId,
+      activeOnlineForm.value.stageDocumentId,
+      { ...onlineFormData },
+      props.authToken
+    );
+    activeOnlineForm.value = response.form || response;
+    syncOnlineFormData(activeOnlineForm.value);
+    actionMessage.value = '在线表单草稿已保存。';
+    await refreshProjectWorkspaceState({ preserveOnlineFormState: true });
+  } catch (error) {
+    onlineFormErrorMessage.value = toReadableApiError(error);
+  } finally {
+    onlineFormSaving.value = false;
+  }
+}
+
+async function submitOnlineForm() {
+  if (!activeOnlineForm.value) {
+    return;
+  }
+
+  onlineFormSubmitting.value = true;
+  onlineFormErrorMessage.value = '';
+
+  try {
+    const response = await submitStageDocumentOnlineForm(
+      props.projectId,
+      activeOnlineForm.value.stageDocumentId,
+      { ...onlineFormData },
+      props.authToken
+    );
+    activeOnlineForm.value = response.form;
+    syncOnlineFormData(activeOnlineForm.value);
+    actionMessage.value = '在线表单已提交。';
+    await refreshProjectWorkspaceState({ preserveOnlineFormState: true });
+  } catch (error) {
+    onlineFormErrorMessage.value = toReadableApiError(error);
+  } finally {
+    onlineFormSubmitting.value = false;
   }
 }
 
@@ -847,7 +1285,9 @@ async function loadDetail(options = {}) {
   errorCode.value = '';
   detail.value = null;
   checklist.value = null;
+  workspace.value = null;
   checklistErrorMessage.value = '';
+  workspaceErrorMessage.value = '';
   operationLogs.value = [];
   operationLogsErrorMessage.value = '';
   responsibilityCandidates.value = [];
@@ -855,6 +1295,8 @@ async function loadDetail(options = {}) {
   clearAttachmentStates();
   clearActionState();
   clearProjectCodeState();
+  lastAppliedWorkspaceRouteKey.value = '';
+  manualWorkspaceSelectionRouteKey.value = '';
   if (!options.preserveStageAdvanceState) {
     clearStageAdvanceState();
   }
@@ -872,6 +1314,7 @@ async function loadDetail(options = {}) {
   if (detail.value) {
     await Promise.all([
       loadChecklist(),
+      loadWorkspace(),
       loadOperationLogs(),
       loadResponsibilityCandidates()
     ]);
@@ -880,4 +1323,12 @@ async function loadDetail(options = {}) {
 
 onMounted(loadDetail);
 watch(() => props.projectId, loadDetail);
+watch(
+  () => [props.taskMode, props.focusDocumentId, props.focusStageId, props.focusNodeKey],
+  () => {
+    if (workspace.value) {
+      selectWorkspaceTargetFromRoute();
+    }
+  }
+);
 </script>

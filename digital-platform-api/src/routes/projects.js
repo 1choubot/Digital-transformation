@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth, requireReportProjectSearchUser } from '../middleware/auth.js';
+import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import {
   advanceProjectStageHandler,
@@ -12,11 +12,13 @@ import {
   downloadStageDocumentAttachmentHandler,
   getProjectDetailHandler,
   getProjectOverviewDashboardHandler,
+  getProjectWorkspaceHandler,
+  getStageDocumentOnlineFormHandler,
   listStageApprovalHistoryHandler,
   getStageDocumentChecklistHandler,
   listProjectOperationLogsHandler,
-  listProjectsHandler,
   listMyActiveProjectsHandler,
+  listProjectsHandler,
   listStageDocumentAttachmentsHandler,
   markStageDocumentNotApplicableHandler,
   restoreStageDocumentApplicableHandler,
@@ -24,7 +26,9 @@ import {
   returnInitiationReviewNodeHandler,
   returnStageDocumentHandler,
   resubmitStageApprovalHandler,
+  saveStageDocumentOnlineFormHandler,
   submitStageDocumentHandler,
+  submitStageDocumentOnlineFormHandler,
   submitStageApprovalHandler,
   updateProjectCodeHandler,
   updateStageDocumentResponsibleUserHandler,
@@ -36,10 +40,10 @@ export const projectsRouter = Router();
 projectsRouter.get('/', requireAuth, asyncHandler(listProjectsHandler));
 projectsRouter.post('/', requireAuth, asyncHandler(createProjectHandler));
 
+// 日报周报共用：搜索当前用户可见且未完成的项目
 projectsRouter.get(
   '/my-active',
   requireAuth,
-  requireReportProjectSearchUser,
   asyncHandler(listMyActiveProjectsHandler)
 );
 
@@ -65,6 +69,12 @@ projectsRouter.get(
   '/:projectId/stage-document-checklist',
   requireAuth,
   asyncHandler(getStageDocumentChecklistHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/workspace',
+  requireAuth,
+  asyncHandler(getProjectWorkspaceHandler)
 );
 
 projectsRouter.post(
@@ -125,6 +135,24 @@ projectsRouter.post(
   '/:projectId/stage-documents/:documentId/revision/complete',
   requireAuth,
   asyncHandler(completeStageDocumentRevisionHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/stage-documents/:documentId/online-form',
+  requireAuth,
+  asyncHandler(getStageDocumentOnlineFormHandler)
+);
+
+projectsRouter.put(
+  '/:projectId/stage-documents/:documentId/online-form',
+  requireAuth,
+  asyncHandler(saveStageDocumentOnlineFormHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/stage-documents/:documentId/online-form/submit',
+  requireAuth,
+  asyncHandler(submitStageDocumentOnlineFormHandler)
 );
 
 projectsRouter.post(

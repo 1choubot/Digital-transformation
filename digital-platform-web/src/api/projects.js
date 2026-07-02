@@ -6,13 +6,15 @@ export async function listProjects(authToken = '') {
   return request('/api/projects', { authToken });
 }
 
-// 加载当前用户可用于日报/周报填写的在研项目。
+// 日报周报共用：搜索当前用户可见且未完成的项目
 export async function searchMyActiveProjects({ keyword = '', limit = 50 } = {}, authToken = '') {
   const params = new URLSearchParams();
+
   if (keyword && keyword.trim()) {
     params.set('q', keyword.trim());
   }
-  if (limit) {
+
+  if (limit != null) {
     params.set('limit', String(limit));
   }
 
@@ -54,6 +56,10 @@ export async function getProjectDetail(projectId, authToken = '') {
   return request(`/api/projects/${projectId}`, { authToken });
 }
 
+export async function getProjectWorkspace(projectId, authToken = '') {
+  return request(`/api/projects/${projectId}/workspace`, { authToken });
+}
+
 export async function updateProjectCode(projectId, projectCode, authToken) {
   return request(`/api/projects/${projectId}/project-code`, {
     method: 'PUT',
@@ -64,6 +70,26 @@ export async function updateProjectCode(projectId, projectCode, authToken) {
 
 export async function getProjectStageDocumentChecklist(projectId, authToken = '') {
   return request(`/api/projects/${projectId}/stage-document-checklist`, { authToken });
+}
+
+export async function getStageDocumentOnlineForm(projectId, documentId, authToken = '') {
+  return request(`/api/projects/${projectId}/stage-documents/${documentId}/online-form`, { authToken });
+}
+
+export async function saveStageDocumentOnlineForm(projectId, documentId, formData, authToken) {
+  return request(`/api/projects/${projectId}/stage-documents/${documentId}/online-form`, {
+    method: 'PUT',
+    authToken,
+    body: JSON.stringify({ formData })
+  });
+}
+
+export async function submitStageDocumentOnlineForm(projectId, documentId, formData, authToken) {
+  return request(`/api/projects/${projectId}/stage-documents/${documentId}/online-form/submit`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ formData })
+  });
 }
 
 export async function getProjectOperationLogs(projectId, authToken = '') {

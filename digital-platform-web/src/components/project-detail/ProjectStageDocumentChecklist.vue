@@ -1,10 +1,11 @@
 <template>
-  <section class="panel stage-documents">
+  <section class="panel stage-documents stage-documents--legacy">
     <div class="panel-heading">
       <div>
-        <span class="section-eyebrow">阶段资料清单</span>
-        <h3>资料级审核状态</h3>
+        <span class="section-eyebrow">辅助兼容区</span>
+        <h3>旧资料清单与资料级状态</h3>
         <p class="manual-status-note">
+          本区域用于查看资料级状态和处理尚未配置完整蓝色节点的阶段；立项阶段 1.1 / 1.2 / 1.3 主操作请在上方节点产出卡片完成。
           阶段资料按 completionMode 计算完成状态：提交即完成资料提交后完成，需审核资料审核通过后完成，条件资料未触发时不阻塞。
           附件保存在在线平台，不展示文件平台归档状态。
           不适用是人工业务判断，用于说明该项目当前不需要该资料。
@@ -196,41 +197,53 @@
 
             <div class="stage-document-card__body">
               <ProjectStageDocumentTrace :document="document" />
-              <ProjectInitiationReviewPanel
-                v-if="document.initiationReview"
-                :document="document"
-                :is-action-pending="isActionPending"
-                @approve-node="$emit('approve-initiation-review-node', $event)"
-                @return-node="$emit('return-initiation-review-node', $event)"
-              />
-              <ProjectStageDocumentAttachments
-                :document="document"
-                :state="getAttachmentState(document.id)"
-                @upload="$emit('upload-attachment', $event)"
-                @download="$emit('download-attachment', $event)"
-                @delete="$emit('delete-attachment', $event)"
-              />
-              <ProjectStageDocumentActions
-                :document="document"
-                :responsibility-candidates="responsibilityCandidates"
-                :responsibility-candidates-loading="responsibilityCandidatesLoading"
-                :responsibility-selections="responsibilitySelections"
-                :can-submit-document="canSubmitDocument(document)"
-                :can-confirm-return-document="canConfirmReturnDocument(document)"
-                :can-manage-responsibility="canManageResponsibility(document)"
-                :can-change-applicability="canChangeApplicability(document)"
-                :return-reasons="returnReasons"
-                :not-applicable-reasons="notApplicableReasons"
-                :is-action-pending="isActionPending"
-                @submit-document="$emit('submit-document', $event)"
-                @confirm-document="$emit('confirm-document', $event)"
-                @return-document="$emit('return-document', $event)"
-                @complete-revision-document="$emit('complete-revision-document', $event)"
-                @mark-not-applicable="$emit('mark-not-applicable', $event)"
-                @restore-applicable="$emit('restore-applicable', $event)"
-                @save-responsible-user="$emit('save-responsible-user', $event)"
-                @clear-responsible-user="$emit('clear-responsible-user', $event)"
-              />
+              <section
+                v-if="isInitiationOnlineFormDocument(document)"
+                class="stage-document-card__actions"
+                aria-label="立项阶段资料辅助提示"
+              >
+                <h4>立项阶段在线表单</h4>
+                <span class="stage-document-actions__empty">
+                  请在上方项目工作区处理立项阶段在线表单。
+                </span>
+              </section>
+              <template v-else>
+                <ProjectInitiationReviewPanel
+                  v-if="document.initiationReview"
+                  :document="document"
+                  :is-action-pending="isActionPending"
+                  @approve-node="$emit('approve-initiation-review-node', $event)"
+                  @return-node="$emit('return-initiation-review-node', $event)"
+                />
+                <ProjectStageDocumentAttachments
+                  :document="document"
+                  :state="getAttachmentState(document.id)"
+                  @upload="$emit('upload-attachment', $event)"
+                  @download="$emit('download-attachment', $event)"
+                  @delete="$emit('delete-attachment', $event)"
+                />
+                <ProjectStageDocumentActions
+                  :document="document"
+                  :responsibility-candidates="responsibilityCandidates"
+                  :responsibility-candidates-loading="responsibilityCandidatesLoading"
+                  :responsibility-selections="responsibilitySelections"
+                  :can-submit-document="canSubmitDocument(document)"
+                  :can-confirm-return-document="canConfirmReturnDocument(document)"
+                  :can-manage-responsibility="canManageResponsibility(document)"
+                  :can-change-applicability="canChangeApplicability(document)"
+                  :return-reasons="returnReasons"
+                  :not-applicable-reasons="notApplicableReasons"
+                  :is-action-pending="isActionPending"
+                  @submit-document="$emit('submit-document', $event)"
+                  @confirm-document="$emit('confirm-document', $event)"
+                  @return-document="$emit('return-document', $event)"
+                  @complete-revision-document="$emit('complete-revision-document', $event)"
+                  @mark-not-applicable="$emit('mark-not-applicable', $event)"
+                  @restore-applicable="$emit('restore-applicable', $event)"
+                  @save-responsible-user="$emit('save-responsible-user', $event)"
+                  @clear-responsible-user="$emit('clear-responsible-user', $event)"
+                />
+              </template>
             </div>
           </article>
         </div>
@@ -254,6 +267,7 @@ import {
   formatRevisionSummary,
   formatResponsibleUser,
   isApplicable,
+  isInitiationOnlineFormDocument,
   isRevisionRequired,
   isResponsibleUserDisabled,
   stageCompleteness,

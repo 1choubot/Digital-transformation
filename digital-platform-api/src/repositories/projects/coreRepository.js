@@ -84,6 +84,7 @@ async function insertProject(connection, project) {
       project_code,
       project_name,
       customer_name,
+      customer_contact,
       project_mode,
       project_manager,
       project_manager_user_id,
@@ -93,11 +94,12 @@ async function insertProject(connection, project) {
       planned_end_date,
       remark,
       created_by_user_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       row.project_code,
       row.project_name,
       row.customer_name,
+      row.customer_contact,
       row.project_mode,
       row.project_manager,
       row.project_manager_user_id,
@@ -118,10 +120,12 @@ export async function createProject(project, createdByUserId) {
 
   try {
     await connection.beginTransaction();
-    const projectManagerUser = await selectProjectManagerUser(connection, project.projectManagerUserId);
+    const projectManagerUser = project.projectManagerUserId
+      ? await selectProjectManagerUser(connection, project.projectManagerUserId)
+      : null;
     const projectId = await insertProject(connection, {
       ...project,
-      projectManager: projectManagerUser.name,
+      projectManager: projectManagerUser?.name ?? null,
       createdByUserId
     });
     await insertInitialStages(connection, projectId);
@@ -136,7 +140,14 @@ export async function createProject(project, createdByUserId) {
       details: {
         projectId,
         projectCode: project.projectCode,
-        projectName: project.projectName
+        projectName: project.projectName,
+        customerName: project.customerName,
+        customerContact: project.customerContact,
+        projectMode: project.projectMode ?? null,
+        projectManagerUserId: project.projectManagerUserId ?? null,
+        participatingDepartments: project.participatingDepartments ?? null,
+        plannedStartDate: project.plannedStartDate ?? null,
+        plannedEndDate: project.plannedEndDate ?? null
       }
     });
     await connection.commit();
@@ -402,6 +413,7 @@ export async function listProjects(user) {
       p.project_code,
       p.project_name,
       p.customer_name,
+      p.customer_contact,
       p.project_mode,
       p.project_manager,
       p.project_manager_user_id,

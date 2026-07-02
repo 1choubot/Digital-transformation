@@ -9,6 +9,11 @@ import { DOCUMENT_STATUS } from './stageDocumentTemplates.js';
 export const INITIATION_REVIEW_DOCUMENT_CODE = '1.2';
 export const INITIATION_REWORK_TARGET_DOCUMENT_CODE = '1.1';
 export const INITIATION_NOTICE_DOCUMENT_CODE = '1.3';
+export const INITIATION_ONLINE_FORM_DOCUMENT_CODES = Object.freeze([
+  INITIATION_REWORK_TARGET_DOCUMENT_CODE,
+  INITIATION_REVIEW_DOCUMENT_CODE,
+  INITIATION_NOTICE_DOCUMENT_CODE
+]);
 
 export const INITIATION_REVIEW_NODE_KEY = {
   BUSINESS: 'business_review',
@@ -28,13 +33,13 @@ export const INITIATION_REVIEW_NODE_STATUS = {
 export const INITIATION_REVIEW_NODE_DEFINITIONS = Object.freeze([
   {
     nodeKey: INITIATION_REVIEW_NODE_KEY.BUSINESS,
-    nodeName: '商务评价审批',
+    nodeName: '营销评价',
     reviewerRole: ORGANIZATION_ROLE.CENTER_MANAGER,
     reviewerDepartment: BUSINESS_DEPARTMENT.MARKETING_CENTER
   },
   {
     nodeKey: INITIATION_REVIEW_NODE_KEY.TECHNICAL,
-    nodeName: '技术评价审批',
+    nodeName: '研发评价',
     reviewerRole: ORGANIZATION_ROLE.CENTER_MANAGER,
     reviewerDepartment: BUSINESS_DEPARTMENT.RD_CENTER
   },
@@ -54,12 +59,20 @@ export function isInitiationReviewDocumentCode(documentCode) {
   return String(documentCode || '').trim() === INITIATION_REVIEW_DOCUMENT_CODE;
 }
 
+export function isInitiationOnlineFormDocumentCode(documentCode) {
+  return INITIATION_ONLINE_FORM_DOCUMENT_CODES.includes(String(documentCode || '').trim());
+}
+
 export function getInitiationReviewDocumentCode(document) {
   return document?.documentCode ?? document?.document_code ?? null;
 }
 
 export function isInitiationReviewDocument(document) {
   return isInitiationReviewDocumentCode(getInitiationReviewDocumentCode(document));
+}
+
+export function isInitiationOnlineFormDocument(document) {
+  return isInitiationOnlineFormDocumentCode(getInitiationReviewDocumentCode(document));
 }
 
 export function getInitiationReviewNodeDefinition(nodeKey) {
@@ -110,15 +123,9 @@ export function getInitialInitiationReviewNodeStatus(nodeKey, documentStatus) {
 }
 
 export function getInitiationReviewNodeActionType(nodeKey, action) {
-  const actionSuffix = action === 'approve' ? 'approved' : 'returned';
-
-  if (nodeKey === INITIATION_REVIEW_NODE_KEY.BUSINESS) {
-    return `initiation_review.business_${actionSuffix}`;
+  if ([INITIATION_REVIEW_NODE_KEY.BUSINESS, INITIATION_REVIEW_NODE_KEY.TECHNICAL].includes(nodeKey)) {
+    return 'initiation.evaluation.submitted';
   }
 
-  if (nodeKey === INITIATION_REVIEW_NODE_KEY.TECHNICAL) {
-    return `initiation_review.technical_${actionSuffix}`;
-  }
-
-  return `initiation_review.general_${actionSuffix}`;
+  return action === 'approve' ? 'initiation.approval.approved' : 'initiation.approval.returned';
 }

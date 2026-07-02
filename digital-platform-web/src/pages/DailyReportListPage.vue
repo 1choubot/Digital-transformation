@@ -303,7 +303,7 @@ onMounted(loadReports);
   flex-direction: column;
   gap: 1.5rem;
   padding: 1.5rem;
-  max-width: 1400px;
+  max-width: 1500px;
   margin: 0 auto;
   min-height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;

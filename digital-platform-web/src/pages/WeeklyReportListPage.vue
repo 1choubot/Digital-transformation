@@ -353,7 +353,7 @@ onMounted(() => {
   flex-direction: column;
   gap: 1.5rem;
   padding: 1.5rem;
-  max-width: 1400px;
+  max-width: 1500px;
   margin: 0 auto;
   min-height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -627,7 +627,7 @@ onMounted(() => {
 }
 .rest-mode-actions {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-end;   /* 添加此行：使下拉框与按钮底部对齐 */
   gap: 0.75rem;
   flex-wrap: wrap;
 }
@@ -635,7 +635,7 @@ onMounted(() => {
   min-width: 140px;
 }
 .rest-mode-actions .primary-button {
-  height: 48px;
+  height: 48px;          /* 与 input-wrapper 高度一致，保证底部对齐 */
 }
 
 /* ===== 表格容器 ===== */

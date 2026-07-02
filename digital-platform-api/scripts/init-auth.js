@@ -56,6 +56,7 @@ async function ensureSchema() {
       department VARCHAR(128) NULL,
       organization_role VARCHAR(64) NOT NULL DEFAULT 'employee',
       role VARCHAR(64) NOT NULL,
+      job_title VARCHAR(100) NULL,
       is_enabled TINYINT(1) NOT NULL DEFAULT 1,
       is_platform_admin TINYINT(1) NOT NULL DEFAULT 0,
       file_platform_user_id VARCHAR(128) NULL,
@@ -79,6 +80,10 @@ async function ensureSchema() {
   }
 
   await pool.execute('ALTER TABLE users MODIFY COLUMN department VARCHAR(128) NULL');
+
+  if (!(await hasColumn('users', 'job_title'))) {
+    await pool.execute("ALTER TABLE users ADD COLUMN job_title VARCHAR(100) NULL DEFAULT NULL COMMENT '岗位名称' AFTER role");
+  }
 
   await pool.execute(
     `CREATE TABLE IF NOT EXISTS auth_sessions (
@@ -126,6 +131,7 @@ async function seedInitialUser() {
     department: null,
     organizationRole: ORGANIZATION_ROLE.SYSTEM_ADMIN,
     role: initialUser.role || '系统管理员',
+    jobTitle: initialUser.jobTitle || null,
     isEnabled: true,
     isPlatformAdmin: true,
     passwordHash: hashPassword(initialUser.password)

@@ -21,6 +21,7 @@ export function mapSafeUser(row) {
     department: row.department,
     organizationRole: row.organization_role,
     role: row.role,
+    jobTitle: row.job_title,
     isEnabled: Boolean(row.is_enabled),
     isPlatformAdmin: Boolean(row.is_platform_admin),
     filePlatformUserId: row.file_platform_user_id,
@@ -52,6 +53,7 @@ export function mapCreator(row) {
     department: row.creator_department,
     organizationRole: row.creator_organization_role,
     role: row.creator_role,
+    jobTitle: row.creator_job_title,
     isEnabled: row.creator_is_enabled === null ? null : Boolean(row.creator_is_enabled),
     filePlatformUserId: row.creator_file_platform_user_id
   };
@@ -69,6 +71,7 @@ function mapResponsibilityCandidate(row) {
     department: row.department,
     organizationRole: row.organization_role,
     role: row.role,
+    jobTitle: row.job_title,
     isEnabled: Boolean(row.is_enabled),
     filePlatformUserId: row.file_platform_user_id
   };
@@ -93,6 +96,7 @@ export async function listResponsibilityCandidateUsers() {
       department,
       organization_role,
       role,
+      job_title,
       is_enabled,
       file_platform_user_id
     FROM users
@@ -122,17 +126,19 @@ export async function upsertInitialUser(user) {
       department,
       organization_role,
       role,
+      job_title,
       is_enabled,
       is_platform_admin,
       file_platform_user_id,
       password_hash,
       password_updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     ON DUPLICATE KEY UPDATE
       display_name = VALUES(display_name),
       department = VALUES(department),
       organization_role = VALUES(organization_role),
       role = VALUES(role),
+      job_title = VALUES(job_title),
       is_enabled = VALUES(is_enabled),
       is_platform_admin = VALUES(is_platform_admin),
       file_platform_user_id = VALUES(file_platform_user_id),
@@ -144,6 +150,7 @@ export async function upsertInitialUser(user) {
       user.department,
       user.organizationRole,
       user.role,
+      user.jobTitle || null,
       user.isEnabled ? 1 : 0,
       user.isPlatformAdmin ? 1 : 0,
       user.filePlatformUserId || null,
@@ -182,6 +189,7 @@ const SAFE_USER_COLUMNS = `
   department,
   organization_role,
   role,
+  job_title,
   is_enabled,
   is_platform_admin,
   file_platform_user_id,
@@ -322,18 +330,20 @@ export async function createManagedUser(user) {
         department,
         organization_role,
         role,
+        job_title,
         is_enabled,
         is_platform_admin,
         file_platform_user_id,
         password_hash,
         password_updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         user.account,
         user.displayName,
         user.department,
         user.organizationRole,
         user.role,
+        user.jobTitle || null,
         user.isEnabled ? 1 : 0,
         user.isPlatformAdmin ? 1 : 0,
         user.filePlatformUserId || null,
@@ -385,6 +395,7 @@ export async function updateManagedUser(userId, patch) {
         department = ?,
         organization_role = ?,
         role = ?,
+        job_title = ?,
         is_enabled = ?,
         is_platform_admin = ?,
         file_platform_user_id = ?
@@ -394,6 +405,7 @@ export async function updateManagedUser(userId, patch) {
         nextState.department,
         nextState.organizationRole,
         patch.role === undefined ? existing.role : patch.role,
+        patch.jobTitle === undefined ? existing.job_title : patch.jobTitle || null,
         nextState.isEnabled ? 1 : 0,
         nextState.isPlatformAdmin ? 1 : 0,
         patch.filePlatformUserId === undefined ? existing.file_platform_user_id : patch.filePlatformUserId || null,

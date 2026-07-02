@@ -56,7 +56,7 @@
           </div>
 
           <div class="filter-group daily-project-select">
-            <span class="filter-label">选择项目</span>
+            <span class="filter-label">项目名称</span>
             <div
               class="project-select-wrapper"
               @focusin="openDropdown"
@@ -134,10 +134,11 @@
 
           <div class="table-container">
             <div class="daily-edit-table daily-edit-table--items">
+              <!-- 调整后的表头顺序 -->
               <div class="daily-edit-table__head">
-                <span>工作内容</span>
                 <span>任务来源</span>
                 <span>关联周计划</span>
+                <span>工作内容</span>
                 <span>执行状态</span>
                 <span>完成进度</span>
                 <span>完成时间</span>
@@ -146,12 +147,7 @@
                 <span class="text-right">操作</span>
               </div>
               <div v-for="(item, index) in form.items" :key="item.localId" class="daily-edit-table__row">
-                <textarea
-                  v-model="item.workContent"
-                  required
-                  class="form-control form-textarea"
-                  :class="{ invalid: itemErrors[item.localId]?.workContent }"
-                />
+                <!-- 任务来源 -->
                 <select
                   v-model="item.sourceType"
                   class="form-control"
@@ -159,9 +155,10 @@
                   @change="onItemSourceTypeChange(item)"
                 >
                   <option value="">请选择来源</option>
-                  <option value="weekly_plan">执行本周计划</option>
-                  <option value="ad_hoc">新增临时工作</option>
+                  <option value="weekly_plan">周计划</option>
+                  <option value="ad_hoc">新增</option>
                 </select>
+                <!-- 关联周计划 -->
                 <select
                   v-model="item.sourcePlanTaskKey"
                   class="form-control"
@@ -174,31 +171,45 @@
                     {{ plan.plannedDate }}｜{{ plan.workTarget }}
                   </option>
                 </select>
+                <!-- 工作内容 -->
+                <textarea
+                  v-model="item.workContent"
+                  required
+                  class="form-control form-textarea"
+                  :class="{ invalid: itemErrors[item.localId]?.workContent }"
+                />
+                <!-- 执行状态 -->
                 <select
                   v-model="item.executionStatus"
                   class="form-control"
                   :class="{ invalid: itemErrors[item.localId]?.executionStatus }"
+                  @change="onExecutionStatusChange(item)"
                 >
                   <option value="">请选择状态</option>
                   <option value="completed">已完成</option>
                   <option value="in_progress">进行中</option>
                   <option value="not_completed">未完成</option>
                 </select>
+                <!-- 完成进度 -->
                 <input
                   v-model="item.completionProgress"
                   required
-                  placeholder="如 100% / 已完成"
+                  placeholder="如 100%"
                   class="form-control"
                   :class="{ invalid: itemErrors[item.localId]?.completionProgress }"
                 />
+                <!-- 完成时间 -->
                 <input
                   v-model="item.completedAt"
                   type="time"
                   class="form-control"
                   :class="{ invalid: itemErrors[item.localId]?.completedAt }"
                 />
+                <!-- 负责人 -->
                 <input v-model="item.responsiblePerson" class="form-control" />
+                <!-- 偏差与纠偏 -->
                 <textarea v-model="item.deviationAndCorrectiveAction" class="form-control form-textarea" />
+                <!-- 操作 -->
                 <button type="button" class="row-btn action-btn" :disabled="form.items.length === 1" @click="removeItem(index)">
                   删除
                 </button>
@@ -207,7 +218,7 @@
           </div>
         </section>
 
-        <!-- ===== 进展照片（新增粘贴监听和缩略图） ===== -->
+        <!-- 进展照片 -->
         <section class="daily-section daily-attachments" @paste="handlePaste">
           <div class="daily-section__heading">
             <h3>进展照片</h3>
@@ -235,7 +246,6 @@
             <ul v-if="savedReport.attachments?.length" class="daily-attachment-list">
               <li v-for="attachment in savedReport.attachments" :key="attachment.id">
                 <div class="attachment-preview">
-                  <!-- 缩略图 -->
                   <img
                     v-if="thumbnails[attachment.id]"
                     :src="thumbnails[attachment.id]"
@@ -507,7 +517,7 @@ function createEmptyItem() {
     sourcePlanTaskKey: '',
     executionStatus: '',
     workContent: '',
-    completionProgress: '100%',
+    completionProgress: '', // 初始为空，由执行状态控制
     completedAt: '17:30',
     responsiblePerson: currentUserDisplayName.value,
     deviationAndCorrectiveAction: '无偏差'
@@ -644,6 +654,17 @@ function applySelectedPlanToItem(item) {
   }
 }
 
+// ===== 执行状态变更时自动填充/清空完成进度 =====
+function onExecutionStatusChange(item) {
+  if (item.executionStatus === 'completed') {
+    item.completionProgress = '100%';
+  } else if (item.executionStatus === 'not_completed') {
+    item.completionProgress = '0%';
+  } else {
+    item.completionProgress = ''; // 进行中或其他状态置空
+  }
+}
+
 // ===== 缩略图加载函数 =====
 async function loadThumbnail(attachment) {
   // 如果已有缩略图或正在加载，跳过
@@ -671,9 +692,6 @@ async function loadThumbnail(attachment) {
 
 // 当缩略图加载出错时（如 url 失效），可尝试重新加载
 function onThumbnailError(attachment) {
-  // 若当前 thumbnails[attachment.id] 是 http 链接且失效，可尝试调用 loadThumbnail 重新获取
-  // 但为避免死循环，可简单移除该缩略图，或置为 null
-  // 这里我们简单地将该条目设为 undefined，以便用户点击下载查看原图
   thumbnails[attachment.id] = undefined;
 }
 
@@ -1028,7 +1046,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 1.5rem;
   padding: 1.5rem;
-  max-width: 1400px;
+  max-width: 1500px;
   margin: 0 auto;
   min-height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -1287,7 +1305,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 .input-wrapper input::placeholder {
-  color: #c0c4cc;
+  color: #303133;  /* 与下拉选项文字颜色一致 */
 }
 
 /* 清空搜索按钮（自定义） */
@@ -1430,8 +1448,9 @@ onBeforeUnmount(() => {
   color: #909399;
   gap: 0.75rem;
 }
+/* 调整后的列宽顺序（任务来源、关联周计划、工作内容、执行状态、完成进度、完成时间、负责人、偏差与纠偏、操作） */
 .daily-edit-table--items .daily-edit-table__head {
-  grid-template-columns: 1.8fr 1.1fr 1.8fr 1.1fr 1fr 0.9fr 1fr 1.4fr 0.7fr;
+  grid-template-columns: 1.1fr 1.8fr 1.8fr 1.1fr 1fr 0.9fr 1fr 1.4fr 0.7fr;
 }
 .daily-edit-table--plans .daily-edit-table__head {
   grid-template-columns: 2fr 1fr 1fr 1.2fr 1.5fr 0.8fr;
@@ -1448,8 +1467,9 @@ onBeforeUnmount(() => {
   gap: 0.75rem;
   transition: background 0.2s ease;
 }
+/* 行内列宽与表头一致 */
 .daily-edit-table--items .daily-edit-table__row {
-  grid-template-columns: 1.8fr 1.1fr 1.8fr 1.1fr 1fr 0.9fr 1fr 1.4fr 0.7fr;
+  grid-template-columns: 1.1fr 1.8fr 1.8fr 1.1fr 1fr 0.9fr 1fr 1.4fr 0.7fr;
 }
 .daily-edit-table--plans .daily-edit-table__row {
   grid-template-columns: 2fr 1fr 1fr 1.2fr 1.5fr 0.8fr;

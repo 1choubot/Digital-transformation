@@ -17,20 +17,18 @@
     </section>
 
     <template v-else-if="report">
-      <!-- 周报摘要信息（修改后：包含被考评人 + 操作按钮） -->
+      <!-- 周报摘要信息（包含被考评人 + 操作按钮） -->
       <section class="panel weekly-review-summary">
         <div class="panel-toolbar">
           <div class="toolbar-info">
-            <!-- 🔥 修改点：被考评人放在第一排最前面 -->
             <span class="evaluatee-name">被考评人：{{ targetUserName }}</span>
             <span class="divider">|</span>
             <strong class="toolbar-title">{{ report.weekStart }} 至 {{ report.weekEnd }}</strong>
             <span class="status-badge" :class="statusClass(report.status)">
               {{ statusLabel(report.status) }}
             </span>
-            <span class="toolbar-subtitle">最终评分：{{ finalScoreText }}</span>
+            <span class="toolbar-subtitle">评分：{{ finalScoreText }}</span>
           </div>
-          <!-- 操作按钮移到这里 -->
           <div class="toolbar-actions">
             <button type="button" class="ghost-button" @click="navigate(returnPath)">
               <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -66,7 +64,7 @@
               <strong class="meta-value">{{ formatDateTime(report.finalReviewedAt) }}</strong>
             </div>
             <div class="meta-item">
-              <span class="meta-label">最终等级</span>
+              <span class="meta-label">等级</span>
               <strong class="meta-value">{{ report.finalGrade || '-' }}</strong>
             </div>
           </div>
@@ -278,32 +276,19 @@
         </div>
       </section>
 
-      <!-- 最终评分 -->
+      <!-- 评分 -->
       <section class="panel weekly-final-review-panel">
         <div class="panel-toolbar">
           <div class="toolbar-info">
-            <strong class="toolbar-title">最终评分</strong>
+            <strong class="toolbar-title">评分</strong>
             <span class="toolbar-subtitle">{{ canEditFinalReview ? '可编辑' : '只读' }}</span>
           </div>
-          <button
-            v-if="canEditFinalReview"
-            type="button"
-            class="primary-button"
-            :disabled="savingFinalReview"
-            @click="saveFinalReview"
-          >
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-              <polyline points="17 21 17 13 7 13 7 21" />
-              <polyline points="7 3 7 8 15 8" />
-            </svg>
-            {{ savingFinalReview ? '正在保存' : '确认评分' }}
-          </button>
+          <!-- 按钮已移除，移至下方 -->
         </div>
         <div class="panel-body">
           <div class="weekly-final-review-form">
             <div class="form-field">
-              <span class="field-label">最终分数</span>
+              <span class="field-label">分数</span>
               <div class="input-wrapper">
                 <input
                   v-model="finalReviewForm.finalScore"
@@ -317,7 +302,7 @@
               </div>
             </div>
             <div class="form-field">
-              <span class="field-label">最终等级</span>
+              <span class="field-label">等级</span>
               <div class="input-wrapper">
                 <select v-model="finalReviewForm.finalGrade" :disabled="!canEditFinalReview">
                   <option value="">请选择</option>
@@ -326,7 +311,7 @@
               </div>
             </div>
             <div class="form-field form-field--full">
-              <span class="field-label">最终评语</span>
+              <span class="field-label">评语</span>
               <textarea
                 v-model="finalReviewForm.finalComment"
                 class="form-control form-textarea"
@@ -334,6 +319,23 @@
                 placeholder="请输入评语..."
               />
             </div>
+          </div>
+
+          <!-- 按钮放在表单底部 -->
+          <div v-if="canEditFinalReview" class="form-actions">
+            <button
+              type="button"
+              class="primary-button"
+              :disabled="savingFinalReview"
+              @click="saveFinalReview"
+            >
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+              </svg>
+              {{ savingFinalReview ? '正在保存' : '确认评分' }}
+            </button>
           </div>
 
           <section v-if="finalReviewMessage" class="state-panel state-panel--success state-panel--compact">
@@ -352,10 +354,8 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { OrganizationRole, ReportStatus } from '../constants/reports.js';
 import {
-  evaluateWeeklyReport,
   exportWeeklyReport,
   getWeeklyReport,
-  getWeeklyReportComparisonTable,
   saveWeeklyReportFinalReview,
   toReadableApiError
 } from '../api/weeklyReports.js';
@@ -393,16 +393,11 @@ const returnPath = computed(() => {
 });
 
 const loading = ref(false);
-const comparisonLoading = ref(false);
-const evaluating = ref(false);
 const exporting = ref(false);
 const savingFinalReview = ref(false);
 const report = ref(null);
 const targetUser = ref(null);
-const comparisonRows = ref([]);
 const errorMessage = ref('');
-const comparisonError = ref('');
-const evaluationError = ref('');
 const finalReviewMessage = ref('');
 const finalReviewError = ref('');
 const finalReviewForm = reactive({
@@ -412,7 +407,6 @@ const finalReviewForm = reactive({
 });
 const finalGradeOptions = ['A', 'B', 'C', 'D', 'E'];
 
-const score = computed(() => report.value?.aiScore || null);
 const targetUserName = computed(() => targetUser.value?.displayName || targetUser.value?.account || '-');
 const targetDepartment = computed(() => formatBusinessDepartment(targetUser.value?.department));
 const isEmployeeTarget = computed(() => targetUser.value?.organizationRole === OrganizationRole.EMPLOYEE);
@@ -436,18 +430,10 @@ const canEditFinalReview = computed(() => {
   }
   return props.currentUser.organizationRole === OrganizationRole.GENERAL_MANAGER && isCenterManagerTarget.value;
 });
-const canEvaluate = computed(() => showEmployeeReviewTools.value && report.value?.status === ReportStatus.SUBMITTED);
 const canExportOwnReport = computed(() => String(report.value?.userId) === String(props.currentUser.id));
-const scoreSourceLabel = computed(() => (score.value?.source === 'ai' ? 'AI 评分完成' : '规则评分完成'));
-const evaluationStatusText = computed(() => {
-  if (evaluating.value) return '评分中';
-  if (evaluationError.value) return '请求失败';
-  if (!score.value) return '未评估';
-  return scoreSourceLabel.value;
-});
 const finalScoreText = computed(() => {
   if (report.value?.finalScore === null || report.value?.finalScore === undefined) {
-    return '待最终评分';
+    return '待评分';
   }
   return `${report.value.finalScore}${report.value.finalGrade ? ` / ${report.value.finalGrade}` : ''}`;
 });
@@ -535,15 +521,6 @@ function formatDateTime(value) {
   return String(value).replace('T', ' ').slice(0, 16);
 }
 
-function comparisonRowKey(row) {
-  return [row.date, row.weeklyTask, row.dailyProjectLabel || row.dailyProjectName, row.dailyWorkContent].join('|');
-}
-
-function dimensionValue(key) {
-  const value = score.value?.components?.[key];
-  return value === undefined || value === null ? '-' : value;
-}
-
 function applyReport(result) {
   report.value = result.report;
   targetUser.value = result.targetUser;
@@ -585,34 +562,6 @@ async function loadReport() {
   }
 }
 
-async function loadComparisonTable() {
-  comparisonLoading.value = true;
-  comparisonError.value = '';
-
-  try {
-    const result = await getWeeklyReportComparisonTable(props.reportId, props.authToken);
-    comparisonRows.value = result.rows || [];
-  } catch (error) {
-    comparisonError.value = toReadableApiError(error);
-  } finally {
-    comparisonLoading.value = false;
-  }
-}
-
-async function evaluateReport(force = false) {
-  evaluating.value = true;
-  evaluationError.value = '';
-
-  try {
-    const result = await evaluateWeeklyReport(props.reportId, { force }, props.authToken);
-    report.value = result.report;
-  } catch (error) {
-    evaluationError.value = toReadableApiError(error);
-  } finally {
-    evaluating.value = false;
-  }
-}
-
 async function saveFinalReview() {
   savingFinalReview.value = true;
   finalReviewMessage.value = '';
@@ -629,7 +578,7 @@ async function saveFinalReview() {
       props.authToken
     );
     report.value = result.report;
-    finalReviewMessage.value = '最终评分已保存。';
+    finalReviewMessage.value = '评分已保存。';
   } catch (error) {
     finalReviewError.value = toReadableApiError(error);
   } finally {
@@ -717,8 +666,6 @@ onMounted(loadReport);
   font-size: 0.8rem;
   color: #909399;
 }
-
-/* 🔥 新增：被考评人样式 */
 .evaluatee-name {
   font-size: 1rem;
   font-weight: 600;
@@ -823,6 +770,10 @@ onMounted(loadReport);
 .state-panel p {
   font-size: 0.9rem;
   margin: 0;
+}
+.state-panel--success {
+  background: #f0f9eb;
+  color: #67c23a;
 }
 .error-icon {
   width: 32px;
@@ -990,13 +941,16 @@ onMounted(loadReport);
   color: #475569;
 }
 
-/* 完成状态标签 */
+/* ===== 完成状态标签（核心修改） ===== */
 .completion-status {
-  display: inline-block;
+  display: inline-block;            /* 保持内联块 */
   padding: 0.1rem 0.5rem;
   border-radius: 4px;
   font-size: 0.75rem;
   font-weight: 500;
+  white-space: nowrap;              /* 强制单行，不换行 */
+  width: fit-content;              /* 宽度完全由内容决定 */
+  max-width: 100%;                 /* 防止溢出父容器（但实际不会） */
 }
 .status--completed {
   background: #f0f9eb;
@@ -1015,143 +969,7 @@ onMounted(loadReport);
   color: #e6a23c;
 }
 
-/* ===== 对照表 ===== */
-.weekly-comparison-table {
-  min-width: 1000px;
-  width: 100%;
-  font-size: 0.85rem;
-}
-.weekly-comparison-table__head {
-  display: grid;
-  padding: 0.6rem 0.75rem;
-  background: #fafafa;
-  border-bottom: 2px solid #ebeef5;
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: #909399;
-  gap: 0.5rem;
-  grid-template-columns: 0.7fr 0.6fr 1.2fr 1.2fr 1fr 1.5fr 0.7fr 0.8fr 0.8fr 0.6fr;
-}
-.weekly-comparison-table__row {
-  display: grid;
-  padding: 0.5rem 0.75rem;
-  align-items: center;
-  border-bottom: 1px solid #f0f0f2;
-  gap: 0.5rem;
-  transition: background 0.2s ease;
-  grid-template-columns: 0.7fr 0.6fr 1.2fr 1.2fr 1fr 1.5fr 0.7fr 0.8fr 0.8fr 0.6fr;
-}
-.weekly-comparison-table__row:hover {
-  background: #fdfdfe;
-}
-.weekly-comparison-table__row span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.match-status {
-  display: inline-block;
-  padding: 0.1rem 0.5rem;
-  border-radius: 4px;
-  font-size: 0.7rem;
-  font-weight: 500;
-}
-.match--matched {
-  background: #f0f9eb;
-  color: #67c23a;
-}
-.match--unmatched {
-  background: #fef0f0;
-  color: #f56c6c;
-}
-.match--weekly-only {
-  background: #fdf6ec;
-  color: #e6a23c;
-}
-.match--daily-only {
-  background: #ecf5ff;
-  color: #3e63dd;
-}
-
-/* ===== 评分展示 ===== */
-.weekly-score {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-.weekly-score__summary {
-  display: flex;
-  gap: 2rem;
-  flex-wrap: wrap;
-}
-.score-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.score-label {
-  font-size: 0.8rem;
-  color: #909399;
-}
-.score-value {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #303133;
-}
-
-.weekly-score__dimensions {
-  display: flex;
-  gap: 2rem;
-  flex-wrap: wrap;
-  padding-top: 0.75rem;
-  border-top: 1px solid #ebeef5;
-}
-.dimension-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.dimension-label {
-  font-size: 0.8rem;
-  color: #909399;
-}
-.dimension-value {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #3e63dd;
-}
-
-.weekly-score__body {
-  padding: 1rem;
-  background: #fafafa;
-  border-radius: 4px;
-  border: 1px solid #ebeef5;
-}
-.weekly-score__body h3 {
-  margin: 0 0 0.5rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #303133;
-}
-.weekly-score__body p {
-  margin: 0 0 0.5rem;
-  font-size: 0.85rem;
-  color: #606266;
-  line-height: 1.6;
-}
-.weekly-score__body ul {
-  margin: 0;
-  padding-left: 1.25rem;
-}
-.weekly-score__body li {
-  font-size: 0.85rem;
-  color: #606266;
-  margin-bottom: 0.25rem;
-  line-height: 1.5;
-}
-
-/* ===== 最终评分表单 ===== */
+/* ===== 评分表单 ===== */
 .weekly-final-review-form {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1243,6 +1061,15 @@ onMounted(loadReport);
   padding-bottom: 0.5rem;
 }
 
+/* 表单操作按钮容器 */
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #ebeef5;
+}
+
 /* ===== 响应式 ===== */
 @media (max-width: 900px) {
   .page-stack {
@@ -1274,33 +1101,11 @@ onMounted(loadReport);
     border-radius: 4px;
     margin-bottom: 0.5rem;
   }
-  .weekly-comparison-table__head,
-  .weekly-comparison-table__row {
-    grid-template-columns: 1fr !important;
-    gap: 0.4rem;
-  }
-  .weekly-comparison-table__head {
-    display: none;
-  }
-  .weekly-comparison-table__row {
-    padding: 0.75rem;
-    border: 1px solid #ebeef5;
-    border-radius: 4px;
-    margin-bottom: 0.5rem;
-  }
-  .weekly-comparison-table__row span {
-    white-space: normal;
-  }
   .weekly-final-review-form {
     grid-template-columns: 1fr;
   }
-  .weekly-score__summary {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-  .weekly-score__dimensions {
-    flex-direction: column;
-    gap: 0.5rem;
+  .form-actions {
+    justify-content: center;
   }
 }
 </style>

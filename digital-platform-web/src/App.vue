@@ -21,8 +21,9 @@
   <!-- 登录后的高保真主控制台外壳 (全新顶部导航布局) -->
   <div v-else class="app-shell">
     
-    <!-- 顶部导航栏 -->
+    <!-- 顶部一级导航栏 -->
     <header class="app-header">
+      <!-- 左侧：品牌 Logo -->
       <div class="header-left">
         <div class="brand-logo-area">
           <svg class="logo-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -33,13 +34,14 @@
             <span class="brand-subtitle">DIGITAL MANAGEMENT</span>
           </div>
         </div>
+      </div>
 
-        <!-- 桌面端横向导航 -->
+      <!-- 中间：桌面端横向一级导航（居中） -->
+      <div class="header-center">
         <nav class="desktop-nav">
-          
           <!-- 项目主数据 -->
           <div v-if="!canAccessUserManagement" class="nav-group">
-            <div class="nav-group-title" :class="{ 'is-active': isGroupActive('projects') }">
+            <div class="nav-group-title" :class="{ 'is-active': activeGroup === 'projects' }" @click="handleGroupClick('projects')">
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="3" width="7" height="9" />
                 <rect x="14" y="3" width="7" height="5" />
@@ -47,24 +49,12 @@
                 <rect x="3" y="16" width="7" height="5" />
               </svg>
               <span>项目管理</span>
-              <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </div>
-            <div class="nav-dropdown">
-              <button class="dropdown-item" :class="{ active: route.name === 'projects' }" @click="handleNavigate('/projects')">项目列表</button>
-              <button class="dropdown-item" :class="{ active: route.name === 'project-create' }" @click="handleNavigate('/projects/new')">新建项目</button>
-              <div class="dropdown-divider"></div>
-              <button class="dropdown-item" :class="{ active: route.name === 'project-detail-old' }" @click="handleNavigate('/projects-old/1')">老版详情页</button>
             </div>
           </div>
           
           <!-- 日报管理 -->
-          <div 
-            v-if="!canAccessUserManagement && (isDailyReportUser || canAccessCenterDailyReport)" 
-            class="nav-group"
-          >
-            <div class="nav-group-title" :class="{ 'is-active': isGroupActive('dailyReports') }">
+          <div v-if="!canAccessUserManagement && (isDailyReportUser || canAccessCenterDailyReport)" class="nav-group">
+            <div class="nav-group-title" :class="{ 'is-active': activeGroup === 'dailyReports' }" @click="handleGroupClick('dailyReports')">
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
                 <line x1="16" y1="2" x2="16" y2="6"/>
@@ -72,23 +62,12 @@
                 <line x1="3" y1="10" x2="21" y2="10"/>
               </svg>
               <span>日报管理</span>
-              <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </div>
-            <div class="nav-dropdown">
-              <button class="dropdown-item" :class="{ active: route.name === 'daily-report' }" @click="handleNavigate('/daily-report')">日报填写</button>
-              <button class="dropdown-item" :class="{ active: route.name === 'daily-reports' }" @click="handleNavigate('/daily-reports')">我的日报列表</button>
-              <button class="dropdown-item" v-if="canAccessCenterDailyReport" :class="{ active: route.name === 'center-daily-report' }" @click="handleNavigate('/center-daily-report')">中心日报汇总</button>
             </div>
           </div>
 
           <!-- 周报管理 -->
-          <div 
-            v-if="!canAccessUserManagement && (isWeeklyReportUser || canAccessWeeklyReports || canAccessWeeklyOverview)" 
-            class="nav-group"
-          >
-            <div class="nav-group-title" :class="{ 'is-active': isGroupActive('weeklyReports') }">
+          <div v-if="!canAccessUserManagement && (isWeeklyReportUser || canAccessWeeklyReports || canAccessWeeklyOverview)" class="nav-group">
+            <div class="nav-group-title" :class="{ 'is-active': activeGroup === 'weeklyReports' }" @click="handleGroupClick('weeklyReports')">
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                 <polyline points="14 2 14 8 20 8"/>
@@ -96,53 +75,34 @@
                 <line x1="16" y1="17" x2="8" y2="17"/>
               </svg>
               <span>周报管理</span>
-              <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </div>
-            <div class="nav-dropdown nav-dropdown--wide">
-              <button class="dropdown-item" v-if="isWeeklyReportUser" :class="{ active: route.name === 'weekly-report' }" @click="handleNavigate('/weekly-report')">周报填写</button>
-              <button class="dropdown-item" v-if="canAccessWeeklyReports" :class="{ active: ['weekly-reports', 'weekly-report-review'].includes(route.name) && route.query?.from !== 'overview' }" @click="handleNavigate('/weekly-reports')">我的周报列表</button>
-              <button class="dropdown-item" v-if="canAccessWeeklyOverview" :class="{ active: route.name === 'weekly-report-overview' || (route.name === 'weekly-report-review' && route.query?.from === 'overview') }" @click="handleNavigate('/weekly-overview')">周报汇总及考评</button>
             </div>
           </div>
 
-          <!-- 过程追踪看板（已移除“项目总览”按钮，仅保留“我的资料任务”） -->
+          <!-- 过程追踪看板 -->
           <div v-if="!canAccessUserManagement" class="nav-group">
-            <div class="nav-group-title" :class="{ 'is-active': isGroupActive('dashboards') }">
+            <div class="nav-group-title" :class="{ 'is-active': activeGroup === 'dashboards' }" @click="handleGroupClick('dashboards')">
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21.21 15.89A10 10 0 1 1 8 2.83" stroke-linecap="round"/>
                 <path d="M22 12A10 10 0 0 0 12 2v10z" stroke-linecap="round"/>
               </svg>
               <span>过程追踪看板</span>
-              <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </div>
-            <div class="nav-dropdown">
-              <button class="dropdown-item" :class="{ active: route.name === 'my-stage-document-tasks' }" @click="handleNavigate('/my-stage-document-tasks')">我的资料任务</button>
             </div>
           </div>
 
           <!-- 系统设置 -->
           <div v-if="canAccessUserManagement" class="nav-group">
-            <div class="nav-group-title" :class="{ 'is-active': isGroupActive('admin') }">
+            <div class="nav-group-title" :class="{ 'is-active': activeGroup === 'admin' }" @click="handleGroupClick('admin')">
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="3"/>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
               </svg>
               <span>系统设置</span>
-              <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </div>
-            <div class="nav-dropdown">
-              <button class="dropdown-item" :class="{ active: route.name === 'users' }" @click="handleNavigate('/users')">用户管理</button>
             </div>
           </div>
         </nav>
       </div>
 
+      <!-- 右侧：用户信息 + 移动菜单 -->
       <div class="header-right">
         <div class="current-user">
           <div class="user-avatar">
@@ -174,7 +134,7 @@
       </div>
     </header>
 
-    <!-- 移动端侧边栏抽屉 (保留供小屏幕使用) -->
+    <!-- 移动端侧边栏抽屉 (现已精简为纯一级导航) -->
     <aside class="mobile-sidebar" :class="{ 'mobile-sidebar--open': isSidebarOpen }">
       <div class="mobile-brand-area">
         <svg class="logo-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -188,7 +148,7 @@
       <nav class="sidebar-nav">
         <!-- 项目主数据 -->
         <div v-if="!canAccessUserManagement" class="mobile-nav-group">
-          <div class="mobile-nav-header" :class="{ 'is-active': isGroupActive('projects') }" @click="toggleMenu('projects')">
+          <div class="mobile-nav-header" :class="{ 'is-active': activeGroup === 'projects' }" @click="handleGroupClick('projects')">
             <div class="header-left-inner">
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="3" width="7" height="9" />
@@ -198,22 +158,12 @@
               </svg>
               <span>项目管理</span>
             </div>
-            <svg class="chevron-icon" :class="{ 'rotated': openMenus.projects }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </div>
-          <div class="mobile-nav-children" :class="{ 'is-open': openMenus.projects }">
-            <div class="nav-children-inner">
-              <button class="nav-child-item" :class="{ active: route.name === 'projects' }" @click="handleNavigate('/projects')">项目列表</button>
-              <button class="nav-child-item" :class="{ active: route.name === 'project-create' }" @click="handleNavigate('/projects/new')">新建项目</button>
-              <button class="nav-child-item" :class="{ active: route.name === 'project-detail-old' }" @click="handleNavigate('/projects-old/1')">老版详情页</button>
-            </div>
           </div>
         </div>
         
         <!-- 日报管理 -->
         <div v-if="!canAccessUserManagement && (isDailyReportUser || canAccessCenterDailyReport)" class="mobile-nav-group">
-          <div class="mobile-nav-header" :class="{ 'is-active': isGroupActive('dailyReports') }" @click="toggleMenu('dailyReports')">
+          <div class="mobile-nav-header" :class="{ 'is-active': activeGroup === 'dailyReports' }" @click="handleGroupClick('dailyReports')">
             <div class="header-left-inner">
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
@@ -223,22 +173,12 @@
               </svg>
               <span>日报管理</span>
             </div>
-            <svg class="chevron-icon" :class="{ 'rotated': openMenus.dailyReports }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </div>
-          <div class="mobile-nav-children" :class="{ 'is-open': openMenus.dailyReports }">
-            <div class="nav-children-inner">
-              <button class="nav-child-item" :class="{ active: route.name === 'daily-report' }" @click="handleNavigate('/daily-report')">日报填写</button>
-              <button class="nav-child-item" :class="{ active: route.name === 'daily-reports' }" @click="handleNavigate('/daily-reports')">我的日报列表</button>
-              <button class="nav-child-item" v-if="canAccessCenterDailyReport" :class="{ active: route.name === 'center-daily-report' }" @click="handleNavigate('/center-daily-report')">中心日报汇总</button>
-            </div>
           </div>
         </div>
 
         <!-- 周报管理 -->
         <div v-if="!canAccessUserManagement && (isWeeklyReportUser || canAccessWeeklyReports || canAccessWeeklyOverview)" class="mobile-nav-group">
-          <div class="mobile-nav-header" :class="{ 'is-active': isGroupActive('weeklyReports') }" @click="toggleMenu('weeklyReports')">
+          <div class="mobile-nav-header" :class="{ 'is-active': activeGroup === 'weeklyReports' }" @click="handleGroupClick('weeklyReports')">
             <div class="header-left-inner">
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -248,22 +188,12 @@
               </svg>
               <span>周报管理</span>
             </div>
-            <svg class="chevron-icon" :class="{ 'rotated': openMenus.weeklyReports }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </div>
-          <div class="mobile-nav-children" :class="{ 'is-open': openMenus.weeklyReports }">
-            <div class="nav-children-inner">
-              <button class="nav-child-item" v-if="isWeeklyReportUser" :class="{ active: route.name === 'weekly-report' }" @click="handleNavigate('/weekly-report')">周报填写</button>
-              <button class="nav-child-item" v-if="canAccessWeeklyReports" :class="{ active: ['weekly-reports', 'weekly-report-review'].includes(route.name) && route.query?.from !== 'overview' }" @click="handleNavigate('/weekly-reports')">我的周报列表</button>
-              <button class="nav-child-item" v-if="canAccessWeeklyOverview" :class="{ active: route.name === 'weekly-report-overview' || (route.name === 'weekly-report-review' && route.query?.from === 'overview') }" @click="handleNavigate('/weekly-overview')">周报汇总及考评</button>
-            </div>
           </div>
         </div>
 
-        <!-- 过程追踪看板（已移除“项目总览”按钮） -->
+        <!-- 过程追踪看板 -->
         <div v-if="!canAccessUserManagement" class="mobile-nav-group">
-          <div class="mobile-nav-header" :class="{ 'is-active': isGroupActive('dashboards') }" @click="toggleMenu('dashboards')">
+          <div class="mobile-nav-header" :class="{ 'is-active': activeGroup === 'dashboards' }" @click="handleGroupClick('dashboards')">
             <div class="header-left-inner">
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21.21 15.89A10 10 0 1 1 8 2.83" stroke-linecap="round"/>
@@ -271,34 +201,18 @@
               </svg>
               <span>过程追踪看板</span>
             </div>
-            <svg class="chevron-icon" :class="{ 'rotated': openMenus.dashboards }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </div>
-          <div class="mobile-nav-children" :class="{ 'is-open': openMenus.dashboards }">
-            <div class="nav-children-inner">
-              <button class="nav-child-item" :class="{ active: route.name === 'my-stage-document-tasks' }" @click="handleNavigate('/my-stage-document-tasks')">我的资料任务</button>
-            </div>
           </div>
         </div>
 
         <!-- 系统设置 -->
         <div v-if="canAccessUserManagement" class="mobile-nav-group">
-          <div class="mobile-nav-header" :class="{ 'is-active': isGroupActive('admin') }" @click="toggleMenu('admin')">
+          <div class="mobile-nav-header" :class="{ 'is-active': activeGroup === 'admin' }" @click="handleGroupClick('admin')">
             <div class="header-left-inner">
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="3"/>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
               </svg>
               <span>系统设置</span>
-            </div>
-            <svg class="chevron-icon" :class="{ 'rotated': openMenus.admin }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </div>
-          <div class="mobile-nav-children" :class="{ 'is-open': openMenus.admin }">
-            <div class="nav-children-inner">
-              <button class="nav-child-item" :class="{ active: route.name === 'users' }" @click="handleNavigate('/users')">用户管理</button>
             </div>
           </div>
         </div>
@@ -314,11 +228,34 @@
     <!-- 主体内区域容器 -->
     <div class="main-wrapper">
       
-      <!-- 面包屑 -->
-      <div class="page-breadcrumb-bar">
-        <span class="breadcrumb-item">数字化管理平台</span>
-        <span class="breadcrumb-separator">/</span>
-        <span class="breadcrumb-item breadcrumb-item--active">{{ currentRouteLabel }}</span>
+      <!-- 二级导航栏 (居中) -->
+      <div class="sub-nav-bar" v-if="activeGroup">
+        <template v-if="activeGroup === 'projects'">
+          <button class="sub-nav-item" :class="{ active: route.name === 'projects' }" @click="navigate('/projects')">项目列表</button>
+          <button class="sub-nav-item" :class="{ active: route.name === 'project-create' }" @click="navigate('/projects/new')">新建项目</button>
+          <div class="sub-nav-divider"></div>
+          <button class="sub-nav-item" :class="{ active: route.name === 'project-detail-old' }" @click="navigate('/projects-old/1')">老版详情页</button>
+        </template>
+        
+        <template v-else-if="activeGroup === 'dailyReports'">
+          <button class="sub-nav-item" :class="{ active: route.name === 'daily-report' }" @click="navigate('/daily-report')">日报填写</button>
+          <button class="sub-nav-item" :class="{ active: route.name === 'daily-reports' }" @click="navigate('/daily-reports')">我的日报列表</button>
+          <button class="sub-nav-item" v-if="canAccessCenterDailyReport" :class="{ active: route.name === 'center-daily-report' }" @click="navigate('/center-daily-report')">中心日报汇总</button>
+        </template>
+        
+        <template v-else-if="activeGroup === 'weeklyReports'">
+          <button class="sub-nav-item" v-if="isWeeklyReportUser" :class="{ active: route.name === 'weekly-report' }" @click="navigate('/weekly-report')">周报填写</button>
+          <button class="sub-nav-item" v-if="canAccessWeeklyReports" :class="{ active: ['weekly-reports', 'weekly-report-review'].includes(route.name) && route.query?.from !== 'overview' }" @click="navigate('/weekly-reports')">我的周报列表</button>
+          <button class="sub-nav-item" v-if="canAccessWeeklyOverview" :class="{ active: route.name === 'weekly-report-overview' || (route.name === 'weekly-report-review' && route.query?.from === 'overview') }" @click="navigate('/weekly-overview')">周报汇总及考评</button>
+        </template>
+
+        <template v-else-if="activeGroup === 'dashboards'">
+          <button class="sub-nav-item" :class="{ active: route.name === 'my-stage-document-tasks' }" @click="navigate('/my-stage-document-tasks')">我的资料任务</button>
+        </template>
+
+        <template v-else-if="activeGroup === 'admin'">
+          <button class="sub-nav-item" :class="{ active: route.name === 'users' }" @click="navigate('/users')">用户管理</button>
+        </template>
       </div>
 
       <!-- 动态路由页面内容 -->
@@ -454,7 +391,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch, nextTick, onUnmounted, reactive } from 'vue';
+import { computed, onMounted, ref, watch, nextTick, onUnmounted } from 'vue';
 import { getCurrentUser, logout as logoutRequest } from './api/auth.js';
 import {
   clearAuthSession,
@@ -476,7 +413,6 @@ import ProjectCreatePage from './pages/ProjectCreatePage.vue';
 import ProjectDetailPage from './pages/ProjectDetailPage.vue';
 import ProjectDetailPageOld from './pages/ProjectDetailPageOld.vue';
 import ProjectListPage from './pages/ProjectListPage.vue';
-// 已移除 ProjectOverviewDashboardPage 导入
 import UserManagementPage from './pages/UserManagementPage.vue';
 import { useHashRouter } from './router.js';
 import {
@@ -487,7 +423,7 @@ import {
 // ===== 自定义导航 =====
 const { route, navigate: baseNavigate } = useHashRouter();
 
-const navigate = (path, options = {}) => {
+const navigate = (path) => {
   baseNavigate(path);
 };
 
@@ -500,30 +436,6 @@ const appMainRef = ref(null);
 
 const isSidebarOpen = ref(false);
 
-const openMenus = reactive({
-  projects: true,
-  dailyReports: true,
-  weeklyReports: true,
-  dashboards: true,
-  admin: true
-});
-
-function toggleMenu(menuName) {
-  openMenus[menuName] = !openMenus[menuName];
-}
-
-function isGroupActive(groupName) {
-  const map = {
-    projects: ['projects', 'project-create', 'project-detail', 'project-detail-old'],
-    dailyReports: ['daily-report', 'daily-reports', 'center-daily-report'],
-    weeklyReports: ['weekly-report', 'weekly-reports', 'weekly-report-review', 'weekly-report-overview'],
-    // 移除 project-overview-dashboard
-    dashboards: ['my-stage-document-tasks'],
-    admin: ['users']
-  };
-  return map[groupName]?.includes(route.value.name);
-}
-
 const toastVisible = ref(false);
 const toastMessage = ref('');
 const toastType = ref('error');
@@ -533,25 +445,33 @@ function toggleSidebar() { isSidebarOpen.value = !isSidebarOpen.value; }
 function closeSidebar() { isSidebarOpen.value = false; }
 function handleNavigate(path) { navigate(path); closeSidebar(); }
 
-const currentRouteLabel = computed(() => {
-  switch (route.value.name) {
-    case 'projects': return '项目列表';
-    case 'project-create': return '新建项目';
-    // case 'project-overview-dashboard': return '项目总览';  // 已移除
-    case 'project-detail': return '项目详情控制台';
-    case 'project-detail-old': return '老版项目详情';
-    case 'my-stage-document-tasks': return '我的资料任务';
-    case 'users': return '用户管理';
-    case 'daily-report': return '日报填写';
-    case 'daily-reports': return '我的日报列表';
-    case 'weekly-report': return '周报填写';
-    case 'weekly-reports': return '我的周报列表';
-    case 'weekly-report-review': return '周报详情';
-    case 'weekly-report-overview': return '周报汇总及考评';
-    case 'center-daily-report': return '中心日报汇总';
-    default: return '管理驾驶舱';
-  }
+// 计算当前高亮的一级导航
+const activeGroup = computed(() => {
+  const name = route.value.name;
+  if (['projects', 'project-create', 'project-detail', 'project-detail-old'].includes(name)) return 'projects';
+  if (['daily-report', 'daily-reports', 'center-daily-report'].includes(name)) return 'dailyReports';
+  if (['weekly-report', 'weekly-reports', 'weekly-report-review', 'weekly-report-overview'].includes(name)) return 'weeklyReports';
+  if (['my-stage-document-tasks'].includes(name)) return 'dashboards';
+  if (['users'].includes(name)) return 'admin';
+  return '';
 });
+
+// 点击一级导航跳转对应首个可用页面
+function handleGroupClick(group) {
+  if (group === 'projects') {
+    handleNavigate('/projects');
+  } else if (group === 'dailyReports') {
+    handleNavigate('/daily-report');
+  } else if (group === 'weeklyReports') {
+    if (isWeeklyReportUser.value) handleNavigate('/weekly-report');
+    else if (canAccessWeeklyReports.value) handleNavigate('/weekly-reports');
+    else if (canAccessWeeklyOverview.value) handleNavigate('/weekly-overview');
+  } else if (group === 'dashboards') {
+    handleNavigate('/my-stage-document-tasks');
+  } else if (group === 'admin') {
+    handleNavigate('/users');
+  }
+}
 
 function showToast(msg, type = 'error') {
   if (toastTimer) clearTimeout(toastTimer);
@@ -565,7 +485,7 @@ function hideToast() {
   toastVisible.value = false;
 }
 
-// 权限计算（无变化）
+// 权限计算
 const canAccessUserManagement = computed(
   () => currentUser.value?.isPlatformAdmin && currentUser.value?.organizationRole === 'system_admin'
 );
@@ -673,11 +593,20 @@ onMounted(restoreAuth);
   display: flex; align-items: center; justify-content: space-between; padding: 0 2rem;
   flex-shrink: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,21,41,0.03);
 }
+
+/* 左侧、中间、右侧三栏布局 */
 .header-left {
-  display: flex; align-items: center; height: 100%;
+  display: flex; align-items: center;
+  /* 宽度由内容撑开 */;
+}
+.header-center {
+  flex: 1;                       /* 占据剩余空间 */
+  display: flex;
+  justify-content: center;       /* 水平居中 */
 }
 .header-right {
   display: flex; align-items: center; gap: 1rem;
+  /* 宽度由内容撑开 */;
 }
 
 /* 品牌 Logo 区 */
@@ -691,7 +620,8 @@ onMounted(restoreAuth);
 
 /* ================== 桌面端横向导航 ================== */
 .desktop-nav {
-  display: flex; align-items: center; height: 100%; gap: 0.5rem; border-left: 1px solid #ebeef5; padding-left: 1.5rem;
+  display: flex; align-items: center; height: 100%; gap: 0.5rem;
+  /* 去除了左边框和左内边距，因为现在由中间容器控制居中 */
 }
 .nav-group {
   position: relative; height: 100%; display: flex; align-items: center;
@@ -701,36 +631,10 @@ onMounted(restoreAuth);
   border-radius: 6px; cursor: pointer; color: #606266; font-weight: 500; font-size: 0.9rem;
   transition: all 0.2s ease; user-select: none;
 }
-.nav-group:hover .nav-group-title { color: #3e63dd; background-color: #f4f6f9; }
+.nav-group-title:hover { color: #3e63dd; background-color: #f4f6f9; }
 .nav-group-title.is-active { color: #3e63dd; background-color: #ecf5ff; font-weight: 600; }
 
 .nav-icon { width: 18px; height: 18px; stroke: currentColor; flex-shrink: 0; }
-.chevron-icon { width: 14px; height: 14px; color: #909399; transition: transform 0.2s; flex-shrink: 0; }
-.nav-group:hover .chevron-icon { transform: rotate(180deg); color: #3e63dd; }
-
-/* 悬浮下拉菜单 */
-.nav-dropdown {
-  position: absolute; top: calc(100% - 6px); left: 0; min-width: 160px;
-  background: #ffffff; border: 1px solid #ebeef5; border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.08); padding: 0.5rem; z-index: 200;
-  opacity: 0; visibility: hidden; transform: translateY(10px);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.nav-dropdown--wide { min-width: 180px; }
-.nav-group:hover .nav-dropdown { opacity: 1; visibility: visible; transform: translateY(0); }
-
-/* 下拉菜单项 */
-.dropdown-item {
-  width: 100%; text-align: left; background: none; border: none; padding: 0.65rem 1rem;
-  border-radius: 4px; font-size: 0.85rem; color: #606266; cursor: pointer;
-  transition: all 0.2s ease; display: block;
-}
-.dropdown-item:hover { background-color: #f4f6f9; color: #3e63dd; }
-.dropdown-item.active { background-color: #ecf5ff; color: #3e63dd; font-weight: 600; }
-
-.dropdown-divider {
-  height: 1px; background-color: #ebeef5; margin: 0.5rem 0;
-}
 
 /* ================== 用户信息区 ================== */
 .current-user { display: flex; align-items: center; gap: 0.85rem; }
@@ -759,16 +663,30 @@ onMounted(restoreAuth);
   border-radius: 50%; animation: spin 0.7s linear infinite;
 }
 
-/* ================== 面包屑及主页面结构 ================== */
+/* ================== 主页面与二级导航栏 ================== */
 .main-wrapper { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
-.page-breadcrumb-bar {
-  padding: 0.8rem 2rem; background: #ffffff; border-bottom: 1px solid #ebeef5;
-  display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: #909399;
-  flex-shrink: 0; box-shadow: 0 1px 2px rgba(0,0,0,0.01);
+/* 横向二级导航栏 (居中) */
+.sub-nav-bar {
+  padding: 0 2rem; background: #ffffff; border-bottom: 1px solid #ebeef5;
+  display: flex; align-items: center; justify-content: center; /* 居中 */
+  gap: 0.5rem; height: 54px;
+  flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+  overflow-x: auto;
 }
-.breadcrumb-separator { color: #c0c4cc; margin: 0 0.25rem; }
-.breadcrumb-item--active { color: #303133; font-weight: 600; }
+.sub-nav-bar::-webkit-scrollbar { display: none; } /* 隐藏内部滚动条 */
+
+.sub-nav-item {
+  background: transparent; border: none; padding: 0.5rem 1rem;
+  border-radius: 4px; font-size: 0.875rem; color: #606266; cursor: pointer;
+  transition: all 0.2s ease; font-weight: 500; white-space: nowrap;
+}
+.sub-nav-item:hover { background-color: #f4f6f9; color: #3e63dd; }
+.sub-nav-item.active { background-color: #ecf5ff; color: #3e63dd; font-weight: 600; }
+
+.sub-nav-divider { 
+  width: 1px; height: 16px; background-color: #dcdfe6; margin: 0 0.25rem; flex-shrink: 0;
+}
 
 .app-main {
   flex: 1; overflow-y: auto; overflow-x: hidden; max-width: 100%; width: 100%;
@@ -832,6 +750,7 @@ onMounted(restoreAuth);
 
 @media (max-width: 1024px) {
   .desktop-nav { display: none; }
+  .header-center { display: none; } /* 移动端隐藏中间导航区 */
   .mobile-menu-toggle {
     display: flex; background: none; border: none; color: #606266; cursor: pointer;
     padding: 0.35rem; border-radius: 4px; transition: background-color 0.2s;
@@ -840,9 +759,9 @@ onMounted(restoreAuth);
   .mobile-menu-toggle svg { width: 24px; height: 24px; }
   
   .app-header { padding: 0 1.5rem; }
-  .page-breadcrumb-bar { padding: 0.8rem 1.5rem; }
+  .sub-nav-bar { padding: 0 1.5rem; }
   
-  /* 移动端抽屉栏 */
+  /* 移动端抽屉栏 (现已精简为纯一级导航) */
   .mobile-sidebar {
     display: flex; flex-direction: column; width: 250px; height: 100vh; background-color: #ffffff; 
     position: fixed; top: 0; bottom: 0; left: 0; z-index: 110; border-right: 1px solid #ebeef5;
@@ -863,30 +782,11 @@ onMounted(restoreAuth);
     border-radius: 6px; cursor: pointer; color: #303133; transition: background-color 0.2s, color 0.2s;
   }
   .mobile-nav-header:hover { background-color: #f4f6f9; color: #3e63dd; }
-  .mobile-nav-header.is-active { color: #3e63dd; }
+  .mobile-nav-header.is-active { color: #3e63dd; background-color: #ecf5ff; }
   
   .header-left-inner { display: flex; align-items: center; gap: 0.75rem; }
   .header-left-inner span { font-size: 0.9rem; font-weight: 600; }
-  .mobile-nav-header .chevron-icon { width: 16px; height: 16px; color: #909399; transition: transform 0.3s ease; }
-  .mobile-nav-header .chevron-icon.rotated { transform: rotate(180deg); }
   
-  .mobile-nav-children {
-    display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  .mobile-nav-children.is-open { grid-template-rows: 1fr; }
-  .nav-children-inner {
-    overflow: hidden; display: flex; flex-direction: column; margin-left: 1.35rem;
-    padding-left: 1.15rem; border-left: 1px solid #ebeef5; margin-top: 0.25rem; gap: 0.2rem;
-  }
-  
-  .nav-child-item {
-    width: 100%; padding: 0.6rem 0.85rem; background: transparent; border: none; border-radius: 4px;
-    display: flex; align-items: center; cursor: pointer; transition: all 0.2s ease;
-    font-family: inherit; color: #606266; text-align: left; font-size: 0.85rem; font-weight: 500;
-  }
-  .nav-child-item:hover { background-color: #f4f6f9; color: #3e63dd; }
-  .nav-child-item.active { background-color: #ecf5ff; color: #3e63dd; font-weight: 600; }
-
   .sidebar-overlay {
     display: block; position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.4);
     backdrop-filter: blur(2px); z-index: 105; animation: fadeInOverlay 0.25s ease-out;
@@ -896,7 +796,7 @@ onMounted(restoreAuth);
 
 @media (max-width: 768px) {
   .app-header { height: 60px; padding: 0 1rem; }
-  .page-breadcrumb-bar { padding: 0.8rem 1rem; }
+  .sub-nav-bar { padding: 0 1rem; }
   .user-info { display: none; }
   .brand-text { display: none; } /* 移动端过小可隐藏顶部文字，仅留Logo */
   .brand-logo-area { padding-right: 0; }

@@ -34,9 +34,14 @@ import {
 export const projectsRouter = Router();
 
 projectsRouter.get('/', requireAuth, asyncHandler(listProjectsHandler));
-// 日报和周报填写页需要在通用项目详情路由之前命中当前用户在研项目搜索。
-projectsRouter.get('/my-active', requireAuth, requireReportProjectSearchUser, asyncHandler(listMyActiveProjectsHandler));
 projectsRouter.post('/', requireAuth, asyncHandler(createProjectHandler));
+
+projectsRouter.get(
+  '/my-active',
+  requireAuth,
+  requireReportProjectSearchUser,
+  asyncHandler(listMyActiveProjectsHandler)
+);
 
 projectsRouter.put(
   '/:projectId/project-code',

@@ -86,6 +86,7 @@ export const env = {
       department: process.env.INITIAL_USER_DEPARTMENT || '',
       organizationRole: process.env.INITIAL_USER_ORGANIZATION_ROLE || 'system_admin',
       role: process.env.INITIAL_USER_ROLE || '系统管理员',
+      jobTitle: process.env.INITIAL_USER_JOB_TITLE || '',
       filePlatformUserId: process.env.INITIAL_USER_FILE_PLATFORM_USER_ID || ''
     }
   },

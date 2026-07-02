@@ -76,27 +76,30 @@
             </div>
             <div class="table-container">
               <div class="weekly-edit-table weekly-edit-table--summaries">
+                <!-- 表头 -->
                 <div class="weekly-edit-table__head">
-                  <span>工作任务</span>
-                  <span>工作目标</span>
+                  <span>项目名称</span>
+                  <span>工作内容</span>
                   <span>计划日期</span>
                   <span>完成状态</span>
                   <span>完成说明</span>
                   <span>完成日期</span>
                   <span class="text-right">操作</span>
                 </div>
+                <!-- 行 -->
                 <div
                   v-for="(summary, index) in form.summaries"
                   :key="summary.localId"
                   class="weekly-edit-table__row"
                 >
-                  <div class="form-field">
+                  <!-- 任务信息（含来源标签 + 项目选择） -->
+                  <div class="form-field task-field">
                     <div class="source-chip-row">
                       <span class="source-chip" :class="sourceChipClass(summary)">
                         {{ sourceTypeLabel(summary) }}
                       </span>
                       <span v-if="summary.missingDailyEvidence" class="source-chip source-chip--warning">
-                        缺少日报证据
+                        未填日报
                       </span>
                     </div>
                     <select
@@ -115,6 +118,8 @@
                       {{ fieldErrors[`summaries.${index}.workTask`] }}
                     </small>
                   </div>
+
+                  <!-- 工作目标 -->
                   <div class="form-field">
                     <textarea
                       v-model="summary.workTarget"
@@ -126,6 +131,8 @@
                       {{ fieldErrors[`summaries.${index}.workTarget`] }}
                     </small>
                   </div>
+
+                  <!-- 计划日期 -->
                   <div class="form-field">
                     <input
                       v-model="summary.plannedDate"
@@ -137,6 +144,8 @@
                       {{ fieldErrors[`summaries.${index}.plannedDate`] }}
                     </small>
                   </div>
+
+                  <!-- 完成状态 -->
                   <div class="form-field">
                     <select
                       v-model="summary.completionStatus"
@@ -151,6 +160,8 @@
                       {{ fieldErrors[`summaries.${index}.completionStatus`] }}
                     </small>
                   </div>
+
+                  <!-- 完成说明 -->
                   <div class="form-field">
                     <textarea
                       v-model="summary.completionDescription"
@@ -162,33 +173,46 @@
                       {{ fieldErrors[`summaries.${index}.completionDescription`] }}
                     </small>
                   </div>
+
+                  <!-- 完成日期 -->
                   <div class="form-field">
                     <input
                       v-model="summary.completedDate"
                       type="date"
                       class="form-control"
+                      :class="[
+                        summary.completionStatus !== 'completed' ? 'form-control--disabled' : '',
+                        { invalid: fieldErrors[`summaries.${index}.completedDate`] }
+                      ]"
                       :disabled="summary.completionStatus !== 'completed'"
-                      :class="{ invalid: fieldErrors[`summaries.${index}.completedDate`] }"
                     />
                     <small v-if="summary.completionStatus !== 'completed'" class="field-hint">
-                      进行中/未完成无需填写实际完成日期
+                      无需填写
                     </small>
                     <small v-if="fieldErrors[`summaries.${index}.completedDate`]" class="field-error">
                       {{ fieldErrors[`summaries.${index}.completedDate`] }}
                     </small>
                   </div>
-                  <div v-if="summary.missingDailyEvidence" class="summary-evidence-hint">
-                    本周未发现关联的已提交日报，暂记未完成。
-                    <button type="button" class="link-button" @click="openDailyBackfill(summary)">补填日报</button>
+
+                  <!-- 操作 -->
+                  <div class="row-actions">
+                    <button
+                      type="button"
+                      class="row-btn action-btn"
+                      :disabled="form.summaries.length === 1"
+                      @click="removeSummary(index)"
+                    >
+                      删除
+                    </button>
+                    <button
+                      v-if="summary.missingDailyEvidence"
+                      type="button"
+                      class="row-btn action-btn action-btn--link"
+                      @click="openDailyBackfill(summary)"
+                    >
+                      补日报
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    class="row-btn action-btn"
-                    :disabled="form.summaries.length === 1"
-                    @click="removeSummary(index)"
-                  >
-                    删除
-                  </button>
                 </div>
               </div>
             </div>
@@ -209,7 +233,7 @@
             <div class="table-container">
               <div class="weekly-edit-table weekly-edit-table--plans">
                 <div class="weekly-edit-table__head">
-                  <span>工作任务</span>
+                  <span>项目名称</span>
                   <span>工作目标</span>
                   <span>计划日期</span>
                   <span>责任人</span>
@@ -661,8 +685,8 @@ function buildPayload(status) {
 }
 
 function sourceTypeLabel(summary) {
-  if (summary.sourceType === 'weekly_plan') return '执行周计划';
-  if (summary.sourceType === 'ad_hoc') return '新增临时工作';
+  if (summary.sourceType === 'weekly_plan') return '周计划';
+  if (summary.sourceType === 'ad_hoc') return '新增';
   return '历史待确认';
 }
 
@@ -862,7 +886,7 @@ watch(
   flex-direction: column;
   gap: 1.5rem;
   padding: 1.5rem;
-  max-width: 1400px;
+  max-width: 1500px;
   margin: 0 auto;
   min-height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -1091,13 +1115,13 @@ watch(
 .input-wrapper input,
 .input-wrapper select {
   width: 100%;
-  padding: 0.5rem 1rem;
+  padding: 0.5rem 1.2rem;        /* 增宽 */
   border: none;
   background: transparent;
-  font-size: 0.9rem;
+  font-size: 0.95rem;            /* 增大字号 */
   color: #303133;
   outline: none;
-  height: 48px;
+  height: 50px;                  /* 增高 */
   box-sizing: border-box;
   font-family: inherit;
 }
@@ -1168,10 +1192,10 @@ watch(
 .source-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 1.4rem;
+  min-height: 1.6rem;            /* 略增高 */
   padding: 0 0.45rem;
   border-radius: 4px;
-  font-size: 0.75rem;
+  font-size: 0.8rem;             /* 增大字号 */
   line-height: 1.4;
   background: #eef2ff;
   color: #334155;
@@ -1204,16 +1228,6 @@ watch(
   font-size: 0.75rem;
 }
 
-.summary-evidence-hint {
-  align-self: stretch;
-  padding: 0.5rem;
-  border: 1px dashed #f59e0b;
-  border-radius: 4px;
-  color: #92400e;
-  font-size: 0.8rem;
-  background: #fffbeb;
-}
-
 .link-button {
   margin-left: 0.35rem;
   padding: 0;
@@ -1239,13 +1253,13 @@ watch(
   padding: 0.6rem 0.75rem;
   background: #fafafa;
   border-bottom: 2px solid #ebeef5;
-  font-size: 0.75rem;
+  font-size: 0.8rem;             /* 表头略大 */
   font-weight: 600;
   color: #909399;
   gap: 0.75rem;
 }
 .weekly-edit-table--summaries .weekly-edit-table__head {
-  grid-template-columns: 1.5fr 1.5fr 0.9fr 1fr 1.5fr 0.9fr 0.7fr;
+  grid-template-columns: 1.6fr 1.8fr 0.8fr 0.9fr 1.6fr 0.8fr 0.5fr;
 }
 .weekly-edit-table--plans .weekly-edit-table__head {
   grid-template-columns: 1.8fr 1.8fr 0.9fr 1.2fr 0.7fr;
@@ -1263,7 +1277,7 @@ watch(
   transition: background 0.2s ease;
 }
 .weekly-edit-table--summaries .weekly-edit-table__row {
-  grid-template-columns: 1.5fr 1.5fr 0.9fr 1fr 1.5fr 0.9fr 0.7fr;
+  grid-template-columns: 1.6fr 1.8fr 0.8fr 0.9fr 1.6fr 0.8fr 0.5fr;
 }
 .weekly-edit-table--plans .weekly-edit-table__row {
   grid-template-columns: 1.8fr 1.8fr 0.9fr 1.2fr 0.7fr;
@@ -1272,11 +1286,11 @@ watch(
   background: #fdfdfe;
 }
 
-/* 表单控件（输入框 / 文本域） */
+/* ===== 统一表单控件（核心修改） ===== */
 .form-control {
   width: 100%;
-  padding: 0.35rem 0.5rem;
-  font-size: 0.85rem;
+  padding: 0.4rem 0.6rem;        /* 增大内边距 */
+  font-size: 0.95rem;            /* 增大字号 */
   color: #303133;
   border: 1px solid #dcdfe6;
   border-radius: 4px;
@@ -1284,7 +1298,7 @@ watch(
   transition: border-color 0.2s ease;
   outline: none;
   font-family: inherit;
-  height: 36px;
+  height: 40px;                  /* 增高 */
   box-sizing: border-box;
 }
 .form-control:focus {
@@ -1298,10 +1312,19 @@ watch(
   border-color: #f56c6c;
   box-shadow: 0 0 0 2px rgba(245, 108, 108, 0.2);
 }
+.form-control--disabled {
+  background: #f5f7fa;
+  color: #909399;
+  cursor: not-allowed;
+}
+.form-control--disabled:focus {
+  border-color: #dcdfe6;
+  box-shadow: none;
+}
 
 .form-textarea {
-  height: 36px;
-  min-height: 36px;
+  height: 40px;                  /* 增高 */
+  min-height: 40px;              /* 增高 */
   resize: vertical;
   overflow-y: auto;
   line-height: 1.4;
@@ -1316,12 +1339,29 @@ watch(
   font-size: 0.7rem;
   color: #f56c6c;
 }
+.task-field .form-control {
+  height: 40px;                  /* 统一增高 */
+}
+
+/* 大屏下对齐补偿（第一列含标签+下拉框，高度增加后其他列下移） */
+@media (min-width: 901px) {
+  .weekly-edit-table--summaries .weekly-edit-table__row > .form-field:not(.task-field),
+  .weekly-edit-table--summaries .weekly-edit-table__row > .row-actions {
+    margin-top: 2.2rem;          /* 原1.75rem，补偿标签高度增加 */
+  }
+}
 
 .weekly-edit-table__row .row-btn {
   margin-top: 0.15rem;
 }
 
-/* 行内操作按钮 */
+.row-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
+}
+
 .row-btn {
   padding: 0.2rem 0.6rem;
   font-size: 0.75rem;
@@ -1333,6 +1373,7 @@ watch(
   border: 1px solid #dcdfe6;
   color: #606266;
   white-space: nowrap;
+  text-align: center;
 }
 .row-btn:disabled {
   opacity: 0.4;
@@ -1347,6 +1388,15 @@ watch(
   border-color: #fbc4c4;
   color: #f56c6c;
   background: #fef0f0;
+}
+.action-btn--link {
+  border-color: #d9ecff;
+  color: #1d4ed8;
+  background: #f5faff;
+}
+.action-btn--link:hover:not(:disabled) {
+  background: #ecf5ff;
+  border-color: #c6e2ff;
 }
 
 /* ===== 底部操作按钮 ===== */
@@ -1389,8 +1439,13 @@ watch(
     border-radius: 4px;
     margin-bottom: 0.5rem;
   }
-  .weekly-edit-table__row .row-btn {
+  .weekly-edit-table__row .row-btn,
+  .weekly-edit-table__row .row-actions {
     align-self: flex-start;
+  }
+  .row-actions {
+    flex-direction: row;
+    gap: 0.5rem;
   }
 }
 </style>

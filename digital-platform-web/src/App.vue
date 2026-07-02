@@ -46,7 +46,7 @@
                 <rect x="14" y="12" width="7" height="9" />
                 <rect x="3" y="16" width="7" height="5" />
               </svg>
-              <span>项目主数据</span>
+              <span>项目管理</span>
               <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="6 9 12 15 18 9"/>
               </svg>
@@ -57,7 +57,7 @@
             </div>
           </div>
           
-          <!-- 日报管理 (拆分后的一级目录) -->
+          <!-- 日报管理 -->
           <div 
             v-if="!canAccessUserManagement && (isDailyReportUser || canAccessCenterDailyReport)" 
             class="nav-group"
@@ -81,7 +81,7 @@
             </div>
           </div>
 
-          <!-- 周报管理 (拆分后的一级目录) -->
+          <!-- 周报管理 -->
           <div 
             v-if="!canAccessUserManagement && (isWeeklyReportUser || canAccessWeeklyReports || canAccessWeeklyOverview)" 
             class="nav-group"
@@ -105,7 +105,7 @@
             </div>
           </div>
 
-          <!-- 过程追踪看板 -->
+          <!-- 过程追踪看板（已移除“项目总览”按钮，仅保留“我的资料任务”） -->
           <div v-if="!canAccessUserManagement" class="nav-group">
             <div class="nav-group-title" :class="{ 'is-active': isGroupActive('dashboards') }">
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -118,7 +118,6 @@
               </svg>
             </div>
             <div class="nav-dropdown">
-              <button class="dropdown-item" :class="{ active: route.name === 'project-overview-dashboard' }" @click="handleNavigate('/projects/overview-dashboard')">项目总览</button>
               <button class="dropdown-item" :class="{ active: route.name === 'my-stage-document-tasks' }" @click="handleNavigate('/my-stage-document-tasks')">我的资料任务</button>
             </div>
           </div>
@@ -195,7 +194,7 @@
                 <rect x="14" y="12" width="7" height="9" />
                 <rect x="3" y="16" width="7" height="5" />
               </svg>
-              <span>项目主数据</span>
+              <span>项目管理</span>
             </div>
             <svg class="chevron-icon" :class="{ 'rotated': openMenus.projects }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="6 9 12 15 18 9"/>
@@ -259,7 +258,7 @@
           </div>
         </div>
 
-        <!-- 过程追踪看板 -->
+        <!-- 过程追踪看板（已移除“项目总览”按钮） -->
         <div v-if="!canAccessUserManagement" class="mobile-nav-group">
           <div class="mobile-nav-header" :class="{ 'is-active': isGroupActive('dashboards') }" @click="toggleMenu('dashboards')">
             <div class="header-left-inner">
@@ -275,7 +274,6 @@
           </div>
           <div class="mobile-nav-children" :class="{ 'is-open': openMenus.dashboards }">
             <div class="nav-children-inner">
-              <button class="nav-child-item" :class="{ active: route.name === 'project-overview-dashboard' }" @click="handleNavigate('/projects/overview-dashboard')">项目总览</button>
               <button class="nav-child-item" :class="{ active: route.name === 'my-stage-document-tasks' }" @click="handleNavigate('/my-stage-document-tasks')">我的资料任务</button>
             </div>
           </div>
@@ -313,7 +311,7 @@
     <!-- 主体内区域容器 -->
     <div class="main-wrapper">
       
-      <!-- 面包屑 (独立于副头部条中) -->
+      <!-- 面包屑 -->
       <div class="page-breadcrumb-bar">
         <span class="breadcrumb-item">数字化管理平台</span>
         <span class="breadcrumb-separator">/</span>
@@ -330,13 +328,6 @@
         />
         <ProjectCreatePage
           v-else-if="route.name === 'project-create'"
-          :auth-token="authToken"
-          :current-user="currentUser"
-          :navigate="navigate"
-          @auth-expired="handleAuthExpired"
-        />
-        <ProjectOverviewDashboardPage
-          v-else-if="route.name === 'project-overview-dashboard'"
           :auth-token="authToken"
           :current-user="currentUser"
           :navigate="navigate"
@@ -472,7 +463,7 @@ import MyStageDocumentTasksPage from './pages/MyStageDocumentTasksPage.vue';
 import ProjectCreatePage from './pages/ProjectCreatePage.vue';
 import ProjectDetailPage from './pages/ProjectDetailPage.vue';
 import ProjectListPage from './pages/ProjectListPage.vue';
-import ProjectOverviewDashboardPage from './pages/ProjectOverviewDashboardPage.vue';
+// 已移除 ProjectOverviewDashboardPage 导入
 import UserManagementPage from './pages/UserManagementPage.vue';
 import { useHashRouter } from './router.js';
 import {
@@ -513,7 +504,8 @@ function isGroupActive(groupName) {
     projects: ['projects', 'project-create', 'project-detail'],
     dailyReports: ['daily-report', 'daily-reports', 'center-daily-report'],
     weeklyReports: ['weekly-report', 'weekly-reports', 'weekly-report-review', 'weekly-report-overview'],
-    dashboards: ['project-overview-dashboard', 'my-stage-document-tasks'],
+    // 移除 project-overview-dashboard
+    dashboards: ['my-stage-document-tasks'],
     admin: ['users']
   };
   return map[groupName]?.includes(route.value.name);
@@ -532,7 +524,7 @@ const currentRouteLabel = computed(() => {
   switch (route.value.name) {
     case 'projects': return '项目列表';
     case 'project-create': return '新建项目';
-    case 'project-overview-dashboard': return '项目总览';
+    // case 'project-overview-dashboard': return '项目总览';  // 已移除
     case 'project-detail': return '项目详情控制台';
     case 'my-stage-document-tasks': return '我的资料任务';
     case 'users': return '用户管理';
@@ -559,7 +551,7 @@ function hideToast() {
   toastVisible.value = false;
 }
 
-// 权限计算
+// 权限计算（无变化）
 const canAccessUserManagement = computed(
   () => currentUser.value?.isPlatformAdmin && currentUser.value?.organizationRole === 'system_admin'
 );

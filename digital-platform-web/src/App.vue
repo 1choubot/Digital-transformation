@@ -54,6 +54,8 @@
             <div class="nav-dropdown">
               <button class="dropdown-item" :class="{ active: route.name === 'projects' }" @click="handleNavigate('/projects')">项目列表</button>
               <button class="dropdown-item" :class="{ active: route.name === 'project-create' }" @click="handleNavigate('/projects/new')">新建项目</button>
+              <div class="dropdown-divider"></div>
+              <button class="dropdown-item" :class="{ active: route.name === 'project-detail-old' }" @click="handleNavigate('/projects-old/1')">老版详情页</button>
             </div>
           </div>
           
@@ -204,6 +206,7 @@
             <div class="nav-children-inner">
               <button class="nav-child-item" :class="{ active: route.name === 'projects' }" @click="handleNavigate('/projects')">项目列表</button>
               <button class="nav-child-item" :class="{ active: route.name === 'project-create' }" @click="handleNavigate('/projects/new')">新建项目</button>
+              <button class="nav-child-item" :class="{ active: route.name === 'project-detail-old' }" @click="handleNavigate('/projects-old/1')">老版详情页</button>
             </div>
           </div>
         </div>
@@ -338,6 +341,15 @@
           :auth-token="authToken"
           :current-user="currentUser"
           :project-id="route.params.projectId"
+          :view="route.params.view || ''"
+          :route-params="route.params"
+          :navigate="navigate"
+        />
+        <ProjectDetailPageOld
+          v-else-if="route.name === 'project-detail-old'"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          :project-id="route.params.projectId"
           :navigate="navigate"
         />
         <MyStageDocumentTasksPage
@@ -462,6 +474,7 @@ import LoginPage from './pages/LoginPage.vue';
 import MyStageDocumentTasksPage from './pages/MyStageDocumentTasksPage.vue';
 import ProjectCreatePage from './pages/ProjectCreatePage.vue';
 import ProjectDetailPage from './pages/ProjectDetailPage.vue';
+import ProjectDetailPageOld from './pages/ProjectDetailPageOld.vue';
 import ProjectListPage from './pages/ProjectListPage.vue';
 // 已移除 ProjectOverviewDashboardPage 导入
 import UserManagementPage from './pages/UserManagementPage.vue';
@@ -501,7 +514,7 @@ function toggleMenu(menuName) {
 
 function isGroupActive(groupName) {
   const map = {
-    projects: ['projects', 'project-create', 'project-detail'],
+    projects: ['projects', 'project-create', 'project-detail', 'project-detail-old'],
     dailyReports: ['daily-report', 'daily-reports', 'center-daily-report'],
     weeklyReports: ['weekly-report', 'weekly-reports', 'weekly-report-review', 'weekly-report-overview'],
     // 移除 project-overview-dashboard
@@ -526,6 +539,7 @@ const currentRouteLabel = computed(() => {
     case 'project-create': return '新建项目';
     // case 'project-overview-dashboard': return '项目总览';  // 已移除
     case 'project-detail': return '项目详情控制台';
+    case 'project-detail-old': return '老版项目详情';
     case 'my-stage-document-tasks': return '我的资料任务';
     case 'users': return '用户管理';
     case 'daily-report': return '日报填写';

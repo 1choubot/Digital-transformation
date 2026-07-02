@@ -30,6 +30,11 @@ function parseHash() {
     return { name: 'project-overview-dashboard', path, query };
   }
 
+  const oldDetailMatch = path.match(/^\/projects-old\/(\d+)$/);
+  if (oldDetailMatch) {
+    return { name: 'project-detail-old', path, params: { projectId: oldDetailMatch[1] }, query };
+  }
+
   if (path === '/users') {
     return { name: 'users', path, query };
   }
@@ -75,6 +80,11 @@ function parseHash() {
   const weeklyReportReviewMatch = path.match(/^\/weekly-report-review\/(\d+)$/);
   if (weeklyReportReviewMatch) {
     return { name: 'weekly-report-review', path, params: { reportId: weeklyReportReviewMatch[1] }, query };
+  }
+
+  const detailWithViewMatch = path.match(/^\/projects\/(\d+)\/(.+)$/);
+  if (detailWithViewMatch) {
+    return { name: 'project-detail', path, params: { projectId: detailWithViewMatch[1], view: detailWithViewMatch[2] }, query };
   }
 
   const detailMatch = path.match(/^\/projects\/(\d+)$/);

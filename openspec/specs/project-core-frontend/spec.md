@@ -1946,3 +1946,41 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **AND** 前端 MUST NOT 将其展示为 v20260629 新目标模板新增资料
 - **AND** 前端 MUST NOT 因该卡片隐藏、折叠或删除下方旧资料清单
 
+### Requirement: 旧资料清单默认折叠为兼容资料区
+
+项目核心前端 MUST 在当前运行 64 项资料已由上方 workspace card 覆盖后，将项目详情页下方旧资料清单展示为默认折叠的兼容资料区，并 MUST 保持上方项目工作区产出卡片为唯一主操作区。
+
+#### Scenario: 项目详情页默认折叠兼容资料区
+- **WHEN** 用户进入项目详情页
+- **THEN** 前端 MUST 默认不直接铺开下方旧资料清单
+- **AND** 前端 MUST 展示“兼容资料区”或等价旧资料兼容语义标题
+- **AND** 前端 MUST 展示摘要说明当前资料已迁移到上方项目工作区处理，本区域仅用于旧模板兼容查看
+
+#### Scenario: 兼容资料区可展开收起
+- **WHEN** 用户点击兼容资料区展开或收起按钮
+- **THEN** 前端 MUST 切换下方旧资料清单的展开状态
+- **AND** 展开后 MUST 继续展示原旧资料清单内容
+- **AND** 收起后 MUST 保留兼容资料区标题、摘要和展开入口
+
+#### Scenario: 上方 workspace card 仍是唯一主操作区
+- **WHEN** 资料已经由上方 workspace card 覆盖
+- **THEN** 前端 MUST 继续将上方产出卡片作为资料主操作入口
+- **AND** 前端 MUST NOT 因兼容资料区展开而恢复旧资料清单中的主操作按钮
+- **AND** `1.1 / 1.2 / 1.3` 在线表单和 `1.2` 专用评价审批入口 MUST 不受兼容资料区折叠影响
+
+#### Scenario: 兼容资料区折叠时主操作反馈可见
+- **WHEN** 用户在上方 workspace card 执行提交、审核、退回、返工、不适用、责任人或附件操作
+- **THEN** 前端 MUST 在兼容资料区折叠时仍展示成功或错误反馈
+- **AND** 前端 MUST NOT 将主操作反馈只渲染在折叠后的旧资料清单内部
+
+#### Scenario: 兼容定位入口继续可用
+- **WHEN** 用户展开兼容资料区查看旧资料清单
+- **THEN** 前端 MUST 保留“到上方产出卡片处理”或等价定位入口
+- **AND** 定位入口 MUST 继续定位到对应 workspace card
+- **AND** 前端 MUST NOT 将定位行为改成错误路由、not-found 页面或无效 hash 路由
+
+#### Scenario: 桌面和移动布局不重叠
+- **WHEN** 用户在桌面或移动 viewport 查看项目详情页
+- **THEN** 兼容资料区标题、摘要、展开按钮和展开后的旧资料清单 MUST 不重叠、不溢出
+- **AND** 按钮文案和状态说明 MUST 在小屏下保持可识别和可点击
+

@@ -2,10 +2,10 @@
   <section class="panel stage-documents stage-documents--legacy">
     <div class="panel-heading">
       <div>
-        <span class="section-eyebrow">辅助兼容区</span>
-        <h3>旧资料清单与资料级状态</h3>
+        <span class="section-eyebrow">旧模板兼容明细</span>
+        <h3>兼容资料区明细</h3>
         <p class="manual-status-note">
-          本区域用于查看资料级状态和处理尚未配置完整蓝色节点的阶段；立项阶段 1.1 / 1.2 / 1.3 主操作请在上方节点产出卡片完成。
+          本区域用于旧模板兼容查看和资料级状态核对；立项阶段 1.1 / 1.2 / 1.3 主操作请在上方节点产出卡片完成。
           已迁移到上方产出卡片的资料，本区域不再显示主操作按钮，只保留只读摘要、兼容提示和定位入口。
           阶段资料按 completionMode 计算完成状态：提交即完成资料提交后完成，需审核资料审核通过后完成，条件资料未触发时不阻塞。
           附件保存在在线平台，不展示文件平台归档状态。

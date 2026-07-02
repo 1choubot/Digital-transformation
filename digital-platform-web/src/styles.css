@@ -1175,6 +1175,38 @@ p {
   background: #f8fafc;
 }
 
+.legacy-compatibility-section {
+  display: grid;
+  gap: 12px;
+}
+
+.legacy-compatibility-section__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid #d9e1ea;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.legacy-compatibility-section__summary > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.legacy-compatibility-section__summary h3 {
+  color: #18202a;
+  font-size: 15px;
+}
+
+.legacy-compatibility-section__toggle {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .operation-log-panel {
   overflow: hidden;
 }
@@ -2397,6 +2429,15 @@ p {
     display: grid;
   }
 
+  .legacy-compatibility-section__summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .legacy-compatibility-section__toggle {
+    width: fit-content;
+  }
+
   .project-workspace__stage-nav {
     position: static;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2549,6 +2590,7 @@ p {
   }
 
   .overview-filters .primary-button,
+  .legacy-compatibility-section__toggle,
   .overview-project__main .ghost-button {
     width: 100%;
   }

@@ -124,6 +124,23 @@
         </div>
       </section>
 
+      <section
+        v-if="actionMessage"
+        class="state-panel state-panel--inline state-panel--success"
+        role="status"
+        aria-live="polite"
+      >
+        <p>{{ actionMessage }}</p>
+      </section>
+
+      <section
+        v-if="actionErrorMessage"
+        class="state-panel state-panel--inline state-panel--error"
+        role="alert"
+      >
+        <p>{{ actionErrorMessage }}</p>
+      </section>
+
       <ProjectOperationLogPanel
         v-if="canViewProjectAudit"
         :loading="operationLogsLoading"
@@ -144,42 +161,66 @@
         @advance="advanceCurrentStage"
       />
 
-      <ProjectStageDocumentChecklist
+      <section
         id="stage-document-checklist"
-        :checklist="checklist"
-        :loading="checklistLoading"
-        :error-message="checklistErrorMessage"
-        :is-checklist-empty="isChecklistEmpty"
-        :action-message="actionMessage"
-        :action-error-message="actionErrorMessage"
-        :responsibility-candidates-error-message="responsibilityCandidatesErrorMessage"
-        :responsibility-candidates-loading="responsibilityCandidatesLoading"
-        :responsibility-candidates="visibleResponsibilityCandidates"
-        :responsibility-selections="responsibilitySelections"
-        :can-submit-document="canSubmitDocument"
-        :can-confirm-return-document="canConfirmReturnDocument"
-        :can-manage-responsibility="canManageResponsibility"
-        :can-change-applicability="canChangeApplicability"
-        :return-reasons="returnReasons"
-        :not-applicable-reasons="notApplicableReasons"
-        :is-action-pending="isActionPending"
-        :get-attachment-state="getAttachmentState"
-        :migrated-workspace-document-keys="migratedWorkspaceDocumentKeys"
-        @submit-document="submitDocument"
-        @confirm-document="confirmDocument"
-        @return-document="returnDocument"
-        @approve-initiation-review-node="approveInitiationNode"
-        @return-initiation-review-node="returnInitiationNode"
-        @complete-revision-document="completeRevisionDocument"
-        @mark-not-applicable="markNotApplicable"
-        @restore-applicable="restoreApplicable"
-        @save-responsible-user="saveResponsibleUser"
-        @clear-responsible-user="clearResponsibleUser"
-        @upload-attachment="uploadAttachment"
-        @download-attachment="downloadAttachment"
-        @delete-attachment="deleteAttachment"
-        @locate-output-card="locateWorkspaceOutputCard"
-      />
+        class="legacy-compatibility-section"
+        :class="{ 'legacy-compatibility-section--expanded': isLegacyChecklistExpanded }"
+      >
+        <div class="legacy-compatibility-section__summary">
+          <div>
+            <span class="section-eyebrow">旧模板兼容查看</span>
+            <h3>兼容资料区</h3>
+            <p class="manual-status-note">
+              当前 64 项资料已迁移到上方项目工作区产出卡片处理，本区域仅用于旧模板兼容查看和历史状态核对。
+            </p>
+          </div>
+          <button
+            type="button"
+            class="ghost-button legacy-compatibility-section__toggle"
+            :aria-expanded="isLegacyChecklistExpanded"
+            aria-controls="stage-document-checklist-content"
+            @click="isLegacyChecklistExpanded = !isLegacyChecklistExpanded"
+          >
+            {{ isLegacyChecklistExpanded ? '收起兼容资料区' : '展开兼容资料区' }}
+          </button>
+        </div>
+
+        <ProjectStageDocumentChecklist
+          v-if="isLegacyChecklistExpanded"
+          id="stage-document-checklist-content"
+          :checklist="checklist"
+          :loading="checklistLoading"
+          :error-message="checklistErrorMessage"
+          :is-checklist-empty="isChecklistEmpty"
+          :responsibility-candidates-error-message="responsibilityCandidatesErrorMessage"
+          :responsibility-candidates-loading="responsibilityCandidatesLoading"
+          :responsibility-candidates="visibleResponsibilityCandidates"
+          :responsibility-selections="responsibilitySelections"
+          :can-submit-document="canSubmitDocument"
+          :can-confirm-return-document="canConfirmReturnDocument"
+          :can-manage-responsibility="canManageResponsibility"
+          :can-change-applicability="canChangeApplicability"
+          :return-reasons="returnReasons"
+          :not-applicable-reasons="notApplicableReasons"
+          :is-action-pending="isActionPending"
+          :get-attachment-state="getAttachmentState"
+          :migrated-workspace-document-keys="migratedWorkspaceDocumentKeys"
+          @submit-document="submitDocument"
+          @confirm-document="confirmDocument"
+          @return-document="returnDocument"
+          @approve-initiation-review-node="approveInitiationNode"
+          @return-initiation-review-node="returnInitiationNode"
+          @complete-revision-document="completeRevisionDocument"
+          @mark-not-applicable="markNotApplicable"
+          @restore-applicable="restoreApplicable"
+          @save-responsible-user="saveResponsibleUser"
+          @clear-responsible-user="clearResponsibleUser"
+          @upload-attachment="uploadAttachment"
+          @download-attachment="downloadAttachment"
+          @delete-attachment="deleteAttachment"
+          @locate-output-card="locateWorkspaceOutputCard"
+        />
+      </section>
     </template>
   </section>
 </template>
@@ -282,6 +323,7 @@ const selectedWorkspaceStageKey = ref('');
 const selectedWorkspaceNodeKey = ref('');
 const lastAppliedWorkspaceRouteKey = ref('');
 const manualWorkspaceSelectionRouteKey = ref('');
+const isLegacyChecklistExpanded = ref(false);
 const activeOnlineFormDocumentId = ref(null);
 const activeOnlineForm = ref(null);
 const onlineFormData = reactive({});
@@ -566,7 +608,12 @@ async function locateWorkspaceOutputCard(document) {
   workspaceElement?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function scrollToStageDocumentChecklist(target = null) {
+async function scrollToStageDocumentChecklist(target = null) {
+  if (!isLegacyChecklistExpanded.value) {
+    isLegacyChecklistExpanded.value = true;
+    await nextTick();
+  }
+
   const documentCard = findStageDocumentChecklistCard(target);
   if (documentCard) {
     documentCard.scrollIntoView({ behavior: 'smooth', block: 'center' });

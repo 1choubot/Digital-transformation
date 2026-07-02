@@ -66,8 +66,12 @@ function formatWorkspaceStatus(status) {
     pending_review: '待处理',
     blocked_by_rework: '返工阻塞',
     returned_for_rework: '需重填',
+    not_applicable: '不适用',
+    shell_placeholder: 'Shell 占位',
+    legacy_document_unavailable: '旧资料不可见',
     not_configured: '未配置',
-    legacy_checklist_available: '旧清单入口'
+    legacy_checklist_available: '旧清单入口',
+    process_node: '过程节点'
   }[status] || status || '-';
 }
 

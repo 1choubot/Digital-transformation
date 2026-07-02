@@ -1660,6 +1660,11 @@ p {
   background: #fffbeb;
 }
 
+.stage-document-card--focused {
+  outline: 3px solid rgba(34, 109, 104, 0.28);
+  outline-offset: 3px;
+}
+
 .stage-document-card__main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

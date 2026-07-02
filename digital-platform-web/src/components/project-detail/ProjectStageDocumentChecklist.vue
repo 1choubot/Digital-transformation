@@ -132,6 +132,8 @@
             v-for="document in stage.documents"
             :key="document.documentCode"
             class="stage-document-card"
+            :data-stage-document-id="document.id || null"
+            :data-stage-document-code="document.documentCode || null"
             :class="{
               'stage-document-card--not-applicable': !isApplicable(document),
               'stage-document-card--revision-required': isRevisionRequired(document)

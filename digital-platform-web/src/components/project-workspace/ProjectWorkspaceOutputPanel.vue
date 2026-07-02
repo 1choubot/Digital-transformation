@@ -42,16 +42,21 @@
         </div>
         <article
           v-for="output in node.outputs"
-          :key="output.documentId || output.documentCode"
+          :key="output.outputKey || output.documentId || output.documentCode || output.targetOutputCode"
           class="project-workspace__output"
         >
           <div class="stage-document-card__main">
             <div class="stage-document-card__identity">
-              <span class="stage-document-code mono">{{ output.documentCode }}</span>
+              <span class="stage-document-code mono">{{ output.targetOutputCode || output.documentCode || '-' }}</span>
               <strong>{{ output.documentName }}</strong>
+              <small v-if="output.legacyDocumentCode" class="inline-muted">
+                旧资料 {{ output.legacyDocumentCode }}{{ output.legacyDocumentName ? ` ${output.legacyDocumentName}` : '' }}
+              </small>
             </div>
             <div class="stage-document-card__badges">
               <span class="stage-document-pill">{{ formatWorkspaceStatus(output.status) }}</span>
+              <span class="stage-document-pill">{{ formatRequirementType(output.requirementType, output.isRequired) }}</span>
+              <span class="stage-document-pill">{{ formatOutputKind(output.outputKind) }}</span>
             </div>
           </div>
 
@@ -59,6 +64,10 @@
             <div>
               <dt>责任人</dt>
               <dd>{{ formatWorkspaceResponsible(output) }}</dd>
+            </div>
+            <div>
+              <dt>责任角色</dt>
+              <dd>{{ output.targetResponsibleRole || output.defaultResponsibilityRole || '-' }}</dd>
             </div>
             <div>
               <dt>资料状态</dt>
@@ -69,8 +78,16 @@
               <dd>{{ formatCompletionStatus(output.completionStatus) }}</dd>
             </div>
             <div>
-              <dt>可分配责任人</dt>
-              <dd>{{ output.permissions?.canManageResponsibility ? '可分配' : '不可分配' }}</dd>
+              <dt>完成规则</dt>
+              <dd>{{ formatCompletionMode(output.completionMode) }}</dd>
+            </div>
+            <div>
+              <dt>权限入口</dt>
+              <dd>{{ formatPermissionSummary(output) }}</dd>
+            </div>
+            <div>
+              <dt>旧清单定位</dt>
+              <dd>{{ formatLegacyDocumentTarget(output) }}</dd>
             </div>
           </dl>
 
@@ -116,7 +133,15 @@
             >
               {{ activeOnlineFormDocumentId === output.documentId ? '正在查看在线表单' : '填写资料/查看在线表单' }}
             </button>
-            <span v-else class="inline-muted">该产出暂无在线表单入口。</span>
+            <button
+              v-else-if="canLocateLegacyChecklist(output)"
+              type="button"
+              class="ghost-button"
+              @click="$emit('open-legacy-checklist', output)"
+            >
+              定位旧资料清单
+            </button>
+            <span v-else class="inline-muted">{{ formatUnavailableActionText(output) }}</span>
           </div>
 
           <ProjectInitiationReviewPanel
@@ -342,13 +367,17 @@ function formatWorkspaceStatus(status) {
     blocked_by_rework: '返工阻塞',
     returned_for_rework: '需重填',
     not_configured: '未配置',
-    legacy_checklist_available: '旧清单入口'
+    not_applicable: '不适用',
+    shell_placeholder: 'Shell 占位',
+    legacy_document_unavailable: '旧资料不可见',
+    legacy_checklist_available: '旧清单入口',
+    process_node: '过程节点'
   }[status] || status || '-';
 }
 
 function formatWorkspaceResponsible(output) {
   if (!output?.responsibleUser) {
-    return output?.documentCode === '1.3' ? '营销中心负责人' : '未分配';
+    return output?.targetResponsibleRole || output?.defaultResponsibilityRole || (output?.documentCode === '1.3' ? '营销中心负责人' : '未分配');
   }
 
   return output.responsibleUser.name || output.responsibleUser.account || `用户 ${output.responsibleUser.id}`;
@@ -365,5 +394,79 @@ function formatBaseStatus(status) {
 
 function formatCompletionStatus(status) {
   return status ? formatCompletionStatusLabel(status) : '-';
+}
+
+function formatCompletionMode(mode) {
+  return {
+    submit_only: '提交即完成',
+    approval_required: '提交后审核',
+    conditional_submit: '条件触发提交',
+    conditional_approval: '条件触发审核'
+  }[mode] || mode || '-';
+}
+
+function formatRequirementType(requirementType, isRequired) {
+  if (requirementType === 'conditional') {
+    return '条件触发';
+  }
+
+  if (requirementType === 'to_be_confirmed') {
+    return '待确认';
+  }
+
+  return isRequired === false ? '非必填' : '必填';
+}
+
+function formatOutputKind(outputKind) {
+  return {
+    draft: '草稿',
+    final: '成品',
+    multi_node_final: '多节点成品'
+  }[outputKind] || '成品';
+}
+
+function formatPermissionSummary(output) {
+  if (output?.formAvailable) {
+    return '在线表单';
+  }
+
+  if (canLocateLegacyChecklist(output)) {
+    return '定位旧清单';
+  }
+
+  return '仅展示';
+}
+
+function canLocateLegacyChecklist(output) {
+  return (
+    !output?.formAvailable &&
+    output?.legacyChecklistTarget?.available === true &&
+    (output?.actionHints || []).includes('locate_legacy_checklist')
+  );
+}
+
+function formatLegacyDocumentTarget(output) {
+  const target = output?.legacyChecklistTarget;
+  if (target?.available) {
+    return target.documentCode ? `${target.documentCode} 可定位` : '可定位';
+  }
+
+  if (output?.legacyDocumentCode) {
+    return `${output.legacyDocumentCode} 未返回`;
+  }
+
+  return '无旧资料';
+}
+
+function formatUnavailableActionText(output) {
+  if (output?.formKey && !output?.formAvailable) {
+    return '关联资料未初始化，暂不能打开在线表单。';
+  }
+
+  if (output?.legacyDocumentCode) {
+    return '旧资料清单未返回对应资料，暂不能定位。';
+  }
+
+  return '目标产出尚未初始化为当前项目资料。';
 }
 </script>

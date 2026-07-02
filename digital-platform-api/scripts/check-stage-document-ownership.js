@@ -141,7 +141,12 @@ function findWorkspaceOutput(workspace, documentCode) {
   const output = workspace.stages
     .flatMap((stage) => stage.nodes || [])
     .flatMap((node) => node.outputs || [])
-    .find((candidate) => candidate.documentCode === documentCode);
+    .find(
+      (candidate) =>
+        candidate.documentCode === documentCode ||
+        candidate.legacyDocumentCode === documentCode ||
+        candidate.targetOutputCode === documentCode
+    );
   assert.ok(output, `Workspace output not found: ${documentCode}`);
   return output;
 }
@@ -946,7 +951,39 @@ async function runInitiationReviewSmoke({
   });
   const workspace = await getProjectWorkspace(projectId, managerUser);
   assert.equal(workspace.scope.globalSkeleton, true);
+  assert.equal(workspace.templateVersion, 'v20260625');
+  assert.equal(workspace.targetTemplateVersion, 'v20260629');
+  assert.equal(workspace.scope.defaultProjectInitializationEnabled, false);
+  assert.equal(workspace.scope.legacyProjectMigrationEnabled, false);
+  assert.equal(workspace.scope.writesProjectStageDocuments, false);
+  assert.equal(workspace.scope.genericActionsMigratedToOutputCards, false);
+  assert.equal(workspace.scope.nonInitiationOutputAction, 'locate_legacy_checklist');
   assert.equal(workspace.stages.length, 8);
+  assert.ok(workspace.stages.every((stage) => stage.configured === true && Array.isArray(stage.nodes) && stage.nodes.length > 0));
+  const workspaceOutputs = workspace.stages
+    .flatMap((stage) => stage.nodes || [])
+    .flatMap((node) => node.outputs || []);
+  assert.equal(new Set(workspaceOutputs.map((output) => output.targetOutputCode)).size, 71);
+  const nonInitiationOutputs = workspaceOutputs.filter((output) => output.stageKey !== 'initiation');
+  assert.ok(nonInitiationOutputs.length > 0);
+  assert.ok(
+    nonInitiationOutputs
+      .filter((output) => output.legacyChecklistTarget.available)
+      .every(
+        (output) =>
+          output.formAvailable === false &&
+          output.actionHints.length === 1 &&
+          output.actionHints.includes('locate_legacy_checklist')
+      )
+  );
+  assert.ok(
+    nonInitiationOutputs.every(
+      (output) =>
+        !output.actionHints.includes('edit_or_submit_form') &&
+        !output.actionHints.includes('handle_initiation_review') &&
+        !output.actionHints.includes('assign_responsible_user')
+    )
+  );
   const initiationStage = workspace.stages.find((stage) => stage.stageKey === 'initiation');
   assert.ok(initiationStage);
   assert.equal(initiationStage.configured, true);
@@ -954,17 +991,17 @@ async function runInitiationReviewSmoke({
     initiationStage.nodes.map((node) => node.nodeKey),
     ['project_input', 'market_research', 'initiation_approval', 'initiation_notice']
   );
-  assert.ok(
-    workspace.stages
-      .filter((stage) => stage.stageKey !== 'initiation')
-      .every(
-        (stage) =>
-          stage.configured === false &&
-          stage.placeholderStatus === 'legacy_checklist_available' &&
-          Array.isArray(stage.nodes) &&
-          stage.nodes.length === 0
-      )
-  );
+  const solutionStage = workspace.stages.find((stage) => stage.stageKey === 'solution');
+  assert.ok(solutionStage.nodes.some((node) => node.nodeKey === 'solution_design'));
+  const solutionPlanOutput = findWorkspaceOutput(workspace, '2.1');
+  assert.equal(solutionPlanOutput.formAvailable, false);
+  assert.equal(solutionPlanOutput.legacyChecklistTarget.available, true);
+  assert.ok(solutionPlanOutput.actionHints.includes('locate_legacy_checklist'));
+  const tenderOutput = findWorkspaceOutput(workspace, 'C19');
+  assert.equal(tenderOutput.documentId, null);
+  assert.equal(tenderOutput.status, 'shell_placeholder');
+  assert.equal(tenderOutput.legacyChecklistTarget.available, false);
+  assert.equal(tenderOutput.actionHints.includes('locate_legacy_checklist'), false);
 
   const marketingResponsibilityChecklist = await getProjectStageDocumentChecklist(projectId, marketingManagerUser);
   assert.equal(findChecklistDocument(marketingResponsibilityChecklist, '1.1').canManageResponsibility, true);

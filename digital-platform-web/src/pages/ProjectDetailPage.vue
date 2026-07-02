@@ -439,7 +439,37 @@ function selectWorkspaceNode(stage, node) {
   clearOnlineFormState();
 }
 
-function scrollToStageDocumentChecklist() {
+function findStageDocumentChecklistCard(target = null) {
+  const documentId = target?.legacyChecklistTarget?.documentId ?? target?.documentId ?? null;
+  const documentCode = target?.legacyChecklistTarget?.documentCode ?? target?.documentCode ?? target?.legacyDocumentCode ?? null;
+  const cards = Array.from(globalThis.document?.querySelectorAll?.('[data-stage-document-id], [data-stage-document-code]') || []);
+
+  return (
+    cards.find((card) => documentId && card.dataset.stageDocumentId === String(documentId)) ||
+    cards.find((card) => documentCode && card.dataset.stageDocumentCode === String(documentCode)) ||
+    null
+  );
+}
+
+function focusStageDocumentChecklistCard(card) {
+  if (!card) {
+    return;
+  }
+
+  card.classList.add('stage-document-card--focused');
+  globalThis.setTimeout?.(() => {
+    card.classList.remove('stage-document-card--focused');
+  }, 1800);
+}
+
+function scrollToStageDocumentChecklist(target = null) {
+  const documentCard = findStageDocumentChecklistCard(target);
+  if (documentCard) {
+    documentCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    focusStageDocumentChecklistCard(documentCard);
+    return;
+  }
+
   const checklistElement = globalThis.document?.getElementById?.('stage-document-checklist');
   checklistElement?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }

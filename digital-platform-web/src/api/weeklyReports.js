@@ -32,8 +32,8 @@ export async function getWeeklyReportComparisonTable(reportId, authToken = '') {
 }
 
 // Load a read-only weekly summary draft generated from previous plans and submitted daily reports.
-export async function getWeeklyReportPrefillSuggestion({ weekStart }, authToken = '') {
-  return request(`/api/weekly-reports/prefill-suggestion${buildQuery({ weekStart })}`, { authToken });
+export async function getWeeklyReportPrefillSuggestion({ weekStart, force = false }, authToken = '') {
+  return request(`/api/weekly-reports/prefill-suggestion${buildQuery({ weekStart, force: force ? 'true' : '' })}`, { authToken });
 }
 
 // Ask the backend to compose wording with AI while preserving rule-derived facts.

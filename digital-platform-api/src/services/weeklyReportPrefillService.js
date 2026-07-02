@@ -86,7 +86,7 @@ function buildAdHocSuggestion(item) {
 }
 
 // Build a no-side-effect weekly prefill suggestion from previous plans and submitted daily evidence.
-export async function buildWeeklyReportPrefillSuggestion({ user, weekStart }, executor = pool) {
+export async function buildWeeklyReportPrefillSuggestion({ user, weekStart, force = false }, executor = pool) {
   const weekEnd = shiftIsoDate(weekStart, 6);
   const previousWeekStart = shiftIsoDate(weekStart, -7);
 
@@ -100,7 +100,8 @@ export async function buildWeeklyReportPrefillSuggestion({ user, weekStart }, ex
     [user.id, weekStart]
   );
 
-  if (existingRows.length > 0) {
+  // Default page loads keep saved weekly reports intact; explicit refreshes can regenerate suggestions.
+  if (existingRows.length > 0 && !force) {
     return {
       shouldPrefill: false,
       reason: 'weekly_report_exists',

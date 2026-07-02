@@ -156,7 +156,8 @@ weeklyReportsRouter.get(
     if (getWeekStart(weekStart) !== weekStart) {
       throw new WeeklyReportError(WEEKLY_REPORT_ERROR.INVALID_WEEK, 'weekStart must be a Monday', 400, ['weekStart']);
     }
-    const suggestion = await buildWeeklyReportPrefillSuggestion({ user: req.auth.user, weekStart });
+    const force = req.query.force === 'true';
+    const suggestion = await buildWeeklyReportPrefillSuggestion({ user: req.auth.user, weekStart, force });
 
     // Prefill is a read-only suggestion and never creates or updates weekly report rows.
     res.json({

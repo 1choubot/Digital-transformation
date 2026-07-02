@@ -673,16 +673,22 @@ function sourceChipClass(summary) {
 }
 
 async function refreshPrefillSuggestion({ force = false } = {}) {
+  let shouldForcePrefill = force;
   if (savedReport.value && !force) {
     const confirmed = window.confirm('当前周报已保存，刷新只会更新页面草稿预览，保存前请确认是否覆盖现有内容。是否继续？');
     if (!confirmed) {
       return;
     }
+    // User-confirmed refreshes should ask the backend to ignore the existing weekly report guard.
+    shouldForcePrefill = true;
   }
 
   try {
-    const result = await getWeeklyReportPrefillSuggestion({ weekStart: form.weekStart }, props.authToken);
-    applyPrefillSuggestion(result.suggestion, { force });
+    const result = await getWeeklyReportPrefillSuggestion(
+      { weekStart: form.weekStart, force: shouldForcePrefill },
+      props.authToken
+    );
+    applyPrefillSuggestion(result.suggestion, { force: shouldForcePrefill });
   } catch (error) {
     if (error.code === 'UNAUTHENTICATED') {
       emit('auth-expired');

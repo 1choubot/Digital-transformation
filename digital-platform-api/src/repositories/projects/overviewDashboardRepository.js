@@ -150,6 +150,7 @@ function stripCompletenessSummary(summary) {
 
 function buildProjectOverviewCard(projectRow, stages, documents, user) {
   const isCompleted = projectRow.status === PROJECT_STATUS.COMPLETED;
+  const isEnded = projectRow.status === PROJECT_STATUS.ENDED;
   const currentStages = stages.filter((stage) => Boolean(stage.is_current));
   const base = {
     projectId: projectRow.id,
@@ -160,7 +161,11 @@ function buildProjectOverviewCard(projectRow, stages, documents, user) {
     projectManagerUserId: projectRow.project_manager_user_id,
     projectManagerUser: mapProjectManagerUser(projectRow),
     projectManager: projectRow.project_manager_display_name || projectRow.project_manager,
+    businessResponsibleUserId: projectRow.business_responsible_user_id,
+    technicalResponsibleUserId: projectRow.technical_responsible_user_id,
     status: projectRow.status,
+    endedReason: projectRow.ended_reason ?? null,
+    endedAt: projectRow.ended_at ?? null,
     currentStageId: null,
     currentStageName: null,
     currentStageOrder: null,
@@ -173,7 +178,7 @@ function buildProjectOverviewCard(projectRow, stages, documents, user) {
     plannedEndDate: projectRow.planned_end_date
   };
 
-  if (isCompleted) {
+  if (isCompleted || isEnded) {
     return base;
   }
 
@@ -236,8 +241,11 @@ function matchesCurrentStageOrderFilter(project, currentStageOrder) {
 function buildOverviewSummary(projects, myPendingStageDocumentTasks) {
   return {
     totalProjects: projects.length,
-    activeProjects: projects.filter((project) => project.status !== PROJECT_STATUS.COMPLETED).length,
+    activeProjects: projects.filter(
+      (project) => ![PROJECT_STATUS.COMPLETED, PROJECT_STATUS.ENDED].includes(project.status)
+    ).length,
     completedProjects: projects.filter((project) => project.status === PROJECT_STATUS.COMPLETED).length,
+    endedProjects: projects.filter((project) => project.status === PROJECT_STATUS.ENDED).length,
     riskProjects: projects.filter(
       (project) => project.status === PROJECT_STATUS.RISK || project.status === PROJECT_STATUS.DELAYED
     ).length,
@@ -256,7 +264,11 @@ async function selectProjectOverviewRows(filters, user) {
       p.project_mode,
       p.project_manager,
       p.project_manager_user_id,
+      p.business_responsible_user_id,
+      p.technical_responsible_user_id,
       p.status,
+      p.ended_reason,
+      p.ended_at,
       p.planned_start_date,
       p.planned_end_date,
       p.created_by_user_id,
@@ -349,22 +361,26 @@ async function selectProjectOverviewDocuments(projectIds) {
 async function countMyPendingStageDocumentTasks(userId) {
   const [rows] = await pool.execute(
     `SELECT COUNT(*) AS count
-    FROM project_stage_documents
-    WHERE responsible_user_id = ?
-      AND is_applicable = 1
+    FROM project_stage_documents d
+    INNER JOIN projects p
+      ON p.id = d.project_id
+    WHERE d.responsible_user_id = ?
+      AND p.status <> ?
+      AND d.is_applicable = 1
       AND (
         (
-          revision_required = 1
+          d.revision_required = 1
           AND NOT (
-            completion_mode IN (?, ?)
-            AND status = ?
-            AND revision_resubmitted_at IS NOT NULL
+            d.completion_mode IN (?, ?)
+            AND d.status = ?
+            AND d.revision_resubmitted_at IS NOT NULL
           )
         )
-        OR status IN (?, ?)
+        OR d.status IN (?, ?)
       )`,
     [
       userId,
+      PROJECT_STATUS.ENDED,
       COMPLETION_MODE.APPROVAL_REQUIRED,
       COMPLETION_MODE.CONDITIONAL_APPROVAL,
       DOCUMENT_STATUS.SUBMITTED,

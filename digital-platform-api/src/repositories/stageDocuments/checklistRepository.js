@@ -256,8 +256,14 @@ async function selectChecklistProject(projectId) {
     `SELECT
       id,
       project_manager_user_id,
+      business_responsible_user_id,
+      technical_responsible_user_id,
       created_by_user_id,
-      participating_departments
+      participating_departments,
+      status,
+      ended_reason,
+      ended_by_user_id,
+      ended_at
     FROM projects
     WHERE id = ?
     LIMIT 1`,

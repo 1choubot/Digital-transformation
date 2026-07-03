@@ -51,6 +51,25 @@
             >
               {{ isNodePending(node, 'approve') ? '提交中...' : '提交评价' }}
             </button>
+            <input
+              v-model.trim="nodeReturnReasons[node.nodeKey]"
+              type="text"
+              placeholder="拒绝原因，退回项目市场调研"
+              :disabled="isNodePending(node, 'approve') || isNodePending(node, 'return')"
+            />
+            <button
+              type="button"
+              class="ghost-button"
+              :disabled="isNodePending(node, 'return') || !nodeReturnReasons[node.nodeKey]"
+              @click="$emit('return-node', {
+                document,
+                node,
+                returnReason: nodeReturnReasons[node.nodeKey],
+                returnAction: 'return_to_market_research'
+              })"
+            >
+              {{ isNodePending(node, 'return') ? '处理中...' : '拒绝并退回市场调研' }}
+            </button>
           </template>
           <template v-else>
             <input
@@ -67,19 +86,37 @@
             >
               {{ isNodePending(node, 'approve') ? '处理中...' : '审批通过' }}
             </button>
+            <select
+              v-model="nodeReturnActions[node.nodeKey]"
+              :disabled="isNodePending(node, 'approve') || isNodePending(node, 'return')"
+            >
+              <option value="return_to_market_research">退回项目市场调研</option>
+              <option value="project_end">项目结束</option>
+            </select>
             <input
-              v-model.trim="nodeReturnReasons[node.nodeKey]"
+              v-if="isProjectEndReturn(node)"
+              v-model.trim="nodeEndReasons[node.nodeKey]"
               type="text"
-              placeholder="审批不通过意见"
+              placeholder="项目结束原因"
               :disabled="isNodePending(node, 'approve') || isNodePending(node, 'return')"
             />
+            <input
+              v-else
+              v-model.trim="nodeReturnReasons[node.nodeKey]"
+              type="text"
+              placeholder="审批不通过意见，退回项目市场调研"
+              :disabled="isNodePending(node, 'approve') || isNodePending(node, 'return')"
+            />
+            <small v-if="isProjectEndReturn(node)" class="inline-muted">
+              项目结束后将阻止立项通知、方案设计和后续资料推进。
+            </small>
             <button
               type="button"
               class="ghost-button"
-              :disabled="isNodePending(node, 'return') || !nodeReturnReasons[node.nodeKey]"
-              @click="$emit('return-node', { document, node, returnReason: nodeReturnReasons[node.nodeKey] })"
+              :disabled="isNodePending(node, 'return') || !canSubmitGeneralReturn(node)"
+              @click="$emit('return-node', buildGeneralReturnPayload(node))"
             >
-              {{ isNodePending(node, 'return') ? '处理中...' : '审批不通过' }}
+              {{ isNodePending(node, 'return') ? '处理中...' : formatGeneralReturnButton(node) }}
             </button>
           </template>
         </div>
@@ -112,6 +149,8 @@ defineEmits(['approve-node', 'return-node']);
 
 const nodeComments = reactive({});
 const nodeReturnReasons = reactive({});
+const nodeReturnActions = reactive({});
+const nodeEndReasons = reactive({});
 
 const review = computed(() => props.document.initiationReview || null);
 const nodes = computed(() => review.value?.nodes || []);
@@ -171,5 +210,37 @@ function isNodePending(node, action) {
 
 function isEvaluationNode(node) {
   return ['business_review', 'technical_review'].includes(node?.nodeKey);
+}
+
+function getGeneralReturnAction(node) {
+  return nodeReturnActions[node.nodeKey] || 'return_to_market_research';
+}
+
+function isProjectEndReturn(node) {
+  return getGeneralReturnAction(node) === 'project_end';
+}
+
+function getGeneralReturnReason(node) {
+  return isProjectEndReturn(node) ? nodeEndReasons[node.nodeKey] : nodeReturnReasons[node.nodeKey];
+}
+
+function canSubmitGeneralReturn(node) {
+  return String(getGeneralReturnReason(node) || '').trim() !== '';
+}
+
+function buildGeneralReturnPayload(node) {
+  const action = getGeneralReturnAction(node);
+  const reason = String(getGeneralReturnReason(node) || '').trim();
+  return {
+    document: props.document,
+    node,
+    returnAction: action,
+    returnReason: action === 'project_end' ? '' : reason,
+    endReason: action === 'project_end' ? reason : ''
+  };
+}
+
+function formatGeneralReturnButton(node) {
+  return isProjectEndReturn(node) ? '拒绝并结束项目' : '审批不通过并退回';
 }
 </script>

@@ -34,6 +34,8 @@ export function buildProjectVisibilityCondition(user, projectAlias = 'p') {
 
   const projectCreatorCondition = `${projectAlias}.created_by_user_id = ?`;
   const projectManagerCondition = `${projectAlias}.project_manager_user_id = ?`;
+  const businessResponsibleCondition = `${projectAlias}.business_responsible_user_id = ?`;
+  const technicalResponsibleCondition = `${projectAlias}.technical_responsible_user_id = ?`;
   const responsibleUserCondition = `EXISTS (
     SELECT 1
     FROM project_stage_documents visible_user_documents
@@ -42,8 +44,8 @@ export function buildProjectVisibilityCondition(user, projectAlias = 'p') {
   )`;
 
   return {
-    sql: `(${projectCreatorCondition} OR ${projectManagerCondition} OR ${responsibleUserCondition})`,
-    params: [user.id, user.id, user.id]
+    sql: `(${projectCreatorCondition} OR ${projectManagerCondition} OR ${businessResponsibleCondition} OR ${technicalResponsibleCondition} OR ${responsibleUserCondition})`,
+    params: [user.id, user.id, user.id, user.id, user.id]
   };
 }
 

@@ -6,6 +6,7 @@ const MAX_OPERATION_LOG_LIMIT = 100;
 export const OPERATION_ACTION_TYPE = {
   PROJECT_CREATED: 'project.created',
   PROJECT_CODE_UPDATED: 'project.code_updated',
+  PROJECT_ENDED: 'project.ended',
   DOCUMENT_SUBMITTED: 'document.submitted',
   DOCUMENT_CONFIRMED: 'document.confirmed',
   DOCUMENT_RETURNED: 'document.returned',

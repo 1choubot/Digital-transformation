@@ -2311,3 +2311,27 @@ TBD - created by archiving change add-stage-document-checklist. Update Purpose a
 - **THEN** 普通资料提交、普通审核或普通退回接口 MUST 继续保护这些在线表单资料
 - **AND** 系统 MUST 提示调用方使用对应在线表单或 `1.2` 专用评价审批能力
 
+### Requirement: 立项在线表单资料边界保持
+
+阶段资料清单能力 MUST 保持 v20260629 / 71 项模板数量不变；立项阶段责任人与退回路径修正 MUST NOT 新增资料项、生成真实文件或接入文件平台。
+
+#### Scenario: 不新增资料项
+- **WHEN** 系统实施立项阶段责任人与退回路径修正
+- **THEN** 阶段资料清单 MUST NOT 新增资料项
+- **AND** v20260629 模板 MUST 继续保持 71 项资料数量
+
+#### Scenario: 1.1 1.2 1.3 仍是在线表单资料
+- **WHEN** 用户处理 `1.1 项目需求表`、`1.2 项目立项审批表` 或 `1.3 立项通知`
+- **THEN** 系统 MUST 继续将这些资料作为在线表单资料处理
+- **AND** 系统 MUST NOT 回退为普通文件上传资料
+
+#### Scenario: 不做真实文件生成
+- **WHEN** 在线表单填写完成
+- **THEN** 系统 MAY 允许有权限用户浏览在线表单内容
+- **AND** 系统 MUST NOT 因本 change 自动生成 Word、PDF、普通附件或文件平台文件
+
+#### Scenario: 不接文件平台
+- **WHEN** 立项阶段在线表单、评价审批或退回路径运行
+- **THEN** 阶段资料清单 MUST NOT 调用文件管理平台 API
+- **AND** 阶段资料清单 MUST NOT 创建文件平台目录、归档文件或下载联动
+

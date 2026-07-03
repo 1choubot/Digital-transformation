@@ -19,6 +19,7 @@ import {
   isInitiationOnlineFormDocument,
   isInitiationReviewDocument
 } from '../../domain/initiationReview.js';
+import { PROJECT_STATUS } from '../../domain/projects.js';
 import {
   DESIGN_CHANGE_SOURCE_DOCUMENT_CODE,
   DESIGN_CHANGE_TARGET_DOCUMENT_CODES,
@@ -91,6 +92,15 @@ function assertOnlineFormDocumentRevisionCompletionSource(currentDocument) {
 }
 
 function assertUserCanUpdateDocumentStatus({ user, action, currentDocument, project }) {
+  if (project?.status === PROJECT_STATUS.ENDED) {
+    throw new StageDocumentStatusError(
+      'PROJECT_ALREADY_ENDED',
+      'Project has ended and stage document status cannot be updated',
+      409,
+      ['projectId']
+    );
+  }
+
   if (isGeneralManagerAssistantUser(user) || isSystemAdminUser(user)) {
     throw new StageDocumentStatusError(
       'FORBIDDEN_OPERATION',

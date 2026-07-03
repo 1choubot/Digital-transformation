@@ -10,6 +10,7 @@ import {
 export const operationActionText = {
   'project.created': '项目创建',
   'project.code_updated': '项目编号更新',
+  'project.ended': '项目结束',
   'document.submitted': '提交资料',
   'document.confirmed': '资料审核通过',
   'document.returned': '退回资料审核',

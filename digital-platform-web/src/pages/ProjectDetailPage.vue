@@ -151,6 +151,8 @@
       <ProjectStageAdvancePanel
         :current-stage="detail.currentStage"
         :is-project-completed="isProjectCompleted"
+        :is-project-ended="isProjectEnded"
+        :ended-reason="detail.project.endedReason"
         :current-stage-completeness="currentStageCompleteness"
         :missing-documents="currentStageAdvanceMissingDocuments"
         :can-advance-current-stage="canAdvanceCurrentStage"
@@ -356,7 +358,12 @@ const isChecklistEmpty = computed(
   () => checklist.value && checklist.value.stages.every((stage) => stage.documents.length === 0)
 );
 const isProjectCompleted = computed(() => detail.value?.project.status === 'completed');
+const isProjectEnded = computed(() => detail.value?.project.status === 'ended');
 const currentStageTitle = computed(() => {
+  if (isProjectEnded.value) {
+    return '项目已结束';
+  }
+
   if (detail.value?.currentStage) {
     return detail.value.currentStage.stageName;
   }
@@ -440,6 +447,10 @@ const visibleResponsibilityCandidates = computed(() => {
   return responsibilityCandidates.value.filter((candidate) => candidate.department === currentUserDepartment.value);
 });
 const canCurrentUserAdvanceProject = computed(() => {
+  if (isProjectEnded.value) {
+    return false;
+  }
+
   if (isCurrentUserGeneralManagerAssistant.value || isCurrentUserSystemAdmin.value) {
     return false;
   }
@@ -472,7 +483,7 @@ const canUpdateProjectCodeByGate = computed(
     ['submitted', 'confirmed'].includes(initiationNoticeDocument.value?.status)
 );
 const canShowProjectCodeUpdate = computed(
-  () => Boolean(detail.value?.project) && canCurrentUserAdvanceProject.value && canUpdateProjectCodeByGate.value
+  () => Boolean(detail.value?.project) && !isProjectEnded.value && canCurrentUserAdvanceProject.value && canUpdateProjectCodeByGate.value
 );
 const currentStageAdvanceMissingDocuments = computed(() => {
   if (stageAdvanceErrorMessage.value && stageAdvanceMissingDocuments.value.length > 0) {
@@ -485,6 +496,7 @@ const canAdvanceCurrentStage = computed(
   () =>
     Boolean(detail.value?.currentStage) &&
     !isProjectCompleted.value &&
+    !isProjectEnded.value &&
     canCurrentUserAdvanceProject.value &&
     Boolean(currentStageCompleteness.value) &&
     currentStageCompleteness.value.incompleteRequiredCount === 0
@@ -828,19 +840,19 @@ function documentPermission(document, key, fallback) {
 }
 
 function canConfirmReturnDocument(document) {
-  return documentPermission(document, 'canReviewDocument', false);
+  return !isProjectEnded.value && documentPermission(document, 'canReviewDocument', false);
 }
 
 function canManageResponsibility(document) {
-  return documentPermission(document, 'canManageResponsibility', false);
+  return !isProjectEnded.value && documentPermission(document, 'canManageResponsibility', false);
 }
 
 function canSubmitDocument(document) {
-  return documentPermission(document, 'canSubmitDocument', false);
+  return !isProjectEnded.value && documentPermission(document, 'canSubmitDocument', false);
 }
 
 function canChangeApplicability(document) {
-  return documentPermission(document, 'canChangeApplicability', false);
+  return !isProjectEnded.value && documentPermission(document, 'canChangeApplicability', false);
 }
 
 function canViewDocumentAttachments(document) {
@@ -848,7 +860,7 @@ function canViewDocumentAttachments(document) {
 }
 
 function canUploadDocumentAttachment(document) {
-  return documentPermission(document, 'canUploadAttachment', false);
+  return !isProjectEnded.value && documentPermission(document, 'canUploadAttachment', false);
 }
 
 function canDownloadDocumentAttachment(document, attachment) {
@@ -857,6 +869,10 @@ function canDownloadDocumentAttachment(document, attachment) {
 }
 
 function canDeleteDocumentAttachment(document, attachment) {
+  if (isProjectEnded.value) {
+    return false;
+  }
+
   const value = attachment?.permissions?.canDelete ?? attachment?.canDelete;
   return typeof value === 'boolean' ? value : documentPermission(document, 'canDeleteAttachment', false);
 }
@@ -1054,10 +1070,19 @@ async function approveInitiationNode({ document, node, comment }) {
   );
 }
 
-async function returnInitiationNode({ document, node, returnReason }) {
+async function returnInitiationNode({ document, node, returnReason, returnAction = 'return_to_market_research', endReason = '' }) {
+  const isProjectEnd = returnAction === 'project_end';
   const reason = String(returnReason || '').trim();
-  if (!reason) {
-    actionErrorMessage.value = '请填写总经理审批不通过意见。';
+  const normalizedEndReason = String(endReason || '').trim();
+  if (!isProjectEnd && !reason) {
+    actionErrorMessage.value = node.nodeKey === 'general_review'
+      ? '请填写总经理审批不通过意见。'
+      : '请填写评价拒绝原因。';
+    return;
+  }
+
+  if (isProjectEnd && !normalizedEndReason) {
+    actionErrorMessage.value = '请填写项目结束原因。';
     return;
   }
 
@@ -1070,9 +1095,15 @@ async function returnInitiationNode({ document, node, returnReason }) {
         document.id,
         node.nodeKey,
         reason,
-        props.authToken
+        props.authToken,
+        {
+          returnAction,
+          endReason: normalizedEndReason
+        }
       ),
-    `${node.nodeName || '总经理审批'}已不通过，1.1 项目需求表进入返工，1.2 需要重新填写。`
+    isProjectEnd
+      ? '项目已结束，后续立项通知、阶段推进和资料操作已停止。'
+      : `${node.nodeName || '审批'}已不通过，流程退回项目市场调研，1.1 项目需求表进入返工，1.2 需要重新填写。`
   );
 }
 

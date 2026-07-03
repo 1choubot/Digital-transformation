@@ -29,7 +29,12 @@
         <p>{{ errorMessage }}</p>
       </section>
 
-      <template v-if="isProjectCompleted">
+      <template v-if="isProjectEnded">
+        <p class="stage-advance-status">项目已结束，不能继续推进立项通知、方案设计或后续阶段。</p>
+        <p v-if="endedReason" class="stage-advance-blocked">结束原因：{{ endedReason }}</p>
+      </template>
+
+      <template v-else-if="isProjectCompleted">
         <p class="stage-advance-status">项目已完成，当前阶段为空，无需继续推进。</p>
       </template>
 
@@ -106,6 +111,14 @@ defineProps({
   isProjectCompleted: {
     type: Boolean,
     default: false
+  },
+  isProjectEnded: {
+    type: Boolean,
+    default: false
+  },
+  endedReason: {
+    type: String,
+    default: ''
   },
   currentStageCompleteness: {
     type: Object,

@@ -3,6 +3,7 @@ import {
   canBeResponsibleUser,
   canManageProjectResponsibility
 } from '../../domain/organization.js';
+import { PROJECT_STATUS } from '../../domain/projects.js';
 import {
   INITIATION_NOTICE_DOCUMENT_CODE,
   INITIATION_REVIEW_DOCUMENT_CODE,
@@ -45,6 +46,15 @@ function normalizeResponsibleUserId(value) {
 }
 
 function assertUserCanManageResponsibility({ user, project, currentDocument, targetResponsibleUser }) {
+  if (project?.status === PROJECT_STATUS.ENDED) {
+    throw new StageDocumentResponsibilityError(
+      'PROJECT_ALREADY_ENDED',
+      'Project has ended and stage document responsibility cannot be changed',
+      409,
+      ['projectId']
+    );
+  }
+
   if ([INITIATION_REWORK_TARGET_DOCUMENT_CODE, INITIATION_REVIEW_DOCUMENT_CODE].includes(currentDocument.document_code)) {
     if (!canManageInitiationOnlineFormResponsibility(user, currentDocument)) {
       throw new StageDocumentResponsibilityError(

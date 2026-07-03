@@ -1,5 +1,6 @@
 import { pool } from '../../db/pool.js';
 import { canManageStageDocumentApplicability } from '../../domain/organization.js';
+import { PROJECT_STATUS } from '../../domain/projects.js';
 import {
   buildDocumentApplicabilityTransition,
   DOCUMENT_APPLICABILITY_ACTION,
@@ -18,6 +19,15 @@ import {
 import { selectProjectPermissionContext } from './permissionContext.js';
 
 function assertUserCanManageApplicability({ user, project, currentDocument }) {
+  if (project?.status === PROJECT_STATUS.ENDED) {
+    throw new StageDocumentApplicabilityError(
+      'PROJECT_ALREADY_ENDED',
+      'Project has ended and stage document applicability cannot be changed',
+      409,
+      ['projectId']
+    );
+  }
+
   if (!canManageStageDocumentApplicability(user, { project, document: currentDocument })) {
     throw new StageDocumentApplicabilityError(
       'FORBIDDEN_OPERATION',

@@ -1,10 +1,13 @@
 import { pool } from '../../db/pool.js';
 import {
+  BUSINESS_DEPARTMENT,
   canAdvanceProjectStage,
   canBeProjectManagerUser,
+  canBeResponsibleUser,
   isCenterManagerUser,
   isValidBusinessDepartment
 } from '../../domain/organization.js';
+import { PROJECT_STATUS } from '../../domain/projects.js';
 import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import { canViewProjectOperationLogs } from '../stageDocuments/accessControl.js';
 import { initializeProjectStageDocuments } from '../stageDocuments/checklistRepository.js';
@@ -20,7 +23,9 @@ import {
   ProjectAuthorizationError,
   ProjectCodeUpdateError,
   PROJECT_MANAGER_ERROR,
+  PROJECT_RESPONSIBLE_USER_ERROR,
   ProjectManagerUserError,
+  ProjectResponsibleUserError,
   mapProject,
   mapProjectListItem,
   mapStage,
@@ -77,6 +82,65 @@ async function selectProjectManagerUser(connection, projectManagerUserId) {
   return user;
 }
 
+async function selectProjectResponsibleUser(connection, userId, expectedDepartment, fieldName, label) {
+  const [rows] = await connection.execute(
+    `SELECT
+      id,
+      account,
+      display_name,
+      department,
+      organization_role,
+      role,
+      is_enabled,
+      file_platform_user_id
+    FROM users
+    WHERE id = ?
+    LIMIT 1`,
+    [userId]
+  );
+
+  const row = rows[0];
+  if (!row || !row.is_enabled) {
+    throw new ProjectResponsibleUserError(
+      PROJECT_RESPONSIBLE_USER_ERROR.NOT_FOUND_OR_DISABLED,
+      `${label} user not found or disabled`,
+      409,
+      [fieldName]
+    );
+  }
+
+  const user = {
+    id: row.id,
+    account: row.account,
+    name: row.display_name,
+    department: row.department,
+    organizationRole: row.organization_role,
+    role: row.role,
+    isEnabled: Boolean(row.is_enabled),
+    filePlatformUserId: row.file_platform_user_id
+  };
+
+  if (!canBeResponsibleUser(user)) {
+    throw new ProjectResponsibleUserError(
+      PROJECT_RESPONSIBLE_USER_ERROR.ROLE_NOT_ALLOWED,
+      `${label} user role is not allowed`,
+      409,
+      [fieldName]
+    );
+  }
+
+  if (user.department !== expectedDepartment) {
+    throw new ProjectResponsibleUserError(
+      PROJECT_RESPONSIBLE_USER_ERROR.DEPARTMENT_NOT_ALLOWED,
+      `${label} user department is not allowed`,
+      409,
+      [fieldName]
+    );
+  }
+
+  return user;
+}
+
 async function insertProject(connection, project) {
   const row = toProjectRow(project);
   const [result] = await connection.execute(
@@ -88,13 +152,18 @@ async function insertProject(connection, project) {
       project_mode,
       project_manager,
       project_manager_user_id,
+      business_responsible_user_id,
+      technical_responsible_user_id,
       participating_departments,
       status,
+      ended_reason,
+      ended_by_user_id,
+      ended_at,
       planned_start_date,
       planned_end_date,
       remark,
       created_by_user_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       row.project_code,
       row.project_name,
@@ -103,8 +172,13 @@ async function insertProject(connection, project) {
       row.project_mode,
       row.project_manager,
       row.project_manager_user_id,
+      row.business_responsible_user_id,
+      row.technical_responsible_user_id,
       row.participating_departments,
       row.status,
+      row.ended_reason,
+      row.ended_by_user_id,
+      row.ended_at,
       row.planned_start_date,
       row.planned_end_date,
       row.remark,
@@ -115,6 +189,18 @@ async function insertProject(connection, project) {
   return result.insertId;
 }
 
+async function assignInitiationResponsibleUser(connection, projectId, businessResponsibleUserId, updatedByUserId) {
+  await connection.execute(
+    `UPDATE project_stage_documents
+    SET responsible_user_id = ?,
+      responsibility_updated_by_user_id = ?,
+      responsibility_updated_at = CURRENT_TIMESTAMP
+    WHERE project_id = ?
+      AND document_code IN ('1.1', '1.2')`,
+    [businessResponsibleUserId, updatedByUserId, projectId]
+  );
+}
+
 export async function createProject(project, createdByUserId) {
   const connection = await pool.getConnection();
 
@@ -123,13 +209,34 @@ export async function createProject(project, createdByUserId) {
     const projectManagerUser = project.projectManagerUserId
       ? await selectProjectManagerUser(connection, project.projectManagerUserId)
       : null;
+    const businessResponsibleUser = await selectProjectResponsibleUser(
+      connection,
+      project.businessResponsibleUserId,
+      BUSINESS_DEPARTMENT.MARKETING_CENTER,
+      'businessResponsibleUserId',
+      'Business responsible'
+    );
+    const technicalResponsibleUser = await selectProjectResponsibleUser(
+      connection,
+      project.technicalResponsibleUserId,
+      BUSINESS_DEPARTMENT.RD_CENTER,
+      'technicalResponsibleUserId',
+      'Technical responsible'
+    );
     const projectId = await insertProject(connection, {
       ...project,
       projectManager: projectManagerUser?.name ?? null,
+      businessResponsibleUserId: businessResponsibleUser.id,
+      technicalResponsibleUserId: technicalResponsibleUser.id,
+      status: PROJECT_STATUS.NORMAL,
+      endedReason: null,
+      endedByUserId: null,
+      endedAt: null,
       createdByUserId
     });
     await insertInitialStages(connection, projectId);
     await initializeProjectStageDocuments(connection, projectId);
+    await assignInitiationResponsibleUser(connection, projectId, businessResponsibleUser.id, createdByUserId);
     await insertOperationLog(connection, {
       projectId,
       actorUserId: createdByUserId,
@@ -145,6 +252,8 @@ export async function createProject(project, createdByUserId) {
         customerContact: project.customerContact,
         projectMode: project.projectMode ?? null,
         projectManagerUserId: project.projectManagerUserId ?? null,
+        businessResponsibleUserId: businessResponsibleUser.id,
+        technicalResponsibleUserId: technicalResponsibleUser.id,
         participatingDepartments: project.participatingDepartments ?? null,
         plannedStartDate: project.plannedStartDate ?? null,
         plannedEndDate: project.plannedEndDate ?? null
@@ -222,6 +331,15 @@ async function selectProjectForCodeUpdate(connection, projectId, user) {
 }
 
 function assertCanUpdateProjectCode(user, projectRow) {
+  if (projectRow.status === PROJECT_STATUS.ENDED) {
+    throw new ProjectCodeUpdateError(
+      'PROJECT_ALREADY_ENDED',
+      'Project has ended and project code cannot be updated',
+      409,
+      ['status']
+    );
+  }
+
   if (!canAdvanceProjectStage(user, projectRow)) {
     throw new ProjectAuthorizationError(
       'FORBIDDEN_OPERATION',
@@ -383,6 +501,8 @@ export async function assertProjectAuditViewable(projectId, user) {
     `SELECT
       id,
       project_manager_user_id,
+      business_responsible_user_id,
+      technical_responsible_user_id,
       created_by_user_id,
       participating_departments
     FROM projects
@@ -417,7 +537,12 @@ export async function listProjects(user) {
       p.project_mode,
       p.project_manager,
       p.project_manager_user_id,
+      p.business_responsible_user_id,
+      p.technical_responsible_user_id,
       p.status,
+      p.ended_reason,
+      p.ended_by_user_id,
+      p.ended_at,
       p.planned_start_date,
       p.planned_end_date,
       p.created_by_user_id,
@@ -435,6 +560,27 @@ export async function listProjects(user) {
       pm.role AS project_manager_role,
       pm.is_enabled AS project_manager_is_enabled,
       pm.file_platform_user_id AS project_manager_file_platform_user_id,
+      br.account AS business_responsible_account,
+      br.display_name AS business_responsible_display_name,
+      br.department AS business_responsible_department,
+      br.organization_role AS business_responsible_organization_role,
+      br.role AS business_responsible_role,
+      br.is_enabled AS business_responsible_is_enabled,
+      br.file_platform_user_id AS business_responsible_file_platform_user_id,
+      tr.account AS technical_responsible_account,
+      tr.display_name AS technical_responsible_display_name,
+      tr.department AS technical_responsible_department,
+      tr.organization_role AS technical_responsible_organization_role,
+      tr.role AS technical_responsible_role,
+      tr.is_enabled AS technical_responsible_is_enabled,
+      tr.file_platform_user_id AS technical_responsible_file_platform_user_id,
+      ended_by.account AS ended_by_account,
+      ended_by.display_name AS ended_by_display_name,
+      ended_by.department AS ended_by_department,
+      ended_by.organization_role AS ended_by_organization_role,
+      ended_by.role AS ended_by_role,
+      ended_by.is_enabled AS ended_by_is_enabled,
+      ended_by.file_platform_user_id AS ended_by_file_platform_user_id,
       s.stage_order AS current_stage_order,
       s.stage_key AS current_stage_key,
       s.stage_name AS current_stage_name,
@@ -444,6 +590,12 @@ export async function listProjects(user) {
       ON u.id = p.created_by_user_id
     LEFT JOIN users pm
       ON pm.id = p.project_manager_user_id
+    LEFT JOIN users br
+      ON br.id = p.business_responsible_user_id
+    LEFT JOIN users tr
+      ON tr.id = p.technical_responsible_user_id
+    LEFT JOIN users ended_by
+      ON ended_by.id = p.ended_by_user_id
     LEFT JOIN project_stages s
       ON s.project_id = p.id AND s.is_current = 1
     ${visibility.whereClause}
@@ -473,12 +625,39 @@ export async function getProjectDetail(projectId, user) {
       pm.organization_role AS project_manager_organization_role,
       pm.role AS project_manager_role,
       pm.is_enabled AS project_manager_is_enabled,
-      pm.file_platform_user_id AS project_manager_file_platform_user_id
+      pm.file_platform_user_id AS project_manager_file_platform_user_id,
+      br.account AS business_responsible_account,
+      br.display_name AS business_responsible_display_name,
+      br.department AS business_responsible_department,
+      br.organization_role AS business_responsible_organization_role,
+      br.role AS business_responsible_role,
+      br.is_enabled AS business_responsible_is_enabled,
+      br.file_platform_user_id AS business_responsible_file_platform_user_id,
+      tr.account AS technical_responsible_account,
+      tr.display_name AS technical_responsible_display_name,
+      tr.department AS technical_responsible_department,
+      tr.organization_role AS technical_responsible_organization_role,
+      tr.role AS technical_responsible_role,
+      tr.is_enabled AS technical_responsible_is_enabled,
+      tr.file_platform_user_id AS technical_responsible_file_platform_user_id,
+      ended_by.account AS ended_by_account,
+      ended_by.display_name AS ended_by_display_name,
+      ended_by.department AS ended_by_department,
+      ended_by.organization_role AS ended_by_organization_role,
+      ended_by.role AS ended_by_role,
+      ended_by.is_enabled AS ended_by_is_enabled,
+      ended_by.file_platform_user_id AS ended_by_file_platform_user_id
     FROM projects p
     LEFT JOIN users u
       ON u.id = p.created_by_user_id
     LEFT JOIN users pm
       ON pm.id = p.project_manager_user_id
+    LEFT JOIN users br
+      ON br.id = p.business_responsible_user_id
+    LEFT JOIN users tr
+      ON tr.id = p.technical_responsible_user_id
+    LEFT JOIN users ended_by
+      ON ended_by.id = p.ended_by_user_id
     WHERE p.id = ?`,
     [projectId]
   );

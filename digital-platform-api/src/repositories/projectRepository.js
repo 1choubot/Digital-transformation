@@ -4,6 +4,7 @@ export {
   ProjectApprovalError,
   ProjectCodeUpdateError,
   ProjectNotFoundError,
+  ProjectResponsibleUserError,
   ProjectStageNotFoundError,
   ProjectManagerUserError,
   ProjectOverviewDashboardQueryError,

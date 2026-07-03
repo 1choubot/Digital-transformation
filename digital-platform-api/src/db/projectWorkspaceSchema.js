@@ -59,6 +59,41 @@ async function ensureProjectModeNullable(executor) {
   }
 }
 
+async function ensureProjectStatusEnded(executor) {
+  const column = await getColumnMetadata(executor, 'projects', 'status');
+  if (column && !String(column.columnType || '').includes("'ended'")) {
+    await executor.execute(
+      "ALTER TABLE projects MODIFY status ENUM('normal', 'risk', 'paused', 'delayed', 'completed', 'ended') NOT NULL DEFAULT 'normal'"
+    );
+  }
+}
+
+async function ensureProjectResponsibilityAndEndColumns(executor) {
+  if (!(await columnExists(executor, 'projects', 'business_responsible_user_id'))) {
+    await executor.execute(
+      'ALTER TABLE projects ADD COLUMN business_responsible_user_id BIGINT UNSIGNED NULL AFTER project_manager_user_id'
+    );
+  }
+
+  if (!(await columnExists(executor, 'projects', 'technical_responsible_user_id'))) {
+    await executor.execute(
+      'ALTER TABLE projects ADD COLUMN technical_responsible_user_id BIGINT UNSIGNED NULL AFTER business_responsible_user_id'
+    );
+  }
+
+  if (!(await columnExists(executor, 'projects', 'ended_reason'))) {
+    await executor.execute('ALTER TABLE projects ADD COLUMN ended_reason VARCHAR(1000) NULL AFTER status');
+  }
+
+  if (!(await columnExists(executor, 'projects', 'ended_by_user_id'))) {
+    await executor.execute('ALTER TABLE projects ADD COLUMN ended_by_user_id BIGINT UNSIGNED NULL AFTER ended_reason');
+  }
+
+  if (!(await columnExists(executor, 'projects', 'ended_at'))) {
+    await executor.execute('ALTER TABLE projects ADD COLUMN ended_at DATETIME NULL AFTER ended_by_user_id');
+  }
+}
+
 async function ensureStageDocumentFormsTable(executor) {
   await executor.execute(
     `CREATE TABLE IF NOT EXISTS project_stage_document_forms (
@@ -101,17 +136,26 @@ export async function ensureProjectWorkspaceSchema(executor) {
   await ensureProjectsCustomerContact(executor);
   await ensureProjectManagerNullable(executor);
   await ensureProjectModeNullable(executor);
+  await ensureProjectStatusEnded(executor);
+  await ensureProjectResponsibilityAndEndColumns(executor);
   await ensureStageDocumentFormsTable(executor);
 }
 
 export async function inspectProjectWorkspaceSchema(executor) {
   const projectManagerColumn = await getColumnMetadata(executor, 'projects', 'project_manager');
   const projectModeColumn = await getColumnMetadata(executor, 'projects', 'project_mode');
+  const statusColumn = await getColumnMetadata(executor, 'projects', 'status');
 
   return {
     projectsCustomerContact: await columnExists(executor, 'projects', 'customer_contact'),
     projectsProjectManagerNullable: projectManagerColumn?.isNullable === 'YES',
     projectsProjectModeNullable: projectModeColumn?.isNullable === 'YES',
+    projectsStatusSupportsEnded: String(statusColumn?.columnType || '').includes("'ended'"),
+    projectsBusinessResponsibleUserId: await columnExists(executor, 'projects', 'business_responsible_user_id'),
+    projectsTechnicalResponsibleUserId: await columnExists(executor, 'projects', 'technical_responsible_user_id'),
+    projectsEndedReason: await columnExists(executor, 'projects', 'ended_reason'),
+    projectsEndedByUserId: await columnExists(executor, 'projects', 'ended_by_user_id'),
+    projectsEndedAt: await columnExists(executor, 'projects', 'ended_at'),
     projectStageDocumentFormsTable: await tableExists(executor, 'project_stage_document_forms')
   };
 }

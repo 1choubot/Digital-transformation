@@ -124,6 +124,7 @@
               <span>当前阶段</span>
               <strong>{{ formatCurrentStage(project) }}</strong>
               <small v-if="project.currentStageIssue">{{ formatStageIssue(project.currentStageIssue) }}</small>
+              <small v-else-if="project.status === 'ended'">结束原因：{{ project.endedReason || '-' }}</small>
             </div>
             <div class="overview-project__completion">
               <span>当前阶段齐套率</span>
@@ -216,7 +217,8 @@ const statusOptions = [
   { value: 'risk', label: '风险' },
   { value: 'paused', label: '暂停' },
   { value: 'delayed', label: '延期' },
-  { value: 'completed', label: '完成' }
+  { value: 'completed', label: '完成' },
+  { value: 'ended', label: '已结束' }
 ];
 
 const stageOrderOptions = Array.from({ length: 8 }, (_, index) => ({
@@ -255,6 +257,10 @@ function formatCurrentStage(project) {
 
   if (project.status === 'completed') {
     return '项目已完成';
+  }
+
+  if (project.status === 'ended') {
+    return '项目已结束';
   }
 
   return formatStageIssue(project.currentStageIssue) || '-';

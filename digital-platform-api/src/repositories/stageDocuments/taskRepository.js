@@ -1,4 +1,5 @@
 import { pool } from '../../db/pool.js';
+import { PROJECT_STATUS } from '../../domain/projects.js';
 import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import {
   mapStageDocumentTask,
@@ -96,7 +97,7 @@ export function normalizeStageDocumentTaskFilters(query = {}) {
 }
 
 export async function listMyStageDocumentTasks(userId, filters) {
-  const params = [userId, ...filters.statuses];
+  const params = [userId, PROJECT_STATUS.ENDED, ...filters.statuses];
   const projectFilter = filters.projectId === null ? '' : 'AND d.project_id = ?';
   const statusFilter =
     filters.status === 'pending'
@@ -167,6 +168,7 @@ export async function listMyStageDocumentTasks(userId, filters) {
       ON s.project_id = d.project_id
       AND s.stage_order = d.stage_order
     WHERE d.responsible_user_id = ?
+      AND p.status <> ?
       ${statusFilter}
       AND d.is_applicable = 1
       ${projectFilter}

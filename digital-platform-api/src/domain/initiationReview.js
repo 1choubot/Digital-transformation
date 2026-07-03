@@ -123,9 +123,13 @@ export function getInitialInitiationReviewNodeStatus(nodeKey, documentStatus) {
 }
 
 export function getInitiationReviewNodeActionType(nodeKey, action) {
-  if ([INITIATION_REVIEW_NODE_KEY.BUSINESS, INITIATION_REVIEW_NODE_KEY.TECHNICAL].includes(nodeKey)) {
-    return 'initiation.evaluation.submitted';
+  if (nodeKey === INITIATION_REVIEW_NODE_KEY.BUSINESS) {
+    return action === 'approve' ? 'initiation_review.business_approved' : 'initiation_review.business_returned';
   }
 
-  return action === 'approve' ? 'initiation.approval.approved' : 'initiation.approval.returned';
+  if (nodeKey === INITIATION_REVIEW_NODE_KEY.TECHNICAL) {
+    return action === 'approve' ? 'initiation_review.technical_approved' : 'initiation_review.technical_returned';
+  }
+
+  return action === 'approve' ? 'initiation_review.general_approved' : 'initiation_review.general_returned';
 }

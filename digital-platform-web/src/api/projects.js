@@ -164,11 +164,22 @@ export async function approveInitiationReviewNode(projectId, documentId, nodeKey
   });
 }
 
-export async function returnInitiationReviewNode(projectId, documentId, nodeKey, returnReason, authToken) {
+export async function returnInitiationReviewNode(
+  projectId,
+  documentId,
+  nodeKey,
+  returnReason,
+  authToken,
+  options = {}
+) {
   return request(`/api/projects/${projectId}/stage-documents/${documentId}/initiation-review/${nodeKey}/return`, {
     method: 'POST',
     authToken,
-    body: JSON.stringify({ returnReason })
+    body: JSON.stringify({
+      returnReason,
+      ...(options.returnAction ? { returnAction: options.returnAction } : {}),
+      ...(options.endReason ? { endReason: options.endReason } : {})
+    })
   });
 }
 

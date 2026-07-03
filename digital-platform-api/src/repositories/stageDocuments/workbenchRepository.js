@@ -224,6 +224,7 @@ async function selectDocumentResponsibilityTodos(user) {
     LEFT JOIN users u
       ON u.id = d.responsible_user_id
     WHERE d.responsible_user_id = ?
+      AND p.status <> ?
       AND d.is_applicable = 1
       AND (
         d.status IN (?, ?)
@@ -246,6 +247,7 @@ async function selectDocumentResponsibilityTodos(user) {
       d.id ASC`,
     [
       user.id,
+      PROJECT_STATUS.ENDED,
       DOCUMENT_STATUS.NOT_SUBMITTED,
       DOCUMENT_STATUS.RETURNED,
       COMPLETION_MODE.APPROVAL_REQUIRED,
@@ -309,6 +311,7 @@ async function selectDocumentReviewTodos(user) {
       ON s.project_id = d.project_id
       AND s.stage_order = d.stage_order
     WHERE d.is_applicable = 1
+      AND p.status <> ?
       AND d.document_code <> '1.2'
       AND d.status = ?
       AND d.completion_mode = ?
@@ -332,7 +335,7 @@ async function selectDocumentReviewTodos(user) {
       d.stage_order ASC,
       d.document_order ASC,
       d.id ASC`,
-    [DOCUMENT_STATUS.SUBMITTED, COMPLETION_MODE.APPROVAL_REQUIRED, user.department, user.department]
+    [PROJECT_STATUS.ENDED, DOCUMENT_STATUS.SUBMITTED, COMPLETION_MODE.APPROVAL_REQUIRED, user.department, user.department]
   );
 
   return rows.map((row) =>
@@ -395,6 +398,7 @@ async function selectStageAdvanceTodos(user) {
       ON p.id = s.project_id
     WHERE s.is_current = 1
       AND s.stage_order < 8
+      AND p.status <> ?
       AND p.status <> ?
       AND EXISTS (
         SELECT 1
@@ -464,6 +468,7 @@ async function selectStageAdvanceTodos(user) {
     [
       ...params,
       PROJECT_STATUS.COMPLETED,
+      PROJECT_STATUS.ENDED,
       DOCUMENT_STATUS.RETURNED,
       COMPLETION_MODE.SUBMIT_ONLY,
       COMPLETION_MODE.CONDITIONAL_SUBMIT,

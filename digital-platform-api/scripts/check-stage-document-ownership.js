@@ -66,6 +66,7 @@ import {
   saveStageDocumentOnlineForm,
   submitStageDocumentOnlineForm,
   upsertStageDocumentTemplates,
+  updateProjectStageDocumentApplicability,
   updateProjectStageDocumentResponsibleUser,
   updateProjectStageDocumentStatus
 } from '../src/repositories/stageDocumentRepository.js';
@@ -80,6 +81,7 @@ import {
   deriveStageDocumentCompletion
 } from '../src/repositories/stageDocuments/shared.js';
 import { DOCUMENT_STATUS_ACTION } from '../src/domain/stageDocumentStatus.js';
+import { DOCUMENT_APPLICABILITY_ACTION } from '../src/domain/stageDocumentApplicability.js';
 import { cleanupStageDocumentAttachmentFile } from '../src/storage/stageDocumentAttachmentStorage.js';
 import { isDocumentRelatedToDepartmentByOwnership } from '../../digital-platform-web/src/components/project-detail/stageDocumentViewHelpers.js';
 
@@ -667,6 +669,8 @@ async function cleanupSmokeProjects(projectIds, storageKeys, userIds = []) {
 async function createInitiationSmokeProject({
   uniqueSuffix,
   projectManagerUser,
+  businessResponsibleUser,
+  technicalResponsibleUser,
   createdByUserId,
   label,
   smokeProjectIds
@@ -679,6 +683,8 @@ async function createInitiationSmokeProject({
       customerContact: '13800000000',
       projectMode: 'self_developed',
       projectManagerUserId: projectManagerUser.id,
+      businessResponsibleUserId: businessResponsibleUser.id,
+      technicalResponsibleUserId: technicalResponsibleUser.id,
       participatingDepartments: [RD_CENTER, MARKETING_CENTER],
       status: 'normal',
       plannedStartDate: null,
@@ -756,6 +762,256 @@ async function assertHasInitiationWorkbenchTask(user, projectId, nodeKey) {
       (item) => item.type === 'initiation_review' && item.projectId === projectId && item.nodeKey === nodeKey
     ),
     `Expected initiation review workbench task ${projectId}/${nodeKey}`
+  );
+}
+
+async function assertNoWorkbenchItemForProject(user, projectId) {
+  const workbench = await getMyWorkbench(user);
+  assert.equal(workbench.items.some((item) => item.projectId === projectId), false);
+}
+
+async function runEvaluationReturnToMarketResearchSmoke({
+  uniqueSuffix,
+  smokeProjectIds,
+  managerUser,
+  marketingManagerUser,
+  generalManagerUser,
+  nodeKey,
+  reviewerUser,
+  expectedActionType,
+  label
+}) {
+  const projectId = await createInitiationSmokeProject({
+    uniqueSuffix,
+    projectManagerUser: managerUser,
+    businessResponsibleUser: marketingManagerUser,
+    technicalResponsibleUser: managerUser,
+    createdByUserId: managerUser.id,
+    label,
+    smokeProjectIds
+  });
+  const initiationDocument = await prepareInitiationSmokeBase(projectId, managerUser);
+  const returnReason = `${label} return to market research`;
+  const retainedNodeKey = nodeKey === 'business_review' ? 'technical_review' : 'business_review';
+
+  await assert.rejects(
+    () =>
+      returnInitiationReviewNode({
+        projectId,
+        documentId: initiationDocument.id,
+        nodeKey,
+        user: reviewerUser,
+        returnReason: ''
+      }),
+    (error) => error.code === 'RETURN_REASON_REQUIRED'
+  );
+
+  await returnInitiationReviewNode({
+    projectId,
+    documentId: initiationDocument.id,
+    nodeKey,
+    user: reviewerUser,
+    returnReason
+  });
+
+  const requirement = await selectSmokeDocument(projectId, '1.1');
+  const initiation = await selectSmokeDocument(projectId, '1.2');
+  const nodes = await selectInitiationReviewNodes(projectId);
+  assert.equal(Boolean(requirement.revision_required), true);
+  assert.equal(String(requirement.revision_source_document_id), String(initiationDocument.id));
+  assert.equal(initiation.status, DOCUMENT_STATUS.RETURNED);
+  assert.equal(initiation.return_reason, returnReason);
+  assertInitiationNodeStatus(nodes, nodeKey, 'returned_blocked_by_rework');
+  assertInitiationNodeStatus(nodes, retainedNodeKey, 'waiting_document_submission');
+  assertInitiationNodeStatus(nodes, 'general_review', 'waiting_prerequisite');
+  assert.equal(
+    await countOperationLogs({
+      projectId,
+      actionType: expectedActionType,
+      targetType: OPERATION_TARGET_TYPE.INITIATION_REVIEW
+    }),
+    1
+  );
+  await assertNoInitiationWorkbenchTask(marketingManagerUser, projectId, 'business_review');
+  await assertNoInitiationWorkbenchTask(managerUser, projectId, 'technical_review');
+  await assertNoInitiationWorkbenchTask(generalManagerUser, projectId, 'general_review');
+}
+
+async function runProjectEndSmoke({
+  uniqueSuffix,
+  smokeProjectIds,
+  managerUser,
+  marketingManagerUser,
+  generalManagerUser
+}) {
+  const projectId = await createInitiationSmokeProject({
+    uniqueSuffix,
+    projectManagerUser: managerUser,
+    businessResponsibleUser: marketingManagerUser,
+    technicalResponsibleUser: managerUser,
+    createdByUserId: managerUser.id,
+    label: 'project-end',
+    smokeProjectIds
+  });
+  const initiationDocument = await prepareInitiationSmokeBase(projectId, managerUser);
+  await approveInitiationReviewNode({
+    projectId,
+    documentId: initiationDocument.id,
+    nodeKey: 'business_review',
+    user: marketingManagerUser,
+    comment: 'marketing evaluation before project end'
+  });
+  await approveInitiationReviewNode({
+    projectId,
+    documentId: initiationDocument.id,
+    nodeKey: 'technical_review',
+    user: managerUser,
+    comment: 'rd evaluation before project end'
+  });
+  await assertHasInitiationWorkbenchTask(generalManagerUser, projectId, 'general_review');
+
+  await assert.rejects(
+    () =>
+      returnInitiationReviewNode({
+        projectId,
+        documentId: initiationDocument.id,
+        nodeKey: 'general_review',
+        user: generalManagerUser,
+        returnAction: 'project_end',
+        endReason: ''
+      }),
+    (error) => error.code === 'PROJECT_END_REASON_REQUIRED'
+  );
+
+  const endReason = 'general manager ended project in smoke';
+  await returnInitiationReviewNode({
+    projectId,
+    documentId: initiationDocument.id,
+    nodeKey: 'general_review',
+    user: generalManagerUser,
+    returnAction: 'project_end',
+    endReason
+  });
+
+  const endedDetail = await getProjectDetail(projectId, managerUser);
+  assert.equal(endedDetail.project.status, 'ended');
+  assert.equal(endedDetail.project.endedReason, endReason);
+  assert.equal(String(endedDetail.project.endedByUserId), String(generalManagerUser.id));
+  assert.ok(endedDetail.project.endedAt);
+  const endedProjectListItem = (await listProjects(managerUser)).find((project) => project.id === projectId);
+  assert.ok(endedProjectListItem);
+  assert.equal(endedProjectListItem.status, 'ended');
+  assert.equal(endedProjectListItem.endedReason, endReason);
+  const endedOverview = await getProjectOverviewDashboard(managerUser, {
+    status: null,
+    currentStageOrder: null,
+    keyword: ''
+  });
+  const endedOverviewCard = endedOverview.projects.find((project) => project.projectId === projectId);
+  assert.ok(endedOverviewCard);
+  assert.equal(endedOverviewCard.status, 'ended');
+  assert.equal(endedOverviewCard.endedReason, endReason);
+  assert.equal(endedOverviewCard.currentStageCompletenessSummary, null);
+  assert.ok(endedOverview.summary.endedProjects >= 1);
+  assert.equal(
+    await countOperationLogs({
+      projectId,
+      actionType: OPERATION_ACTION_TYPE.PROJECT_ENDED,
+      targetType: OPERATION_TARGET_TYPE.PROJECT,
+      targetId: projectId
+    }),
+    1
+  );
+  assert.equal(
+    await countOperationLogs({
+      projectId,
+      actionType: OPERATION_ACTION_TYPE.INITIATION_REVIEW_GENERAL_RETURNED,
+      targetType: OPERATION_TARGET_TYPE.INITIATION_REVIEW
+    }),
+    1
+  );
+  await assertNoWorkbenchItemForProject(generalManagerUser, projectId);
+  await assertNoWorkbenchItemForProject(managerUser, projectId);
+  assert.deepEqual(
+    await listMyStageDocumentTasks(managerUser.id, normalizeStageDocumentTaskFilters({ projectId })),
+    []
+  );
+
+  const endedRequirement = await selectSmokeDocument(projectId, '1.1');
+  const endedFollowUpDocument = await selectSmokeDocument(projectId, '2.1');
+  await assert.rejects(
+    () =>
+      saveStageDocumentOnlineForm({
+        projectId,
+        documentId: endedRequirement.id,
+        user: marketingManagerUser,
+        formData: { projectBackground: 'ended', customerNeed: 'ended', scope: 'ended', expectedValue: 'ended' }
+      }),
+    (error) => error.code === 'PROJECT_ALREADY_ENDED'
+  );
+  const endedRequirementForm = await getStageDocumentOnlineForm({
+    projectId,
+    documentId: endedRequirement.id,
+    user: marketingManagerUser
+  });
+  assert.equal(endedRequirementForm.permissions.canView, true);
+  assert.equal(endedRequirementForm.permissions.canEdit, false);
+  assert.equal(endedRequirementForm.permissions.canSubmit, false);
+  assert.ok(endedRequirementForm.blockingReasons.some((reason) => String(reason).includes('项目已结束')));
+  await assert.rejects(
+    () =>
+      updateProjectStageDocumentStatus({
+        projectId,
+        documentId: endedFollowUpDocument.id,
+        action: DOCUMENT_STATUS_ACTION.SUBMIT,
+        user: managerUser
+      }),
+    (error) => error.code === 'PROJECT_ALREADY_ENDED'
+  );
+  await assert.rejects(
+    () =>
+      updateProjectStageDocumentResponsibleUser({
+        projectId,
+        documentId: endedFollowUpDocument.id,
+        responsibleUserId: managerUser.id,
+        user: marketingManagerUser
+      }),
+    (error) => error.code === 'PROJECT_ALREADY_ENDED'
+  );
+  await assert.rejects(
+    () =>
+      updateProjectStageDocumentApplicability({
+        projectId,
+        documentId: endedFollowUpDocument.id,
+        action: DOCUMENT_APPLICABILITY_ACTION.MARK_NOT_APPLICABLE,
+        user: managerUser,
+        notApplicableReason: 'ended project should block applicability'
+      }),
+    (error) => error.code === 'PROJECT_ALREADY_ENDED'
+  );
+  await assert.rejects(
+    () => advanceProjectStage(projectId, managerUser),
+    (error) => error.code === 'PROJECT_ALREADY_ENDED'
+  );
+  await assert.rejects(
+    () =>
+      updateProjectCode({
+        projectId,
+        projectCode: `SMOKE-END-${uniqueSuffix}`,
+        user: managerUser
+      }),
+    (error) => error.code === 'PROJECT_ALREADY_ENDED'
+  );
+  await assert.rejects(
+    () =>
+      approveInitiationReviewNode({
+        projectId,
+        documentId: initiationDocument.id,
+        nodeKey: 'general_review',
+        user: generalManagerUser,
+        comment: 'ended project cannot approve'
+      }),
+    (error) => error.code === 'PROJECT_ALREADY_ENDED'
   );
 }
 
@@ -1004,6 +1260,8 @@ async function runInitiationReviewSmoke({
   const projectId = await createInitiationSmokeProject({
     uniqueSuffix,
     projectManagerUser: managerUser,
+    businessResponsibleUser: marketingManagerUser,
+    technicalResponsibleUser: managerUser,
     createdByUserId: managerUser.id,
     label: 'gate',
     smokeProjectIds
@@ -1094,6 +1352,8 @@ async function runInitiationReviewSmoke({
   const visibilityProjectId = await createInitiationSmokeProject({
     uniqueSuffix,
     projectManagerUser: managerUser,
+    businessResponsibleUser: marketingManagerUser,
+    technicalResponsibleUser: managerUser,
     createdByUserId: managerUser.id,
     label: 'form-visibility',
     smokeProjectIds
@@ -1154,6 +1414,7 @@ async function runInitiationReviewSmoke({
   });
 
   const requirementDocument = await selectSmokeDocument(projectId, '1.1');
+  assert.equal(requirementDocument.responsible_user_id, marketingManagerUser.id);
   await assert.rejects(
     () =>
       submitStageDocumentOnlineForm({
@@ -1162,7 +1423,10 @@ async function runInitiationReviewSmoke({
         user: managerUser,
         formData: requirementFormData
       }),
-    (error) => error.code === 'FORM_RESPONSIBLE_USER_REQUIRED'
+    (error) =>
+      error.code === 'FORBIDDEN_OPERATION' &&
+      Array.isArray(error.details) &&
+      error.details.includes('responsibleUserId')
   );
   await assert.rejects(
     () =>
@@ -1280,6 +1544,7 @@ async function runInitiationReviewSmoke({
   }), requirementFormUpdatedLogCount);
 
   const initialInitiationDocument = await selectSmokeDocument(projectId, '1.2');
+  assert.equal(initialInitiationDocument.responsible_user_id, marketingManagerUser.id);
   await assert.rejects(
     () =>
       submitStageDocumentOnlineForm({
@@ -1288,7 +1553,10 @@ async function runInitiationReviewSmoke({
         user: managerUser,
         formData: initiationFormData
       }),
-    (error) => error.code === 'FORM_RESPONSIBLE_USER_REQUIRED'
+    (error) =>
+      error.code === 'FORBIDDEN_OPERATION' &&
+      Array.isArray(error.details) &&
+      error.details.includes('responsibleUserId')
   );
   await assert.rejects(
     () =>
@@ -1504,6 +1772,8 @@ async function runInitiationReviewSmoke({
   const atomicFailureProjectId = await createInitiationSmokeProject({
     uniqueSuffix,
     projectManagerUser: managerUser,
+    businessResponsibleUser: marketingManagerUser,
+    technicalResponsibleUser: managerUser,
     createdByUserId: managerUser.id,
     label: 'atomic-form-submit',
     smokeProjectIds
@@ -1853,6 +2123,8 @@ async function runInitiationReviewSmoke({
   const returnProjectId = await createInitiationSmokeProject({
     uniqueSuffix,
     projectManagerUser: managerUser,
+    businessResponsibleUser: marketingManagerUser,
+    technicalResponsibleUser: managerUser,
     createdByUserId: managerUser.id,
     label: 'return',
     smokeProjectIds
@@ -2218,6 +2490,8 @@ async function runInitiationReviewSmoke({
   const notSubmittedProjectId = await createInitiationSmokeProject({
     uniqueSuffix,
     projectManagerUser: managerUser,
+    businessResponsibleUser: marketingManagerUser,
+    technicalResponsibleUser: managerUser,
     createdByUserId: managerUser.id,
     label: 'not-submitted',
     smokeProjectIds
@@ -2236,6 +2510,8 @@ async function runInitiationReviewSmoke({
   const legacyProjectId = await createInitiationSmokeProject({
     uniqueSuffix,
     projectManagerUser: managerUser,
+    businessResponsibleUser: marketingManagerUser,
+    technicalResponsibleUser: managerUser,
     createdByUserId: managerUser.id,
     label: 'legacy-confirmed',
     smokeProjectIds
@@ -2304,6 +2580,8 @@ async function runInitiationReviewSmoke({
   const returnedBaseProjectId = await createInitiationSmokeProject({
     uniqueSuffix,
     projectManagerUser: managerUser,
+    businessResponsibleUser: marketingManagerUser,
+    technicalResponsibleUser: managerUser,
     createdByUserId: managerUser.id,
     label: 'returned-base',
     smokeProjectIds
@@ -2339,30 +2617,61 @@ async function runInitiationReviewSmoke({
   await assertHasInitiationWorkbenchTask(managerUser, returnedBaseProjectId, 'technical_review');
   assert.equal(nodes.some((node) => node.node_status === 'submitted'), false);
 
+  await runEvaluationReturnToMarketResearchSmoke({
+    uniqueSuffix,
+    smokeProjectIds,
+    managerUser,
+    marketingManagerUser,
+    generalManagerUser,
+    nodeKey: 'business_review',
+    reviewerUser: marketingManagerUser,
+    expectedActionType: OPERATION_ACTION_TYPE.INITIATION_REVIEW_BUSINESS_RETURNED,
+    label: 'business-return'
+  });
+  await runEvaluationReturnToMarketResearchSmoke({
+    uniqueSuffix,
+    smokeProjectIds,
+    managerUser,
+    marketingManagerUser,
+    generalManagerUser,
+    nodeKey: 'technical_review',
+    reviewerUser: managerUser,
+    expectedActionType: OPERATION_ACTION_TYPE.INITIATION_REVIEW_TECHNICAL_RETURNED,
+    label: 'technical-return'
+  });
+  await runProjectEndSmoke({
+    uniqueSuffix,
+    smokeProjectIds,
+    managerUser,
+    marketingManagerUser,
+    generalManagerUser
+  });
+
+  const countedActionTypes = [
+    'initiation_review.submitted',
+    'initiation_review.business_approved',
+    'initiation_review.technical_approved',
+    'initiation_review.general_approved',
+    'initiation_review.general_returned',
+    'initiation_review.completed',
+    'form.updated',
+    'form.submitted',
+    'document.revision_requested'
+  ];
   const [logRows] = await pool.execute(
     `SELECT action_type AS actionType, COUNT(*) AS count
      FROM business_operation_logs
      WHERE project_id IN (?, ?)
-       AND action_type IN (?, ?, ?, ?, ?, ?, ?, ?)
+       AND action_type IN (${countedActionTypes.map(() => '?').join(', ')})
      GROUP BY action_type`,
-    [
-      projectId,
-      returnProjectId,
-      'initiation_review.submitted',
-      'initiation.evaluation.submitted',
-      'initiation.approval.approved',
-      'initiation.approval.returned',
-      'initiation_review.completed',
-      'form.updated',
-      'form.submitted',
-      'document.revision_requested'
-    ]
+    [projectId, returnProjectId, ...countedActionTypes]
   );
   const logCounts = Object.fromEntries(logRows.map((row) => [row.actionType, Number(row.count)]));
   assert.ok(logCounts['initiation_review.submitted'] >= 2);
-  assert.ok(logCounts['initiation.evaluation.submitted'] >= 6);
-  assert.ok(logCounts['initiation.approval.approved'] >= 2);
-  assert.ok(logCounts['initiation.approval.returned'] >= 1);
+  assert.ok(logCounts['initiation_review.business_approved'] >= 2);
+  assert.ok(logCounts['initiation_review.technical_approved'] >= 2);
+  assert.ok(logCounts['initiation_review.general_approved'] >= 2);
+  assert.ok(logCounts['initiation_review.general_returned'] >= 1);
   assert.ok(logCounts['initiation_review.completed'] >= 2);
   assert.ok(logCounts['form.updated'] >= 1);
   assert.ok(logCounts['form.submitted'] >= 4);
@@ -2436,10 +2745,93 @@ async function runProjectLifecycleSmoke() {
     });
     smokeUserIds.push(generalManagerAssistantUser.id);
 
+    assert.throws(
+      () =>
+        normalizeCreateProjectInput({
+          projectName: `缺少负责人 smoke ${uniqueSuffix}`,
+          customerName: 'Smoke 客户',
+          customerContact: '13800000001'
+        }),
+      (error) =>
+        error.code === 'VALIDATION_ERROR' &&
+        error.details.includes('businessResponsibleUserId') &&
+        error.details.includes('technicalResponsibleUserId')
+    );
+    assert.throws(
+      () =>
+        normalizeCreateProjectInput({
+          projectName: `禁止直接创建结束项目 smoke ${uniqueSuffix}`,
+          customerName: 'Smoke 客户',
+          customerContact: '13800000002',
+          businessResponsibleUserId: marketingManagerUser.id,
+          technicalResponsibleUserId: managerUser.id,
+          status: 'ended'
+        }),
+      (error) => error.code === 'INVALID_PROJECT_STATUS' && error.details.includes('status')
+    );
+    await assert.rejects(
+      () =>
+        createProject(
+          normalizeCreateProjectInput({
+            projectName: `商务负责人部门错误 smoke ${uniqueSuffix}`,
+            customerName: 'Smoke 客户',
+            customerContact: '13800000002',
+            businessResponsibleUserId: managerUser.id,
+            technicalResponsibleUserId: managerUser.id
+          }),
+          marketingManagerUser.id
+        ),
+      (error) => error.code === 'PROJECT_RESPONSIBLE_USER_DEPARTMENT_NOT_ALLOWED'
+    );
+    await assert.rejects(
+      () =>
+        createProject(
+          normalizeCreateProjectInput({
+            projectName: `技术负责人部门错误 smoke ${uniqueSuffix}`,
+            customerName: 'Smoke 客户',
+            customerContact: '13800000003',
+            businessResponsibleUserId: marketingManagerUser.id,
+            technicalResponsibleUserId: marketingManagerUser.id
+          }),
+          marketingManagerUser.id
+        ),
+      (error) => error.code === 'PROJECT_RESPONSIBLE_USER_DEPARTMENT_NOT_ALLOWED'
+    );
+    const directEndedStatusInput = {
+      ...normalizeCreateProjectInput({
+        projectName: `Repository 防绕过 smoke ${uniqueSuffix}`,
+        customerName: 'Smoke 客户',
+        customerContact: '13800000004',
+        businessResponsibleUserId: marketingManagerUser.id,
+        technicalResponsibleUserId: managerUser.id
+      }),
+      status: 'ended',
+      endedReason: 'bypassed project end reason',
+      endedByUserId: generalManagerUser.id,
+      endedAt: '2026-07-03 10:00:00'
+    };
+    const directEndedStatusCreated = await createProject(directEndedStatusInput, marketingManagerUser.id);
+    smokeProjectIds.push(directEndedStatusCreated.project.id);
+    assert.equal(directEndedStatusCreated.project.status, 'normal');
+    assert.equal(directEndedStatusCreated.project.endedReason, null);
+    assert.equal(directEndedStatusCreated.project.endedByUserId, null);
+    assert.equal(directEndedStatusCreated.project.endedAt, null);
+    assert.equal(
+      await countOperationLogs({
+        projectId: directEndedStatusCreated.project.id,
+        actionType: OPERATION_ACTION_TYPE.PROJECT_ENDED,
+        targetType: OPERATION_TARGET_TYPE.PROJECT,
+        targetId: directEndedStatusCreated.project.id
+      }),
+      0
+    );
+
     const lightweightProjectInput = normalizeCreateProjectInput({
       projectName: `轻量创建 smoke ${uniqueSuffix}`,
       customerName: 'Smoke 轻量客户',
-      customerContact: '13800000005'
+      customerContact: '13800000005',
+      businessResponsibleUserId: marketingManagerUser.id,
+      technicalResponsibleUserId: managerUser.id
     });
     const lightweightCreated = await createProject(lightweightProjectInput, marketingManagerUser.id);
     const lightweightProjectId = lightweightCreated.project.id;
@@ -2460,6 +2852,8 @@ async function runProjectLifecycleSmoke() {
         customerContact: '13800000001',
         projectMode: 'self_developed',
         projectManagerUserId: managerUser.id,
+        businessResponsibleUserId: marketingManagerUser.id,
+        technicalResponsibleUserId: managerUser.id,
         participatingDepartments: [RD_CENTER],
         status: 'normal',
         plannedStartDate: null,
@@ -2480,6 +2874,8 @@ async function runProjectLifecycleSmoke() {
         customerContact: '13800000002',
         projectMode: 'self_developed',
         projectManagerUserId: managerUser.id,
+        businessResponsibleUserId: marketingManagerUser.id,
+        technicalResponsibleUserId: managerUser.id,
         participatingDepartments: [RD_CENTER],
         status: 'normal',
         plannedStartDate: null,
@@ -2500,6 +2896,8 @@ async function runProjectLifecycleSmoke() {
         customerContact: '13800000003',
         projectMode: 'self_developed',
         projectManagerUserId: managerUser.id,
+        businessResponsibleUserId: marketingManagerUser.id,
+        technicalResponsibleUserId: managerUser.id,
         participatingDepartments: [RD_CENTER],
         status: 'normal',
         plannedStartDate: null,
@@ -2519,6 +2917,8 @@ async function runProjectLifecycleSmoke() {
         customerContact: '13800000004',
         projectMode: 'self_developed',
         projectManagerUserId: managerUser.id,
+        businessResponsibleUserId: marketingManagerUser.id,
+        technicalResponsibleUserId: managerUser.id,
         participatingDepartments: [RD_CENTER],
         status: 'normal',
         plannedStartDate: null,
@@ -3599,7 +3999,9 @@ assert.equal(
     projectName: '空编号项目',
     customerName: '客户',
     customerContact: '13800000000',
-    projectManagerUserId: '1'
+    projectManagerUserId: '1',
+    businessResponsibleUserId: '2',
+    technicalResponsibleUserId: '3'
   }).projectCode,
   null
 );
@@ -3609,7 +4011,9 @@ assert.equal(
     projectName: '空编号项目',
     customerName: '客户',
     customerContact: '13800000000',
-    projectManagerUserId: '1'
+    projectManagerUserId: '1',
+    businessResponsibleUserId: '2',
+    technicalResponsibleUserId: '3'
   }).projectCode,
   null
 );
@@ -4246,6 +4650,12 @@ assert.deepEqual(projectWorkspaceSchemaStatus, {
   projectsCustomerContact: true,
   projectsProjectManagerNullable: true,
   projectsProjectModeNullable: true,
+  projectsStatusSupportsEnded: true,
+  projectsBusinessResponsibleUserId: true,
+  projectsTechnicalResponsibleUserId: true,
+  projectsEndedReason: true,
+  projectsEndedByUserId: true,
+  projectsEndedAt: true,
   projectStageDocumentFormsTable: true
 });
 await ensureStageDocumentSchema(pool);

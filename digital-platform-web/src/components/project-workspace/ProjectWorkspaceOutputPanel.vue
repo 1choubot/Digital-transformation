@@ -26,6 +26,14 @@
           <dt>项目编号</dt>
           <dd>{{ node.projectInput.projectCode || '待后置生成' }}</dd>
         </div>
+        <div>
+          <dt>商务负责人</dt>
+          <dd>{{ formatProjectInputUser(node.projectInput.businessResponsibleUser) }}</dd>
+        </div>
+        <div>
+          <dt>技术负责人</dt>
+          <dd>{{ formatProjectInputUser(node.projectInput.technicalResponsibleUser) }}</dd>
+        </div>
       </dl>
 
       <div v-if="node.blockingReasons?.length" class="stage-document-missing">
@@ -481,6 +489,14 @@ function formatWorkspaceResponsible(output) {
   }
 
   return output.responsibleUser.name || output.responsibleUser.account || `用户 ${output.responsibleUser.id}`;
+}
+
+function formatProjectInputUser(user) {
+  if (!user) {
+    return '-';
+  }
+
+  return user.name || user.account || `用户 ${user.id}`;
 }
 
 function formatBaseStatus(status) {

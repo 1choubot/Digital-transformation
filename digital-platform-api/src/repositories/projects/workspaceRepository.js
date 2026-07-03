@@ -186,6 +186,8 @@ function buildWorkspaceNode(moduleConfig, documentsByCode, project) {
         customerContact: project.customerContact,
         projectCode: project.projectCode,
         projectManagerUser: project.projectManagerUser,
+        businessResponsibleUser: project.businessResponsibleUser,
+        technicalResponsibleUser: project.technicalResponsibleUser,
         projectMode: project.projectMode
       },
       blockingReasons: [],

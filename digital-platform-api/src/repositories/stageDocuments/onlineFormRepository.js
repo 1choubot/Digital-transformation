@@ -9,6 +9,7 @@ import {
   INITIATION_REWORK_TARGET_DOCUMENT_CODE,
   isInitiationOnlineFormDocument
 } from '../../domain/initiationReview.js';
+import { PROJECT_STATUS } from '../../domain/projects.js';
 import { DOCUMENT_STATUS_ACTION } from '../../domain/stageDocumentStatus.js';
 import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import {
@@ -202,6 +203,17 @@ function assertDocumentEditableForOnlineForm(document) {
   );
 }
 
+function assertProjectNotEndedForOnlineForm(project) {
+  if (project?.status === PROJECT_STATUS.ENDED) {
+    throw new StageDocumentFormError(
+      'PROJECT_ALREADY_ENDED',
+      'Project has ended and online form cannot be edited',
+      409,
+      ['projectId']
+    );
+  }
+}
+
 async function assertCanViewFormDocument({ connection, projectId, document, user }) {
   const project = await selectProjectPermissionContext(connection, projectId, user);
   if (!project || !canViewStageDocumentItem(user, { project, document })) {
@@ -377,10 +389,15 @@ async function buildFormPermissions({ connection, projectId, document, user }) {
   }
 
   if (String(getDocumentCode(document)) === INITIATION_NOTICE_DOCUMENT_CODE) {
+    const project = await selectProjectPermissionContext(connection, projectId, user);
     const gate = await buildGateContext(connection, projectId, document);
     const isEditable = isDocumentEditableForOnlineForm(document);
-    const canHandle = isMarketingCenterManager(user) && gate.ready && isEditable;
+    const projectEnded = project?.status === PROJECT_STATUS.ENDED;
+    const canHandle = isMarketingCenterManager(user) && gate.ready && isEditable && !projectEnded;
     const blockingReasons = [];
+    if (projectEnded) {
+      blockingReasons.push('项目已结束，在线表单仅可浏览');
+    }
     if (!gate.ready) {
       blockingReasons.push(...gate.blockingReasons);
     }
@@ -401,12 +418,17 @@ async function buildFormPermissions({ connection, projectId, document, user }) {
 
   const hasResponsible = Boolean(document.responsible_user_id ?? document.responsibleUserId);
   const isEditable = isDocumentEditableForOnlineForm(document);
+  const project = await selectProjectPermissionContext(connection, projectId, user);
+  const projectEnded = project?.status === PROJECT_STATUS.ENDED;
   const reworkBlocker =
     String(getDocumentCode(document)) === INITIATION_REVIEW_DOCUMENT_CODE
       ? await selectOutstandingInitiationRequirementRework(connection, projectId, document)
       : null;
-  const canHandle = hasResponsible && isResponsibleUser(user, document) && isEditable && !reworkBlocker;
+  const canHandle = hasResponsible && isResponsibleUser(user, document) && isEditable && !reworkBlocker && !projectEnded;
   const blockingReasons = [];
+  if (projectEnded) {
+    blockingReasons.push('项目已结束，在线表单仅可浏览');
+  }
   if (!hasResponsible) {
     blockingReasons.push('尚未分配资料责任人');
   }
@@ -468,7 +490,8 @@ export async function saveStageDocumentOnlineForm({ projectId, documentId, user,
   try {
     await connection.beginTransaction();
     document = await selectProjectStageDocumentForUpdate(connection, projectId, documentId);
-    await assertCanViewFormDocument({ connection, projectId, document, user });
+    const project = await assertCanViewFormDocument({ connection, projectId, document, user });
+    assertProjectNotEndedForOnlineForm(project);
     assertDocumentEditableForOnlineForm(document);
     schema = await assertCanEditForm({ connection, projectId, document, user });
     await upsertForm({
@@ -531,7 +554,8 @@ export async function submitStageDocumentOnlineForm({ projectId, documentId, use
   try {
     await connection.beginTransaction();
     document = await selectProjectStageDocumentForUpdate(connection, projectId, documentId);
-    await assertCanViewFormDocument({ connection, projectId, document, user });
+    const project = await assertCanViewFormDocument({ connection, projectId, document, user });
+    assertProjectNotEndedForOnlineForm(project);
     assertDocumentEditableForOnlineForm(document);
     schema = await assertCanEditForm({ connection, projectId, document, user });
     validateRequiredFields(schema, normalizedFormData);

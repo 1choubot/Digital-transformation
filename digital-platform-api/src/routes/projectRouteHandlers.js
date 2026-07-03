@@ -413,7 +413,9 @@ export async function returnInitiationReviewNodeHandler(req, res) {
     documentId,
     nodeKey: req.params.nodeKey,
     user: req.auth.user,
-    returnReason: req.body?.returnReason ?? req.body?.comment
+    returnReason: req.body?.returnReason ?? req.body?.comment,
+    returnAction: req.body?.returnAction ?? req.body?.returnTarget,
+    endReason: req.body?.endReason
   });
 
   res.json({

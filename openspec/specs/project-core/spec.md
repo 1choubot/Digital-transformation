@@ -1636,3 +1636,38 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **THEN** 项目核心 MUST 继续使用现有在线表单、`1.2` 专用评价审批、精准返工和项目编号前置门禁
 - **AND** 项目核心 MUST NOT 新增普通提交、普通审核或普通退回路径绕过立项专用规则
 
+### Requirement: v20260629 新项目运行基线验证
+
+项目核心能力 MUST 支持对 v20260629 新项目真实运行基线进行验证和阻塞 bug 修复；验证和修复 MUST 保持旧项目不迁移，并 MUST NOT 新增业务规则、数据库 migration、文件平台联动或第二套状态机。
+
+#### Scenario: 新项目生成 71 项运行资料
+- **WHEN** 团队执行 v20260629 新项目运行基线 API smoke
+- **THEN** 新建测试项目 MUST 初始化标准 8 阶段和 71 项项目级阶段资料
+- **AND** 新项目资料 MUST 保存 `v20260629` 模板版本或等价稳定版本标识
+
+#### Scenario: 新项目不包含旧兼容资料
+- **WHEN** 团队核查 v20260629 新项目资料集合
+- **THEN** 新项目 MUST NOT 包含 `3.3`、`5.4`、`LC33` 或 `LC54` 对应项目资料记录
+- **AND** `LC33 / LC54` MUST 继续仅服务旧项目 workspace 兼容展示
+
+#### Scenario: 旧项目保持 64 项
+- **WHEN** 系统存在已按 20260625 64 项初始化的旧项目
+- **THEN** 本 change MUST NOT 迁移旧项目、补初始化旧项目或改写旧项目资料状态、责任人、附件和阶段推进结果
+- **AND** 旧项目 MUST 继续按其已有项目级资料记录运行
+
+#### Scenario: 阶段推进按项目实际资料集合
+- **WHEN** 系统判断 v20260629 新项目或 20260625 旧项目的阶段齐套、阶段推进门禁、工作台待办或项目工作区状态
+- **THEN** 判断 MUST 基于该项目实际存在的资料记录、completionMode、适用性、状态和返工字段
+- **AND** 系统 MUST NOT 将 64 项旧模板和 71 项新模板混用为同一个项目资料集合
+
+#### Scenario: 运行阻塞 bug 可在本 change 修复
+- **WHEN** Runtime Audit 或 Browser Acceptance 发现 v20260629 新项目运行阻塞 bug
+- **THEN** 项目核心 MAY 在本 change 内修复现有项目创建、资料查询、workspace 聚合、工作台或阶段推进逻辑
+- **AND** 修复 MUST 复用现有资料状态、权限、附件、业务日志和阶段推进边界
+- **AND** 修复 MUST NOT 新增业务规则、流程引擎、文件平台联动、数据库 migration 或旧项目迁移
+
+#### Scenario: 立项主流程不回退
+- **WHEN** v20260629 新项目处理 `1.1 项目需求表`、`1.2 项目立项审批表` 或 `1.3 项目立项通知`
+- **THEN** 项目核心 MUST 继续使用现有在线表单、`1.2` 专用评价审批、精准返工和项目编号前置门禁
+- **AND** 项目核心 MUST NOT 新增普通提交、普通审核或普通退回路径绕过立项专用规则
+

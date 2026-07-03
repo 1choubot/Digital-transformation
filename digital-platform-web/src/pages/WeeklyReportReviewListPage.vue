@@ -58,18 +58,18 @@
             <span>状态</span>
             <span>最终评分</span>
             <span>参考评分</span>
-            <span>评分人</span>
+            <span>审批人</span>
             <span class="text-right">操作</span>
           </div>
           <div v-for="row in overviewRows" :key="row.reportId" class="weekly-overview-table__row">
             <strong>{{ row.userName }}</strong>
             <span>{{ formatBusinessDepartment(row.department) }}</span>
-            <span class="status-badge" :class="statusClass(row.status)">{{ statusLabel(row.status) }}</span>
+            <span class="status-badge" :class="approvalStatusClass(row.approvalStatus)">{{ approvalStatusLabel(row.approvalStatus) }}</span>
             <span>{{ overviewFinalScoreText(row) }}</span>
             <span>{{ overviewReferenceScoreText(row) }}</span>
-            <span>{{ row.finalReviewedByName || '-' }}</span>
+            <span>{{ row.approvalReviewedByName || '-' }}</span>
             <button type="button" class="row-btn action-btn" @click="navigate(`/weekly-report-review/${row.reportId}?from=overview`)">
-              考评
+              审核
             </button>
           </div>
         </div>
@@ -80,7 +80,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
-import { OrganizationRole, ReportStatus } from '../constants/reports.js';
+import { OrganizationRole, ReportStatus, WeeklyApprovalStatus } from '../constants/reports.js';
 import {
   listWeeklyComparisonOverview,
   toReadableApiError
@@ -138,6 +138,28 @@ function statusLabel(status) {
 
 function statusClass(status) {
   return status === ReportStatus.SUBMITTED ? 'status-badge--done' : 'status-badge--draft';
+}
+
+// Weekly overview rows surface approval progress for center-manager review.
+function approvalStatusLabel(status) {
+  const labels = {
+    [WeeklyApprovalStatus.NOT_SUBMITTED]: '未提交',
+    [WeeklyApprovalStatus.PENDING]: '审批中',
+    [WeeklyApprovalStatus.APPROVED]: '审批通过',
+    [WeeklyApprovalStatus.RETURNED]: '已打回'
+  };
+  return labels[status] || labels[WeeklyApprovalStatus.NOT_SUBMITTED];
+}
+
+// Approval badge classes mirror the employee-facing weekly list.
+function approvalStatusClass(status) {
+  const classes = {
+    [WeeklyApprovalStatus.NOT_SUBMITTED]: 'status-badge--draft',
+    [WeeklyApprovalStatus.PENDING]: 'status-badge--pending',
+    [WeeklyApprovalStatus.APPROVED]: 'status-badge--done',
+    [WeeklyApprovalStatus.RETURNED]: 'status-badge--returned'
+  };
+  return classes[status] || classes[WeeklyApprovalStatus.NOT_SUBMITTED];
 }
 
 function sourceLabel(source) {
@@ -398,6 +420,16 @@ onMounted(() => {
   background: #f0f9eb;
   color: #67c23a;
   border-color: #e1f3d8;
+}
+.status-badge--pending {
+  background: #ecf5ff;
+  color: #3e63dd;
+  border-color: #d9ecff;
+}
+.status-badge--returned {
+  background: #fef0f0;
+  color: #f56c6c;
+  border-color: #fde2e2;
 }
 
 /* ===== 筛选栏 ===== */

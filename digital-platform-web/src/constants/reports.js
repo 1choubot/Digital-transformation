@@ -4,6 +4,14 @@ export const ReportStatus = {
   SUBMITTED: 'submitted'
 };
 
+// Weekly approval statuses are independent from draft/submitted report status.
+export const WeeklyApprovalStatus = {
+  NOT_SUBMITTED: 'not_submitted',
+  PENDING: 'pending',
+  APPROVED: 'approved',
+  RETURNED: 'returned'
+};
+
 // Organization roles mirror the backend organization model for page-level guards.
 export const OrganizationRole = {
   GENERAL_MANAGER: 'general_manager',

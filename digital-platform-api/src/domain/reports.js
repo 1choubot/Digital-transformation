@@ -6,6 +6,14 @@ export const ReportStatus = {
   SUBMITTED: 'submitted'
 };
 
+// Weekly approval statuses are separate from draft/submitted persistence status.
+export const WeeklyApprovalStatus = {
+  NOT_SUBMITTED: 'not_submitted',
+  PENDING: 'pending',
+  APPROVED: 'approved',
+  RETURNED: 'returned'
+};
+
 // Re-export the main organization model names expected by report modules.
 export const OrganizationRole = ORGANIZATION_ROLE;
 

@@ -124,7 +124,7 @@
             <div>
               <strong>{{ report.weekStart }} 至 {{ report.weekEnd }}</strong>
             </div>
-            <span class="status-badge" :class="statusClass(report.status)">{{ statusLabel(report.status) }}</span>
+            <span class="status-badge" :class="approvalStatusClass(report.approvalStatus)">{{ approvalStatusLabel(report.approvalStatus) }}</span>
             <span v-if="!isEmployeeUser">{{ finalScoreText(report) }}</span>
             <span v-if="!isEmployeeUser">{{ sourceLabel(report.aiEvaluationSource) }}</span>
             <time>{{ formatDateTime(report.updatedAt) }}</time>
@@ -149,7 +149,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import { OrganizationRole, ReportStatus, WeeklyRestMode } from '../constants/reports.js';
+import { OrganizationRole, ReportStatus, WeeklyApprovalStatus, WeeklyRestMode } from '../constants/reports.js';
 import {
   deleteWeeklyReport,
   exportWeeklyReport,
@@ -229,6 +229,28 @@ function statusLabel(status) {
 
 function statusClass(status) {
   return status === ReportStatus.SUBMITTED ? 'status-badge--done' : 'status-badge--draft';
+}
+
+// Employees track review progress through the independent approval status.
+function approvalStatusLabel(status) {
+  const labels = {
+    [WeeklyApprovalStatus.NOT_SUBMITTED]: '未提交',
+    [WeeklyApprovalStatus.PENDING]: '审批中',
+    [WeeklyApprovalStatus.APPROVED]: '审批通过',
+    [WeeklyApprovalStatus.RETURNED]: '已打回'
+  };
+  return labels[status] || labels[WeeklyApprovalStatus.NOT_SUBMITTED];
+}
+
+// Badge colors distinguish pending, approved, and returned reports at a glance.
+function approvalStatusClass(status) {
+  const classes = {
+    [WeeklyApprovalStatus.NOT_SUBMITTED]: 'status-badge--draft',
+    [WeeklyApprovalStatus.PENDING]: 'status-badge--pending',
+    [WeeklyApprovalStatus.APPROVED]: 'status-badge--done',
+    [WeeklyApprovalStatus.RETURNED]: 'status-badge--returned'
+  };
+  return classes[status] || classes[WeeklyApprovalStatus.NOT_SUBMITTED];
 }
 
 function sourceLabel(source) {
@@ -592,6 +614,16 @@ onMounted(() => {
   background: #f0f9eb;
   color: #67c23a;
   border-color: #e1f3d8;
+}
+.status-badge--pending {
+  background: #ecf5ff;
+  color: #3e63dd;
+  border-color: #d9ecff;
+}
+.status-badge--returned {
+  background: #fef0f0;
+  color: #f56c6c;
+  border-color: #fde2e2;
 }
 
 /* ===== 单双休设置面板 ===== */

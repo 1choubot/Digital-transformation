@@ -24,8 +24,8 @@
             <span class="evaluatee-name">被考评人：{{ targetUserName }}</span>
             <span class="divider">|</span>
             <strong class="toolbar-title">{{ report.weekStart }} 至 {{ report.weekEnd }}</strong>
-            <span class="status-badge" :class="statusClass(report.status)">
-              {{ statusLabel(report.status) }}
+            <span class="status-badge" :class="approvalStatusClass(report.approvalStatus)">
+              {{ approvalStatusLabel(report.approvalStatus) }}
             </span>
             <span class="toolbar-subtitle">评分：{{ finalScoreText }}</span>
           </div>
@@ -56,6 +56,18 @@
         <div class="panel-body">
           <div class="weekly-review-meta">
             <div class="meta-item">
+              <span class="meta-label">审批状态</span>
+              <strong class="meta-value">{{ approvalStatusLabel(report.approvalStatus) }}</strong>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">审批人</span>
+              <strong class="meta-value">{{ approvalReviewerText }}</strong>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">审批时间</span>
+              <strong class="meta-value">{{ formatDateTime(report.approvalReviewedAt) }}</strong>
+            </div>
+            <div class="meta-item">
               <span class="meta-label">评分人</span>
               <strong class="meta-value">{{ finalReviewerText }}</strong>
             </div>
@@ -68,6 +80,9 @@
               <strong class="meta-value">{{ report.finalGrade || '-' }}</strong>
             </div>
           </div>
+          <p v-if="report.approvalComment" class="final-comment final-comment--approval">
+            打回原因：{{ report.approvalComment }}
+          </p>
           <p v-if="report.finalComment" class="final-comment">{{ report.finalComment }}</p>
         </div>
       </section>
@@ -276,6 +291,53 @@
         </div>
       </section>
 
+      <!-- 审批 -->
+      <section class="panel weekly-approval-panel">
+        <div class="panel-toolbar">
+          <div class="toolbar-info">
+            <strong class="toolbar-title">审批</strong>
+            <span class="toolbar-subtitle">{{ canReviewApproval ? '待审批' : '只读' }}</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="weekly-final-review-form">
+            <div class="form-field form-field--full">
+              <span class="field-label">打回原因</span>
+              <textarea
+                v-model="approvalForm.comment"
+                class="form-control form-textarea"
+                :readonly="!canReviewApproval"
+                placeholder="打回时必须填写原因"
+              />
+            </div>
+          </div>
+          <div v-if="canReviewApproval" class="form-actions">
+            <button
+              type="button"
+              class="primary-button"
+              :disabled="savingApproval"
+              @click="submitApproval('approve')"
+            >
+              通过审批
+            </button>
+            <button
+              type="button"
+              class="ghost-button ghost-button--danger"
+              :disabled="savingApproval"
+              @click="submitApproval('return')"
+            >
+              打回
+            </button>
+          </div>
+          <section v-if="approvalMessage" class="state-panel state-panel--success state-panel--compact">
+            <p>{{ approvalMessage }}</p>
+          </section>
+          <section v-if="approvalError" class="state-panel state-panel--error state-panel--compact">
+            <p>{{ approvalError }}</p>
+          </section>
+        </div>
+      </section>
+
       <!-- 评分 -->
       <section class="panel weekly-final-review-panel">
         <div class="panel-toolbar">
@@ -352,10 +414,11 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
-import { OrganizationRole, ReportStatus } from '../constants/reports.js';
+import { OrganizationRole, ReportStatus, WeeklyApprovalStatus } from '../constants/reports.js';
 import {
   exportWeeklyReport,
   getWeeklyReport,
+  reviewWeeklyReportApproval,
   saveWeeklyReportFinalReview,
   toReadableApiError
 } from '../api/weeklyReports.js';
@@ -395,15 +458,21 @@ const returnPath = computed(() => {
 const loading = ref(false);
 const exporting = ref(false);
 const savingFinalReview = ref(false);
+const savingApproval = ref(false);
 const report = ref(null);
 const targetUser = ref(null);
 const errorMessage = ref('');
 const finalReviewMessage = ref('');
 const finalReviewError = ref('');
+const approvalMessage = ref('');
+const approvalError = ref('');
 const finalReviewForm = reactive({
   finalScore: '',
   finalGrade: '',
   finalComment: ''
+});
+const approvalForm = reactive({
+  comment: ''
 });
 const finalGradeOptions = ['A', 'B', 'C', 'D', 'E'];
 
@@ -430,6 +499,13 @@ const canEditFinalReview = computed(() => {
   }
   return props.currentUser.organizationRole === OrganizationRole.GENERAL_MANAGER && isCenterManagerTarget.value;
 });
+// Center managers approve only pending employee reports from their own center.
+const canReviewApproval = computed(
+  () =>
+    props.currentUser.organizationRole === OrganizationRole.CENTER_MANAGER &&
+    isEmployeeTarget.value &&
+    report.value?.approvalStatus === WeeklyApprovalStatus.PENDING
+);
 const canExportOwnReport = computed(() => String(report.value?.userId) === String(props.currentUser.id));
 const finalScoreText = computed(() => {
   if (report.value?.finalScore === null || report.value?.finalScore === undefined) {
@@ -443,6 +519,12 @@ const finalReviewerText = computed(() => {
   }
   return report.value?.finalReviewedByUserId ? `用户 ${report.value.finalReviewedByUserId}` : '-';
 });
+const approvalReviewerText = computed(() => {
+  if (report.value?.approvalReviewedByName) {
+    return report.value.approvalReviewedByName;
+  }
+  return report.value?.approvalReviewedByUserId ? `用户 ${report.value.approvalReviewedByUserId}` : '-';
+});
 
 function statusLabel(status) {
   return status === ReportStatus.SUBMITTED ? '已提交' : '草稿';
@@ -450,6 +532,28 @@ function statusLabel(status) {
 
 function statusClass(status) {
   return status === ReportStatus.SUBMITTED ? 'status-badge--done' : 'status-badge--draft';
+}
+
+// Approval state is the business status shown on review pages.
+function approvalStatusLabel(status) {
+  const labels = {
+    [WeeklyApprovalStatus.NOT_SUBMITTED]: '未提交',
+    [WeeklyApprovalStatus.PENDING]: '审批中',
+    [WeeklyApprovalStatus.APPROVED]: '审批通过',
+    [WeeklyApprovalStatus.RETURNED]: '已打回'
+  };
+  return labels[status] || labels[WeeklyApprovalStatus.NOT_SUBMITTED];
+}
+
+// Approval status classes share the existing compact badge component.
+function approvalStatusClass(status) {
+  const classes = {
+    [WeeklyApprovalStatus.NOT_SUBMITTED]: 'status-badge--draft',
+    [WeeklyApprovalStatus.PENDING]: 'status-badge--pending',
+    [WeeklyApprovalStatus.APPROVED]: 'status-badge--done',
+    [WeeklyApprovalStatus.RETURNED]: 'status-badge--returned'
+  };
+  return classes[status] || classes[WeeklyApprovalStatus.NOT_SUBMITTED];
 }
 
 function completionStatusLabel(status) {
@@ -527,6 +631,7 @@ function applyReport(result) {
   finalReviewForm.finalScore = result.report.finalScore ?? '';
   finalReviewForm.finalGrade = result.report.finalGrade || '';
   finalReviewForm.finalComment = result.report.finalComment || '';
+  approvalForm.comment = result.report.approvalComment || '';
 }
 
 function saveBlob(download, fallbackName) {
@@ -583,6 +688,30 @@ async function saveFinalReview() {
     finalReviewError.value = toReadableApiError(error);
   } finally {
     savingFinalReview.value = false;
+  }
+}
+
+// Submit the center manager's approval decision and refresh the displayed report state.
+async function submitApproval(action) {
+  savingApproval.value = true;
+  approvalMessage.value = '';
+  approvalError.value = '';
+
+  try {
+    const result = await reviewWeeklyReportApproval(
+      props.reportId,
+      {
+        action,
+        comment: approvalForm.comment
+      },
+      props.authToken
+    );
+    report.value = result.report;
+    approvalMessage.value = action === 'approve' ? '审批已通过。' : '周报已打回。';
+  } catch (error) {
+    approvalError.value = toReadableApiError(error);
+  } finally {
+    savingApproval.value = false;
   }
 }
 
@@ -698,6 +827,15 @@ onMounted(loadReport);
   border-color: #c6e2ff;
   background: #ecf5ff;
   color: #3e63dd;
+}
+.ghost-button--danger {
+  color: #f56c6c;
+  border-color: #fde2e2;
+}
+.ghost-button--danger:hover:not(:disabled) {
+  background: #fef0f0;
+  border-color: #fbc4c4;
+  color: #f56c6c;
 }
 .ghost-button:disabled {
   opacity: 0.6;
@@ -816,6 +954,16 @@ onMounted(loadReport);
   color: #67c23a;
   border-color: #e1f3d8;
 }
+.status-badge--pending {
+  background: #ecf5ff;
+  color: #3e63dd;
+  border-color: #d9ecff;
+}
+.status-badge--returned {
+  background: #fef0f0;
+  color: #f56c6c;
+  border-color: #fde2e2;
+}
 
 /* ===== 周报摘要元信息 ===== */
 .weekly-review-meta {
@@ -844,6 +992,11 @@ onMounted(loadReport);
   border-left: 3px solid #3e63dd;
   font-size: 0.9rem;
   color: #606266;
+}
+.final-comment--approval {
+  border-left-color: #f56c6c;
+  background: #fef0f0;
+  color: #9f3a38;
 }
 
 /* ===== 只读表格 ===== */

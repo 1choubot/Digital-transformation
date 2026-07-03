@@ -490,6 +490,16 @@ export function toReadableApiError(error) {
     return '只有已提交周报可以发起评分。';
   }
 
+  // Weekly approval actions are allowed only while a report is waiting for review.
+  if (error.code === 'WEEKLY_REPORT_INVALID_APPROVAL_ACTION') {
+    return '当前周报审批状态不允许执行该操作，请刷新后重试。';
+  }
+
+  // Returned weekly reports must always tell the employee what to revise.
+  if (error.code === 'WEEKLY_REPORT_APPROVAL_COMMENT_REQUIRED') {
+    return '打回周报时必须填写原因。';
+  }
+
   if (error.code === 'CENTER_SCOPE_FORBIDDEN') {
     return '当前账号不能查看其他中心的中心周报。';
   }

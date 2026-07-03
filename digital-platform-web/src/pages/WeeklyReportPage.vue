@@ -19,12 +19,24 @@
             <strong class="toolbar-title">周报周期</strong>
             <span class="toolbar-subtitle">{{ form.weekStart }} 至 {{ form.weekEnd }}</span>
           </div>
-          <span v-if="savedReport" class="status-badge" :class="statusClass(savedReport.status)">
-            {{ statusLabel(savedReport.status) }}
+          <span v-if="savedReport" class="status-badge" :class="approvalStatusClass(savedReport.approvalStatus)">
+            {{ approvalStatusLabel(savedReport.approvalStatus) }}
           </span>
         </div>
 
         <form class="weekly-form" @submit.prevent="saveDraft">
+          <section v-if="savedReport?.approvalStatus === WeeklyApprovalStatus.RETURNED" class="state-panel state-panel--error state-panel--compact weekly-return-reason">
+            <p>已打回：{{ savedReport.approvalComment || '中心负责人未填写具体原因。' }}</p>
+          </section>
+
+          <section v-if="savedReport?.approvalStatus === WeeklyApprovalStatus.APPROVED" class="state-panel state-panel--success state-panel--compact">
+            <p>审批已通过，周报内容已锁定。</p>
+          </section>
+
+          <section v-if="savedReport?.approvalStatus === WeeklyApprovalStatus.PENDING" class="state-panel state-panel--compact weekly-pending-note">
+            <p>周报审批中，暂不可修改。</p>
+          </section>
+
           <!-- 日期选择 -->
           <div class="weekly-date-grid">
             <div class="filter-group">
@@ -56,13 +68,13 @@
             <div class="weekly-section__heading">
               <h3>本周工作总结</h3>
               <div class="section-actions">
-                <button type="button" class="ghost-button" :disabled="saving" @click="refreshPrefillSuggestion">
+                <button type="button" class="ghost-button" :disabled="saving || !canEditReport" @click="refreshPrefillSuggestion">
                   刷新日报数据
                 </button>
-                <button type="button" class="ghost-button" :disabled="saving || aiComposing || !prefillState.basisHash" @click="composePrefillWithAi">
+                <button type="button" class="ghost-button" :disabled="saving || aiComposing || !prefillState.basisHash || !canEditReport" @click="composePrefillWithAi">
                   {{ aiComposing ? 'AI 整理中' : 'AI 整理草稿' }}
                 </button>
-                <button type="button" class="ghost-button" @click="addSummary">
+                <button type="button" class="ghost-button" :disabled="!canEditReport" @click="addSummary">
                   <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <line x1="12" y1="5" x2="12" y2="19" />
                     <line x1="5" y1="12" x2="19" y2="12" />
@@ -199,7 +211,7 @@
                     <button
                       type="button"
                       class="row-btn action-btn"
-                      :disabled="form.summaries.length === 1"
+                      :disabled="form.summaries.length === 1 || !canEditReport"
                       @click="removeSummary(index)"
                     >
                       删除
@@ -222,7 +234,7 @@
           <section class="weekly-section">
             <div class="weekly-section__heading">
               <h3>下周工作计划</h3>
-              <button type="button" class="ghost-button" @click="addPlan">
+              <button type="button" class="ghost-button" :disabled="!canEditReport" @click="addPlan">
                 <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                   <line x1="12" y1="5" x2="12" y2="19" />
                   <line x1="5" y1="12" x2="19" y2="12" />
@@ -293,7 +305,7 @@
                   <button
                     type="button"
                     class="row-btn action-btn"
-                    :disabled="form.plans.length === 1"
+                    :disabled="form.plans.length === 1 || !canEditReport"
                     @click="removePlan(index)"
                   >
                     删除
@@ -313,7 +325,7 @@
 
           <!-- 底部操作按钮 -->
           <div class="form-actions">
-            <button type="button" class="ghost-button" :disabled="saving" @click="saveDraft">
+            <button type="button" class="ghost-button" :disabled="saving || !canEditReport" @click="saveDraft">
               <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
                 <polyline points="17 21 17 13 7 13 7 21" />
@@ -321,7 +333,7 @@
               </svg>
               暂存草稿
             </button>
-            <button type="button" class="primary-button" :disabled="saving" @click="submitReport">
+            <button type="button" class="primary-button" :disabled="saving || !canEditReport" @click="submitReport">
               <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                 <polyline points="22 4 12 14.01 9 11.01" />
@@ -337,7 +349,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { OrganizationRole, ReportStatus } from '../constants/reports.js';
+import { OrganizationRole, ReportStatus, WeeklyApprovalStatus } from '../constants/reports.js';
 import {
   createWeeklyReport,
   composeWeeklyReportPrefillWithAi,
@@ -400,6 +412,16 @@ const form = reactive({
 const canUseWeeklyReport = computed(() =>
   [OrganizationRole.EMPLOYEE, OrganizationRole.CENTER_MANAGER].includes(props.currentUser.organizationRole)
 );
+// Editing is locked once a submitted report is pending review or approved.
+const canEditReport = computed(() => {
+  if (!savedReport.value) {
+    return true;
+  }
+  return [
+    WeeklyApprovalStatus.NOT_SUBMITTED,
+    WeeklyApprovalStatus.RETURNED
+  ].includes(savedReport.value.approvalStatus || WeeklyApprovalStatus.NOT_SUBMITTED);
+});
 const currentUserDisplayName = computed(
   () => props.currentUser.displayName || props.currentUser.name || props.currentUser.account || ''
 );
@@ -786,6 +808,28 @@ function statusClass(status) {
   return status === ReportStatus.SUBMITTED ? 'status-badge--done' : 'status-badge--draft';
 }
 
+// Approval labels are shown to employees instead of the raw draft/submitted state.
+function approvalStatusLabel(status) {
+  const labels = {
+    [WeeklyApprovalStatus.NOT_SUBMITTED]: '未提交',
+    [WeeklyApprovalStatus.PENDING]: '审批中',
+    [WeeklyApprovalStatus.APPROVED]: '审批通过',
+    [WeeklyApprovalStatus.RETURNED]: '已打回'
+  };
+  return labels[status] || labels[WeeklyApprovalStatus.NOT_SUBMITTED];
+}
+
+// Approval classes keep the existing compact badge shape with clearer colors.
+function approvalStatusClass(status) {
+  const classes = {
+    [WeeklyApprovalStatus.NOT_SUBMITTED]: 'status-badge--draft',
+    [WeeklyApprovalStatus.PENDING]: 'status-badge--pending',
+    [WeeklyApprovalStatus.APPROVED]: 'status-badge--done',
+    [WeeklyApprovalStatus.RETURNED]: 'status-badge--returned'
+  };
+  return classes[status] || classes[WeeklyApprovalStatus.NOT_SUBMITTED];
+}
+
 // Trigger browser download for generated Excel files.
 function saveBlob(download, fallbackName) {
   const url = URL.createObjectURL(download.blob);
@@ -800,6 +844,11 @@ function saveBlob(download, fallbackName) {
 
 // Persist either a draft or submitted weekly report.
 async function saveReport(status) {
+  if (!canEditReport.value) {
+    errorMessage.value = '当前周报审批状态不允许修改。';
+    return;
+  }
+
   if (status === ReportStatus.SUBMITTED && !validateSubmitFields()) {
     errorMessage.value = '请补齐标红字段后再提交。';
     return;
@@ -1067,6 +1116,21 @@ watch(
   background: #f0f9eb;
   color: #67c23a;
   border-color: #e1f3d8;
+}
+.status-badge--pending {
+  background: #ecf5ff;
+  color: #3e63dd;
+  border-color: #d9ecff;
+}
+.status-badge--returned {
+  background: #fef0f0;
+  color: #f56c6c;
+  border-color: #fde2e2;
+}
+.weekly-return-reason,
+.weekly-pending-note {
+  align-items: flex-start;
+  text-align: left;
 }
 
 /* ===== 表单 ===== */

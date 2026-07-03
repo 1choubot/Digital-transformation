@@ -14,6 +14,7 @@ import {
 import { isValidBusinessDepartment } from '../domain/organization.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import {
+  normalizeWeeklyApprovalPayload,
   normalizeComparisonOverviewFilters,
   normalizeWeeklyFinalReviewPayload,
   normalizeWeeklyReportPayload,
@@ -33,6 +34,7 @@ import {
   listWeeklyReports,
   saveWeeklyReportEvaluation,
   saveWeeklyReportFinalReview,
+  reviewWeeklyReportApproval,
   updateWeeklyReport,
   resolveWeeklyReportWorkdayContext
 } from '../repositories/weeklyReportRepository.js';
@@ -351,6 +353,26 @@ weeklyReportsRouter.post(
       data: {
         report,
         cached: false
+      }
+    });
+  })
+);
+
+weeklyReportsRouter.put(
+  '/:reportId/approval',
+  asyncHandler(async (req, res) => {
+    const reportId = parseReportId(req.params.reportId);
+    const approval = normalizeWeeklyApprovalPayload(req.body || {});
+    const report = await reviewWeeklyReportApproval({
+      reportId,
+      evaluatorUser: req.auth.user,
+      approval
+    });
+
+    // Approval is independent of final score and returns the refreshed report row.
+    res.json({
+      data: {
+        report
       }
     });
   })

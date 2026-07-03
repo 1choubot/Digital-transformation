@@ -4,7 +4,9 @@ import {
   canEvaluateWeeklyReport,
   canFinalizeWeeklyReport,
   canReadManagedWeeklyReport,
-  ReportStatus
+  canReviewEmployeeWeeklyReport,
+  ReportStatus,
+  WeeklyApprovalStatus
 } from '../domain/reports.js';
 import { getExpectedWorkdatesForWeek, resolveWeeklyRestMode } from '../domain/reportWorkdays.js';
 import {
@@ -71,6 +73,11 @@ function mapWeeklyReportRow(row) {
     weekStart: dateOnly(row.week_start),
     weekEnd: dateOnly(row.week_end),
     status: row.status,
+    approvalStatus: row.approval_status || WeeklyApprovalStatus.NOT_SUBMITTED,
+    approvalComment: row.approval_comment,
+    approvalReviewedByUserId: row.approval_reviewed_by_user_id,
+    approvalReviewedByName: row.approval_reviewer_display_name || row.approval_reviewer_account || null,
+    approvalReviewedAt: dateTime(row.approval_reviewed_at),
     aiScore: parseJson(row.ai_score),
     aiEvaluatedAt: dateTime(row.ai_evaluated_at),
     aiEvaluationSource: row.ai_evaluation_source,
@@ -292,6 +299,57 @@ function throwDuplicateIfNeeded(error) {
   }
 }
 
+// Approval starts when a submitted report is created.
+function approvalStatusForNewReport(report) {
+  return report.status === ReportStatus.SUBMITTED
+    ? WeeklyApprovalStatus.PENDING
+    : WeeklyApprovalStatus.NOT_SUBMITTED;
+}
+
+// Returned drafts keep the visible return reason until the employee resubmits.
+function approvalStatusForUpdate(existing, report) {
+  if (report.status === ReportStatus.SUBMITTED) {
+    return WeeklyApprovalStatus.PENDING;
+  }
+  return existing.approvalStatus === WeeklyApprovalStatus.RETURNED
+    ? WeeklyApprovalStatus.RETURNED
+    : WeeklyApprovalStatus.NOT_SUBMITTED;
+}
+
+// Employees may edit drafts and returned reports, but not reports under review or approved.
+function assertWeeklyReportEditable(existing) {
+  const editable =
+    existing.status === ReportStatus.DRAFT ||
+    existing.approvalStatus === WeeklyApprovalStatus.RETURNED;
+
+  if (!editable) {
+    throw new WeeklyReportError(
+      WEEKLY_REPORT_ERROR.FORBIDDEN,
+      'Weekly report cannot be edited in current approval status',
+      409,
+      ['approvalStatus']
+    );
+  }
+}
+
+// Approval history records the business transition separately from report content.
+async function insertWeeklyReportApprovalHistory(
+  executor,
+  { weeklyReportId, action, fromApprovalStatus, toApprovalStatus, comment, operatorUserId }
+) {
+  await executor.execute(
+    `INSERT INTO weekly_report_approval_history (
+      weekly_report_id,
+      action,
+      from_approval_status,
+      to_approval_status,
+      comment,
+      operator_user_id
+    ) VALUES (?, ?, ?, ?, ?, ?)`,
+    [weeklyReportId, action, fromApprovalStatus, toApprovalStatus, comment || null, operatorUserId]
+  );
+}
+
 // Write child summary rows in a stable display order.
 async function insertWeeklyReportSummaries(executor, weeklyReportId, summaries) {
   for (const item of summaries) {
@@ -372,9 +430,12 @@ export async function getWeeklyReportById({ reportId, userId }, executor = pool)
     `SELECT
       wr.*,
       reviewer.display_name AS final_reviewer_display_name,
-      reviewer.account AS final_reviewer_account
+      reviewer.account AS final_reviewer_account,
+      approval_reviewer.display_name AS approval_reviewer_display_name,
+      approval_reviewer.account AS approval_reviewer_account
     FROM weekly_reports wr
     LEFT JOIN users reviewer ON reviewer.id = wr.final_reviewed_by_user_id
+    LEFT JOIN users approval_reviewer ON approval_reviewer.id = wr.approval_reviewed_by_user_id
     WHERE wr.id = ? AND wr.user_id = ?
     LIMIT 1`,
     [reportId, userId]
@@ -393,9 +454,12 @@ async function getWeeklyReportByIdForSystem(reportId, executor = pool) {
     `SELECT
       wr.*,
       reviewer.display_name AS final_reviewer_display_name,
-      reviewer.account AS final_reviewer_account
+      reviewer.account AS final_reviewer_account,
+      approval_reviewer.display_name AS approval_reviewer_display_name,
+      approval_reviewer.account AS approval_reviewer_account
     FROM weekly_reports wr
     LEFT JOIN users reviewer ON reviewer.id = wr.final_reviewed_by_user_id
+    LEFT JOIN users approval_reviewer ON approval_reviewer.id = wr.approval_reviewed_by_user_id
     WHERE wr.id = ?
     LIMIT 1`,
     [reportId]
@@ -415,6 +479,8 @@ export async function getWeeklyReportWithUserForReview(reportId, executor = pool
       wr.*,
       reviewer.display_name AS final_reviewer_display_name,
       reviewer.account AS final_reviewer_account,
+      approval_reviewer.display_name AS approval_reviewer_display_name,
+      approval_reviewer.account AS approval_reviewer_account,
       u.id AS user_id,
       u.account,
       u.display_name,
@@ -426,6 +492,7 @@ export async function getWeeklyReportWithUserForReview(reportId, executor = pool
     FROM weekly_reports wr
     INNER JOIN users u ON u.id = wr.user_id
     LEFT JOIN users reviewer ON reviewer.id = wr.final_reviewed_by_user_id
+    LEFT JOIN users approval_reviewer ON approval_reviewer.id = wr.approval_reviewed_by_user_id
     WHERE wr.id = ?
     LIMIT 1`,
     [reportId]
@@ -485,13 +552,24 @@ export async function createWeeklyReport({ user, report }) {
         user_id,
         week_start,
         week_end,
-        status
-      ) VALUES (?, ?, ?, ?)`,
-      [userId, report.weekStart, report.weekEnd, report.status]
+        status,
+        approval_status
+      ) VALUES (?, ?, ?, ?, ?)`,
+      [userId, report.weekStart, report.weekEnd, report.status, approvalStatusForNewReport(report)]
     );
 
     await insertWeeklyReportSummaries(connection, result.insertId, report.summaries);
     await insertWeeklyReportPlans(connection, result.insertId, report.plans);
+    if (report.status === ReportStatus.SUBMITTED) {
+      await insertWeeklyReportApprovalHistory(connection, {
+        weeklyReportId: result.insertId,
+        action: 'submit',
+        fromApprovalStatus: WeeklyApprovalStatus.NOT_SUBMITTED,
+        toApprovalStatus: WeeklyApprovalStatus.PENDING,
+        comment: null,
+        operatorUserId: userId
+      });
+    }
     await connection.commit();
 
     return getWeeklyReportById({ reportId: result.insertId, userId });
@@ -511,7 +589,9 @@ export async function updateWeeklyReport({ reportId, user, report }) {
   try {
     await connection.beginTransaction();
     const existing = await getWeeklyReportById({ reportId, userId }, connection);
+    assertWeeklyReportEditable(existing);
     await assertWeeklyReportProjectsAvailable(connection, { report, user });
+    const nextApprovalStatus = approvalStatusForUpdate(existing, report);
 
     await connection.execute(
       `UPDATE weekly_reports
@@ -526,14 +606,46 @@ export async function updateWeeklyReport({ reportId, user, report }) {
         final_grade = NULL,
         final_comment = NULL,
         final_reviewed_by_user_id = NULL,
-        final_reviewed_at = NULL
+        final_reviewed_at = NULL,
+        approval_status = ?,
+        approval_comment = ?,
+        approval_reviewed_by_user_id = NULL,
+        approval_reviewed_at = NULL
       WHERE id = ? AND user_id = ?`,
-      [report.weekStart, report.weekEnd, report.status, existing.id, userId]
+      [
+        report.weekStart,
+        report.weekEnd,
+        report.status,
+        nextApprovalStatus,
+        nextApprovalStatus === WeeklyApprovalStatus.RETURNED ? existing.approvalComment : null,
+        existing.id,
+        userId
+      ]
     );
     await connection.execute('DELETE FROM weekly_report_summaries WHERE weekly_report_id = ?', [existing.id]);
     await connection.execute('DELETE FROM weekly_report_plans WHERE weekly_report_id = ?', [existing.id]);
     await insertWeeklyReportSummaries(connection, existing.id, report.summaries);
     await insertWeeklyReportPlans(connection, existing.id, report.plans);
+    if (existing.approvalStatus === WeeklyApprovalStatus.NOT_SUBMITTED && report.status === ReportStatus.SUBMITTED) {
+      await insertWeeklyReportApprovalHistory(connection, {
+        weeklyReportId: existing.id,
+        action: 'submit',
+        fromApprovalStatus: WeeklyApprovalStatus.NOT_SUBMITTED,
+        toApprovalStatus: WeeklyApprovalStatus.PENDING,
+        comment: null,
+        operatorUserId: userId
+      });
+    }
+    if (existing.approvalStatus === WeeklyApprovalStatus.RETURNED && report.status === ReportStatus.SUBMITTED) {
+      await insertWeeklyReportApprovalHistory(connection, {
+        weeklyReportId: existing.id,
+        action: 'resubmit',
+        fromApprovalStatus: WeeklyApprovalStatus.RETURNED,
+        toApprovalStatus: WeeklyApprovalStatus.PENDING,
+        comment: null,
+        operatorUserId: userId
+      });
+    }
     await connection.commit();
 
     return getWeeklyReportById({ reportId, userId });
@@ -855,6 +967,55 @@ export async function saveWeeklyReportFinalReview({ reportId, evaluatorUser, fin
   return getWeeklyReportByIdForSystem(reportId);
 }
 
+// Persist a center manager's approval decision for a pending employee weekly report.
+export async function reviewWeeklyReportApproval({ reportId, evaluatorUser, approval }) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const target = await getWeeklyReportWithUserForReview(reportId, connection);
+    if (!canReviewEmployeeWeeklyReport(evaluatorUser, target.user)) {
+      throw new WeeklyReportError(WEEKLY_REPORT_ERROR.FORBIDDEN, 'Weekly approval forbidden', 403);
+    }
+    if (target.report.approvalStatus !== WeeklyApprovalStatus.PENDING) {
+      throw new WeeklyReportError(
+        WEEKLY_REPORT_ERROR.INVALID_APPROVAL_ACTION,
+        'Only pending weekly reports can be approved or returned',
+        409,
+        ['approvalStatus']
+      );
+    }
+
+    const nextApprovalStatus = approval.action === 'approve'
+      ? WeeklyApprovalStatus.APPROVED
+      : WeeklyApprovalStatus.RETURNED;
+    await connection.execute(
+      `UPDATE weekly_reports
+      SET approval_status = ?,
+        approval_comment = ?,
+        approval_reviewed_by_user_id = ?,
+        approval_reviewed_at = NOW()
+      WHERE id = ?`,
+      [nextApprovalStatus, approval.action === 'return' ? approval.comment : null, evaluatorUser.id, reportId]
+    );
+    await insertWeeklyReportApprovalHistory(connection, {
+      weeklyReportId: reportId,
+      action: approval.action,
+      fromApprovalStatus: WeeklyApprovalStatus.PENDING,
+      toApprovalStatus: nextApprovalStatus,
+      comment: approval.comment,
+      operatorUserId: evaluatorUser.id
+    });
+    await connection.commit();
+
+    return getWeeklyReportByIdForSystem(reportId);
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 // Return a cached evaluation unless force=true was requested.
 export async function getWeeklyReportEvaluationTarget({ reportId, evaluatorUser, force = false }) {
   const target = await getWeeklyReportWithUserForReview(reportId);
@@ -910,6 +1071,10 @@ export async function listWeeklyComparisonOverview({ weekStart, department, subj
     `SELECT
       wr.id,
       wr.status,
+      wr.approval_status,
+      wr.approval_comment,
+      wr.approval_reviewed_by_user_id,
+      wr.approval_reviewed_at,
       wr.ai_score,
       wr.ai_evaluated_at,
       wr.ai_evaluation_source,
@@ -923,10 +1088,13 @@ export async function listWeeklyComparisonOverview({ weekStart, department, subj
       u.account,
       u.department,
       reviewer.display_name AS final_reviewer_display_name,
-      reviewer.account AS final_reviewer_account
+      reviewer.account AS final_reviewer_account,
+      approval_reviewer.display_name AS approval_reviewer_display_name,
+      approval_reviewer.account AS approval_reviewer_account
     FROM weekly_reports wr
     INNER JOIN users u ON u.id = wr.user_id
     LEFT JOIN users reviewer ON reviewer.id = wr.final_reviewed_by_user_id
+    LEFT JOIN users approval_reviewer ON approval_reviewer.id = wr.approval_reviewed_by_user_id
     WHERE wr.week_start = ?
       ${departmentFilter}
       ${subjectRoleFilter}
@@ -942,6 +1110,11 @@ export async function listWeeklyComparisonOverview({ weekStart, department, subj
       userName: row.display_name || row.account,
       department: row.department,
       status: row.status,
+      approvalStatus: row.approval_status || WeeklyApprovalStatus.NOT_SUBMITTED,
+      approvalComment: row.approval_comment,
+      approvalReviewedByUserId: row.approval_reviewed_by_user_id,
+      approvalReviewedByName: row.approval_reviewer_display_name || row.approval_reviewer_account || null,
+      approvalReviewedAt: dateTime(row.approval_reviewed_at),
       totalScore: score?.totalScore ?? null,
       grade: score?.grade ?? null,
       evaluationSource: row.ai_evaluation_source,

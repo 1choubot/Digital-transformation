@@ -14,6 +14,8 @@ export const WEEKLY_REPORT_ERROR = {
   DELETE_SUBMITTED: 'WEEKLY_REPORT_DELETE_SUBMITTED',
   EVALUATE_SUBMITTED_ONLY: 'WEEKLY_REPORT_EVALUATE_SUBMITTED_ONLY',
   INVALID_FINAL_REVIEW: 'WEEKLY_REPORT_INVALID_FINAL_REVIEW',
+  INVALID_APPROVAL_ACTION: 'WEEKLY_REPORT_INVALID_APPROVAL_ACTION',
+  APPROVAL_COMMENT_REQUIRED: 'WEEKLY_REPORT_APPROVAL_COMMENT_REQUIRED',
   PREFILL_BASIS_CHANGED: 'WEEKLY_PREFILL_BASIS_CHANGED'
 };
 
@@ -279,5 +281,34 @@ export function normalizeWeeklyFinalReviewPayload(payload = {}) {
     finalScore: Math.round(finalScore * 100) / 100,
     finalGrade,
     finalComment: normalizeNullableText(payload.finalComment, 5000)
+  };
+}
+
+// Normalize approval actions while requiring a reason when a report is returned.
+export function normalizeWeeklyApprovalPayload(payload = {}) {
+  const action = String(payload.action || '').trim();
+  const comment = normalizeNullableText(payload.comment, 5000);
+
+  if (!['approve', 'return'].includes(action)) {
+    throw new WeeklyReportError(
+      WEEKLY_REPORT_ERROR.INVALID_APPROVAL_ACTION,
+      'Approval action must be approve or return',
+      400,
+      ['action']
+    );
+  }
+
+  if (action === 'return' && !comment) {
+    throw new WeeklyReportError(
+      WEEKLY_REPORT_ERROR.APPROVAL_COMMENT_REQUIRED,
+      'Return comment is required',
+      400,
+      ['comment']
+    );
+  }
+
+  return {
+    action,
+    comment
   };
 }

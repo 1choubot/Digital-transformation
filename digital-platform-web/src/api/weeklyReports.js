@@ -89,6 +89,15 @@ export async function saveWeeklyReportFinalReview(reportId, payload, authToken =
   });
 }
 
+// Save the center manager's weekly report approval decision.
+export async function reviewWeeklyReportApproval(reportId, payload, authToken = '') {
+  return request(`/api/weekly-reports/${reportId}/approval`, {
+    method: 'PUT',
+    authToken,
+    body: JSON.stringify(payload)
+  });
+}
+
 // Download the official personal weekly report workbook.
 export async function exportWeeklyReport(reportId, authToken = '') {
   return requestBlob(`/api/weekly-reports/${reportId}/export`, {

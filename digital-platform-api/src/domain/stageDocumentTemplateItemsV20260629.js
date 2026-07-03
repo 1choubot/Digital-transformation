@@ -14,11 +14,11 @@ export const V20260629_WORKSPACE_COMPATIBILITY_OUTPUT_COUNT = 2;
 
 export const V20260629_TEMPLATE_SWITCH_METADATA = Object.freeze({
   templateVersion: V20260629_TARGET_TEMPLATE_VERSION,
-  runtimeDefault: false,
-  defaultProjectInitializationEnabled: false,
+  runtimeDefault: true,
+  defaultProjectInitializationEnabled: true,
   legacyProjectMigrationEnabled: false,
-  writesProjectStageDocuments: false,
-  switchRequiresChange: true,
+  writesProjectStageDocuments: true,
+  switchRequiresChange: false,
   source: '20260629 PDF drawing outputs + 4 missing draft corrections'
 });
 
@@ -338,7 +338,7 @@ export const V20260629_TARGET_TEMPLATE_OUTPUTS = Object.freeze([
     completionMode: COMPLETION_MODE.APPROVAL_REQUIRED,
     requirementType: REQUIREMENT_TYPE.CONDITIONAL,
     isRequired: false,
-    notes: '当前 64 项无对应资料，shell 只显示目标占位。'
+    notes: 'v20260629 新项目初始化为正式资料；旧项目无对应资料时仅显示目标占位。'
   }),
   targetOutput({
     targetOutputCode: 'C20',
@@ -628,7 +628,7 @@ export const V20260629_TARGET_TEMPLATE_OUTPUTS = Object.freeze([
     completionMode: COMPLETION_MODE.APPROVAL_REQUIRED,
     requirementType: REQUIREMENT_TYPE.TO_BE_CONFIRMED,
     isRequired: false,
-    notes: '当前 64 项无对应资料，shell 只显示目标占位。'
+    notes: 'v20260629 新项目初始化为正式资料；旧项目无对应资料时仅显示目标占位。'
   }),
   targetOutput({
     targetOutputCode: 'C44',
@@ -669,7 +669,7 @@ export const V20260629_TARGET_TEMPLATE_OUTPUTS = Object.freeze([
     completionMode: COMPLETION_MODE.APPROVAL_REQUIRED,
     requirementType: REQUIREMENT_TYPE.TO_BE_CONFIRMED,
     isRequired: false,
-    notes: '当前 64 项无对应资料，shell 只显示目标占位。'
+    notes: 'v20260629 新项目初始化为正式资料；旧项目无对应资料时仅显示目标占位。'
   }),
   targetOutput({
     targetOutputCode: 'C47',
@@ -708,7 +708,7 @@ export const V20260629_TARGET_TEMPLATE_OUTPUTS = Object.freeze([
     completionMode: COMPLETION_MODE.SUBMIT_ONLY,
     requirementType: REQUIREMENT_TYPE.TO_BE_CONFIRMED,
     isRequired: false,
-    notes: '当前 64 项无对应资料，shell 只显示目标占位。'
+    notes: 'v20260629 新项目初始化为正式资料；旧项目无对应资料时仅显示目标占位。'
   }),
   targetOutput({
     targetOutputCode: 'C50',
@@ -948,7 +948,7 @@ export const V20260629_TARGET_TEMPLATE_OUTPUTS = Object.freeze([
     completionMode: COMPLETION_MODE.SUBMIT_ONLY,
     requirementType: REQUIREMENT_TYPE.TO_BE_CONFIRMED,
     isRequired: false,
-    notes: '当前 64 项无对应资料，shell 只显示目标占位。'
+    notes: 'v20260629 新项目初始化为正式资料；旧项目无对应资料时仅显示目标占位。'
   }),
   targetOutput({
     targetOutputCode: 'C69',

@@ -168,10 +168,10 @@
       >
         <div class="legacy-compatibility-section__summary">
           <div>
-            <span class="section-eyebrow">旧模板兼容查看</span>
+            <span class="section-eyebrow">兼容查看</span>
             <h3>兼容资料区</h3>
             <p class="manual-status-note">
-              当前 64 项资料已迁移到上方项目工作区产出卡片处理，本区域仅用于旧模板兼容查看和历史状态核对。
+              资料主操作已迁移到上方项目工作区产出卡片处理，本区域仅用于兼容查看和历史状态核对。
             </p>
           </div>
           <button

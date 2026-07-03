@@ -8,7 +8,7 @@ import { getProjectStageDocumentChecklist } from '../stageDocuments/checklistRep
 import { getProjectDetail } from './coreRepository.js';
 
 const INITIATION_STAGE_KEY = 'initiation';
-const CURRENT_RUNTIME_TEMPLATE_VERSION = 'v20260625';
+const CURRENT_RUNTIME_TEMPLATE_VERSION = V20260629_TARGET_TEMPLATE_VERSION;
 
 function buildDocumentActionHints(document, outputConfig) {
   const permissions = document?.permissions || {};
@@ -124,9 +124,10 @@ function buildLegacyChecklistTarget(document, outputConfig) {
 }
 
 function mapOutput(outputConfig, documentsByCode) {
-  const document = outputConfig.legacyDocumentCode
-    ? documentsByCode.get(outputConfig.legacyDocumentCode) || null
-    : null;
+  const document =
+    (outputConfig.legacyDocumentCode ? documentsByCode.get(outputConfig.legacyDocumentCode) : null) ||
+    documentsByCode.get(outputConfig.targetOutputCode) ||
+    null;
 
   return {
     outputKey: outputConfig.targetOutputCode,
@@ -138,7 +139,7 @@ function mapOutput(outputConfig, documentsByCode) {
     stageName: outputConfig.stageName,
     nodeKey: outputConfig.nodeKey,
     documentId: document?.id ?? null,
-    documentCode: document?.documentCode ?? outputConfig.legacyDocumentCode ?? null,
+    documentCode: document?.documentCode ?? outputConfig.legacyDocumentCode ?? outputConfig.targetOutputCode ?? null,
     legacyDocumentCode: outputConfig.legacyDocumentCode,
     documentName: outputConfig.documentName,
     legacyDocumentName: document?.documentName ?? null,
@@ -208,9 +209,25 @@ function buildWorkspaceNode(moduleConfig, documentsByCode, project) {
   };
 }
 
-function buildWorkspaceStage(stage, documents, project) {
+function isCompatibilityOnlyModule(moduleConfig) {
+  if (!moduleConfig.outputCodes.length) {
+    return false;
+  }
+
+  return moduleConfig.outputCodes.every((outputCode) => getV20260629TargetOutputByCode(outputCode)?.workspaceCompatibility);
+}
+
+function buildWorkspaceStage(stage, documents, project, runtimeTemplateVersion) {
   const documentsByCode = new Map(documents.map((document) => [document.documentCode, document]));
-  const moduleConfigs = V20260629_WORKSPACE_BLUE_MODULES.filter((module) => module.stageKey === stage.stageKey);
+  const moduleConfigs = V20260629_WORKSPACE_BLUE_MODULES.filter((module) => {
+    if (module.stageKey !== stage.stageKey) {
+      return false;
+    }
+
+    return runtimeTemplateVersion === V20260629_TARGET_TEMPLATE_VERSION
+      ? !isCompatibilityOnlyModule(module)
+      : true;
+  });
   const nodes = moduleConfigs.map((moduleConfig) =>
     buildWorkspaceNode(moduleConfig, documentsByCode, project)
   );
@@ -247,7 +264,7 @@ export async function getProjectWorkspace(projectId, user) {
 
   const stages = (detail.stages || []).map((stage) => {
     const documents = documentsByStageKey.get(stage.stageKey) || [];
-    return buildWorkspaceStage(stage, documents, detail.project);
+    return buildWorkspaceStage(stage, documents, detail.project, runtimeTemplateVersion);
   });
 
   return {
@@ -264,9 +281,9 @@ export async function getProjectWorkspace(projectId, user) {
       configuredStageCount: stages.length,
       runtimeTemplateVersion,
       targetTemplateVersion: V20260629_TARGET_TEMPLATE_VERSION,
-      defaultProjectInitializationEnabled: false,
+      defaultProjectInitializationEnabled: V20260629_TEMPLATE_SWITCH_METADATA.defaultProjectInitializationEnabled,
       legacyProjectMigrationEnabled: false,
-      writesProjectStageDocuments: false,
+      writesProjectStageDocuments: V20260629_TEMPLATE_SWITCH_METADATA.writesProjectStageDocuments,
       genericActionsMigratedToOutputCards: true,
       nonInitiationOutputAction: 'workspace_output_card'
     }

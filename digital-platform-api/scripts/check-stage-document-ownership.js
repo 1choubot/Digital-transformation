@@ -19,6 +19,9 @@ import {
   DOCUMENT_STATUS,
   EXPECTED_COMPLETION_MODE_COUNTS,
   EXPECTED_STAGE_DOCUMENT_ITEM_COUNT,
+  LEGACY_STAGE_DOCUMENT_ITEM_COUNT,
+  LEGACY_STAGE_DOCUMENT_TEMPLATE_VERSION,
+  STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260629,
   STAGE_DOCUMENT_TEMPLATE_VERSION,
   V20260629_TARGET_TEMPLATE_OUTPUT_COUNT,
   loadStageDocumentTemplateItems
@@ -62,6 +65,7 @@ import {
   returnInitiationReviewNode,
   saveStageDocumentOnlineForm,
   submitStageDocumentOnlineForm,
+  upsertStageDocumentTemplates,
   updateProjectStageDocumentResponsibleUser,
   updateProjectStageDocumentStatus
 } from '../src/repositories/stageDocumentRepository.js';
@@ -87,6 +91,10 @@ const {
 } = BUSINESS_DEPARTMENT;
 
 const LEGACY_CONTRACT_REVIEW_COMPATIBILITY_OUTPUT_CODES = new Set(['LC33', 'LC54']);
+const EXCLUDED_V20260629_PROJECT_DOCUMENT_CODES = new Set(['3.3', '5.4', 'LC33', 'LC54']);
+const V20260629_TARGET_ONLY_DOCUMENT_CODES = STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260629
+  .filter((item) => item.documentCode === item.targetOutputCode)
+  .map((item) => item.documentCode);
 
 function departmentUser(id, organizationRole, department) {
   return {
@@ -294,6 +302,42 @@ async function countSmokeProjectObjects(projectId) {
   };
 }
 
+async function assertProjectUsesV20260629Template(projectId) {
+  const [summaryRows] = await pool.execute(
+    `SELECT template_version AS templateVersion, COUNT(*) AS count
+     FROM project_stage_documents
+     WHERE project_id = ?
+     GROUP BY template_version`,
+    [projectId]
+  );
+  assert.equal(summaryRows.length, 1, `Project ${projectId} should use one template version`);
+  assert.equal(summaryRows[0].templateVersion, STAGE_DOCUMENT_TEMPLATE_VERSION);
+  assert.equal(Number(summaryRows[0].count), EXPECTED_STAGE_DOCUMENT_ITEM_COUNT);
+
+  const [excludedRows] = await pool.execute(
+    `SELECT document_code AS documentCode
+     FROM project_stage_documents
+     WHERE project_id = ?
+       AND document_code IN (${[...EXCLUDED_V20260629_PROJECT_DOCUMENT_CODES].map(() => '?').join(', ')})
+     ORDER BY document_code`,
+    [projectId, ...EXCLUDED_V20260629_PROJECT_DOCUMENT_CODES]
+  );
+  assert.deepEqual(excludedRows.map((row) => row.documentCode), []);
+
+  const [targetOnlyRows] = await pool.execute(
+    `SELECT document_code AS documentCode
+     FROM project_stage_documents
+     WHERE project_id = ?
+       AND document_code IN (${V20260629_TARGET_ONLY_DOCUMENT_CODES.map(() => '?').join(', ')})
+     ORDER BY document_code`,
+    [projectId, ...V20260629_TARGET_ONLY_DOCUMENT_CODES]
+  );
+  assert.deepEqual(
+    targetOnlyRows.map((row) => row.documentCode),
+    [...V20260629_TARGET_ONLY_DOCUMENT_CODES].sort()
+  );
+}
+
 async function completeInitiationGate(projectId, { submitterUser, marketingManagerUser, rdManagerUser, generalManagerUser }) {
   await pool.execute(
     `UPDATE project_stage_documents
@@ -443,6 +487,18 @@ async function assertApprovalRevisionResubmitCycle({ projectId, sourceCode, targ
   assert.equal(revisionTarget.revision_resubmitted_at, null);
   assert.equal(deriveStageDocumentCompletion(revisionTarget).isComplete, false);
   assert.equal(deriveStageDocumentCompletion(revisionTarget).completionStatus, 'revision_required');
+
+  if (revisionTarget.completion_mode !== COMPLETION_MODE.APPROVAL_REQUIRED) {
+    const completedRevisionTarget = await completeProjectStageDocumentRevision({
+      projectId,
+      documentId: revisionTarget.id,
+      user
+    });
+    assert.equal(completedRevisionTarget.revisionRequired, false);
+    assert.equal(completedRevisionTarget.isComplete, true);
+    assert.equal(buildStageCompletenessSummary([completedRevisionTarget]).incompleteRequiredCount, 0);
+    return;
+  }
 
   await pool.execute(
     `UPDATE project_stage_documents
@@ -954,11 +1010,11 @@ async function runInitiationReviewSmoke({
   });
   const workspace = await getProjectWorkspace(projectId, managerUser);
   assert.equal(workspace.scope.globalSkeleton, true);
-  assert.equal(workspace.templateVersion, 'v20260625');
+  assert.equal(workspace.templateVersion, STAGE_DOCUMENT_TEMPLATE_VERSION);
   assert.equal(workspace.targetTemplateVersion, 'v20260629');
-  assert.equal(workspace.scope.defaultProjectInitializationEnabled, false);
+  assert.equal(workspace.scope.defaultProjectInitializationEnabled, true);
   assert.equal(workspace.scope.legacyProjectMigrationEnabled, false);
-  assert.equal(workspace.scope.writesProjectStageDocuments, false);
+  assert.equal(workspace.scope.writesProjectStageDocuments, true);
   assert.equal(workspace.scope.genericActionsMigratedToOutputCards, true);
   assert.equal(workspace.scope.nonInitiationOutputAction, 'workspace_output_card');
   assert.equal(workspace.stages.length, 8);
@@ -969,18 +1025,17 @@ async function runInitiationReviewSmoke({
   const workspaceOutputCodes = new Set(workspaceOutputs.map((output) => output.targetOutputCode));
   assert.equal(
     workspaceOutputCodes.size,
-    V20260629_TARGET_TEMPLATE_OUTPUT_COUNT + LEGACY_CONTRACT_REVIEW_COMPATIBILITY_OUTPUT_CODES.size
+    V20260629_TARGET_TEMPLATE_OUTPUT_COUNT
   );
   assert.equal(
-    workspaceOutputs.filter(
-      (output) => !LEGACY_CONTRACT_REVIEW_COMPATIBILITY_OUTPUT_CODES.has(output.targetOutputCode)
-    ).length,
+    workspaceOutputs.filter((output) => !LEGACY_CONTRACT_REVIEW_COMPATIBILITY_OUTPUT_CODES.has(output.targetOutputCode)).length,
     V20260629_TARGET_TEMPLATE_OUTPUT_COUNT
   );
   for (const compatibilityOutputCode of LEGACY_CONTRACT_REVIEW_COMPATIBILITY_OUTPUT_CODES) {
-    assert.ok(
+    assert.equal(
       workspaceOutputCodes.has(compatibilityOutputCode),
-      `Workspace compatibility output missing: ${compatibilityOutputCode}`
+      false,
+      `Workspace compatibility output must not be shown for v20260629 project: ${compatibilityOutputCode}`
     );
   }
   const nonInitiationOutputs = workspaceOutputs.filter((output) => output.stageKey !== 'initiation');
@@ -1016,18 +1071,10 @@ async function runInitiationReviewSmoke({
   assert.equal(solutionPlanOutput.legacyChecklistTarget.available, true);
   assert.ok(solutionPlanOutput.actionHints.includes('view_attachments'));
   const tenderOutput = findWorkspaceOutput(workspace, 'C19');
-  assert.equal(tenderOutput.documentId, null);
-  assert.equal(tenderOutput.status, 'shell_placeholder');
-  assert.equal(tenderOutput.legacyChecklistTarget.available, false);
-  assert.equal(tenderOutput.actionHints.length, 0);
-  const salesContractReviewOutput = findWorkspaceOutput(workspace, '3.3');
-  assert.equal(salesContractReviewOutput.targetOutputCode, 'LC33');
-  assert.equal(salesContractReviewOutput.stageKey, 'contract');
-  assert.equal(salesContractReviewOutput.legacyChecklistTarget.available, true);
-  const purchaseContractReviewOutput = findWorkspaceOutput(workspace, '5.4');
-  assert.equal(purchaseContractReviewOutput.targetOutputCode, 'LC54');
-  assert.equal(purchaseContractReviewOutput.stageKey, 'manufacturing');
-  assert.equal(purchaseContractReviewOutput.legacyChecklistTarget.available, true);
+  assert.ok(tenderOutput.documentId);
+  assert.equal(tenderOutput.documentCode, 'C19');
+  assert.equal(tenderOutput.status, 'waiting_submission');
+  assert.equal(tenderOutput.legacyChecklistTarget.available, true);
 
   const marketingResponsibilityChecklist = await getProjectStageDocumentChecklist(projectId, marketingManagerUser);
   assert.equal(findChecklistDocument(marketingResponsibilityChecklist, '1.1').canManageResponsibility, true);
@@ -2403,6 +2450,7 @@ async function runProjectLifecycleSmoke() {
     assert.equal(lightweightCreated.project.projectMode, null);
     assert.equal(lightweightCreated.stages.length, 8);
     assert.equal((await countSmokeProjectObjects(lightweightProjectId)).documents, EXPECTED_STAGE_DOCUMENT_ITEM_COUNT);
+    await assertProjectUsesV20260629Template(lightweightProjectId);
 
     const createdA = await createProject(
       {
@@ -2523,6 +2571,7 @@ async function runProjectLifecycleSmoke() {
       documents: EXPECTED_STAGE_DOCUMENT_ITEM_COUNT,
       attachments: 0
     });
+    await assertProjectUsesV20260629Template(projectAId);
 
     const projectAListForCenterManager = await listProjects(departmentUser(9001, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER));
     assert.ok(projectAListForCenterManager.some((projectItem) => projectItem.id === projectAId));
@@ -2998,14 +3047,14 @@ async function runProjectLifecycleSmoke() {
 
     await assertApprovalRevisionResubmitCycle({
       projectId: projectAId,
-      sourceCode: '3.3',
-      targetCode: '3.2',
+      sourceCode: '2.12',
+      targetCode: '2.4',
       user: managerUser
     });
     await assertApprovalRevisionResubmitCycle({
       projectId: projectAId,
-      sourceCode: '5.4',
-      targetCode: '5.3',
+      sourceCode: '4.12',
+      targetCode: '4.3',
       user: managerUser
     });
 
@@ -3485,8 +3534,8 @@ const generalManager = globalUser(32, ORGANIZATION_ROLE.GENERAL_MANAGER);
 
 const items = await loadStageDocumentTemplateItems();
 assert.equal(items.length, EXPECTED_STAGE_DOCUMENT_ITEM_COUNT);
-assert.equal(STAGE_DOCUMENT_TEMPLATE_VERSION, 'v20260625');
-assert.equal(EXPECTED_STAGE_DOCUMENT_ITEM_COUNT, 64);
+assert.equal(STAGE_DOCUMENT_TEMPLATE_VERSION, 'v20260629');
+assert.equal(EXPECTED_STAGE_DOCUMENT_ITEM_COUNT, 71);
 assert.notEqual(EXPECTED_STAGE_DOCUMENT_ITEM_COUNT, 54);
 assert.notEqual(EXPECTED_STAGE_DOCUMENT_ITEM_COUNT, 66);
 
@@ -3514,11 +3563,17 @@ const byCode = new Map(items.map((item) => [item.documentCode, item]));
 assert.equal(byCode.size, EXPECTED_STAGE_DOCUMENT_ITEM_COUNT);
 assert.equal(byCode.has('7.P1'), false);
 assert.equal(byCode.has('8.P1'), false);
+for (const excludedDocumentCode of EXCLUDED_V20260629_PROJECT_DOCUMENT_CODES) {
+  assert.equal(byCode.has(excludedDocumentCode), false);
+}
+for (const targetOnlyDocumentCode of V20260629_TARGET_ONLY_DOCUMENT_CODES) {
+  assert.equal(byCode.has(targetOnlyDocumentCode), true);
+}
 assert.deepEqual(
   [...items.reduce((counts, item) => counts.set(item.stageOrder, (counts.get(item.stageOrder) || 0) + 1), new Map())]
     .sort(([stageA], [stageB]) => stageA - stageB)
     .map(([stageOrder, count]) => `${stageOrder}:${count}`),
-  ['1:3', '2:15', '3:4', '4:17', '5:17', '6:2', '7:4', '8:2']
+  ['1:3', '2:16', '3:5', '4:17', '5:21', '6:2', '7:5', '8:2']
 );
 assert.deepEqual(
   Object.fromEntries(
@@ -3535,6 +3590,10 @@ assert.equal(byCode.get('4.16').completionMode, COMPLETION_MODE.APPROVAL_REQUIRE
 assert.equal(byCode.get('3.4').completionMode, COMPLETION_MODE.SUBMIT_ONLY);
 assert.equal(byCode.get('6.2').completionMode, COMPLETION_MODE.SUBMIT_ONLY);
 assert.equal(byCode.get('8.1').completionMode, COMPLETION_MODE.SUBMIT_ONLY);
+assert.equal(byCode.get('1.1').submitMode, 'online_form');
+assert.equal(byCode.get('1.2').submitMode, 'online_form');
+assert.equal(byCode.get('1.3').submitMode, 'online_form');
+assert.equal(byCode.get('C19').submitMode, 'file_upload');
 assert.equal(
   normalizeCreateProjectInput({
     projectName: '空编号项目',
@@ -3669,7 +3728,7 @@ assert.deepEqual(
     ownerDepartment: byCode.get('2.4').ownerDepartment,
     reviewDepartment: byCode.get('2.4').reviewDepartment
   },
-  { documentName: '3D模型', ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER }
+  { documentName: '3D模型（方案设计）', ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER }
 );
 assert.deepEqual(
   {
@@ -3689,7 +3748,7 @@ assert.deepEqual(
     ownerDepartment: byCode.get('4.3').ownerDepartment,
     reviewDepartment: byCode.get('4.3').reviewDepartment
   },
-  { documentName: '3D模型', ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER }
+  { documentName: '3D模型（详细设计）', ownerDepartment: RD_CENTER, reviewDepartment: RD_CENTER }
 );
 assert.deepEqual(
   {
@@ -4190,6 +4249,7 @@ assert.deepEqual(projectWorkspaceSchemaStatus, {
   projectStageDocumentFormsTable: true
 });
 await ensureStageDocumentSchema(pool);
+await upsertStageDocumentTemplates(pool, items);
 await initializeInitiationReviewNodesForExistingProjects(pool);
 
 const [activeTemplateRows] = await pool.query(
@@ -4229,7 +4289,10 @@ assert.deepEqual(
 const [excludedTemplateRows] = await pool.query(
   `SELECT COUNT(*) AS count
    FROM stage_document_templates
-   WHERE document_code IN ('7.P1', '8.P1')`
+   WHERE template_version = ?
+     AND is_active = 1
+     AND document_code IN ('7.P1', '8.P1', '3.3', '5.4', 'LC33', 'LC54')`,
+  [STAGE_DOCUMENT_TEMPLATE_VERSION]
 );
 assert.equal(Number(excludedTemplateRows[0].count), 0);
 
@@ -4267,32 +4330,51 @@ const [templateDistributionRows] = await pool.query(
 );
 assert.deepEqual(
   templateDistributionRows.map((row) => `${row.stageOrder}:${Number(row.count)}`),
-  ['1:3', '2:15', '3:4', '4:17', '5:17', '6:2', '7:4', '8:2']
+  ['1:3', '2:16', '3:5', '4:17', '5:21', '6:2', '7:5', '8:2']
 );
 
 const [projectDocumentRows] = await pool.query(
-  `SELECT p.id AS projectId, COUNT(d.id) AS documentCount
-   FROM projects p
-   LEFT JOIN project_stage_documents d
-     ON d.project_id = p.id
-     AND d.template_version = ?
-   GROUP BY p.id
-   ORDER BY p.id`,
-  [STAGE_DOCUMENT_TEMPLATE_VERSION]
+  `SELECT project_id AS projectId, template_version AS templateVersion, COUNT(*) AS documentCount
+   FROM project_stage_documents
+   GROUP BY project_id, template_version
+   ORDER BY project_id, template_version`
 );
+const projectTemplateVersions = new Map();
 for (const row of projectDocumentRows) {
-  assert.equal(
-    Number(row.documentCount),
-    EXPECTED_STAGE_DOCUMENT_ITEM_COUNT,
-    `Project ${row.projectId} should have ${EXPECTED_STAGE_DOCUMENT_ITEM_COUNT} stage documents`
-  );
+  if (!projectTemplateVersions.has(row.projectId)) {
+    projectTemplateVersions.set(row.projectId, []);
+  }
+  projectTemplateVersions.get(row.projectId).push(row.templateVersion);
+
+  if (row.templateVersion === STAGE_DOCUMENT_TEMPLATE_VERSION) {
+    assert.equal(
+      Number(row.documentCount),
+      EXPECTED_STAGE_DOCUMENT_ITEM_COUNT,
+      `Project ${row.projectId} should have ${EXPECTED_STAGE_DOCUMENT_ITEM_COUNT} v20260629 stage documents`
+    );
+    continue;
+  }
+
+  if (row.templateVersion === LEGACY_STAGE_DOCUMENT_TEMPLATE_VERSION) {
+    assert.equal(
+      Number(row.documentCount),
+      LEGACY_STAGE_DOCUMENT_ITEM_COUNT,
+      `Project ${row.projectId} should keep ${LEGACY_STAGE_DOCUMENT_ITEM_COUNT} legacy stage documents`
+    );
+    continue;
+  }
+
+  assert.fail(`Unexpected project stage document template version: ${row.projectId}/${row.templateVersion}`);
+}
+for (const [projectId, templateVersions] of projectTemplateVersions) {
+  assert.equal(templateVersions.length, 1, `Project ${projectId} must not mix template versions`);
 }
 
 const [staleProjectDocumentRows] = await pool.query(
   `SELECT COUNT(*) AS count
    FROM project_stage_documents
-   WHERE template_version <> ?`,
-  [STAGE_DOCUMENT_TEMPLATE_VERSION]
+   WHERE template_version NOT IN (?, ?)`,
+  [STAGE_DOCUMENT_TEMPLATE_VERSION, LEGACY_STAGE_DOCUMENT_TEMPLATE_VERSION]
 );
 assert.equal(Number(staleProjectDocumentRows[0].count), 0);
 
@@ -4307,7 +4389,7 @@ const [projectDocumentCompletionRows] = await pool.query(
 const expectedProjectCompletionCounts = Object.fromEntries(
   Object.entries(EXPECTED_COMPLETION_MODE_COUNTS).map(([completionMode, count]) => [
     completionMode,
-    count * projectDocumentRows.length
+    count * projectDocumentRows.filter((row) => row.templateVersion === STAGE_DOCUMENT_TEMPLATE_VERSION).length
   ])
 );
 assert.deepEqual(

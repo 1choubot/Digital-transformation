@@ -4,6 +4,15 @@ import { STANDARD_PROJECT_STAGES } from './stages.js';
 import {
   STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260625
 } from './stageDocumentTemplateItemsV20260624.js';
+import {
+  V20260629_TARGET_TEMPLATE_VERSION,
+  V20260629_TARGET_TEMPLATE_OUTPUT_COUNT,
+  V20260629_TEMPLATE_SWITCH_METADATA,
+  V20260629_TARGET_TEMPLATE_OUTPUTS,
+  V20260629_WORKSPACE_BLUE_MODULES,
+  getV20260629TargetOutputByCode,
+  getV20260629WorkspaceShellConfig
+} from './stageDocumentTemplateItemsV20260629.js';
 
 export {
   V20260629_TARGET_TEMPLATE_VERSION,
@@ -15,11 +24,13 @@ export {
   getV20260629WorkspaceShellConfig
 } from './stageDocumentTemplateItemsV20260629.js';
 
-export const STAGE_DOCUMENT_TEMPLATE_VERSION = 'v20260625';
-export const EXPECTED_STAGE_DOCUMENT_ITEM_COUNT = 64;
+export const LEGACY_STAGE_DOCUMENT_TEMPLATE_VERSION = 'v20260625';
+export const LEGACY_STAGE_DOCUMENT_ITEM_COUNT = 64;
+export const STAGE_DOCUMENT_TEMPLATE_VERSION = V20260629_TARGET_TEMPLATE_VERSION;
+export const EXPECTED_STAGE_DOCUMENT_ITEM_COUNT = V20260629_TARGET_TEMPLATE_OUTPUT_COUNT;
 export const EXPECTED_COMPLETION_MODE_COUNTS = Object.freeze({
-  submit_only: 33,
-  approval_required: 24,
+  submit_only: 35,
+  approval_required: 29,
   conditional_submit: 7,
   conditional_approval: 0
 });
@@ -49,6 +60,16 @@ const stageByOrder = new Map(STANDARD_PROJECT_STAGES.map((stage) => [stage.stage
 const stageByName = new Map(STANDARD_PROJECT_STAGES.map((stage) => [stage.stageName, stage]));
 const expectedStageDocumentCounts = new Map([
   [1, 3],
+  [2, 16],
+  [3, 5],
+  [4, 17],
+  [5, 21],
+  [6, 2],
+  [7, 5],
+  [8, 2]
+]);
+const legacyExpectedStageDocumentCounts = new Map([
+  [1, 3],
   [2, 15],
   [3, 4],
   [4, 17],
@@ -57,6 +78,12 @@ const expectedStageDocumentCounts = new Map([
   [7, 4],
   [8, 2]
 ]);
+const legacyExpectedCompletionModeCounts = Object.freeze({
+  submit_only: 33,
+  approval_required: 24,
+  conditional_submit: 7,
+  conditional_approval: 0
+});
 const templateOwnershipByCode = new Map(
   STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260625.map((item) => [
     item.documentCode,
@@ -66,6 +93,9 @@ const templateOwnershipByCode = new Map(
       completionMode: item.completionMode
     }
   ])
+);
+const legacyTemplateItemByCode = new Map(
+  STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260625.map((item) => [item.documentCode, item])
 );
 const validCompletionModes = new Set(Object.values(COMPLETION_MODE));
 
@@ -145,10 +175,20 @@ function buildExpectedTargetFolderPath(stage, documentCode, documentName) {
   return `${stage.stageOrder}-${shortStageName}/${documentCode} ${documentName}`;
 }
 
-function assertParsedItems(items) {
-  if (items.length !== EXPECTED_STAGE_DOCUMENT_ITEM_COUNT) {
+function assertTemplateItems(
+  items,
+  {
+    expectedVersion,
+    expectedCount,
+    expectedStageCounts,
+    expectedCompletionCounts,
+    enforceLegacyCodeOrder = false,
+    sourceLabel
+  }
+) {
+  if (items.length !== expectedCount) {
     throw new Error(
-      `Expected ${EXPECTED_STAGE_DOCUMENT_ITEM_COUNT} stage document items, got ${items.length}`
+      `Expected ${expectedCount} ${sourceLabel} stage document items, got ${items.length}`
     );
   }
 
@@ -156,11 +196,11 @@ function assertParsedItems(items) {
     (counts, item) => counts.set(item.stageOrder, (counts.get(item.stageOrder) || 0) + 1),
     new Map()
   );
-  for (const [stageOrder, expectedCount] of expectedStageDocumentCounts) {
+  for (const [stageOrder, expectedStageCount] of expectedStageCounts) {
     const actualCount = stageCounts.get(stageOrder) || 0;
-    if (actualCount !== expectedCount) {
+    if (actualCount !== expectedStageCount) {
       throw new Error(
-        `Invalid v20260625 stage document count for stage ${stageOrder}: expected ${expectedCount}, got ${actualCount}`
+        `Invalid ${sourceLabel} stage document count for stage ${stageOrder}: expected ${expectedStageCount}, got ${actualCount}`
       );
     }
   }
@@ -170,9 +210,9 @@ function assertParsedItems(items) {
     Object.values(COMPLETION_MODE).map((completionMode) => [completionMode, 0])
   );
   for (const item of items) {
-    if (item.templateVersion !== STAGE_DOCUMENT_TEMPLATE_VERSION) {
+    if (item.templateVersion !== expectedVersion) {
       throw new Error(
-        `Invalid template version in stage document checklist for ${item.documentCode}: ${item.templateVersion}`
+        `Invalid template version in ${sourceLabel} stage document checklist for ${item.documentCode}: ${item.templateVersion}`
       );
     }
 
@@ -186,9 +226,11 @@ function assertParsedItems(items) {
       throw new Error(`Invalid stage fields in stage document checklist: ${item.documentCode}`);
     }
 
-    const [stageNumber, documentOrder] = item.documentCode.split('.').map((part) => Number.parseInt(part, 10));
-    if (stageNumber !== item.stageOrder || documentOrder !== item.documentOrder) {
-      throw new Error(`Document code/order mismatch in stage document checklist: ${item.documentCode}`);
+    if (enforceLegacyCodeOrder) {
+      const [stageNumber, documentOrder] = item.documentCode.split('.').map((part) => Number.parseInt(part, 10));
+      if (stageNumber !== item.stageOrder || documentOrder !== item.documentOrder) {
+        throw new Error(`Document code/order mismatch in stage document checklist: ${item.documentCode}`);
+      }
     }
 
     if (!item.targetFolderPath) {
@@ -235,14 +277,25 @@ function assertParsedItems(items) {
     }
   }
 
-  for (const [completionMode, expectedCount] of Object.entries(EXPECTED_COMPLETION_MODE_COUNTS)) {
+  for (const [completionMode, expectedCompletionCount] of Object.entries(expectedCompletionCounts)) {
     const actualCount = completionModeCounts.get(completionMode) || 0;
-    if (actualCount !== expectedCount) {
+    if (actualCount !== expectedCompletionCount) {
       throw new Error(
-        `Invalid v20260625 completionMode count for ${completionMode}: expected ${expectedCount}, got ${actualCount}`
+        `Invalid ${sourceLabel} completionMode count for ${completionMode}: expected ${expectedCompletionCount}, got ${actualCount}`
       );
     }
   }
+}
+
+function assertParsedItems(items) {
+  assertTemplateItems(items, {
+    expectedVersion: LEGACY_STAGE_DOCUMENT_TEMPLATE_VERSION,
+    expectedCount: LEGACY_STAGE_DOCUMENT_ITEM_COUNT,
+    expectedStageCounts: legacyExpectedStageDocumentCounts,
+    expectedCompletionCounts: legacyExpectedCompletionModeCounts,
+    enforceLegacyCodeOrder: true,
+    sourceLabel: LEGACY_STAGE_DOCUMENT_TEMPLATE_VERSION
+  });
 
   for (const [documentCode, expectedCompletionMode] of [
     ['4.14', COMPLETION_MODE.SUBMIT_ONLY],
@@ -260,6 +313,97 @@ function assertParsedItems(items) {
     }
   }
 }
+
+function assertCurrentTemplateItems(items) {
+  assertTemplateItems(items, {
+    expectedVersion: STAGE_DOCUMENT_TEMPLATE_VERSION,
+    expectedCount: EXPECTED_STAGE_DOCUMENT_ITEM_COUNT,
+    expectedStageCounts: expectedStageDocumentCounts,
+    expectedCompletionCounts: EXPECTED_COMPLETION_MODE_COUNTS,
+    sourceLabel: STAGE_DOCUMENT_TEMPLATE_VERSION
+  });
+
+  const byCode = new Map(items.map((item) => [item.documentCode, item]));
+  for (const excludedDocumentCode of ['3.3', '5.4', 'LC33', 'LC54']) {
+    if (byCode.has(excludedDocumentCode)) {
+      throw new Error(`Excluded compatibility document must not enter v20260629 template: ${excludedDocumentCode}`);
+    }
+  }
+
+  for (const documentCode of ['1.1', '1.2', '1.3']) {
+    const item = byCode.get(documentCode);
+    if (!item || item.submitMode !== SUBMIT_MODE.ONLINE_FORM) {
+      throw new Error(`Initiation online form document missing from v20260629 template: ${documentCode}`);
+    }
+  }
+}
+
+function buildV20260629ApplicabilityCondition(output, legacyItem) {
+  if (output.requirementType === 'conditional') {
+    return output.notes || legacyItem?.applicabilityCondition || '条件适用';
+  }
+
+  if (output.requirementType === 'to_be_confirmed') {
+    return output.notes || legacyItem?.applicabilityCondition || '是否适用待业务确认';
+  }
+
+  return legacyItem?.applicabilityCondition || '默认适用';
+}
+
+function buildV20260629ConfirmRole(output, legacyItem) {
+  if (legacyItem?.confirmRole) {
+    return legacyItem.confirmRole;
+  }
+
+  if (output.reviewDepartment) {
+    return `${output.reviewDepartment}确认`;
+  }
+
+  return output.responsibleRole || '';
+}
+
+function buildV20260629TemplateItems() {
+  const stageOrderCounters = new Map();
+
+  const items = V20260629_TARGET_TEMPLATE_OUTPUTS.map((output) => {
+    const stage = stageByOrder.get(output.stageOrder);
+    if (!stage) {
+      throw new Error(`Invalid v20260629 stage order: ${output.stageOrder}`);
+    }
+
+    const documentCode = output.legacyDocumentCode ?? output.targetOutputCode;
+    const documentOrder = (stageOrderCounters.get(output.stageOrder) || 0) + 1;
+    stageOrderCounters.set(output.stageOrder, documentOrder);
+    const legacyItem = output.legacyDocumentCode ? legacyTemplateItemByCode.get(output.legacyDocumentCode) : null;
+
+    return Object.freeze({
+      templateVersion: V20260629_TARGET_TEMPLATE_VERSION,
+      stageOrder: stage.stageOrder,
+      stageKey: stage.stageKey,
+      stageName: stage.stageName,
+      documentCode,
+      targetOutputCode: output.targetOutputCode,
+      documentOrder,
+      documentName: output.documentName,
+      isRequired: output.isRequired,
+      defaultResponsibilityRole: output.responsibleRole || legacyItem?.defaultResponsibilityRole || '',
+      confirmRole: buildV20260629ConfirmRole(output, legacyItem),
+      ownerDepartment: output.ownerDepartment,
+      reviewDepartment: output.reviewDepartment,
+      completionMode: output.completionMode,
+      submitMode: output.submitMode,
+      targetFolderPath: buildExpectedTargetFolderPath(stage, documentCode, output.documentName),
+      targetFolderId: null,
+      applicabilityCondition: buildV20260629ApplicabilityCondition(output, legacyItem),
+      notes: output.notes
+    });
+  });
+
+  assertCurrentTemplateItems(items);
+  return Object.freeze(items);
+}
+
+export const STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260629 = buildV20260629TemplateItems();
 
 function cloneTemplateItems(items) {
   return items.map((item) => ({ ...item }));
@@ -316,7 +460,7 @@ function parseLegacyStageChecklistRow(cells, currentStage, line) {
   }
 
   return {
-    templateVersion: STAGE_DOCUMENT_TEMPLATE_VERSION,
+    templateVersion: LEGACY_STAGE_DOCUMENT_TEMPLATE_VERSION,
     stageOrder: currentStage.stageOrder,
     stageKey: currentStage.stageKey,
     stageName: currentStage.stageName,
@@ -363,7 +507,7 @@ function parseV20260624PlanningRow(cells, line) {
   }
 
   return {
-    templateVersion: STAGE_DOCUMENT_TEMPLATE_VERSION,
+    templateVersion: LEGACY_STAGE_DOCUMENT_TEMPLATE_VERSION,
     stageOrder: stage.stageOrder,
     stageKey: stage.stageKey,
     stageName: stage.stageName,
@@ -413,8 +557,8 @@ export function parseStageDocumentTemplateMarkdown(markdown) {
 
 export async function loadStageDocumentTemplateItems(markdownPath) {
   if (!markdownPath) {
-    const items = cloneTemplateItems(STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260625);
-    assertParsedItems(items);
+    const items = cloneTemplateItems(STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260629);
+    assertCurrentTemplateItems(items);
     return items;
   }
 

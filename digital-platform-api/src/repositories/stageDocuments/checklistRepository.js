@@ -172,6 +172,14 @@ export async function initializeProjectStageDocuments(executor, projectId) {
     'SELECT COUNT(*) AS count FROM project_stage_documents WHERE project_id = ?',
     [projectId]
   );
+  const existingCount = Number(beforeRows[0].count);
+  if (existingCount > 0) {
+    return {
+      expectedCount: templateRows.length,
+      insertedCount: 0
+    };
+  }
+
   const placeholders = templateRows.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
   const values = templateRows.flatMap((template) => [
     projectId,
@@ -230,7 +238,7 @@ export async function initializeProjectStageDocuments(executor, projectId) {
 
   return {
     expectedCount: templateRows.length,
-    insertedCount: Number(afterRows[0].count) - Number(beforeRows[0].count)
+    insertedCount: Number(afterRows[0].count) - existingCount
   };
 }
 

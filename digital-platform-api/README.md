@@ -16,12 +16,12 @@
 - `system_admin` 必须对应 `isPlatformAdmin = true`；初始化账号默认保存/恢复为启用系统管理员和平台管理员
 - 用户管理操作至少保留一个同时满足 `isEnabled = true`、`organizationRole = system_admin`、`isPlatformAdmin = true` 的账号
 - 项目创建要求登录，并记录 `createdByUserId`；项目编号 `projectCode` 可为空，第一版仅允许总经理和中心负责人创建项目，员工、总经理助理和系统管理员创建会返回 `FORBIDDEN_OPERATION`
-- 项目模式：`self_developed` 自研模式、`outsourced` 供应链/外包模式，两者共用同一 8 阶段和 20260625 版 64 项资料
+- 项目模式：`self_developed` 自研模式、`outsourced` 供应链/外包模式，两者共用同一 8 阶段和当前默认 v20260629 71 项资料模板
 - 项目经理用户关联：项目创建以 `projectManagerUserId` 为准，响应返回 `projectManagerUser`；旧 `projectManager` 文本仅为展示兼容
 - 项目列表和详情返回创建人追溯字段、项目模式和项目经理用户字段，兼容历史项目创建人或项目经理用户为空
-- 阶段资料项模板和项目级阶段资料清单；20260625 流程和 `docs/9.11` / `docs/9.12` 是当前业务依据，后端运行使用内置 20260625 64 项模板快照并写入 `completionMode`
-- 项目创建后自动初始化标准 8 阶段和 20260625 版 64 项阶段资料清单
-- 当前开发库项目可通过后端命令按 20260625 版资料清单重置并补齐资料项；旧 48 项、`v20260610` 54 项和 20260624 旧口径不做兼容迁移
+- 阶段资料项模板和项目级阶段资料清单；新建项目默认使用内置 v20260629 71 项模板快照并写入 `completionMode`
+- 项目创建后自动初始化标准 8 阶段和 v20260629 71 项阶段资料清单；已有 20260625 64 项旧项目保持既有资料记录，不迁移、不补初始化
+- 开发库如需重建模拟阶段资料，可执行 reset 兼容脚本清空模拟资料后再运行 `npm run init-stage-documents`；文件平台联动、旧项目迁移和兼容资料区删除不在本能力范围
 - `GET /api/projects/:projectId/stage-document-checklist` 按 8 阶段分组查询资料清单
 - 资料项手工状态流转按 `completionMode` 分流：`submit_only` 提交/上传后派生完成；`approval_required` 提交后待审核、审核通过后完成；`conditional_submit` 复用 `isApplicable` 表达未触发/已触发
 - 资料项手工适用性标记：标记不适用、恢复适用，并记录不适用/恢复适用追溯字段
@@ -64,13 +64,13 @@ migrations/001_project_core.sql
 npm run init-auth
 ```
 
-5. 初始化 20260625 版阶段资料清单模板，并按 64 项 `completionMode` 资料项补齐当前开发库项目：
+5. 初始化当前默认 v20260629 阶段资料清单模板：
 
 ```bash
 npm run init-stage-documents
 ```
 
-该命令会创建阶段资料模板表和项目级资料清单表。20260625 流程、`docs/9.11_20260625项目流程资料审批口径规划.md` 和 `docs/9.12_在线平台内部资料闭环规划_20260625.md` 是当前模板规划依据；后端运行和 `npm run init-stage-documents` 使用内置 20260625 模板快照，不依赖部署包包含 `docs` 目录或固定 md 路径。该快照共 64 项，并校验 `submit_only 33`、`approval_required 24`、`conditional_submit 7`、`conditional_approval 0`。旧 48 项模板、`v20260610` 54 项模板和 20260624 旧口径已废弃，当前模拟数据不做旧资料兼容迁移。重复执行不会为已有项目重复生成同一资料项。
+该命令会创建阶段资料模板表和项目级资料清单表，并 upsert 当前默认 v20260629 71 项 active 模板；后端运行不依赖部署包包含 `docs` 目录或固定 md 路径。v20260629 快照校验 `submit_only 35`、`approval_required 29`、`conditional_submit 7`、`conditional_approval 0`。已有 20260625 64 项旧项目不迁移、不补初始化、不改写资料状态、责任人或附件；项目已有阶段资料记录时，`init-stage-documents` 保持 no-op，不会重复生成 71 项。`3.3`、`5.4`、`LC33`、`LC54` 只属于旧项目 workspace 兼容输出，不进入新项目 71 项模板。非立项阶段默认仍走文件上传/附件上传，`1.1 / 1.2 / 1.3` 继续走在线表单和 `1.2` 专用评价审批。文件平台联动、旧项目迁移和兼容资料区删除不在本 change 范围。
 
 如果正式资料清单发生变更，必须同步更新内置模板快照、`EXPECTED_STAGE_DOCUMENT_ITEM_COUNT` 和模板初始化验证用例。
 
@@ -152,7 +152,7 @@ npm run init-stage-documents
 
 原因是项目资料的 `owner_department` / `review_department` 写入依赖 `npm run init-stage-documents` 中的模板 upsert/backfill 逻辑；仅执行 012 只会新增空列，不会自动补齐既有项目资料归属中心。
 
-15. 当前模拟库切换到 20260625 64 项 `completionMode` 模板时，先执行本 change 迁移，再按当前模板重置和初始化：
+15. 当前模拟库需要清空阶段资料并按默认模板重建时，先执行迁移，再使用历史命名的 reset 兼容脚本清空模拟资料，最后按当前默认模板初始化：
 
 ```bash
 npm run migrate-online-platform-internal-flow
@@ -161,7 +161,7 @@ npm run init-stage-documents
 npm run check
 ```
 
-`migrate-online-platform-internal-flow` 会补齐 nullable `project_code` 和 `completion_mode` 字段。`reset-stage-documents-v20260625` 会确认当前连接库是 `digital_platform`，然后清理旧项目阶段资料快照、阶段资料附件记录、附件物理文件、阶段资料/阶段推进相关业务日志和旧模板，并将项目状态重置为 `normal`、第 1 阶段重置为 current、其他阶段重置为 not_started。附件物理文件清理使用 `STAGE_DOCUMENT_ATTACHMENT_STORAGE_DIR` 指定的目录；未配置时清理默认的 `storage/stage-document-attachments`。reset 会清空该目录，且仅面向当前模拟数据；正式或非模拟环境不得执行。该步骤不做旧模板到 20260625 的兼容迁移，也不保留旧项目资料。
+`migrate-online-platform-internal-flow` 会补齐 nullable `project_code` 和 `completion_mode` 字段。`reset-stage-documents-v20260625` 是历史命名/兼容脚本名，脚本名未改不代表默认模板口径回退到旧模板；它会确认当前连接库是 `digital_platform`，然后清理模拟库阶段资料快照、阶段资料附件记录、附件物理文件、阶段资料/阶段推进相关业务日志和旧模板，并将项目状态重置为 `normal`、第 1 阶段重置为 current、其他阶段重置为 not_started。附件物理文件清理使用 `STAGE_DOCUMENT_ATTACHMENT_STORAGE_DIR` 指定的目录；未配置时清理默认的 `storage/stage-document-attachments`。reset 会清空该目录，且仅面向当前模拟数据；正式或非模拟环境不得执行。reset 后执行 `npm run init-stage-documents` 会按当前默认 v20260629 71 项模板初始化模拟项目资料。
 
 16. 启动服务：
 
@@ -347,7 +347,7 @@ Content-Type: application/json
 
 创建项目是业务权限操作，第一版仅允许 `organizationRole = general_manager` 或 `center_manager`。`employee`、`general_manager_assistant` 和 `system_admin` 直接调用会返回 `FORBIDDEN_OPERATION`，HTTP 403；失败时不得插入项目、阶段、阶段资料或成功业务日志。
 
-`projectMode` 只允许 `self_developed` 或 `outsourced`，非法值返回 `INVALID_PROJECT_MODE`。两种模式共用同一 8 阶段和 20260625 版 64 项资料，不改变 `completionMode`、适用性、附件规则或阶段推进门禁。
+`projectMode` 只允许 `self_developed` 或 `outsourced`，非法值返回 `INVALID_PROJECT_MODE`。两种模式共用同一 8 阶段和当前默认 v20260629 71 项资料模板，不改变 `completionMode`、适用性、附件规则或阶段推进门禁；已有 20260625 64 项旧项目仍按其项目级资料记录运行。
 
 `participatingDepartments` 是四个业务部门稳定枚举数组，只允许 `operations_center`、`marketing_center`、`manufacturing_center`、`rd_center`。空值或空数组表示未配置参与部门，重复值会去重；中文部门名、未知值、非数组非空值返回 `INVALID_PARTICIPATING_DEPARTMENT`，HTTP 状态为 400。该字段不是中文展示文本，中心负责人项目可见范围会使用该枚举数组或本中心责任人资料判断本中心相关项目。
 
@@ -386,11 +386,11 @@ Authorization: Bearer <token>
 GET /api/projects/{projectId}
 ```
 
-该接口必须携带登录态，只做 `requireAuth`，并按当前用户校验项目可见性。无权访问具体项目时返回 `FORBIDDEN_OPERATION`，不伪装成项目不存在；项目确实不存在时仍返回 `PROJECT_NOT_FOUND`。返回项目基础信息、全部 8 个阶段、当前阶段和创建人追溯字段；`projectCode` 可为空。当前 20260625 内部资料闭环不使用 `approvalStatus` 作为阶段推进门禁。第 8 阶段推进完成后，项目 `status` 为 `completed`，当前阶段为空。
+该接口必须携带登录态，只做 `requireAuth`，并按当前用户校验项目可见性。无权访问具体项目时返回 `FORBIDDEN_OPERATION`，不伪装成项目不存在；项目确实不存在时仍返回 `PROJECT_NOT_FOUND`。返回项目基础信息、全部 8 个阶段、当前阶段和创建人追溯字段；`projectCode` 可为空。当前资料闭环不使用 `approvalStatus` 作为阶段推进门禁。第 8 阶段推进完成后，项目 `status` 为 `completed`，当前阶段为空。
 
 ### Legacy Stage Approval Workflow
 
-这些阶段级审批接口属于旧实现兼容能力。当前 20260625 在线平台内部资料闭环不再把泛化阶段关口审批作为项目推进前置，也不要求 `project_stages.approval_status = approved` 后才能推进。资料级 `approval_required` 审核仍通过阶段资料接口处理。
+这些阶段级审批接口属于旧实现兼容能力。当前在线平台内部资料闭环不再把泛化阶段关口审批作为项目推进前置，也不要求 `project_stages.approval_status = approved` 后才能推进。资料级 `approval_required` 审核仍通过阶段资料接口处理。
 
 固定接口：
 
@@ -419,7 +419,7 @@ Content-Type: application/json
 
 接口不接收、不信任目标阶段、目标阶段顺序或目标阶段标识。服务端只根据当前阶段自动推进到下一顺序阶段，不支持跳阶段、回退、批量推进或自由指定阶段。
 
-推进前检查当前阶段适用资料 `completionMode` 齐套门禁，不检查泛化阶段关口审批状态。当前阶段必须已经存在项目级阶段资料项记录；如果当前阶段没有任何资料项记录，系统会认为阶段资料清单尚未初始化并拒绝推进。当前开发库项目可先执行 20260625 资料清单初始化命令；旧模拟项目资料不做兼容迁移。
+推进前检查当前阶段适用资料 `completionMode` 齐套门禁，不检查泛化阶段关口审批状态。当前阶段必须已经存在项目级阶段资料项记录；如果当前阶段没有任何资料项记录，系统会认为阶段资料清单尚未初始化并拒绝推进。开发库项目可先执行 `npm run init-stage-documents` 初始化当前默认 v20260629 资料清单；旧项目资料不做兼容迁移。
 
 - 统计当前阶段所有 `isApplicable = true` 且参与推进门禁的适用资料项
 - `submit_only + submitted` 计为完成
@@ -444,7 +444,7 @@ Content-Type: application/json
 GET /api/projects/{projectId}/stage-document-checklist
 ```
 
-按 8 阶段顺序分组返回项目阶段资料清单，并按当前用户资料项权限过滤。项目流程以 20260625 流程、`docs/9.11_20260625项目流程资料审批口径规划.md` 和 `docs/9.12_在线平台内部资料闭环规划_20260625.md` 为当前模板依据。后端运行使用内置 20260625 64 项模板快照，新建项目初始化 64 项资料项，不在运行时依赖 docs 目录或 md 路径。`7.P1 随机资料移交` 和 `8.P1 资料服务器核查` 不纳入普通阶段资料模板；旧 48 项模板、`v20260610` 54 项模板和 20260624 旧口径已废弃，当前模拟数据不做旧项目资料兼容迁移。
+按 8 阶段顺序分组返回项目阶段资料清单，并按当前用户资料项权限过滤。后端运行使用内置 v20260629 71 项模板快照，新建项目初始化 71 项资料项，不在运行时依赖 docs 目录或 md 路径。已有 20260625 64 项旧项目继续返回其已有项目级资料记录，不迁移、不补初始化、不改写状态、责任人或附件。`3.3`、`5.4`、`LC33`、`LC54` 只作为旧项目 workspace 兼容输出，不进入新项目 71 项模板；旧 48 项模板、`v20260610` 54 项模板和 20260624 旧口径已废弃。
 
 该接口必须携带登录态，只做 `requireAuth`，不使用 `requirePlatformAdmin`，并按当前用户校验项目可见性；无权访问具体项目时返回 `FORBIDDEN_OPERATION`。该限制用于保护清单中返回的资料责任人信息，避免未登录用户或无关用户绕过项目详情接口读取 `responsibleUser`。
 
@@ -672,6 +672,6 @@ Authorization: Bearer <token>
 - `detailsJson`
 - `createdAt`
 
-第一版当前流程记录的 `actionType` 包括 `project.created`、`document.submitted`、`document.confirmed`、`document.returned`、`document.marked_not_applicable`、`document.restored_applicable`、`document.responsible_changed`、`document.attachment_uploaded`、`document.attachment_deleted`、`stage.advanced` 和 `project.completed`。历史库或 legacy 阶段审批兼容能力可能保留 `approval.*` 日志类型，但当前 20260625 内部资料闭环不以阶段关口审批日志作为推进前置。所有日志必须归属于项目，操作人来自当前登录态，不信任前端提交的操作人。
+第一版当前流程记录的 `actionType` 包括 `project.created`、`document.submitted`、`document.confirmed`、`document.returned`、`document.marked_not_applicable`、`document.restored_applicable`、`document.responsible_changed`、`document.attachment_uploaded`、`document.attachment_deleted`、`stage.advanced` 和 `project.completed`。历史库或 legacy 阶段审批兼容能力可能保留 `approval.*` 日志类型，但当前内部资料闭环不以阶段关口审批日志作为推进前置。所有日志必须归属于项目，操作人来自当前登录态，不信任前端提交的操作人。
 
 业务日志写入与项目创建、资料状态/适用性操作、阶段推进等业务状态变更在同一事务中提交；日志写入失败时业务状态变更回滚。失败操作和历史兼容审批查询不记录成功日志。历史补初始化、模板初始化、系统脚本动作和本能力上线前已发生的业务动作不补写历史日志。

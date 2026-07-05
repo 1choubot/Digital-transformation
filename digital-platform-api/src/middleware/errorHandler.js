@@ -10,6 +10,7 @@ import {
   ProjectManagerUserError,
   ProjectNotFoundError,
   ProjectOverviewDashboardQueryError,
+  ProjectResponsibleUserError,
   ProjectStageNotFoundError,
   ProjectStageAdvanceError
 } from '../repositories/projectRepository.js';
@@ -117,6 +118,17 @@ export function errorHandler(error, req, res, next) {
   }
 
   if (error instanceof ProjectManagerUserError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      }
+    });
+    return;
+  }
+
+  if (error instanceof ProjectResponsibleUserError) {
     res.status(error.statusCode).json({
       error: {
         code: error.code,

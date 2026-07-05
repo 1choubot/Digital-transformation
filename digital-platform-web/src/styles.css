@@ -94,6 +94,7 @@ p {
   flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
+  max-width: 100%;
 }
 
 .current-user {
@@ -101,24 +102,29 @@ p {
   align-items: center;
   gap: 10px;
   min-width: 240px;
+  max-width: 100%;
   justify-content: flex-end;
 }
 
 .current-user div {
   display: grid;
   gap: 3px;
+  min-width: 0;
+  max-width: 100%;
   text-align: right;
 }
 
 .current-user strong {
   color: #17212f;
   font-size: 14px;
+  overflow-wrap: anywhere;
 }
 
 .current-user span,
 .page-user {
   color: #6c7b8c;
   font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .app-nav button,
@@ -134,6 +140,8 @@ p {
   font-weight: 700;
   line-height: 1.2;
   text-align: center;
+  max-width: 100%;
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 
@@ -228,6 +236,7 @@ p {
   display: grid;
   gap: 0;
   min-width: 0;
+  max-width: 100%;
 }
 
 .page-title-actions {
@@ -235,6 +244,8 @@ p {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .page-header h2,
@@ -2336,7 +2347,13 @@ p {
   }
 
   .app-header__inner {
+    width: 100%;
     min-height: 0;
+  }
+
+  .app-header__brand,
+  .current-user {
+    min-width: 0;
   }
 
   .app-main {
@@ -2344,7 +2361,12 @@ p {
     padding-top: 18px;
   }
 
-  .app-nav,
+  .app-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
   .current-user,
   .page-title-actions,
   .form-actions {
@@ -2352,11 +2374,19 @@ p {
   }
 
   .current-user {
+    align-items: flex-start;
+    flex-wrap: wrap;
     justify-content: space-between;
   }
 
   .current-user div {
+    flex: 1 1 180px;
     text-align: left;
+  }
+
+  .current-user .ghost-button {
+    flex: 0 1 auto;
+    min-width: 0;
   }
 
   .department-checkbox-group {
@@ -2365,7 +2395,8 @@ p {
 
   .app-nav button,
   .form-actions button {
-    flex: 1;
+    width: 100%;
+    min-width: 0;
   }
 
   .form-grid,
@@ -2501,13 +2532,58 @@ p {
     padding: 18px 16px;
   }
 
+  .app-header__inner,
+  .page-header,
+  .page-title-row {
+    gap: 12px;
+  }
+
   .app-header h1 {
     font-size: 21px;
+    overflow-wrap: anywhere;
   }
 
   .page-header h2,
   .page-title-row h2 {
     font-size: 20px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .app-main {
+    width: min(100vw - 20px, 1280px);
+  }
+
+  .app-nav {
+    gap: 6px;
+  }
+
+  .current-user {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: stretch;
+  }
+
+  .current-user .ghost-button {
+    width: 100%;
+  }
+
+  .app-nav button,
+  .page-title-actions .ghost-button,
+  .page-title-actions .primary-button {
+    min-height: 34px;
+    padding: 0 10px;
+  }
+
+  .page-title-actions {
+    justify-content: stretch;
+  }
+
+  .page-title-actions .ghost-button,
+  .page-title-actions .primary-button {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
   }
 
   .panel-toolbar,

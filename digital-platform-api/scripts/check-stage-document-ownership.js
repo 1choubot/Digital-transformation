@@ -36,6 +36,7 @@ import {
 import {
   DuplicateProjectCodeError,
   ProjectCodeUpdateError,
+  ProjectResponsibleUserError,
   ProjectStageAdvanceError,
   advanceProjectStage,
   assertProjectAuditViewable,
@@ -82,6 +83,7 @@ import {
 } from '../src/repositories/stageDocuments/shared.js';
 import { DOCUMENT_STATUS_ACTION } from '../src/domain/stageDocumentStatus.js';
 import { DOCUMENT_APPLICABILITY_ACTION } from '../src/domain/stageDocumentApplicability.js';
+import { errorHandler } from '../src/middleware/errorHandler.js';
 import { cleanupStageDocumentAttachmentFile } from '../src/storage/stageDocumentAttachmentStorage.js';
 import { isDocumentRelatedToDepartmentByOwnership } from '../../digital-platform-web/src/components/project-detail/stageDocumentViewHelpers.js';
 
@@ -175,6 +177,30 @@ async function assertStageDocumentSubmitForbidden({ projectId, documentId, user 
       }),
     (error) => error.code === 'FORBIDDEN_OPERATION' && error.statusCode === 403
   );
+}
+
+function captureErrorHandlerResponse(error) {
+  const response = {
+    statusCode: null,
+    body: null,
+    headersSent: false,
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(body) {
+      this.body = body;
+      return this;
+    }
+  };
+  let forwardedError = null;
+
+  errorHandler(error, {}, response, (nextError) => {
+    forwardedError = nextError;
+  });
+
+  assert.equal(forwardedError, null);
+  return response;
 }
 
 async function selectSmokeUser(account) {
@@ -2781,7 +2807,19 @@ async function runProjectLifecycleSmoke() {
           }),
           marketingManagerUser.id
         ),
-      (error) => error.code === 'PROJECT_RESPONSIBLE_USER_DEPARTMENT_NOT_ALLOWED'
+      (error) => {
+        const response = captureErrorHandlerResponse(error);
+        return (
+          error instanceof ProjectResponsibleUserError &&
+          error.code === 'PROJECT_RESPONSIBLE_USER_DEPARTMENT_NOT_ALLOWED' &&
+          error.statusCode === 409 &&
+          Array.isArray(error.details) &&
+          error.details.includes('businessResponsibleUserId') &&
+          response.statusCode === 409 &&
+          response.body?.error?.code === 'PROJECT_RESPONSIBLE_USER_DEPARTMENT_NOT_ALLOWED' &&
+          response.body?.error?.details?.includes('businessResponsibleUserId')
+        );
+      }
     );
     await assert.rejects(
       () =>
@@ -2795,7 +2833,19 @@ async function runProjectLifecycleSmoke() {
           }),
           marketingManagerUser.id
         ),
-      (error) => error.code === 'PROJECT_RESPONSIBLE_USER_DEPARTMENT_NOT_ALLOWED'
+      (error) => {
+        const response = captureErrorHandlerResponse(error);
+        return (
+          error instanceof ProjectResponsibleUserError &&
+          error.code === 'PROJECT_RESPONSIBLE_USER_DEPARTMENT_NOT_ALLOWED' &&
+          error.statusCode === 409 &&
+          Array.isArray(error.details) &&
+          error.details.includes('technicalResponsibleUserId') &&
+          response.statusCode === 409 &&
+          response.body?.error?.code === 'PROJECT_RESPONSIBLE_USER_DEPARTMENT_NOT_ALLOWED' &&
+          response.body?.error?.details?.includes('technicalResponsibleUserId')
+        );
+      }
     );
     const directEndedStatusInput = {
       ...normalizeCreateProjectInput({

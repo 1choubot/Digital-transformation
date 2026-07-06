@@ -228,29 +228,166 @@
             <li v-for="reason in activeOnlineForm.blockingReasons" :key="reason">{{ reason }}</li>
           </ul>
         </div>
-        <form class="form-grid" @submit.prevent="$emit('submit-online-form')">
-          <label
-            v-for="field in activeOnlineForm.schema?.fields || []"
-            :key="field.key"
-            :class="{ 'form-grid__wide': field.type === 'textarea' }"
+        <form class="online-form-editor__form" @submit.prevent="$emit('submit-online-form')">
+          <section v-if="activeOnlineForm.schema?.noticeTemplate" class="online-form-notice-preview">
+            <h4>{{ activeOnlineForm.schema.noticeTemplate.title }}</h4>
+            <p
+              v-for="paragraph in activeOnlineForm.schema.noticeTemplate.bodyParagraphs"
+              :key="paragraph"
+            >
+              {{ paragraph }}
+            </p>
+            <div class="online-form-notice-table" role="table" aria-label="立项通知项目表格">
+              <div class="online-form-notice-table__row online-form-notice-table__row--head" role="row">
+                <span
+                  v-for="column in activeOnlineForm.schema.noticeTemplate.tableColumns"
+                  :key="column"
+                  role="columnheader"
+                >
+                  {{ column }}
+                </span>
+              </div>
+              <div class="online-form-notice-table__row" role="row">
+                <span
+                  v-for="column in activeOnlineForm.schema.noticeTemplate.tableColumns"
+                  :key="column"
+                  role="cell"
+                >
+                  {{ getNoticeTableValue(column) }}
+                </span>
+              </div>
+            </div>
+            <p class="online-form-notice-preview__signer">{{ activeOnlineForm.schema.noticeTemplate.signer }}</p>
+            <p class="online-form-notice-preview__date">{{ onlineFormData.noticeDate || '日期待填写' }}</p>
+          </section>
+
+          <section
+            v-for="section in getSchemaSections(activeOnlineForm)"
+            :key="section.key"
+            class="online-form-section"
           >
-            <span>{{ field.label }}{{ field.required ? ' *' : '' }}</span>
-            <textarea
-              v-if="field.type === 'textarea'"
-              :value="onlineFormData[field.key]"
-              rows="3"
-              :disabled="!activeOnlineForm.permissions?.canEdit || onlineFormSubmitting"
-              @input="$emit('update-online-form-field', { key: field.key, value: $event.target.value })"
-            ></textarea>
-            <input
-              v-else
-              :value="onlineFormData[field.key]"
-              :type="field.type === 'date' ? 'date' : 'text'"
-              :disabled="!activeOnlineForm.permissions?.canEdit || onlineFormSubmitting"
-              @input="$emit('update-online-form-field', { key: field.key, value: $event.target.value })"
-            />
-          </label>
-          <div class="form-actions form-grid__wide">
+            <h4>{{ section.title }}</h4>
+            <div class="form-grid">
+              <label
+                v-for="field in section.fields || []"
+                :key="field.key"
+                :class="getFieldClass(field)"
+              >
+                <span>{{ field.label }}{{ field.required ? ' *' : '' }}</span>
+                <select
+                  v-if="field.type === 'select'"
+                  :value="onlineFormData[field.key]"
+                  :disabled="isOnlineFormFieldDisabled(field)"
+                  @change="$emit('update-online-form-field', { key: field.key, value: $event.target.value })"
+                >
+                  <option value="">请选择</option>
+                  <option v-for="option in field.options || []" :key="option" :value="option">{{ option }}</option>
+                </select>
+                <select
+                  v-else-if="field.type === 'score'"
+                  :value="onlineFormData[field.key]"
+                  :disabled="isOnlineFormFieldDisabled(field)"
+                  @change="$emit('update-online-form-field', { key: field.key, value: $event.target.value })"
+                >
+                  <option value="">请选择分值</option>
+                  <option v-for="score in scoreOptions" :key="score" :value="score">{{ score }}</option>
+                </select>
+                <textarea
+                  v-else-if="field.type === 'textarea'"
+                  :value="onlineFormData[field.key]"
+                  rows="3"
+                  :disabled="isOnlineFormFieldDisabled(field)"
+                  @input="$emit('update-online-form-field', { key: field.key, value: $event.target.value })"
+                ></textarea>
+                <input
+                  v-else
+                  :value="onlineFormData[field.key]"
+                  :type="field.type === 'date' ? 'date' : 'text'"
+                  :readonly="field.readOnly"
+                  :disabled="isOnlineFormFieldDisabled(field)"
+                  @input="$emit('update-online-form-field', { key: field.key, value: $event.target.value })"
+                />
+              </label>
+            </div>
+          </section>
+
+          <section
+            v-for="section in activeOnlineForm.schema?.scoringSections || []"
+            :key="section.key"
+            class="online-form-section"
+          >
+            <h4>{{ section.title }}</h4>
+            <div class="online-form-score-list">
+              <article
+                v-for="item in section.items || []"
+                :key="item.key"
+                class="online-form-score-card"
+              >
+                <header>
+                  <strong>{{ item.itemName }}</strong>
+                </header>
+                <dl class="online-form-score-card__template">
+                  <div>
+                    <dt>条款内容</dt>
+                    <dd>{{ item.clauseContent || '-' }}</dd>
+                  </div>
+                  <div>
+                    <dt>评价标准</dt>
+                    <dd>{{ item.evaluationStandard || '-' }}</dd>
+                  </div>
+                </dl>
+                <div class="form-grid online-form-score-card__inputs">
+                  <label>
+                    <span>分值 0-5 *</span>
+                    <select
+                      :value="onlineFormData[`${item.key}Score`]"
+                      :disabled="!activeOnlineForm.permissions?.canEdit || onlineFormSubmitting"
+                      @change="$emit('update-online-form-field', { key: `${item.key}Score`, value: $event.target.value })"
+                    >
+                      <option value="">请选择分值</option>
+                      <option v-for="score in scoreOptions" :key="score" :value="score">{{ score }}</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>信息收集说明</span>
+                    <textarea
+                      :value="onlineFormData[`${item.key}InformationNotes`]"
+                      rows="3"
+                      :disabled="!activeOnlineForm.permissions?.canEdit || onlineFormSubmitting"
+                      @input="$emit('update-online-form-field', { key: `${item.key}InformationNotes`, value: $event.target.value })"
+                    ></textarea>
+                  </label>
+                  <label>
+                    <span>责任人</span>
+                    <input
+                      :value="onlineFormData[`${item.key}ResponsiblePerson`]"
+                      type="text"
+                      :disabled="!activeOnlineForm.permissions?.canEdit || onlineFormSubmitting"
+                      @input="$emit('update-online-form-field', { key: `${item.key}ResponsiblePerson`, value: $event.target.value })"
+                    />
+                  </label>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section v-if="activeOnlineForm.reviewOpinions?.length" class="online-form-section">
+            <h4>三方意见</h4>
+            <div class="online-form-review-opinions">
+              <article
+                v-for="opinion in activeOnlineForm.reviewOpinions"
+                :key="opinion.nodeKey"
+                class="online-form-review-opinion"
+              >
+                <strong>{{ opinion.nodeName }}</strong>
+                <span class="stage-document-pill">{{ formatReviewOpinionStatus(opinion.nodeStatus) }}</span>
+                <p>{{ opinion.comment || opinion.returnReason || '暂无意见' }}</p>
+                <small>{{ opinion.reviewedByName || opinion.reviewerName || '待处理' }}{{ opinion.reviewedAt ? ` · ${opinion.reviewedAt}` : '' }}</small>
+              </article>
+            </div>
+          </section>
+
+          <div class="form-actions online-form-editor__actions">
             <button
               type="button"
               class="ghost-button"
@@ -405,6 +542,56 @@ const props = defineProps({
     required: true
   }
 });
+
+const scoreOptions = [0, 1, 2, 3, 4, 5];
+
+function getSchemaSections(form) {
+  if (Array.isArray(form?.schema?.sections) && form.schema.sections.length > 0) {
+    return form.schema.sections;
+  }
+
+  return [
+    {
+      key: 'default',
+      title: '表单内容',
+      fields: form?.schema?.fields || []
+    }
+  ];
+}
+
+function getFieldClass(field) {
+  return {
+    'form-grid__wide': field.type === 'textarea',
+    'online-form-field--readonly': field.readOnly
+  };
+}
+
+function isOnlineFormFieldDisabled(field) {
+  return field.readOnly || !props.activeOnlineForm?.permissions?.canEdit || props.onlineFormSubmitting;
+}
+
+function getNoticeTableValue(column) {
+  const keyByColumn = {
+    序号: 'sequenceNumber',
+    项目编号: 'projectCode',
+    项目名称: 'projectName',
+    客户单位: 'customerUnit',
+    立项日期: 'initiationDate'
+  };
+  const key = keyByColumn[column];
+  return key ? props.onlineFormData[key] || '-' : '-';
+}
+
+function formatReviewOpinionStatus(status) {
+  return {
+    waiting_document_submission: '待表单提交',
+    pending: '待处理',
+    approved: '已通过',
+    returned_blocked_by_rework: '已退回',
+    waiting_prerequisite: '等待前置评价',
+    invalidated: '已失效'
+  }[status] || status || '-';
+}
 
 function isAssignableInitiationOutput(output) {
   return ['1.1', '1.2'].includes(output?.documentCode);

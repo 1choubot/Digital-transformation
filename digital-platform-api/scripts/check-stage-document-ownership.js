@@ -99,6 +99,64 @@ const EXCLUDED_V20260629_PROJECT_DOCUMENT_CODES = new Set(['3.3', '5.4', 'LC33',
 const V20260629_TARGET_ONLY_DOCUMENT_CODES = STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260629
   .filter((item) => item.documentCode === item.targetOutputCode)
   .map((item) => item.documentCode);
+const INITIATION_APPROVAL_SCORE_ITEM_KEYS = [
+  'partyAttribute',
+  'enterpriseInfo',
+  'identityRole',
+  'companyAdvantages',
+  'businessModeBackground',
+  'relationshipLevel',
+  'projectSituation',
+  'specialEnvironment',
+  'industryThreshold',
+  'technologyMaturity',
+  'referenceCases'
+];
+
+function buildSmokeRequirementFormData(patch = {}) {
+  return {
+    internalParticipants: 'smoke internal participants',
+    customerParticipants: 'smoke customer participants',
+    workpieceDimensions: '1000mm x 800mm x 600mm',
+    workpieceWeight: '120kg',
+    workpieceMaterial: 'steel',
+    workpieceQuantity: '12',
+    hasWorkpieceDrawing: '待提供',
+    workpieceDrawingDescription: 'smoke drawing note',
+    operationWhat: 'smoke operation what',
+    operationHow: 'smoke operation how',
+    hasProcessDocument: '待提供',
+    processDocumentDescription: 'smoke process document note',
+    automationScope: 'smoke automation scope',
+    taktTime: '60s',
+    interactionMode: 'operator load and unload',
+    priceTarget: '100000',
+    deliverySchedule: '60 days',
+    ...patch
+  };
+}
+
+function buildSmokeInitiationFormData(patch = {}) {
+  return {
+    projectResponsibleContact: '13800000000',
+    ...Object.fromEntries(
+      INITIATION_APPROVAL_SCORE_ITEM_KEYS.flatMap((itemKey) => [
+        [`${itemKey}Score`, '3'],
+        [`${itemKey}InformationNotes`, `smoke ${itemKey} information notes`],
+        [`${itemKey}ResponsiblePerson`, 'smoke business responsible']
+      ])
+    ),
+    ...patch
+  };
+}
+
+function buildSmokeNoticeFormData(patch = {}) {
+  return {
+    initiationDate: '2026-07-01',
+    noticeDate: '2026-07-01',
+    ...patch
+  };
+}
 
 function departmentUser(id, organizationRole, department) {
   return {
@@ -393,13 +451,7 @@ async function completeInitiationGate(projectId, { submitterUser, marketingManag
       projectId,
       documentId: initiationDocument.id,
       user: submitterUser,
-      formData: {
-        projectOverview: 'smoke project overview',
-        marketAssessment: 'smoke market assessment',
-        technicalPlan: 'smoke technical plan',
-        budgetEstimate: 'smoke budget estimate',
-        riskAssessment: 'smoke risk assessment'
-      }
+      formData: buildSmokeInitiationFormData()
     });
   }
   await approveInitiationReviewNode({
@@ -756,13 +808,7 @@ async function prepareInitiationSmokeBase(projectId, submitterUser) {
     projectId,
     documentId: initiationDocument.id,
     user: submitterUser,
-    formData: {
-      projectOverview: 'smoke project overview',
-      marketAssessment: 'smoke market assessment',
-      technicalPlan: 'smoke technical plan',
-      budgetEstimate: 'smoke budget estimate',
-      riskAssessment: 'smoke risk assessment'
-    }
+    formData: buildSmokeInitiationFormData()
   });
 
   return selectSmokeDocument(projectId, '1.2');
@@ -971,7 +1017,7 @@ async function runProjectEndSmoke({
         projectId,
         documentId: endedRequirement.id,
         user: marketingManagerUser,
-        formData: { projectBackground: 'ended', customerNeed: 'ended', scope: 'ended', expectedValue: 'ended' }
+        formData: buildSmokeRequirementFormData({ operationWhat: 'ended' })
       }),
     (error) => error.code === 'PROJECT_ALREADY_ENDED'
   );
@@ -1201,12 +1247,7 @@ async function assertInitiationNoticeSubmitGateRejects({ projectId, user, expect
         projectId,
         documentId: notice.id,
         user,
-        formData: {
-          projectName: 'smoke project',
-          projectCode: 'SMOKE-PENDING',
-          noticeContent: 'smoke initiation notice blocked by gate',
-          effectiveDate: '2026-07-01'
-        }
+        formData: buildSmokeNoticeFormData()
       }),
     (error) =>
       error.code === 'INITIATION_NOTICE_GATE_NOT_READY' &&
@@ -1233,12 +1274,7 @@ async function submitInitiationNoticeAfterGateReady(projectId, user) {
     projectId,
     documentId: notice.id,
     user,
-    formData: {
-      projectName: 'smoke project',
-      projectCode: 'SMOKE-PENDING',
-      noticeContent: 'smoke initiation notice',
-      effectiveDate: '2026-07-01'
-    }
+    formData: buildSmokeNoticeFormData()
   });
   const submittedNotice = result.document;
 
@@ -1263,25 +1299,9 @@ async function runInitiationReviewSmoke({
   systemAdminUser,
   generalManagerAssistantUser
 }) {
-  const requirementFormData = {
-    projectBackground: 'smoke requirement background',
-    customerNeed: 'smoke customer need',
-    scope: 'smoke scope',
-    expectedValue: 'smoke expected value'
-  };
-  const initiationFormData = {
-    projectOverview: 'smoke project overview',
-    marketAssessment: 'smoke market assessment',
-    technicalPlan: 'smoke technical plan',
-    budgetEstimate: 'smoke budget estimate',
-    riskAssessment: 'smoke risk assessment'
-  };
-  const noticeFormData = {
-    projectName: 'smoke project',
-    projectCode: 'SMOKE-PENDING',
-    noticeContent: 'smoke initiation notice',
-    effectiveDate: '2026-07-01'
-  };
+  const requirementFormData = buildSmokeRequirementFormData();
+  const initiationFormData = buildSmokeInitiationFormData();
+  const noticeFormData = buildSmokeNoticeFormData();
 
   const projectId = await createInitiationSmokeProject({
     uniqueSuffix,
@@ -1406,6 +1426,66 @@ async function runInitiationReviewSmoke({
   });
   assert.equal(visibleForm.documentCode, '1.1');
   assert.equal(visibleForm.permissions.canView, true);
+  assert.deepEqual(
+    visibleForm.schema.sections.map((section) => section.title),
+    ['基础信息', '环境要求', '场地情况', '工件描述', '作业工艺', '目标']
+  );
+  const requirementFieldKeys = new Set(visibleForm.schema.fields.map((field) => field.key));
+  for (const key of [
+    'workpieceDimensions',
+    'workpieceWeight',
+    'workpieceMaterial',
+    'workpieceQuantity',
+    'hasWorkpieceDrawing',
+    'workpieceDrawingDescription',
+    'operationWhat',
+    'operationHow',
+    'hasProcessDocument',
+    'processDocumentDescription'
+  ]) {
+    assert.ok(requirementFieldKeys.has(key), `1.1 schema should include ${key}`);
+  }
+
+  const initiationTemplateForm = await getStageDocumentOnlineForm({
+    projectId: visibilityProjectId,
+    documentId: visibilityInitiation.id,
+    user: managerUser
+  });
+  assert.equal(initiationTemplateForm.documentCode, '1.2');
+  assert.equal(initiationTemplateForm.schema.reviewOpinionSource, 'initiationReviewNodes');
+  assert.equal(initiationTemplateForm.schema.scoringSections.length, 2);
+  assert.deepEqual(
+    initiationTemplateForm.schema.scoringSections.map((section) => section.items.length),
+    [7, 4]
+  );
+  const partyAttributeItem = initiationTemplateForm.schema.scoringSections[0].items.find(
+    (item) => item.key === 'partyAttribute'
+  );
+  assert.ok(partyAttributeItem.clauseContent.includes('央国企业'));
+  assert.ok(partyAttributeItem.evaluationStandard.includes('4-5分-央国企业'));
+  const specialEnvironmentItem = initiationTemplateForm.schema.scoringSections[1].items.find(
+    (item) => item.key === 'specialEnvironment'
+  );
+  assert.ok(specialEnvironmentItem.clauseContent.includes('防爆'));
+  assert.ok(specialEnvironmentItem.evaluationStandard.includes('5-以上要求均无'));
+  assert.ok(
+    initiationTemplateForm.schema.fields.some((field) => field.key === 'partyAttributeInformationNotes'),
+    '1.2 schema should keep information collection notes field'
+  );
+  assert.deepEqual(
+    initiationTemplateForm.reviewOpinions.map((opinion) => opinion.nodeKey),
+    ['business_review', 'technical_review', 'general_review']
+  );
+
+  const noticeTemplateForm = await getStageDocumentOnlineForm({
+    projectId: visibilityProjectId,
+    documentId: visibilityNotice.id,
+    user: marketingManagerUser
+  });
+  assert.equal(noticeTemplateForm.documentCode, '1.3');
+  assert.equal(noticeTemplateForm.schema.noticeTemplate.title, '关于确定项目名称及编号的通知');
+  assert.ok(noticeTemplateForm.schema.noticeTemplate.bodyParagraphs[1].includes('成本归集'));
+  assert.ok(noticeTemplateForm.blockingReasons.some((reason) => String(reason).includes('项目编号')));
   await assert.rejects(
     () =>
       getStageDocumentOnlineForm({
@@ -1547,7 +1627,7 @@ async function runInitiationReviewSmoke({
         user: managerUser,
         formData: {
           ...requirementFormData,
-          customerNeed: 'tampered requirement after submit'
+          operationWhat: 'tampered requirement after submit'
         }
       }),
     (error) =>
@@ -1613,6 +1693,13 @@ async function runInitiationReviewSmoke({
         user: systemAdminUser
       }),
     (error) => error.code === 'FORBIDDEN_OPERATION' && error.statusCode === 403
+  );
+  const technicalResponsibleWorkbenchBeforeReassignment = await getMyWorkbench(managerUser);
+  assert.equal(
+    technicalResponsibleWorkbenchBeforeReassignment.items.some(
+      (item) => item.projectId === projectId && item.type === 'document_responsibility' && item.documentCode === '1.2'
+    ),
+    false
   );
   await updateProjectStageDocumentResponsibleUser({
     projectId,
@@ -1684,7 +1771,7 @@ async function runInitiationReviewSmoke({
         user: managerUser,
         formData: {
           ...initiationFormData,
-          projectOverview: 'tampered initiation after submit'
+          partyAttributeInformationNotes: 'tampered initiation after submit'
         }
       }),
     (error) => error.code === 'FORM_DOCUMENT_NOT_EDITABLE' && error.statusCode === 409
@@ -1706,7 +1793,7 @@ async function runInitiationReviewSmoke({
         user: managerUser,
         formData: {
           ...initiationFormData,
-          projectOverview: 'duplicate submit should fail'
+          partyAttributeInformationNotes: 'duplicate submit should fail'
         }
       }),
     (error) => error.code === 'FORM_DOCUMENT_NOT_EDITABLE' && error.statusCode === 409
@@ -2064,6 +2151,43 @@ async function runInitiationReviewSmoke({
     documentCode: '1.3',
     user: marketingManagerUser
   });
+  await assert.rejects(
+    () =>
+      submitStageDocumentOnlineForm({
+        projectId,
+        documentId: gateReadyNotice.id,
+        user: marketingManagerUser,
+        formData: noticeFormData
+      }),
+    (error) =>
+      error.code === 'INITIATION_NOTICE_GATE_NOT_READY' &&
+      Array.isArray(error.details) &&
+      error.details.some((detail) => String(detail).includes('项目编号'))
+  );
+  await assert.rejects(
+    () =>
+      updateProjectCode({
+        projectId,
+        projectCode: `SMOKE-INIT-ADMIN-${uniqueSuffix}`,
+        user: systemAdminUser
+      }),
+    (error) => error.code === 'FORBIDDEN_OPERATION'
+  );
+  const projectCodeDetail = await updateProjectCode({
+    projectId,
+    projectCode: `SMOKE-INIT-${uniqueSuffix}`,
+    user: managerUser
+  });
+  assert.equal(projectCodeDetail.project.projectCode, `SMOKE-INIT-${uniqueSuffix}`);
+  const gateReadyNoticeWithProjectCode = await getStageDocumentOnlineForm({
+    projectId,
+    documentId: gateReadyNotice.id,
+    user: marketingManagerUser
+  });
+  assert.equal(gateReadyNoticeWithProjectCode.permissions.canSubmit, true);
+  assert.equal(gateReadyNoticeWithProjectCode.formData.projectCode, `SMOKE-INIT-${uniqueSuffix}`);
+  assert.equal(gateReadyNoticeWithProjectCode.formData.projectName, projectCodeDetail.project.projectName);
+  assert.equal(gateReadyNoticeWithProjectCode.formData.customerUnit, projectCodeDetail.project.customerName);
   const submittedNotice = await submitInitiationNoticeAfterGateReady(projectId, marketingManagerUser);
   const submittedNoticeGet = await getStageDocumentOnlineForm({
     projectId,
@@ -2095,7 +2219,7 @@ async function runInitiationReviewSmoke({
         user: marketingManagerUser,
         formData: {
           ...noticeFormData,
-          noticeContent: 'tampered notice after submit'
+          noticeDate: '2026-07-02'
         }
       }),
     (error) => error.code === 'FORM_DOCUMENT_NOT_EDITABLE' && error.statusCode === 409
@@ -2108,7 +2232,7 @@ async function runInitiationReviewSmoke({
         user: marketingManagerUser,
         formData: {
           ...noticeFormData,
-          noticeContent: 'duplicate notice submit should fail'
+          noticeDate: '2026-07-03'
         }
       }),
     (error) => error.code === 'FORM_DOCUMENT_NOT_EDITABLE' && error.statusCode === 409
@@ -2130,20 +2254,6 @@ async function runInitiationReviewSmoke({
     targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
     targetId: submittedNotice.id
   }), noticeFormSubmittedLogCount);
-  await assert.rejects(
-    () =>
-      updateProjectCode({
-        projectId,
-        projectCode: `SMOKE-INIT-ADMIN-${uniqueSuffix}`,
-        user: systemAdminUser
-      }),
-    (error) => error.code === 'FORBIDDEN_OPERATION'
-  );
-  await updateProjectCode({
-    projectId,
-    projectCode: `SMOKE-INIT-${uniqueSuffix}`,
-    user: managerUser
-  });
   await advanceProjectStage(projectId, managerUser);
 
   const returnProjectId = await createInitiationSmokeProject({
@@ -2266,7 +2376,7 @@ async function runInitiationReviewSmoke({
         user: managerUser,
         formData: {
           ...initiationFormData,
-          projectOverview: 'blocked refill before 1.1 rework clear'
+          partyAttributeInformationNotes: 'blocked refill before 1.1 rework clear'
         }
       }),
     (error) =>
@@ -2283,7 +2393,7 @@ async function runInitiationReviewSmoke({
         user: managerUser,
         formData: {
           ...initiationFormData,
-          projectOverview: 'blocked submit before 1.1 rework clear'
+          partyAttributeInformationNotes: 'blocked submit before 1.1 rework clear'
         }
       }),
     (error) =>
@@ -2423,7 +2533,7 @@ async function runInitiationReviewSmoke({
     user: managerUser,
     formData: {
       ...requirementFormData,
-      projectBackground: 'smoke requirement rework via online form'
+      operationWhat: 'smoke requirement rework via online form'
     }
   });
   const requirementAfterOnlineRework = await selectSmokeDocument(returnProjectId, '1.1');
@@ -2472,7 +2582,7 @@ async function runInitiationReviewSmoke({
     user: managerUser,
     formData: {
       ...initiationFormData,
-      projectOverview: 'smoke project overview after general return'
+      partyAttributeInformationNotes: 'smoke project overview after general return'
     }
   });
   nodes = await selectInitiationReviewNodes(returnProjectId);
@@ -3648,18 +3758,12 @@ async function runProjectLifecycleSmoke() {
     assert.equal(updatedProjectCodeDetail.project.projectCode, duplicateProjectCode);
     assert.deepEqual(await countSmokeProjectObjects(projectAId), beforeProjectCodeCountsA);
 
-    await assert.rejects(
-      () =>
-        updateProjectCode({
-          projectId: projectBId,
-          projectCode: `SMOKE-GATE-${uniqueSuffix}`,
-          user: managerUser
-        }),
-      (error) =>
-        error instanceof ProjectCodeUpdateError &&
-        error.code === 'PROJECT_CODE_GATE_NOT_READY' &&
-        error.details.includes('1.3')
-    );
+    const projectCodeDetailWithNoticeNotApplicable = await updateProjectCode({
+      projectId: projectBId,
+      projectCode: `SMOKE-GATE-${uniqueSuffix}`,
+      user: managerUser
+    });
+    assert.equal(projectCodeDetailWithNoticeNotApplicable.project.projectCode, `SMOKE-GATE-${uniqueSuffix}`);
 
     await pool.execute(
       `UPDATE project_stage_documents

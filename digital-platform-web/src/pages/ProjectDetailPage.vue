@@ -34,7 +34,7 @@
             {{ projectCodePending ? '保存中...' : '保存项目编号' }}
           </button>
         </form>
-        <p>项目编号在 1.2 项目立项审批表审核通过且 1.3 项目立项通知提交后填写，非空编号必须唯一。</p>
+        <p>项目编号在 1.2 项目立项审批表总经理最终审批通过后填写，保存后会带入 1.3 项目立项通知，非空编号必须唯一。</p>
       </section>
 
       <section v-if="projectCodeMessage || projectCodeErrorMessage" class="state-panel state-panel--inline" :class="{ 'state-panel--error': projectCodeErrorMessage, 'state-panel--success': projectCodeMessage }">
@@ -471,16 +471,20 @@ const canViewProjectAudit = computed(
 const initiationApprovalDocument = computed(() =>
   allStageDocuments.value.find((document) => document.documentCode === '1.2') || null
 );
-const initiationNoticeDocument = computed(() =>
-  allStageDocuments.value.find((document) => document.documentCode === '1.3') || null
+const initiationRequirementDocument = computed(() =>
+  allStageDocuments.value.find((document) => document.documentCode === '1.1') || null
+);
+const hasOutstandingInitiationRequirementRework = computed(
+  () =>
+    initiationRequirementDocument.value?.revisionRequired === true &&
+    Boolean(initiationRequirementDocument.value?.revisionSourceDocumentId) &&
+    String(initiationRequirementDocument.value.revisionSourceDocumentId) === String(initiationApprovalDocument.value?.id)
 );
 const canUpdateProjectCodeByGate = computed(
   () =>
     getCompletionMode(initiationApprovalDocument.value) === 'approval_required' &&
     initiationApprovalDocument.value?.initiationReview?.isComplete === true &&
-    getCompletionMode(initiationNoticeDocument.value) === 'submit_only' &&
-    initiationNoticeDocument.value?.isApplicable !== false &&
-    ['submitted', 'confirmed'].includes(initiationNoticeDocument.value?.status)
+    !hasOutstandingInitiationRequirementRework.value
 );
 const canShowProjectCodeUpdate = computed(
   () => Boolean(detail.value?.project) && !isProjectEnded.value && canCurrentUserAdvanceProject.value && canUpdateProjectCodeByGate.value
@@ -1178,6 +1182,12 @@ async function saveProjectCode() {
     detail.value = await updateProjectCode(props.projectId, projectCode, props.authToken);
     syncProjectCodeForm();
     projectCodeMessage.value = '项目编号已保存。';
+    if (activeOnlineFormDocumentId.value) {
+      const response = await getStageDocumentOnlineForm(props.projectId, activeOnlineFormDocumentId.value, props.authToken);
+      activeOnlineForm.value = response.form || response;
+      syncOnlineFormData(activeOnlineForm.value);
+    }
+    await refreshProjectWorkspaceState({ preserveOnlineFormState: true });
     await loadOperationLogs();
   } catch (error) {
     projectCodeErrorMessage.value = toReadableApiError(error);

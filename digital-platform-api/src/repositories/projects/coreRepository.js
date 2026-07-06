@@ -8,7 +8,7 @@ import {
   isValidBusinessDepartment
 } from '../../domain/organization.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
-import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
+import { COMPLETION_MODE } from '../../domain/stageDocumentTemplates.js';
 import { canViewProjectOperationLogs } from '../stageDocuments/accessControl.js';
 import { initializeProjectStageDocuments } from '../stageDocuments/checklistRepository.js';
 import { attachInitiationReviewToStageDocumentRows } from '../stageDocuments/initiationReviewRepository.js';
@@ -365,7 +365,7 @@ async function assertProjectCodeReady(connection, projectId) {
       revision_resubmitted_at
     FROM project_stage_documents
     WHERE project_id = ?
-      AND document_code IN ('1.1', '1.2', '1.3')
+      AND document_code IN ('1.1', '1.2')
     FOR UPDATE`,
     [projectId]
   );
@@ -373,7 +373,6 @@ async function assertProjectCodeReady(connection, projectId) {
   const byCode = new Map(rowsWithInitiationReview.map((row) => [row.document_code, row]));
   const initiationApproval = byCode.get('1.2');
   const initiationRequirement = byCode.get('1.1');
-  const initiationNotice = byCode.get('1.3');
   const details = [];
 
   if (
@@ -392,19 +391,10 @@ async function assertProjectCodeReady(connection, projectId) {
     details.push('1.1');
   }
 
-  if (
-    !initiationNotice ||
-    initiationNotice.completion_mode !== COMPLETION_MODE.SUBMIT_ONLY ||
-    !Boolean(initiationNotice.is_applicable) ||
-    ![DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.CONFIRMED].includes(initiationNotice.status)
-  ) {
-    details.push('1.3');
-  }
-
   if (details.length > 0) {
     throw new ProjectCodeUpdateError(
       'PROJECT_CODE_GATE_NOT_READY',
-      'Project code can be updated only after initiation approval and notice completion',
+      'Project code can be updated only after initiation approval is complete',
       409,
       details
     );

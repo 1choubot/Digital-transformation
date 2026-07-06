@@ -211,7 +211,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'PROJECT_CODE_GATE_NOT_READY') {
-    return '项目编号需在 1.2 营销/研发评价完成、总经理审批通过、1.3 项目立项通知提交且相关返工清除后填写。';
+    return '项目编号需在 1.2 营销/研发评价完成、总经理审批通过且相关返工清除后填写，保存后会带入 1.3 项目立项通知。';
   }
 
   if (error.code === 'PROJECT_NOT_FOUND') {

@@ -36,6 +36,60 @@ const INITIATION_REVIEW_RETURN_ACTION = {
   PROJECT_END: 'project_end'
 };
 
+const INITIATION_COLLABORATION_METADATA_KEY = '_collaboration';
+
+function buildResetInitiationCollaboration() {
+  return {
+    businessSubmitted: false,
+    businessSubmittedByUserId: null,
+    businessSubmittedAt: null,
+    technicalSubmitted: false,
+    technicalSubmittedByUserId: null,
+    technicalSubmittedAt: null
+  };
+}
+
+function parseJsonValue(value, fallback = {}) {
+  if (!value) {
+    return fallback;
+  }
+  if (typeof value === 'object') {
+    return value;
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+async function resetInitiationCollaborationFormForRefill(connection, documentId) {
+  const [rows] = await connection.execute(
+    `SELECT id, form_data_json
+    FROM project_stage_document_forms
+    WHERE stage_document_id = ?
+    LIMIT 1
+    FOR UPDATE`,
+    [documentId]
+  );
+
+  if (rows.length === 0) {
+    return;
+  }
+
+  const formData = parseJsonValue(rows[0].form_data_json, {});
+  formData[INITIATION_COLLABORATION_METADATA_KEY] = buildResetInitiationCollaboration();
+  await connection.execute(
+    `UPDATE project_stage_document_forms
+    SET form_data_json = ?,
+      status = 'draft',
+      submitted_by_user_id = NULL,
+      submitted_at = NULL
+    WHERE id = ?`,
+    [JSON.stringify(formData), rows[0].id]
+  );
+}
+
 export class InitiationReviewError extends Error {
   constructor(code, message, statusCode = 400, details = []) {
     super(message);
@@ -1442,6 +1496,7 @@ export async function returnInitiationReviewNode({
       AND id = ?`,
     [DOCUMENT_STATUS.RETURNED, user.id, normalizedReason, projectId, documentId]
   );
+  await resetInitiationCollaborationFormForRefill(connection, documentId);
   await markInitiationReworkTarget({
     connection,
     projectId,

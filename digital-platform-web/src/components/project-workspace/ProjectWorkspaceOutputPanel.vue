@@ -19,12 +19,16 @@
           <dd>{{ node.projectInput.customerName || '-' }}</dd>
         </div>
         <div>
+          <dt>客户联系人</dt>
+          <dd>{{ node.projectInput.customerContactPerson || '-' }}</dd>
+        </div>
+        <div>
           <dt>客户联系方式</dt>
           <dd>{{ node.projectInput.customerContact || '-' }}</dd>
         </div>
         <div>
           <dt>项目编号</dt>
-          <dd>{{ node.projectInput.projectCode || '待后置生成' }}</dd>
+          <dd>{{ node.projectInput.projectCode || '待在 1.2 填写' }}</dd>
         </div>
         <div>
           <dt>商务负责人</dt>
@@ -228,6 +232,20 @@
             <li v-for="reason in activeOnlineForm.blockingReasons" :key="reason">{{ reason }}</li>
           </ul>
         </div>
+        <dl v-if="activeOnlineForm.collaboration" class="stage-document-meta online-form-collaboration-status">
+          <div>
+            <dt>商务部分</dt>
+            <dd>{{ formatCollaborationPartStatus(activeOnlineForm.collaboration.businessSubmitted) }}</dd>
+          </div>
+          <div>
+            <dt>技术部分</dt>
+            <dd>{{ formatCollaborationPartStatus(activeOnlineForm.collaboration.technicalSubmitted) }}</dd>
+          </div>
+          <div>
+            <dt>当前填写区域</dt>
+            <dd>{{ formatEditablePart(activeOnlineForm.permissions?.editablePart) }}</dd>
+          </div>
+        </dl>
         <form class="online-form-editor__form" @submit.prevent="$emit('submit-online-form')">
           <section v-if="activeOnlineForm.schema?.noticeTemplate" class="online-form-notice-preview">
             <h4>{{ activeOnlineForm.schema.noticeTemplate.title }}</h4>
@@ -339,9 +357,9 @@
                 <div class="form-grid online-form-score-card__inputs">
                   <label>
                     <span>分值 0-5 *</span>
-                    <select
-                      :value="onlineFormData[`${item.key}Score`]"
-                      :disabled="!activeOnlineForm.permissions?.canEdit || onlineFormSubmitting"
+                      <select
+                        :value="onlineFormData[`${item.key}Score`]"
+                      :disabled="isOnlineFormPartDisabled(section.editablePart)"
                       @change="$emit('update-online-form-field', { key: `${item.key}Score`, value: $event.target.value })"
                     >
                       <option value="">请选择分值</option>
@@ -353,7 +371,7 @@
                     <textarea
                       :value="onlineFormData[`${item.key}InformationNotes`]"
                       rows="3"
-                      :disabled="!activeOnlineForm.permissions?.canEdit || onlineFormSubmitting"
+                      :disabled="isOnlineFormPartDisabled(section.editablePart)"
                       @input="$emit('update-online-form-field', { key: `${item.key}InformationNotes`, value: $event.target.value })"
                     ></textarea>
                   </label>
@@ -362,7 +380,7 @@
                     <input
                       :value="onlineFormData[`${item.key}ResponsiblePerson`]"
                       type="text"
-                      :disabled="!activeOnlineForm.permissions?.canEdit || onlineFormSubmitting"
+                      :disabled="isOnlineFormPartDisabled(section.editablePart)"
                       @input="$emit('update-online-form-field', { key: `${item.key}ResponsiblePerson`, value: $event.target.value })"
                     />
                   </label>
@@ -401,7 +419,7 @@
               class="primary-button"
               :disabled="!activeOnlineForm.permissions?.canSubmit || onlineFormSubmitting"
             >
-              {{ onlineFormSubmitting ? '提交中...' : '提交表单' }}
+              {{ onlineFormSubmitting ? '提交中...' : getOnlineFormSubmitLabel() }}
             </button>
           </div>
         </form>
@@ -567,7 +585,44 @@ function getFieldClass(field) {
 }
 
 function isOnlineFormFieldDisabled(field) {
-  return field.readOnly || !props.activeOnlineForm?.permissions?.canEdit || props.onlineFormSubmitting;
+  return (
+    field.readOnly ||
+    isOnlineFormPartDisabled(field.editablePart)
+  );
+}
+
+function isOnlineFormPartDisabled(editablePart) {
+  const permissions = props.activeOnlineForm?.permissions || {};
+  if (!permissions.canEdit || props.onlineFormSubmitting) {
+    return true;
+  }
+
+  return Boolean(editablePart) && editablePart !== permissions.editablePart;
+}
+
+function formatCollaborationPartStatus(value) {
+  return value ? '已提交' : '待填写';
+}
+
+function formatEditablePart(part) {
+  return {
+    business: '基础模块和商务模块',
+    technical: '技术模块'
+  }[part] || '仅查看';
+}
+
+function getOnlineFormSubmitLabel() {
+  const part = props.activeOnlineForm?.permissions?.editablePart;
+  if (props.activeOnlineForm?.documentCode === '1.2') {
+    if (part === 'business') {
+      return '提交商务部分';
+    }
+    if (part === 'technical') {
+      return '提交技术部分';
+    }
+  }
+
+  return '提交表单';
 }
 
 function getNoticeTableValue(column) {
@@ -594,7 +649,7 @@ function formatReviewOpinionStatus(status) {
 }
 
 function isAssignableInitiationOutput(output) {
-  return ['1.1', '1.2'].includes(output?.documentCode);
+  return output?.documentCode === '1.1';
 }
 
 function canManageOutputResponsibility(output) {

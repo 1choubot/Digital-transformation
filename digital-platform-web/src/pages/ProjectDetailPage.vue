@@ -24,23 +24,6 @@
     <template v-else-if="detail">
       <ProjectDetailHeader :detail="detail" :current-stage-title="currentStageTitle" />
 
-      <section v-if="canShowProjectCodeUpdate" class="state-panel state-panel--inline">
-        <form class="inline-form" @submit.prevent="saveProjectCode">
-          <label>
-            <span>项目编号</span>
-            <input v-model.trim="projectCodeForm" type="text" autocomplete="off" placeholder="填写唯一项目编号" />
-          </label>
-          <button type="submit" class="primary-button" :disabled="projectCodePending">
-            {{ projectCodePending ? '保存中...' : '保存项目编号' }}
-          </button>
-        </form>
-        <p>项目编号在 1.2 项目立项审批表总经理最终审批通过后填写，保存后会带入 1.3 项目立项通知，非空编号必须唯一。</p>
-      </section>
-
-      <section v-if="projectCodeMessage || projectCodeErrorMessage" class="state-panel state-panel--inline" :class="{ 'state-panel--error': projectCodeErrorMessage, 'state-panel--success': projectCodeMessage }">
-        <p>{{ projectCodeErrorMessage || projectCodeMessage }}</p>
-      </section>
-
       <section v-if="isTaskMode" class="state-panel state-panel--inline">
         <p>当前为工作台任务视图，仅展示后端返回的有权项目资料和操作入口。</p>
       </section>
@@ -250,7 +233,6 @@ import {
   saveStageDocumentOnlineForm,
   submitStageDocumentOnlineForm,
   toReadableApiError,
-  updateProjectCode,
   updateStageDocumentResponsibleUser,
   uploadStageDocumentAttachment
 } from '../api/projects.js';
@@ -343,10 +325,6 @@ const stageAdvancePending = ref(false);
 const stageAdvanceMessage = ref('');
 const stageAdvanceErrorMessage = ref('');
 const stageAdvanceMissingDocuments = ref([]);
-const projectCodeForm = ref('');
-const projectCodePending = ref(false);
-const projectCodeMessage = ref('');
-const projectCodeErrorMessage = ref('');
 const returnReasons = reactive({});
 const notApplicableReasons = reactive({});
 const responsibilitySelections = reactive({});
@@ -467,27 +445,6 @@ const canViewProjectAudit = computed(
       isCurrentUserProjectCreator.value ||
       isCurrentUserProjectManager.value
     )
-);
-const initiationApprovalDocument = computed(() =>
-  allStageDocuments.value.find((document) => document.documentCode === '1.2') || null
-);
-const initiationRequirementDocument = computed(() =>
-  allStageDocuments.value.find((document) => document.documentCode === '1.1') || null
-);
-const hasOutstandingInitiationRequirementRework = computed(
-  () =>
-    initiationRequirementDocument.value?.revisionRequired === true &&
-    Boolean(initiationRequirementDocument.value?.revisionSourceDocumentId) &&
-    String(initiationRequirementDocument.value.revisionSourceDocumentId) === String(initiationApprovalDocument.value?.id)
-);
-const canUpdateProjectCodeByGate = computed(
-  () =>
-    getCompletionMode(initiationApprovalDocument.value) === 'approval_required' &&
-    initiationApprovalDocument.value?.initiationReview?.isComplete === true &&
-    !hasOutstandingInitiationRequirementRework.value
-);
-const canShowProjectCodeUpdate = computed(
-  () => Boolean(detail.value?.project) && !isProjectEnded.value && canCurrentUserAdvanceProject.value && canUpdateProjectCodeByGate.value
 );
 const currentStageAdvanceMissingDocuments = computed(() => {
   if (stageAdvanceErrorMessage.value && stageAdvanceMissingDocuments.value.length > 0) {
@@ -898,15 +855,6 @@ function clearStageAdvanceState() {
   stageAdvanceMissingDocuments.value = [];
 }
 
-function clearProjectCodeState() {
-  projectCodeMessage.value = '';
-  projectCodeErrorMessage.value = '';
-}
-
-function syncProjectCodeForm() {
-  projectCodeForm.value = detail.value?.project?.projectCode || '';
-}
-
 function syncResponsibilitySelectionsFromChecklist() {
   Object.keys(responsibilitySelections).forEach((key) => {
     delete responsibilitySelections[key];
@@ -1165,35 +1113,6 @@ async function saveResponsibleUser(document) {
     () => updateStageDocumentResponsibleUser(props.projectId, document.id, responsibleUserId, props.authToken),
     responsibleUserId === null ? '资料责任人已清空。' : '资料责任人已更新。'
   );
-}
-
-async function saveProjectCode() {
-  clearProjectCodeState();
-  const projectCode = projectCodeForm.value.trim();
-
-  if (!projectCode) {
-    projectCodeErrorMessage.value = '请填写项目编号。';
-    return;
-  }
-
-  projectCodePending.value = true;
-
-  try {
-    detail.value = await updateProjectCode(props.projectId, projectCode, props.authToken);
-    syncProjectCodeForm();
-    projectCodeMessage.value = '项目编号已保存。';
-    if (activeOnlineFormDocumentId.value) {
-      const response = await getStageDocumentOnlineForm(props.projectId, activeOnlineFormDocumentId.value, props.authToken);
-      activeOnlineForm.value = response.form || response;
-      syncOnlineFormData(activeOnlineForm.value);
-    }
-    await refreshProjectWorkspaceState({ preserveOnlineFormState: true });
-    await loadOperationLogs();
-  } catch (error) {
-    projectCodeErrorMessage.value = toReadableApiError(error);
-  } finally {
-    projectCodePending.value = false;
-  }
 }
 
 async function clearResponsibleUser(document) {
@@ -1516,7 +1435,6 @@ async function loadDetail(options = {}) {
   responsibilityCandidatesErrorMessage.value = '';
   clearAttachmentStates();
   clearActionState();
-  clearProjectCodeState();
   lastAppliedWorkspaceRouteKey.value = '';
   manualWorkspaceSelectionRouteKey.value = '';
   if (!options.preserveStageAdvanceState) {
@@ -1525,7 +1443,6 @@ async function loadDetail(options = {}) {
 
   try {
     detail.value = await getProjectDetail(props.projectId, props.authToken);
-    syncProjectCodeForm();
   } catch (error) {
     errorCode.value = error.code || '';
     errorMessage.value = toReadableApiError(error);

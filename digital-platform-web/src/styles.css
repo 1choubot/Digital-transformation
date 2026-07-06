@@ -2158,6 +2158,10 @@ p {
   color: #5d6c7a;
 }
 
+.online-form-collaboration-status {
+  margin: 0;
+}
+
 .online-form-score-card,
 .online-form-review-opinion,
 .online-form-notice-preview {

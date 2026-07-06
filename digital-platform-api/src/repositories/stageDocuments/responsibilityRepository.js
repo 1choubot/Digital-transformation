@@ -55,7 +55,16 @@ function assertUserCanManageResponsibility({ user, project, currentDocument, tar
     );
   }
 
-  if ([INITIATION_REWORK_TARGET_DOCUMENT_CODE, INITIATION_REVIEW_DOCUMENT_CODE].includes(currentDocument.document_code)) {
+  if (currentDocument.document_code === INITIATION_REVIEW_DOCUMENT_CODE) {
+    throw new StageDocumentResponsibilityError(
+      'FORBIDDEN_OPERATION',
+      'Initiation approval uses business and technical responsible users and does not support separate stage document responsibility assignment',
+      403,
+      ['documentId']
+    );
+  }
+
+  if (currentDocument.document_code === INITIATION_REWORK_TARGET_DOCUMENT_CODE) {
     if (!canManageInitiationOnlineFormResponsibility(user, currentDocument)) {
       throw new StageDocumentResponsibilityError(
         'FORBIDDEN_OPERATION',

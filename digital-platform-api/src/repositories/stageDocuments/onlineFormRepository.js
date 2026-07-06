@@ -12,6 +12,7 @@ import {
   isInitiationOnlineFormDocument
 } from '../../domain/initiationReview.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
+import { assertDocumentIsApplicable } from '../../domain/stageDocumentApplicability.js';
 import { DOCUMENT_STATUS_ACTION } from '../../domain/stageDocumentStatus.js';
 import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import {
@@ -19,7 +20,7 @@ import {
   OPERATION_ACTION_TYPE,
   OPERATION_TARGET_TYPE
 } from '../operationLogRepository.js';
-import { assertProjectViewable } from '../projectRepository.js';
+import { assertProjectViewable, DuplicateProjectCodeError } from '../projectRepository.js';
 import { canViewStageDocumentItem } from './accessControl.js';
 import {
   assertInitiationNoticeSubmitGateReady,
@@ -30,6 +31,7 @@ import {
 } from './initiationReviewRepository.js';
 import { selectProjectPermissionContext } from './permissionContext.js';
 import {
+  mapDocument,
   selectProjectStageDocument,
   selectProjectStageDocumentForUpdate
 } from './shared.js';
@@ -38,6 +40,12 @@ import { updateProjectStageDocumentStatus } from './statusRepository.js';
 const FORM_STATUS = {
   DRAFT: 'draft',
   SUBMITTED: 'submitted'
+};
+
+const INITIATION_COLLABORATION_METADATA_KEY = '_collaboration';
+const INITIATION_COLLABORATION_PART = {
+  BUSINESS: 'business',
+  TECHNICAL: 'technical'
 };
 
 const NOTICE_TEMPLATE = Object.freeze({
@@ -55,6 +63,7 @@ const INITIATION_APPROVAL_SCORING_SECTIONS = Object.freeze([
   {
     key: 'businessModule',
     title: '商务模块',
+    editablePart: INITIATION_COLLABORATION_PART.BUSINESS,
     items: [
       {
         key: 'partyAttribute',
@@ -103,6 +112,7 @@ const INITIATION_APPROVAL_SCORING_SECTIONS = Object.freeze([
   {
     key: 'technicalModule',
     title: '技术模块',
+    editablePart: INITIATION_COLLABORATION_PART.TECHNICAL,
     items: [
       {
         key: 'specialEnvironment',
@@ -143,7 +153,8 @@ function buildScoringFields(scoringSections) {
         min: 0,
         max: 5,
         scoreItemKey: item.key,
-        sectionKey: section.key
+        sectionKey: section.key,
+        editablePart: section.editablePart
       },
       {
         key: `${item.key}InformationNotes`,
@@ -151,7 +162,8 @@ function buildScoringFields(scoringSections) {
         type: 'textarea',
         required: false,
         scoreItemKey: item.key,
-        sectionKey: section.key
+        sectionKey: section.key,
+        editablePart: section.editablePart
       },
       {
         key: `${item.key}ResponsiblePerson`,
@@ -159,7 +171,8 @@ function buildScoringFields(scoringSections) {
         type: 'text',
         required: false,
         scoreItemKey: item.key,
-        sectionKey: section.key
+        sectionKey: section.key,
+        editablePart: section.editablePart
       }
     ])
   );
@@ -289,16 +302,31 @@ const INITIATION_FORM_DEFINITIONS = Object.freeze({
     templateFileName: '项目立项审批表-模板.xlsx',
     sections: [
       {
-        key: 'basicInfo',
-        title: '基础信息',
+        key: 'approvalHeader',
+        title: '表头信息',
+        editablePart: INITIATION_COLLABORATION_PART.BUSINESS,
         fields: [
           { key: 'projectName', label: '项目名称', type: 'text', required: false, readOnly: true, autoFill: 'projectName' },
-          { key: 'projectCode', label: '项目号', type: 'text', required: false, readOnly: true, autoFill: 'projectCode' },
+          { key: 'projectCode', label: '项目号/项目编号', type: 'text', required: true, autoFill: 'projectCode' }
+        ]
+      },
+      {
+        key: 'customerBasicInfo',
+        title: '客户基本信息',
+        editablePart: INITIATION_COLLABORATION_PART.BUSINESS,
+        fields: [
           { key: 'customerName', label: '客户名称', type: 'text', required: false, readOnly: true, autoFill: 'customerName' },
-          { key: 'projectContact', label: '项目联系人', type: 'text', required: false, autoFill: 'customerContact' },
-          { key: 'customerContact', label: '客户联系方式', type: 'text', required: false, autoFill: 'customerContact' },
+          { key: 'customerContactPerson', label: '项目联系人', type: 'text', required: false, readOnly: true, autoFill: 'customerContactPerson' },
+          { key: 'customerContact', label: '联系方式', type: 'text', required: false, readOnly: true, autoFill: 'customerContact' }
+        ]
+      },
+      {
+        key: 'projectBasicInfo',
+        title: '项目基本信息',
+        editablePart: INITIATION_COLLABORATION_PART.BUSINESS,
+        fields: [
           { key: 'projectResponsiblePerson', label: '项目负责人', type: 'text', required: false, readOnly: true, autoFill: 'businessResponsibleName' },
-          { key: 'projectResponsibleContact', label: '项目负责人联系方式', type: 'text', required: false }
+          { key: 'projectResponsibleContact', label: '联系方式', type: 'text', required: false }
         ]
       }
     ],
@@ -306,12 +334,12 @@ const INITIATION_FORM_DEFINITIONS = Object.freeze({
     reviewOpinionSource: 'initiationReviewNodes',
     fields: [
       { key: 'projectName', label: '项目名称', type: 'text', required: false, readOnly: true, autoFill: 'projectName' },
-      { key: 'projectCode', label: '项目号', type: 'text', required: false, readOnly: true, autoFill: 'projectCode' },
+      { key: 'projectCode', label: '项目号/项目编号', type: 'text', required: true, autoFill: 'projectCode', editablePart: INITIATION_COLLABORATION_PART.BUSINESS },
       { key: 'customerName', label: '客户名称', type: 'text', required: false, readOnly: true, autoFill: 'customerName' },
-      { key: 'projectContact', label: '项目联系人', type: 'text', required: false, autoFill: 'customerContact' },
-      { key: 'customerContact', label: '客户联系方式', type: 'text', required: false, autoFill: 'customerContact' },
+      { key: 'customerContactPerson', label: '项目联系人', type: 'text', required: false, readOnly: true, autoFill: 'customerContactPerson' },
+      { key: 'customerContact', label: '联系方式', type: 'text', required: false, readOnly: true, autoFill: 'customerContact' },
       { key: 'projectResponsiblePerson', label: '项目负责人', type: 'text', required: false, readOnly: true, autoFill: 'businessResponsibleName' },
-      { key: 'projectResponsibleContact', label: '项目负责人联系方式', type: 'text', required: false },
+      { key: 'projectResponsibleContact', label: '项目负责人联系方式', type: 'text', required: false, editablePart: INITIATION_COLLABORATION_PART.BUSINESS },
       ...buildScoringFields(INITIATION_APPROVAL_SCORING_SECTIONS)
     ]
   },
@@ -397,7 +425,10 @@ function cloneField(field) {
 function cloneSection(section) {
   return {
     ...section,
-    fields: (section.fields || []).map(cloneField)
+    fields: (section.fields || []).map((field) => ({
+      ...cloneField(field),
+      editablePart: field.editablePart ?? section.editablePart
+    }))
   };
 }
 
@@ -479,14 +510,19 @@ async function selectOnlineFormProjectContext(connection, projectId, { forUpdate
       p.project_code,
       p.project_name,
       p.customer_name,
+      p.customer_contact_person,
       p.customer_contact,
       p.business_responsible_user_id,
       p.technical_responsible_user_id,
       business_responsible.display_name AS business_responsible_display_name,
-      business_responsible.account AS business_responsible_account
+      business_responsible.account AS business_responsible_account,
+      technical_responsible.display_name AS technical_responsible_display_name,
+      technical_responsible.account AS technical_responsible_account
     FROM projects p
     LEFT JOIN users business_responsible
       ON business_responsible.id = p.business_responsible_user_id
+    LEFT JOIN users technical_responsible
+      ON technical_responsible.id = p.technical_responsible_user_id
     WHERE p.id = ?
     LIMIT 1
     ${forUpdate ? 'FOR UPDATE' : ''}`,
@@ -504,10 +540,14 @@ function getProjectAutoFillValue(project, autoFillKey) {
       return project?.project_name ?? '';
     case 'customerName':
       return project?.customer_name ?? '';
+    case 'customerContactPerson':
+      return project?.customer_contact_person ?? '';
     case 'customerContact':
       return project?.customer_contact ?? '';
     case 'businessResponsibleName':
       return project?.business_responsible_display_name ?? project?.business_responsible_account ?? '';
+    case 'technicalResponsibleName':
+      return project?.technical_responsible_display_name ?? project?.technical_responsible_account ?? '';
     default:
       return '';
   }
@@ -532,8 +572,9 @@ function applySchemaDefaults(schema, formData, project) {
   return mergedFormData;
 }
 
-function validateRequiredFields(schema, formData) {
-  const missing = schema.fields
+function validateRequiredFields(schema, formData, fields = schema.fields) {
+  const fieldsToValidate = fields || [];
+  const missing = fieldsToValidate
     .filter((field) => field.required)
     .filter((field) => String(formData[field.key] ?? '').trim() === '')
     .map((field) => field.key);
@@ -547,7 +588,7 @@ function validateRequiredFields(schema, formData) {
     );
   }
 
-  const invalidScores = schema.fields
+  const invalidScores = fieldsToValidate
     .filter((field) => field.type === 'score')
     .filter((field) => {
       const rawValue = String(formData[field.key] ?? '').trim();
@@ -567,6 +608,241 @@ function validateRequiredFields(schema, formData) {
       invalidScores
     );
   }
+}
+
+function isInitiationReviewFormDocument(document) {
+  return String(getDocumentCode(document)) === INITIATION_REVIEW_DOCUMENT_CODE;
+}
+
+function buildDefaultInitiationCollaboration() {
+  return {
+    businessSubmitted: false,
+    businessSubmittedByUserId: null,
+    businessSubmittedAt: null,
+    technicalSubmitted: false,
+    technicalSubmittedByUserId: null,
+    technicalSubmittedAt: null
+  };
+}
+
+function normalizeInitiationCollaboration(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    ...buildDefaultInitiationCollaboration(),
+    businessSubmitted: source.businessSubmitted === true,
+    businessSubmittedByUserId: source.businessSubmittedByUserId ?? null,
+    businessSubmittedAt: source.businessSubmittedAt ?? null,
+    technicalSubmitted: source.technicalSubmitted === true,
+    technicalSubmittedByUserId: source.technicalSubmittedByUserId ?? null,
+    technicalSubmittedAt: source.technicalSubmittedAt ?? null
+  };
+}
+
+function getInitiationCollaboration(formData) {
+  return normalizeInitiationCollaboration(formData?.[INITIATION_COLLABORATION_METADATA_KEY]);
+}
+
+function omitInitiationCollaborationMetadata(formData) {
+  const { [INITIATION_COLLABORATION_METADATA_KEY]: _collaboration, ...rest } = formData || {};
+  return rest;
+}
+
+function isInitiationCollaborationComplete(collaboration) {
+  return collaboration.businessSubmitted === true && collaboration.technicalSubmitted === true;
+}
+
+function markInitiationCollaborationPartSubmitted(collaboration, part, userId) {
+  const submittedAt = new Date().toISOString();
+  if (part === INITIATION_COLLABORATION_PART.BUSINESS) {
+    return {
+      ...collaboration,
+      businessSubmitted: true,
+      businessSubmittedByUserId: userId,
+      businessSubmittedAt: submittedAt
+    };
+  }
+
+  return {
+    ...collaboration,
+    technicalSubmitted: true,
+    technicalSubmittedByUserId: userId,
+    technicalSubmittedAt: submittedAt
+  };
+}
+
+function isInitiationCollaborationPartSubmitted(collaboration, part) {
+  if (part === INITIATION_COLLABORATION_PART.BUSINESS) {
+    return collaboration.businessSubmitted === true;
+  }
+
+  if (part === INITIATION_COLLABORATION_PART.TECHNICAL) {
+    return collaboration.technicalSubmitted === true;
+  }
+
+  return false;
+}
+
+function assertInitiationCollaborationPartNotSubmitted(collaboration, part) {
+  if (!isInitiationCollaborationPartSubmitted(collaboration, part)) {
+    return;
+  }
+
+  throw new StageDocumentFormError(
+    'FORM_PART_ALREADY_SUBMITTED',
+    'Current initiation approval form part has been submitted and cannot be changed until returned',
+    409,
+    [part]
+  );
+}
+
+function getUserInitiationCollaborationPart(user, projectContext) {
+  if (
+    projectContext?.business_responsible_user_id &&
+    String(projectContext.business_responsible_user_id) === String(user?.id)
+  ) {
+    return INITIATION_COLLABORATION_PART.BUSINESS;
+  }
+
+  if (
+    projectContext?.technical_responsible_user_id &&
+    String(projectContext.technical_responsible_user_id) === String(user?.id)
+  ) {
+    return INITIATION_COLLABORATION_PART.TECHNICAL;
+  }
+
+  return null;
+}
+
+function assertUserCanHandleInitiationCollaboration(user, projectContext) {
+  const part = getUserInitiationCollaborationPart(user, projectContext);
+  if (!part) {
+    throw new StageDocumentFormError(
+      'FORBIDDEN_OPERATION',
+      'Current user cannot edit initiation approval collaboration form',
+      403,
+      ['businessResponsibleUserId', 'technicalResponsibleUserId']
+    );
+  }
+
+  return part;
+}
+
+function getEditablePartFields(schema, part) {
+  return (schema.fields || []).filter((field) => field.editablePart === part);
+}
+
+function assertNoDisallowedInitiationFieldChanges({ schema, existingFormData, incomingFormData, incomingOriginal, part }) {
+  const disallowedFields = [];
+  for (const field of schema.fields || []) {
+    if (field.editablePart === part || field.readOnly) {
+      continue;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(incomingOriginal, field.key)) {
+      continue;
+    }
+
+    const existingValue = String(existingFormData[field.key] ?? '');
+    const incomingValue = String(incomingFormData[field.key] ?? '');
+    if (existingValue !== incomingValue) {
+      disallowedFields.push(field.key);
+    }
+  }
+
+  if (disallowedFields.length > 0) {
+    throw new StageDocumentFormError(
+      'FORM_FIELDS_NOT_ALLOWED',
+      'Current user cannot edit fields outside their initiation approval responsibility',
+      403,
+      disallowedFields
+    );
+  }
+}
+
+function mergeInitiationCollaborationFormData({ schema, existingFormData, incomingFormData, incomingOriginal, part }) {
+  assertNoDisallowedInitiationFieldChanges({
+    schema,
+    existingFormData,
+    incomingFormData,
+    incomingOriginal,
+    part
+  });
+
+  const mergedFormData = { ...existingFormData };
+  for (const field of getEditablePartFields(schema, part)) {
+    if (field.readOnly) {
+      continue;
+    }
+    mergedFormData[field.key] = incomingFormData[field.key] ?? '';
+  }
+
+  return mergedFormData;
+}
+
+function normalizeInitiationProjectCode(formData, { required = false } = {}) {
+  const projectCode = String(formData.projectCode ?? '').trim();
+  if (!projectCode && required) {
+    throw new StageDocumentFormError(
+      'PROJECT_CODE_REQUIRED',
+      'Project code is required before submitting initiation approval business part',
+      400,
+      ['projectCode']
+    );
+  }
+
+  return projectCode;
+}
+
+async function assertProjectCodeUniqueForInitiationForm(connection, projectId, projectCode) {
+  const [rows] = await connection.execute(
+    `SELECT id
+    FROM projects
+    WHERE project_code = ?
+      AND id <> ?
+    LIMIT 1
+    FOR UPDATE`,
+    [projectCode, projectId]
+  );
+
+  if (rows.length > 0) {
+    throw new DuplicateProjectCodeError(projectCode);
+  }
+}
+
+async function updateProjectCodeFromInitiationForm({
+  connection,
+  projectId,
+  projectContext,
+  projectCode,
+  user,
+  document
+}) {
+  if (!projectCode) {
+    return;
+  }
+
+  await assertProjectCodeUniqueForInitiationForm(connection, projectId, projectCode);
+  if (String(projectContext?.project_code ?? '') === projectCode) {
+    return;
+  }
+
+  await connection.execute('UPDATE projects SET project_code = ? WHERE id = ?', [projectCode, projectId]);
+  await insertOperationLog(connection, {
+    projectId,
+    actorUserId: user.id,
+    actionType: OPERATION_ACTION_TYPE.PROJECT_CODE_UPDATED,
+    targetType: OPERATION_TARGET_TYPE.PROJECT,
+    targetId: projectId,
+    summary: `更新项目编号：${projectCode}`,
+    details: {
+      fromProjectCode: projectContext?.project_code ?? null,
+      toProjectCode: projectCode,
+      sourceDocumentId: document.id,
+      sourceDocumentCode: document.document_code,
+      sourceDocumentName: document.document_name
+    }
+  });
+  projectContext.project_code = projectCode;
 }
 
 function isMarketingCenterManager(user) {
@@ -610,6 +886,10 @@ function assertDocumentEditableForOnlineForm(document) {
     409,
     ['documentId', 'status']
   );
+}
+
+function assertDocumentApplicableForOnlineForm(document) {
+  assertDocumentIsApplicable(document?.is_applicable === undefined ? true : Boolean(document.is_applicable));
 }
 
 function assertProjectNotEndedForOnlineForm(project) {
@@ -701,6 +981,11 @@ async function assertCanEditForm({ connection, projectId, document, user, projec
 
   if (String(getDocumentCode(document)) === INITIATION_REVIEW_DOCUMENT_CODE) {
     await assertNoOutstandingInitiationRequirementRework(connection, projectId, document, { forUpdate: true });
+    assertUserCanHandleInitiationCollaboration(
+      user,
+      projectContext || (await selectOnlineFormProjectContext(connection, projectId))
+    );
+    return schema;
   }
 
   if (!(document.responsible_user_id ?? document.responsibleUserId)) {
@@ -815,7 +1100,10 @@ async function buildReviewOpinions({ connection, document, schema }) {
 
 function mapForm({ document, schema, row, permissions, projectContext = null, blockingReasons = [], reviewOpinions = [] }) {
   const savedFormData = parseJsonValue(row?.form_data_json, {});
-  const formData = applySchemaDefaults(schema, savedFormData, projectContext);
+  const formData = applySchemaDefaults(schema, omitInitiationCollaborationMetadata(savedFormData), projectContext);
+  const collaboration = isInitiationReviewFormDocument(document)
+    ? getInitiationCollaboration(savedFormData)
+    : null;
 
   return {
     id: row?.id ?? null,
@@ -832,6 +1120,7 @@ function mapForm({ document, schema, row, permissions, projectContext = null, bl
     submittedByUserId: row?.submitted_by_user_id ?? null,
     submittedAt: row?.submitted_at ?? null,
     permissions,
+    collaboration,
     blockingReasons,
     reviewOpinions
   };
@@ -872,6 +1161,50 @@ async function buildFormPermissions({ connection, projectId, document, user }) {
     };
   }
 
+  if (String(getDocumentCode(document)) === INITIATION_REVIEW_DOCUMENT_CODE) {
+    const project = await selectProjectPermissionContext(connection, projectId, user);
+    const projectContext = await selectOnlineFormProjectContext(connection, projectId);
+    const editablePart = getUserInitiationCollaborationPart(user, projectContext);
+    const isEditable = isDocumentEditableForOnlineForm(document);
+    const projectEnded = project?.status === PROJECT_STATUS.ENDED;
+    const reworkBlocker = await selectOutstandingInitiationRequirementRework(connection, projectId, document);
+    const formRow = await selectFormRow(connection, document.id);
+    const collaboration = getInitiationCollaboration(parseJsonValue(formRow?.form_data_json, {}));
+    const currentPartSubmitted = isInitiationCollaborationPartSubmitted(collaboration, editablePart);
+    const canHandle = Boolean(editablePart) && !currentPartSubmitted && isEditable && !reworkBlocker && !projectEnded;
+    const blockingReasons = [];
+    if (projectEnded) {
+      blockingReasons.push('项目已结束，在线表单仅可浏览');
+    }
+    if (!editablePart) {
+      blockingReasons.push('当前账号不是本项目商务负责人或技术负责人');
+    }
+    if (!isEditable) {
+      blockingReasons.push(buildDocumentNotEditableBlockingReason(document));
+    }
+    if (reworkBlocker) {
+      blockingReasons.push(buildInitiationReworkNotClearedReason());
+    }
+    if (currentPartSubmitted) {
+      blockingReasons.push('该部分已提交，需退回后重新填写');
+    }
+
+    return {
+      schema,
+      permissions: {
+        canView: true,
+        canEdit: canHandle,
+        canSubmit: canHandle,
+        editablePart,
+        canEditBusinessPart: canHandle && editablePart === INITIATION_COLLABORATION_PART.BUSINESS,
+        canEditTechnicalPart: canHandle && editablePart === INITIATION_COLLABORATION_PART.TECHNICAL,
+        canSubmitBusinessPart: canHandle && editablePart === INITIATION_COLLABORATION_PART.BUSINESS,
+        canSubmitTechnicalPart: canHandle && editablePart === INITIATION_COLLABORATION_PART.TECHNICAL
+      },
+      blockingReasons
+    };
+  }
+
   const hasResponsible = Boolean(document.responsible_user_id ?? document.responsibleUserId);
   const isEditable = isDocumentEditableForOnlineForm(document);
   const project = await selectProjectPermissionContext(connection, projectId, user);
@@ -903,6 +1236,86 @@ async function buildFormPermissions({ connection, projectId, document, user }) {
       canSubmit: canHandle
     },
     blockingReasons
+  };
+}
+
+async function persistInitiationCollaborationForm({
+  connection,
+  projectId,
+  documentId,
+  document,
+  user,
+  schema,
+  projectContext,
+  normalizedFormData,
+  submit = false
+}) {
+  const editablePart = assertUserCanHandleInitiationCollaboration(user, projectContext);
+  const existingRow = await selectFormRow(connection, documentId);
+  const existingStoredFormData = parseJsonValue(existingRow?.form_data_json, {});
+  const existingCollaboration = getInitiationCollaboration(existingStoredFormData);
+  assertInitiationCollaborationPartNotSubmitted(existingCollaboration, editablePart);
+  const existingFormData = applySchemaDefaults(
+    schema,
+    omitInitiationCollaborationMetadata(existingStoredFormData),
+    projectContext
+  );
+  const incomingFormData = applySchemaDefaults(schema, normalizedFormData, projectContext);
+  const mergedFormData = mergeInitiationCollaborationFormData({
+    schema,
+    existingFormData,
+    incomingFormData,
+    incomingOriginal: normalizedFormData,
+    part: editablePart
+  });
+
+  if (editablePart === INITIATION_COLLABORATION_PART.BUSINESS) {
+    const projectCode = normalizeInitiationProjectCode(mergedFormData, { required: submit });
+    await updateProjectCodeFromInitiationForm({
+      connection,
+      projectId,
+      projectContext,
+      projectCode,
+      user,
+      document
+    });
+    if (projectCode) {
+      mergedFormData.projectCode = projectCode;
+    }
+  }
+
+  let collaboration = existingCollaboration;
+  if (submit) {
+    validateRequiredFields(schema, mergedFormData, getEditablePartFields(schema, editablePart));
+    collaboration = markInitiationCollaborationPartSubmitted(collaboration, editablePart, user.id);
+  }
+
+  const status = isInitiationCollaborationComplete(collaboration)
+    ? FORM_STATUS.SUBMITTED
+    : FORM_STATUS.DRAFT;
+  const formDataToStore = applySchemaDefaults(
+    schema,
+    {
+      ...mergedFormData,
+      [INITIATION_COLLABORATION_METADATA_KEY]: collaboration
+    },
+    projectContext
+  );
+
+  await upsertForm({
+    connection,
+    projectId,
+    documentId,
+    schema,
+    formData: formDataToStore,
+    status,
+    userId: user.id
+  });
+
+  return {
+    editablePart,
+    collaboration,
+    status
   };
 }
 
@@ -953,18 +1366,34 @@ export async function saveStageDocumentOnlineForm({ projectId, documentId, user,
     const project = await assertCanViewFormDocument({ connection, projectId, document, user });
     assertProjectNotEndedForOnlineForm(project);
     assertDocumentEditableForOnlineForm(document);
+    assertDocumentApplicableForOnlineForm(document);
     projectContext = await selectOnlineFormProjectContext(connection, projectId, { forUpdate: true });
     schema = await assertCanEditForm({ connection, projectId, document, user, projectContext });
-    const formDataWithDefaults = applySchemaDefaults(schema, normalizedFormData, projectContext);
-    await upsertForm({
-      connection,
-      projectId,
-      documentId,
-      schema,
-      formData: formDataWithDefaults,
-      status: FORM_STATUS.DRAFT,
-      userId: user.id
-    });
+    const collaborationResult = isInitiationReviewFormDocument(document)
+      ? await persistInitiationCollaborationForm({
+          connection,
+          projectId,
+          documentId,
+          document,
+          user,
+          schema,
+          projectContext,
+          normalizedFormData,
+          submit: false
+        })
+      : null;
+    if (!collaborationResult) {
+      const formDataWithDefaults = applySchemaDefaults(schema, normalizedFormData, projectContext);
+      await upsertForm({
+        connection,
+        projectId,
+        documentId,
+        schema,
+        formData: formDataWithDefaults,
+        status: FORM_STATUS.DRAFT,
+        userId: user.id
+      });
+    }
     await insertOperationLog(connection, {
       projectId,
       actorUserId: user.id,
@@ -979,7 +1408,9 @@ export async function saveStageDocumentOnlineForm({ projectId, documentId, user,
         documentName: document.document_name,
         formKey: schema.formKey,
         fromStatus: document.status,
-        toStatus: FORM_STATUS.DRAFT,
+        toStatus: collaborationResult?.status ?? FORM_STATUS.DRAFT,
+        collaborationPart: collaborationResult?.editablePart ?? null,
+        collaboration: collaborationResult?.collaboration ?? null,
         actorUserId: user.id,
         operatedAt: new Date().toISOString()
       }
@@ -1024,19 +1455,35 @@ export async function submitStageDocumentOnlineForm({ projectId, documentId, use
     const project = await assertCanViewFormDocument({ connection, projectId, document, user });
     assertProjectNotEndedForOnlineForm(project);
     assertDocumentEditableForOnlineForm(document);
+    assertDocumentApplicableForOnlineForm(document);
     projectContext = await selectOnlineFormProjectContext(connection, projectId, { forUpdate: true });
     schema = await assertCanEditForm({ connection, projectId, document, user, projectContext });
-    const formDataWithDefaults = applySchemaDefaults(schema, normalizedFormData, projectContext);
-    validateRequiredFields(schema, formDataWithDefaults);
-    await upsertForm({
-      connection,
-      projectId,
-      documentId,
-      schema,
-      formData: formDataWithDefaults,
-      status: FORM_STATUS.SUBMITTED,
-      userId: user.id
-    });
+    const collaborationResult = isInitiationReviewFormDocument(document)
+      ? await persistInitiationCollaborationForm({
+          connection,
+          projectId,
+          documentId,
+          document,
+          user,
+          schema,
+          projectContext,
+          normalizedFormData,
+          submit: true
+        })
+      : null;
+    if (!collaborationResult) {
+      const formDataWithDefaults = applySchemaDefaults(schema, normalizedFormData, projectContext);
+      validateRequiredFields(schema, formDataWithDefaults);
+      await upsertForm({
+        connection,
+        projectId,
+        documentId,
+        schema,
+        formData: formDataWithDefaults,
+        status: FORM_STATUS.SUBMITTED,
+        userId: user.id
+      });
+    }
     await insertOperationLog(connection, {
       projectId,
       actorUserId: user.id,
@@ -1051,20 +1498,27 @@ export async function submitStageDocumentOnlineForm({ projectId, documentId, use
         documentName: document.document_name,
         formKey: schema.formKey,
         fromStatus: document.status,
-        toStatus: FORM_STATUS.SUBMITTED,
+        toStatus: collaborationResult?.status ?? FORM_STATUS.SUBMITTED,
+        collaborationPart: collaborationResult?.editablePart ?? null,
+        collaboration: collaborationResult?.collaboration ?? null,
         actorUserId: user.id,
         operatedAt: new Date().toISOString()
       }
     });
-    updatedDocument = await updateProjectStageDocumentStatus({
-      connection,
-      projectId,
-      documentId,
-      action: DOCUMENT_STATUS_ACTION.SUBMIT,
-      user,
-      allowOnlineFormDocumentSubmit: true
-    });
-    updatedFormDocument = await selectProjectStageDocument(connection, projectId, documentId);
+    if (!collaborationResult || collaborationResult.status === FORM_STATUS.SUBMITTED) {
+      updatedDocument = await updateProjectStageDocumentStatus({
+        connection,
+        projectId,
+        documentId,
+        action: DOCUMENT_STATUS_ACTION.SUBMIT,
+        user,
+        allowOnlineFormDocumentSubmit: true
+      });
+      updatedFormDocument = await selectProjectStageDocument(connection, projectId, documentId);
+    } else {
+      updatedDocument = mapDocument(document);
+      updatedFormDocument = document;
+    }
     formRow = await selectFormRow(connection, documentId);
     formPermissions = await buildFormPermissions({
       connection,

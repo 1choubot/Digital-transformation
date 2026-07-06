@@ -91,7 +91,7 @@ function assertOnlineFormDocumentRevisionCompletionSource(currentDocument) {
   );
 }
 
-function assertUserCanUpdateDocumentStatus({ user, action, currentDocument, project }) {
+function assertUserCanUpdateDocumentStatus({ user, action, currentDocument, project, allowOnlineFormDocumentSubmit = false }) {
   if (project?.status === PROJECT_STATUS.ENDED) {
     throw new StageDocumentStatusError(
       'PROJECT_ALREADY_ENDED',
@@ -132,6 +132,10 @@ function assertUserCanUpdateDocumentStatus({ user, action, currentDocument, proj
           ['organizationRole']
         );
       }
+      return;
+    }
+
+    if (allowOnlineFormDocumentSubmit && isInitiationReviewDocument(currentDocument)) {
       return;
     }
 
@@ -733,7 +737,7 @@ export async function updateProjectStageDocumentStatus({
     const project = await selectProjectPermissionContext(connection, projectId, user);
     assertDocumentCompletionModeAllowsAction(action, currentDocument);
     assertOnlineFormDocumentSubmitSource({ action, currentDocument, allowOnlineFormDocumentSubmit });
-    assertUserCanUpdateDocumentStatus({ user, action, currentDocument, project });
+    assertUserCanUpdateDocumentStatus({ user, action, currentDocument, project, allowOnlineFormDocumentSubmit });
     assertReviewActionAllowedForRevision(action, currentDocument);
     assertDocumentIsApplicable(
       currentDocument.is_applicable === undefined ? true : Boolean(currentDocument.is_applicable)

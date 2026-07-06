@@ -1,18 +1,15 @@
 import { pool } from '../../db/pool.js';
 import {
   BUSINESS_DEPARTMENT,
-  canAdvanceProjectStage,
   canBeProjectManagerUser,
   canBeResponsibleUser,
   isCenterManagerUser,
   isValidBusinessDepartment
 } from '../../domain/organization.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
-import { COMPLETION_MODE } from '../../domain/stageDocumentTemplates.js';
+import { INITIATION_REVIEW_DOCUMENT_CODE, INITIATION_REWORK_TARGET_DOCUMENT_CODE } from '../../domain/initiationReview.js';
 import { canViewProjectOperationLogs } from '../stageDocuments/accessControl.js';
 import { initializeProjectStageDocuments } from '../stageDocuments/checklistRepository.js';
-import { attachInitiationReviewToStageDocumentRows } from '../stageDocuments/initiationReviewRepository.js';
-import { deriveStageDocumentCompletion } from '../stageDocuments/shared.js';
 import {
   insertOperationLog,
   OPERATION_ACTION_TYPE,
@@ -148,6 +145,7 @@ async function insertProject(connection, project) {
       project_code,
       project_name,
       customer_name,
+      customer_contact_person,
       customer_contact,
       project_mode,
       project_manager,
@@ -163,11 +161,12 @@ async function insertProject(connection, project) {
       planned_end_date,
       remark,
       created_by_user_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       row.project_code,
       row.project_name,
       row.customer_name,
+      row.customer_contact_person,
       row.customer_contact,
       row.project_mode,
       row.project_manager,
@@ -249,6 +248,7 @@ export async function createProject(project, createdByUserId) {
         projectCode: project.projectCode,
         projectName: project.projectName,
         customerName: project.customerName,
+        customerContactPerson: project.customerContactPerson,
         customerContact: project.customerContact,
         projectMode: project.projectMode ?? null,
         projectManagerUserId: project.projectManagerUserId ?? null,
@@ -340,11 +340,14 @@ function assertCanUpdateProjectCode(user, projectRow) {
     );
   }
 
-  if (!canAdvanceProjectStage(user, projectRow)) {
+  if (
+    !projectRow.business_responsible_user_id ||
+    String(projectRow.business_responsible_user_id) !== String(user?.id)
+  ) {
     throw new ProjectAuthorizationError(
       'FORBIDDEN_OPERATION',
       'Current user cannot update project code',
-      ['projectId']
+      ['businessResponsibleUserId']
     );
   }
 }
@@ -354,34 +357,18 @@ async function assertProjectCodeReady(connection, projectId) {
     `SELECT
       id,
       document_code,
-      document_name,
-      status,
-      completion_mode,
-      is_applicable,
       revision_required,
-      revision_reason,
-      revision_source_document_id,
-      revision_requested_at,
-      revision_resubmitted_at
+      revision_source_document_id
     FROM project_stage_documents
     WHERE project_id = ?
       AND document_code IN ('1.1', '1.2')
     FOR UPDATE`,
     [projectId]
   );
-  const rowsWithInitiationReview = await attachInitiationReviewToStageDocumentRows(connection, rows);
-  const byCode = new Map(rowsWithInitiationReview.map((row) => [row.document_code, row]));
-  const initiationApproval = byCode.get('1.2');
-  const initiationRequirement = byCode.get('1.1');
+  const byCode = new Map(rows.map((row) => [row.document_code, row]));
+  const initiationApproval = byCode.get(INITIATION_REVIEW_DOCUMENT_CODE);
+  const initiationRequirement = byCode.get(INITIATION_REWORK_TARGET_DOCUMENT_CODE);
   const details = [];
-
-  if (
-    !initiationApproval ||
-    initiationApproval.completion_mode !== COMPLETION_MODE.APPROVAL_REQUIRED ||
-    !deriveStageDocumentCompletion(initiationApproval).isComplete
-  ) {
-    details.push('1.2');
-  }
 
   if (
     initiationRequirement &&
@@ -394,9 +381,54 @@ async function assertProjectCodeReady(connection, projectId) {
   if (details.length > 0) {
     throw new ProjectCodeUpdateError(
       'PROJECT_CODE_GATE_NOT_READY',
-      'Project code can be updated only after initiation approval is complete',
+      'Project code cannot be updated while initiation requirement rework is pending',
       409,
       details
+    );
+  }
+}
+
+function parseJsonValue(value, fallback = {}) {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+async function assertProjectCodeIndependentUpdateAllowed(connection, projectId) {
+  const [rows] = await connection.execute(
+    `SELECT
+      f.form_data_json
+    FROM project_stage_documents d
+    LEFT JOIN project_stage_document_forms f
+      ON f.stage_document_id = d.id
+    WHERE d.project_id = ?
+      AND d.document_code = ?
+    LIMIT 1
+    FOR UPDATE`,
+    [projectId, INITIATION_REVIEW_DOCUMENT_CODE]
+  );
+  const formData = parseJsonValue(rows[0]?.form_data_json, {});
+  const hasInitiationApprovalFormData =
+    formData &&
+    typeof formData === 'object' &&
+    Object.keys(formData).some((key) => key !== '_collaboration');
+
+  if (hasInitiationApprovalFormData) {
+    throw new ProjectCodeUpdateError(
+      'PROJECT_CODE_MANAGED_BY_INITIATION_APPROVAL_FORM',
+      'Project code must be changed in the 1.2 initiation approval form',
+      409,
+      ['projectCode', '1.2']
     );
   }
 }
@@ -435,6 +467,7 @@ export async function updateProjectCode({ projectId, projectCode, user }) {
     const projectRow = await selectProjectForCodeUpdate(connection, projectId, user);
     assertCanUpdateProjectCode(user, projectRow);
     await assertProjectCodeReady(connection, projectId);
+    await assertProjectCodeIndependentUpdateAllowed(connection, projectId);
     await assertProjectCodeUnique(connection, projectId, normalizedProjectCode);
 
     if (projectRow.project_code !== normalizedProjectCode) {
@@ -523,6 +556,7 @@ export async function listProjects(user) {
       p.project_code,
       p.project_name,
       p.customer_name,
+      p.customer_contact_person,
       p.customer_contact,
       p.project_mode,
       p.project_manager,

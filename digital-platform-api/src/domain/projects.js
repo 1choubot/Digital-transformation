@@ -182,6 +182,7 @@ export function normalizeCreateProjectInput(payload) {
     projectCode,
     projectName: normalizeText(firstValue(payload, 'projectName', 'project_name')),
     customerName: normalizeText(firstValue(payload, 'customerName', 'customer_name')),
+    customerContactPerson: normalizeText(firstValue(payload, 'customerContactPerson', 'customer_contact_person')),
     customerContact: normalizeText(firstValue(payload, 'customerContact', 'customer_contact')),
     projectMode: normalizeProjectMode(firstValue(payload, 'projectMode', 'project_mode')),
     projectManagerUserId: normalizeOptionalProjectManagerUserId(
@@ -205,6 +206,7 @@ export function normalizeCreateProjectInput(payload) {
   const missing = [];
   if (!project.projectName) missing.push('projectName');
   if (!project.customerName) missing.push('customerName');
+  if (!project.customerContactPerson) missing.push('customerContactPerson');
   if (!project.customerContact) missing.push('customerContact');
   if (!project.businessResponsibleUserId) missing.push('businessResponsibleUserId');
   if (!project.technicalResponsibleUserId) missing.push('technicalResponsibleUserId');

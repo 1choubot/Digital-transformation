@@ -115,7 +115,7 @@
               <span class="mono">{{ formatProjectCode(project.projectCode) }}</span>
               <strong>{{ project.projectName }}</strong>
               <small>
-                {{ project.customerName }} / {{ formatProjectMode(project.projectMode) }} /
+                {{ project.customerName }} / {{ project.customerContactPerson || '-' }} / {{ formatProjectMode(project.projectMode) }} /
                 {{ formatUser(project.projectManagerUser) }}
               </small>
             </div>

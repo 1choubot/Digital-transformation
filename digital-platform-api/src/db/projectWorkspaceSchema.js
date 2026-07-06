@@ -45,6 +45,14 @@ async function ensureProjectsCustomerContact(executor) {
   }
 }
 
+async function ensureProjectsCustomerContactPerson(executor) {
+  if (!(await columnExists(executor, 'projects', 'customer_contact_person'))) {
+    await executor.execute(
+      'ALTER TABLE projects ADD COLUMN customer_contact_person VARCHAR(255) NULL AFTER customer_name'
+    );
+  }
+}
+
 async function ensureProjectManagerNullable(executor) {
   const column = await getColumnMetadata(executor, 'projects', 'project_manager');
   if (column && column.isNullable !== 'YES') {
@@ -134,6 +142,7 @@ async function ensureStageDocumentFormsTable(executor) {
 
 export async function ensureProjectWorkspaceSchema(executor) {
   await ensureProjectsCustomerContact(executor);
+  await ensureProjectsCustomerContactPerson(executor);
   await ensureProjectManagerNullable(executor);
   await ensureProjectModeNullable(executor);
   await ensureProjectStatusEnded(executor);
@@ -148,6 +157,7 @@ export async function inspectProjectWorkspaceSchema(executor) {
 
   return {
     projectsCustomerContact: await columnExists(executor, 'projects', 'customer_contact'),
+    projectsCustomerContactPerson: await columnExists(executor, 'projects', 'customer_contact_person'),
     projectsProjectManagerNullable: projectManagerColumn?.isNullable === 'YES',
     projectsProjectModeNullable: projectModeColumn?.isNullable === 'YES',
     projectsStatusSupportsEnded: String(statusColumn?.columnType || '').includes("'ended'"),

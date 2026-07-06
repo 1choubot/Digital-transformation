@@ -67,7 +67,7 @@
         <article v-for="project in projects" :key="project.id" class="project-table__row">
           <span class="mono">{{ formatProjectCode(project.projectCode) }}</span>
           <strong>{{ project.projectName }}</strong>
-          <span>{{ project.customerName }}</span>
+          <span>{{ project.customerName }} / {{ project.customerContactPerson || '-' }}</span>
           <span>{{ formatProjectMode(project.projectMode) }}</span>
           <span>{{ formatUser(project.projectManagerUser) }}</span>
           <StatusBadge :status="project.status" />

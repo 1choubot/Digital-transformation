@@ -183,6 +183,7 @@ function buildWorkspaceNode(moduleConfig, documentsByCode, project) {
       projectInput: {
         projectName: project.projectName,
         customerName: project.customerName,
+        customerContactPerson: project.customerContactPerson,
         customerContact: project.customerContact,
         projectCode: project.projectCode,
         projectManagerUser: project.projectManagerUser,

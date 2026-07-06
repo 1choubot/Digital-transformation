@@ -1,6 +1,10 @@
 import { pool } from '../../db/pool.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
 import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
+import {
+  INITIATION_NOTICE_DOCUMENT_CODE,
+  INITIATION_REVIEW_DOCUMENT_CODE
+} from '../../domain/initiationReview.js';
 import { canViewCompleteStageDocumentSet } from '../stageDocuments/accessControl.js';
 import { buildStageCompletenessSummary } from '../stageDocuments/shared.js';
 import { attachInitiationReviewToStageDocumentRows } from '../stageDocuments/initiationReviewRepository.js';
@@ -157,6 +161,7 @@ function buildProjectOverviewCard(projectRow, stages, documents, user) {
     projectCode: projectRow.project_code,
     projectName: projectRow.project_name,
     customerName: projectRow.customer_name,
+    customerContactPerson: projectRow.customer_contact_person ?? null,
     projectMode: projectRow.project_mode,
     projectManagerUserId: projectRow.project_manager_user_id,
     projectManagerUser: mapProjectManagerUser(projectRow),
@@ -261,6 +266,7 @@ async function selectProjectOverviewRows(filters, user) {
       p.project_code,
       p.project_name,
       p.customer_name,
+      p.customer_contact_person,
       p.project_mode,
       p.project_manager,
       p.project_manager_user_id,
@@ -367,6 +373,7 @@ async function countMyPendingStageDocumentTasks(userId) {
     WHERE d.responsible_user_id = ?
       AND p.status <> ?
       AND d.is_applicable = 1
+      AND d.document_code NOT IN (?, ?)
       AND (
         (
           d.revision_required = 1
@@ -381,6 +388,8 @@ async function countMyPendingStageDocumentTasks(userId) {
     [
       userId,
       PROJECT_STATUS.ENDED,
+      INITIATION_REVIEW_DOCUMENT_CODE,
+      INITIATION_NOTICE_DOCUMENT_CODE,
       COMPLETION_MODE.APPROVAL_REQUIRED,
       COMPLETION_MODE.CONDITIONAL_APPROVAL,
       DOCUMENT_STATUS.SUBMITTED,

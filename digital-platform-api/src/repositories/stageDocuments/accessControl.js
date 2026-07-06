@@ -15,7 +15,6 @@ import {
 import { PROJECT_STATUS } from '../../domain/projects.js';
 import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import {
-  INITIATION_REVIEW_DOCUMENT_CODE,
   INITIATION_REWORK_TARGET_DOCUMENT_CODE,
   isInitiationOnlineFormDocument,
   isInitiationReviewDocument
@@ -256,7 +255,7 @@ export function canDeleteStageDocumentAttachment(user, { project = null, documen
 
 export function canManageInitiationOnlineFormResponsibility(user, document) {
   const documentCode = String(document?.document_code ?? document?.documentCode ?? '').trim();
-  if (![INITIATION_REWORK_TARGET_DOCUMENT_CODE, INITIATION_REVIEW_DOCUMENT_CODE].includes(documentCode)) {
+  if (documentCode !== INITIATION_REWORK_TARGET_DOCUMENT_CODE) {
     return false;
   }
 

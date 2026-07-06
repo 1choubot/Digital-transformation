@@ -27,6 +27,10 @@
         <input v-model.trim="form.customerName" type="text" autocomplete="off" />
       </label>
       <label>
+        <span>客户联系人</span>
+        <input v-model.trim="form.customerContactPerson" type="text" autocomplete="off" />
+      </label>
+      <label>
         <span>客户联系方式</span>
         <input v-model.trim="form.customerContact" type="text" autocomplete="off" />
       </label>
@@ -98,6 +102,7 @@ const emit = defineEmits(['auth-expired']);
 const form = reactive({
   projectName: '',
   customerName: '',
+  customerContactPerson: '',
   customerContact: '',
   businessResponsibleUserId: '',
   technicalResponsibleUserId: ''
@@ -127,6 +132,7 @@ function validateForm() {
   const missing = [];
   if (!form.projectName) missing.push('项目名称');
   if (!form.customerName) missing.push('客户');
+  if (!form.customerContactPerson) missing.push('客户联系人');
   if (!form.customerContact) missing.push('客户联系方式');
   if (!form.businessResponsibleUserId) missing.push('商务负责人');
   if (!form.technicalResponsibleUserId) missing.push('技术负责人');

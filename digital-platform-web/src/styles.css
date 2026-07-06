@@ -1925,6 +1925,58 @@ p {
   min-width: 0;
 }
 
+.initiation-review-return-options {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.initiation-review-return-option {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #334252;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+}
+
+.initiation-review-return-option:hover:not(:disabled) {
+  border-color: #2563eb;
+  color: #1d4ed8;
+}
+
+.initiation-review-return-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.initiation-review-return-option--danger:hover:not(:disabled) {
+  border-color: #dc2626;
+  color: #b91c1c;
+}
+
+.initiation-review-return-option--active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.initiation-review-return-option--danger.initiation-review-return-option--active {
+  border-color: #dc2626;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.initiation-review-actions .inline-muted {
+  grid-column: 1 / -1;
+}
+
 .project-workspace__layout {
   display: grid;
   grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);

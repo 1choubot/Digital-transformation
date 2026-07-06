@@ -86,25 +86,38 @@
             >
               {{ isNodePending(node, 'approve') ? '处理中...' : '审批通过' }}
             </button>
-            <select
-              v-model="nodeReturnActions[node.nodeKey]"
-              :disabled="isNodePending(node, 'approve') || isNodePending(node, 'return')"
-            >
-              <option value="return_to_market_research">退回项目市场调研</option>
-              <option value="project_end">项目结束</option>
-            </select>
+            <div class="initiation-review-return-options" role="group" aria-label="审批不通过去向">
+              <button
+                type="button"
+                class="initiation-review-return-option"
+                :class="{ 'initiation-review-return-option--active': !isProjectEndReturn(node) }"
+                :disabled="isNodePending(node, 'approve') || isNodePending(node, 'return')"
+                @click="setGeneralReturnAction(node, 'return_to_market_research')"
+              >
+                退回项目市场调研
+              </button>
+              <button
+                type="button"
+                class="initiation-review-return-option initiation-review-return-option--danger"
+                :class="{ 'initiation-review-return-option--active': isProjectEndReturn(node) }"
+                :disabled="isNodePending(node, 'approve') || isNodePending(node, 'return')"
+                @click="setGeneralReturnAction(node, 'project_end')"
+              >
+                结束项目
+              </button>
+            </div>
             <input
               v-if="isProjectEndReturn(node)"
               v-model.trim="nodeEndReasons[node.nodeKey]"
               type="text"
-              placeholder="项目结束原因"
+              placeholder="项目结束原因（必填）"
               :disabled="isNodePending(node, 'approve') || isNodePending(node, 'return')"
             />
             <input
               v-else
               v-model.trim="nodeReturnReasons[node.nodeKey]"
               type="text"
-              placeholder="审批不通过意见，退回项目市场调研"
+              placeholder="审批不通过原因，退回项目市场调研"
               :disabled="isNodePending(node, 'approve') || isNodePending(node, 'return')"
             />
             <small v-if="isProjectEndReturn(node)" class="inline-muted">
@@ -216,6 +229,10 @@ function getGeneralReturnAction(node) {
   return nodeReturnActions[node.nodeKey] || 'return_to_market_research';
 }
 
+function setGeneralReturnAction(node, action) {
+  nodeReturnActions[node.nodeKey] = action;
+}
+
 function isProjectEndReturn(node) {
   return getGeneralReturnAction(node) === 'project_end';
 }
@@ -241,6 +258,6 @@ function buildGeneralReturnPayload(node) {
 }
 
 function formatGeneralReturnButton(node) {
-  return isProjectEndReturn(node) ? '拒绝并结束项目' : '审批不通过并退回';
+  return isProjectEndReturn(node) ? '拒绝并结束项目' : '审批不通过并退回市场调研';
 }
 </script>

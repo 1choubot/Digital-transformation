@@ -1,5 +1,6 @@
 import { pool } from '../../db/pool.js';
 import {
+  BUSINESS_DEPARTMENT,
   canAdvanceProjectStage,
   isCenterManagerUser,
   isGeneralManagerAssistantUser,
@@ -74,6 +75,12 @@ function isInitiationNoticeOnlineFormReady(relatedDocumentsByCode) {
   );
 }
 
+function buildInitiationNoticeActionText(row) {
+  return String(row.project_code ?? '').trim()
+    ? '提交 1.3 项目立项通知'
+    : '填写项目编号并提交 1.3 项目立项通知';
+}
+
 function buildDocumentTodo({ row, user, type, actionText, relatedDocumentsByCode = null }) {
   const project = mapWorkbenchProject(row);
   const document = attachStageDocumentPermissions({
@@ -89,6 +96,8 @@ function buildDocumentTodo({ row, user, type, actionText, relatedDocumentsByCode
       (row.document_code === '1.3' && !isInitiationNoticeOnlineFormReady(relatedDocumentsByCode))
     ) {
       displayActionText = '查看在线表单前置状态';
+    } else if (row.document_code === '1.3') {
+      displayActionText = buildInitiationNoticeActionText(row);
     } else if (isRevisionRequired(row) || row.status === DOCUMENT_STATUS.RETURNED) {
       displayActionText = '通过在线表单重提';
     } else {
@@ -276,6 +285,72 @@ async function selectDocumentResponsibilityTodos(user) {
           : '提交资料'
     })
   );
+}
+
+async function selectInitiationNoticeSyntheticTodos(user) {
+  if (!isCenterManagerUser(user) || user.department !== BUSINESS_DEPARTMENT.MARKETING_CENTER) {
+    return [];
+  }
+
+  const [rows] = await pool.execute(
+    `SELECT
+      d.*,
+      p.id AS project_id,
+      p.project_code,
+      p.project_name,
+      p.project_manager_user_id,
+      p.participating_departments,
+      p.status AS project_status,
+      p.updated_at AS project_updated_at,
+      s.id AS stage_id,
+      u.account AS responsible_account,
+      u.display_name AS responsible_display_name,
+      u.department AS responsible_department,
+      u.organization_role AS responsible_organization_role,
+      u.role AS responsible_role,
+      u.is_enabled AS responsible_is_enabled,
+      u.file_platform_user_id AS responsible_file_platform_user_id,
+      1 AS has_department_responsible
+    FROM project_stage_documents d
+    INNER JOIN projects p
+      ON p.id = d.project_id
+    LEFT JOIN project_stages s
+      ON s.project_id = d.project_id
+      AND s.stage_order = d.stage_order
+    LEFT JOIN users u
+      ON u.id = d.responsible_user_id
+    WHERE d.document_code = '1.3'
+      AND d.is_applicable = 1
+      AND p.status <> ?
+      AND d.status NOT IN (?, ?)
+      AND (
+        d.responsible_user_id IS NULL
+        OR d.responsible_user_id <> ?
+      )
+    ORDER BY
+      p.project_code ASC,
+      d.stage_order ASC,
+      d.document_order ASC,
+      d.id ASC`,
+    [PROJECT_STATUS.ENDED, DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.CONFIRMED, user.id]
+  );
+
+  const relatedDocumentsByProjectId = await selectRelatedInitiationDocumentsByProjectId(
+    rows.map((row) => row.project_id),
+    user
+  );
+
+  return rows
+    .filter((row) => isInitiationNoticeOnlineFormReady(relatedDocumentsByProjectId.get(row.project_id) ?? null))
+    .map((row) =>
+      buildDocumentTodo({
+        row,
+        user,
+        type: 'document_responsibility',
+        relatedDocumentsByCode: relatedDocumentsByProjectId.get(row.project_id) ?? null,
+        actionText: buildInitiationNoticeActionText(row)
+      })
+    );
 }
 
 async function selectDocumentReviewTodos(user) {
@@ -530,6 +605,7 @@ function sortWorkbenchItems(items) {
 export async function getMyWorkbench(user) {
   const groups = await Promise.all([
     selectDocumentResponsibilityTodos(user),
+    selectInitiationNoticeSyntheticTodos(user),
     selectDocumentReviewTodos(user),
     selectInitiationReviewWorkbenchTodos(pool, user),
     selectStageAdvanceTodos(user)

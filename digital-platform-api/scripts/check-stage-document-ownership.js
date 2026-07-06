@@ -842,6 +842,12 @@ async function assertNoWorkbenchItemForProject(user, projectId) {
   assert.equal(workbench.items.some((item) => item.projectId === projectId), false);
 }
 
+function findInitiationNoticeWorkbenchTodo(workbench, projectId) {
+  return workbench.items.find(
+    (item) => item.projectId === projectId && item.type === 'document_responsibility' && item.documentCode === '1.3'
+  );
+}
+
 async function runEvaluationReturnToMarketResearchSmoke({
   uniqueSuffix,
   smokeProjectIds,
@@ -1003,6 +1009,7 @@ async function runProjectEndSmoke({
     1
   );
   await assertNoWorkbenchItemForProject(generalManagerUser, projectId);
+  await assertNoWorkbenchItemForProject(marketingManagerUser, projectId);
   await assertNoWorkbenchItemForProject(managerUser, projectId);
   assert.deepEqual(
     await listMyStageDocumentTasks(managerUser.id, normalizeStageDocumentTaskFilters({ projectId })),
@@ -1840,10 +1847,11 @@ async function runInitiationReviewSmoke({
   );
   await pool.execute(
     `UPDATE project_stage_documents
-     SET responsible_user_id = ?
+     SET responsible_user_id = NULL,
+       status = ?
      WHERE project_id = ?
        AND document_code = '1.3'`,
-    [marketingManagerUser.id, projectId]
+    [DOCUMENT_STATUS.NOT_SUBMITTED, projectId]
   );
   const checklistBeforeInitiationApproval = await getProjectStageDocumentChecklist(projectId, marketingManagerUser);
   const initiationOnlineFormDocumentsBeforeApproval = checklistBeforeInitiationApproval.stages
@@ -1859,12 +1867,7 @@ async function runInitiationReviewSmoke({
     .find((document) => document.documentCode === '1.3');
   assert.equal(noticeBeforeInitiationApproval.permissions.canSubmitDocument, false);
   const workbenchBeforeInitiationApproval = await getMyWorkbench(marketingManagerUser);
-  const noticeTodoBeforeInitiationApproval = workbenchBeforeInitiationApproval.items.find(
-    (item) => item.projectId === projectId && item.type === 'document_responsibility' && item.documentCode === '1.3'
-  );
-  assert.ok(noticeTodoBeforeInitiationApproval);
-  assert.equal(noticeTodoBeforeInitiationApproval.permissions.canSubmitDocument, false);
-  assert.equal(noticeTodoBeforeInitiationApproval.actionText.includes('提交'), false);
+  assert.equal(findInitiationNoticeWorkbenchTodo(workbenchBeforeInitiationApproval, projectId), undefined);
   await assertInitiationNoticeSubmitGateRejects({
     projectId,
     user: marketingManagerUser,
@@ -2067,19 +2070,17 @@ async function runInitiationReviewSmoke({
   assert.equal(noticeAfterInitiationApproval.permissions.canSubmitDocument, false);
   await pool.execute(
     `UPDATE project_stage_documents
-     SET responsible_user_id = ?,
-       status = ?
-     WHERE project_id = ?
-       AND document_code = '1.3'`,
-    [marketingManagerUser.id, DOCUMENT_STATUS.NOT_SUBMITTED, projectId]
+     SET responsible_user_id = NULL,
+        status = ?
+      WHERE project_id = ?
+        AND document_code = '1.3'`,
+    [DOCUMENT_STATUS.NOT_SUBMITTED, projectId]
   );
   const workbenchAfterInitiationApproval = await getMyWorkbench(marketingManagerUser);
-  const noticeTodoAfterInitiationApproval = workbenchAfterInitiationApproval.items.find(
-    (item) => item.projectId === projectId && item.type === 'document_responsibility' && item.documentCode === '1.3'
-  );
+  const noticeTodoAfterInitiationApproval = findInitiationNoticeWorkbenchTodo(workbenchAfterInitiationApproval, projectId);
   assert.ok(noticeTodoAfterInitiationApproval);
   assert.equal(noticeTodoAfterInitiationApproval.permissions.canSubmitDocument, false);
-  assert.match(noticeTodoAfterInitiationApproval.actionText, /在线表单/);
+  assert.equal(noticeTodoAfterInitiationApproval.actionText, '填写项目编号并提交 1.3 项目立项通知');
   await pool.execute(
     `UPDATE project_stage_documents
      SET revision_required = 1,
@@ -2096,12 +2097,7 @@ async function runInitiationReviewSmoke({
     ['project-code gate rework smoke', initiationDocument.id, marketingManagerUser.id, projectId]
   );
   const workbenchWithRequirementRework = await getMyWorkbench(marketingManagerUser);
-  const noticeTodoWithRequirementRework = workbenchWithRequirementRework.items.find(
-    (item) => item.projectId === projectId && item.type === 'document_responsibility' && item.documentCode === '1.3'
-  );
-  assert.ok(noticeTodoWithRequirementRework);
-  assert.equal(noticeTodoWithRequirementRework.permissions.canSubmitDocument, false);
-  assert.equal(noticeTodoWithRequirementRework.actionText.includes('提交'), false);
+  assert.equal(findInitiationNoticeWorkbenchTodo(workbenchWithRequirementRework, projectId), undefined);
   await assert.rejects(
     () =>
       updateProjectCode({
@@ -2179,6 +2175,10 @@ async function runInitiationReviewSmoke({
     user: managerUser
   });
   assert.equal(projectCodeDetail.project.projectCode, `SMOKE-INIT-${uniqueSuffix}`);
+  const workbenchWithProjectCode = await getMyWorkbench(marketingManagerUser);
+  const noticeTodoWithProjectCode = findInitiationNoticeWorkbenchTodo(workbenchWithProjectCode, projectId);
+  assert.ok(noticeTodoWithProjectCode);
+  assert.equal(noticeTodoWithProjectCode.actionText, '提交 1.3 项目立项通知');
   const gateReadyNoticeWithProjectCode = await getStageDocumentOnlineForm({
     projectId,
     documentId: gateReadyNotice.id,
@@ -2189,6 +2189,8 @@ async function runInitiationReviewSmoke({
   assert.equal(gateReadyNoticeWithProjectCode.formData.projectName, projectCodeDetail.project.projectName);
   assert.equal(gateReadyNoticeWithProjectCode.formData.customerUnit, projectCodeDetail.project.customerName);
   const submittedNotice = await submitInitiationNoticeAfterGateReady(projectId, marketingManagerUser);
+  const workbenchAfterNoticeSubmitted = await getMyWorkbench(marketingManagerUser);
+  assert.equal(findInitiationNoticeWorkbenchTodo(workbenchAfterNoticeSubmitted, projectId), undefined);
   const submittedNoticeGet = await getStageDocumentOnlineForm({
     projectId,
     documentId: submittedNotice.id,

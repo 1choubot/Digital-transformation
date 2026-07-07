@@ -71,6 +71,7 @@
               :online-form-saving="onlineFormSaving"
               :online-form-submitting="onlineFormSubmitting"
               :online-form-error-message="onlineFormErrorMessage"
+              :online-form-image-state="onlineFormImageState"
               :is-action-pending="isActionPending"
               :get-output-document="getOutputDocument"
               :responsibility-candidates="visibleResponsibilityCandidates"
@@ -102,6 +103,10 @@
               @upload-attachment="uploadAttachment"
               @download-attachment="downloadAttachment"
               @delete-attachment="deleteAttachment"
+              @upload-online-form-image="uploadOnlineFormImage"
+              @download-online-form-image="downloadOnlineFormImage"
+              @delete-online-form-image="deleteOnlineFormImage"
+              @download-generated-file="downloadGeneratedFile"
             />
           </div>
         </div>
@@ -218,7 +223,10 @@ import {
   confirmStageDocument,
   completeStageDocumentRevision,
   deleteStageDocumentAttachment,
+  deleteStageDocumentOnlineFormImage,
   downloadStageDocumentAttachment,
+  downloadStageDocumentGeneratedFile,
+  downloadStageDocumentOnlineFormImage,
   getProjectDetail,
   getProjectOperationLogs,
   getProjectStageDocumentChecklist,
@@ -234,7 +242,8 @@ import {
   submitStageDocumentOnlineForm,
   toReadableApiError,
   updateStageDocumentResponsibleUser,
-  uploadStageDocumentAttachment
+  uploadStageDocumentAttachment,
+  uploadStageDocumentOnlineFormImage
 } from '../api/projects.js';
 import { listResponsibilityCandidates } from '../api/users.js';
 import ProjectDetailHeader from '../components/project-detail/ProjectDetailHeader.vue';
@@ -329,8 +338,14 @@ const returnReasons = reactive({});
 const notApplicableReasons = reactive({});
 const responsibilitySelections = reactive({});
 const attachmentStates = reactive({});
+const onlineFormImageState = reactive({
+  uploadPendingFieldKey: '',
+  downloadPendingId: null,
+  deletePendingId: null
+});
 
 const MAX_ATTACHMENT_FILE_SIZE = 50 * 1024 * 1024;
+const MAX_ONLINE_FORM_IMAGE_FILE_SIZE = 10 * 1024 * 1024;
 const notFound = computed(() => errorCode.value === 'PROJECT_NOT_FOUND');
 const isChecklistEmpty = computed(
   () => checklist.value && checklist.value.stages.every((stage) => stage.documents.length === 0)
@@ -753,6 +768,9 @@ function clearOnlineFormState() {
   activeOnlineFormDocumentId.value = null;
   activeOnlineForm.value = null;
   onlineFormErrorMessage.value = '';
+  onlineFormImageState.uploadPendingFieldKey = '';
+  onlineFormImageState.downloadPendingId = null;
+  onlineFormImageState.deletePendingId = null;
   Object.keys(onlineFormData).forEach((key) => {
     delete onlineFormData[key];
   });
@@ -1217,6 +1235,39 @@ async function downloadAttachment({ document, attachment }) {
   }
 }
 
+async function downloadGeneratedFile(output) {
+  clearActionState();
+  const document = getOutputDocument(output);
+  if (!document?.id) {
+    actionErrorMessage.value = '关联资料未初始化，无法下载生成文件。';
+    return;
+  }
+
+  const generatedFile = output?.generatedFile;
+  if (!generatedFile?.downloadable) {
+    actionErrorMessage.value = '生成文件尚不可下载。';
+    return;
+  }
+
+  pendingAction.value = actionKey(document.id, 'download-generated-file');
+
+  try {
+    const download = await downloadStageDocumentGeneratedFile(props.projectId, document.id, props.authToken);
+    const url = URL.createObjectURL(download.blob);
+    const link = globalThis.document.createElement('a');
+    link.href = url;
+    link.download = download.fileName || generatedFile.downloadableFileName || generatedFile.fileName || 'generated-file';
+    globalThis.document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    actionErrorMessage.value = toReadableApiError(error);
+  } finally {
+    pendingAction.value = '';
+  }
+}
+
 async function deleteAttachment({ document, attachment }) {
   clearActionState();
   const state = getAttachmentState(document.id);
@@ -1239,6 +1290,152 @@ async function deleteAttachment({ document, attachment }) {
     actionErrorMessage.value = state.errorMessage;
   } finally {
     state.deletePendingId = null;
+  }
+}
+
+function canUseOnlineFormImageField(field) {
+  return Boolean(activeOnlineForm.value?.permissions?.canEdit) && field?.type === 'image';
+}
+
+function getOnlineFormImageLimit(field) {
+  const maxImages = Number(field?.maxImages);
+  return Number.isSafeInteger(maxImages) && maxImages > 0 ? maxImages : 3;
+}
+
+function getActiveOnlineFormImages(fieldKey) {
+  return (Array.isArray(activeOnlineForm.value?.images) ? activeOnlineForm.value.images : []).filter(
+    (image) => image.fieldKey === fieldKey
+  );
+}
+
+function upsertActiveOnlineFormImage(fieldKey, image) {
+  if (!activeOnlineForm.value) {
+    return;
+  }
+
+  const currentImages = Array.isArray(activeOnlineForm.value.images) ? activeOnlineForm.value.images : [];
+  activeOnlineForm.value = {
+    ...activeOnlineForm.value,
+    images: [
+      ...currentImages.filter((item) => String(item.id) !== String(image.id)),
+      image
+    ].sort((left, right) => {
+      if (left.fieldKey !== right.fieldKey) {
+        return String(left.fieldKey).localeCompare(String(right.fieldKey));
+      }
+      return String(left.uploadedAt || '').localeCompare(String(right.uploadedAt || '')) || Number(left.id) - Number(right.id);
+    })
+  };
+}
+
+function removeActiveOnlineFormImage(imageId) {
+  if (!activeOnlineForm.value) {
+    return;
+  }
+
+  const currentImages = Array.isArray(activeOnlineForm.value.images) ? activeOnlineForm.value.images : [];
+  activeOnlineForm.value = {
+    ...activeOnlineForm.value,
+    images: currentImages.filter((item) => String(item.id) !== String(imageId))
+  };
+}
+
+async function uploadOnlineFormImage({ field, file }) {
+  clearActionState();
+  onlineFormErrorMessage.value = '';
+
+  if (!activeOnlineForm.value?.stageDocumentId || !canUseOnlineFormImageField(field)) {
+    onlineFormErrorMessage.value = '当前账号无权上传该在线表单图片。';
+    return;
+  }
+
+  const limit = getOnlineFormImageLimit(field);
+  if (getActiveOnlineFormImages(field.key).length >= limit) {
+    onlineFormErrorMessage.value = `该区域最多上传 ${limit} 张图片。`;
+    return;
+  }
+
+  if (!file || !['image/png', 'image/jpeg'].includes(file.type) || file.size <= 0 || file.size > MAX_ONLINE_FORM_IMAGE_FILE_SIZE) {
+    onlineFormErrorMessage.value = '图片文件无效，请选择 10MB 以内的 png/jpg/jpeg 图片。';
+    return;
+  }
+
+  onlineFormImageState.uploadPendingFieldKey = field.key;
+
+  try {
+    const image = await uploadStageDocumentOnlineFormImage(
+      props.projectId,
+      activeOnlineForm.value.stageDocumentId,
+      field.key,
+      file,
+      props.authToken
+    );
+    upsertActiveOnlineFormImage(field.key, image);
+    actionMessage.value = '在线表单图片已上传。';
+  } catch (error) {
+    onlineFormErrorMessage.value = toReadableApiError(error);
+  } finally {
+    onlineFormImageState.uploadPendingFieldKey = '';
+  }
+}
+
+async function downloadOnlineFormImage({ image }) {
+  clearActionState();
+  onlineFormErrorMessage.value = '';
+
+  if (!activeOnlineForm.value?.stageDocumentId || !image?.id) {
+    onlineFormErrorMessage.value = '图片尚不可下载。';
+    return;
+  }
+
+  onlineFormImageState.downloadPendingId = image.id;
+
+  try {
+    const download = await downloadStageDocumentOnlineFormImage(
+      props.projectId,
+      activeOnlineForm.value.stageDocumentId,
+      image.id,
+      props.authToken
+    );
+    const url = URL.createObjectURL(download.blob);
+    const link = globalThis.document.createElement('a');
+    link.href = url;
+    link.download = download.fileName || image.originalFileName || 'online-form-image';
+    globalThis.document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    onlineFormErrorMessage.value = toReadableApiError(error);
+  } finally {
+    onlineFormImageState.downloadPendingId = null;
+  }
+}
+
+async function deleteOnlineFormImage({ image }) {
+  clearActionState();
+  onlineFormErrorMessage.value = '';
+
+  if (!activeOnlineForm.value?.stageDocumentId || !image?.id) {
+    onlineFormErrorMessage.value = '图片尚不可删除。';
+    return;
+  }
+
+  onlineFormImageState.deletePendingId = image.id;
+
+  try {
+    await deleteStageDocumentOnlineFormImage(
+      props.projectId,
+      activeOnlineForm.value.stageDocumentId,
+      image.id,
+      props.authToken
+    );
+    removeActiveOnlineFormImage(image.id);
+    actionMessage.value = '在线表单图片已删除。';
+  } catch (error) {
+    onlineFormErrorMessage.value = toReadableApiError(error);
+  } finally {
+    onlineFormImageState.deletePendingId = null;
   }
 }
 

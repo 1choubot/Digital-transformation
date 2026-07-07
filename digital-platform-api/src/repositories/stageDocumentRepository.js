@@ -29,6 +29,15 @@ export {
   StageDocumentFormError,
   submitStageDocumentOnlineForm
 } from './stageDocuments/onlineFormRepository.js';
+export {
+  deleteStageDocumentOnlineFormImage,
+  getStageDocumentOnlineFormImageDownload,
+  listStageDocumentOnlineFormImagesForDocument,
+  ONLINE_FORM_IMAGE_FIELD,
+  STAGE_DOCUMENT_ONLINE_FORM_IMAGE_ERROR,
+  StageDocumentOnlineFormImageError,
+  uploadStageDocumentOnlineFormImage
+} from './stageDocuments/onlineFormImageRepository.js';
 export { updateProjectStageDocumentApplicability } from './stageDocuments/applicabilityRepository.js';
 export {
   approveInitiationReviewNode,
@@ -37,3 +46,9 @@ export {
   InitiationReviewError,
   returnInitiationReviewNode
 } from './stageDocuments/initiationReviewRepository.js';
+export {
+  getStageDocumentGeneratedFileDownload,
+  getStageDocumentGeneratedFileStatus,
+  StageDocumentGeneratedFileError,
+  STAGE_DOCUMENT_GENERATED_FILE_ERROR
+} from './stageDocuments/generatedFileRepository.js';

@@ -18,8 +18,10 @@ import { OperationLogLimitError } from '../repositories/operationLogRepository.j
 import {
   StageDocumentFormError,
   InitiationReviewError,
+  StageDocumentOnlineFormImageError,
   StageDocumentNotFoundError,
   StageDocumentResponsibilityError,
+  StageDocumentGeneratedFileError,
   StageDocumentTaskQueryError
 } from '../repositories/stageDocumentRepository.js';
 import { StageDocumentAttachmentError } from '../repositories/stageDocumentAttachmentRepository.js';
@@ -229,6 +231,28 @@ export function errorHandler(error, req, res, next) {
   }
 
   if (error instanceof StageDocumentAttachmentError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      }
+    });
+    return;
+  }
+
+  if (error instanceof StageDocumentOnlineFormImageError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      }
+    });
+    return;
+  }
+
+  if (error instanceof StageDocumentGeneratedFileError) {
     res.status(error.statusCode).json({
       error: {
         code: error.code,

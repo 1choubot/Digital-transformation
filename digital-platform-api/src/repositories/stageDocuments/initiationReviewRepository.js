@@ -27,6 +27,10 @@ import {
   OPERATION_ACTION_TYPE,
   OPERATION_TARGET_TYPE
 } from '../operationLogRepository.js';
+import {
+  INITIATION_TEMPLATE_TRIGGER_EVENT,
+  generateInitiationTemplateFile
+} from './generatedFileRepository.js';
 import { deriveStageDocumentCompletion, mapDocument } from './shared.js';
 
 export const INITIATION_REVIEW_TODO_TYPE = 'initiation_review';
@@ -1120,6 +1124,9 @@ export async function approveInitiationReviewNode({
 }) {
   const connection = providedConnection || (await pool.getConnection());
   const ownsConnection = !providedConnection;
+  let shouldGenerateTemplateFile = false;
+  let generatedProjectId = projectId;
+  let generatedDocumentId = documentId;
 
   try {
     if (ownsConnection) {
@@ -1200,7 +1207,7 @@ export async function approveInitiationReviewNode({
       }
     });
   }
-  await maybeLogInitiationReviewCompleted({
+  const completed = await maybeLogInitiationReviewCompleted({
     connection,
     projectId,
     document,
@@ -1208,11 +1215,25 @@ export async function approveInitiationReviewNode({
     userId: user.id,
     reworkTargetDocument
   });
+  shouldGenerateTemplateFile =
+    ownsConnection &&
+    completed &&
+    nodeKey === INITIATION_REVIEW_NODE_KEY.GENERAL &&
+    String(document.document_code) === INITIATION_REVIEW_DOCUMENT_CODE;
 
   const updatedDocument = await selectInitiationDocumentForUpdate(connection, projectId, documentId);
     const result = await mapDocumentWithInitiationReview(connection, updatedDocument, user);
     if (ownsConnection) {
       await connection.commit();
+    }
+    if (shouldGenerateTemplateFile) {
+      await generateInitiationTemplateFile({
+        projectId: generatedProjectId,
+        documentId: generatedDocumentId,
+        documentCode: INITIATION_REVIEW_DOCUMENT_CODE,
+        triggerEvent: INITIATION_TEMPLATE_TRIGGER_EVENT.INITIATION_REVIEW_GENERAL_APPROVED,
+        user
+      });
     }
     return result;
   } catch (error) {

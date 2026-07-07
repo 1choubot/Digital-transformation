@@ -144,6 +144,34 @@
             </ul>
           </div>
 
+          <section
+            v-if="isInitiationGeneratedFileOutput(output)"
+            class="generated-file-panel"
+            aria-label="生成文件状态"
+          >
+            <div class="generated-file-panel__main">
+              <span class="section-eyebrow">模板文件</span>
+              <strong>{{ formatGeneratedFileStatus(output.generatedFile) }}</strong>
+              <small v-if="output.generatedFile?.fileName">{{ output.generatedFile.fileName }}</small>
+              <small v-else>达到触发点后由后端生成。</small>
+              <small v-if="output.generatedFile?.status === 'failed' && output.generatedFile.failureSummary">
+                {{ output.generatedFile.failureSummary }}
+              </small>
+              <small v-if="output.generatedFile?.status === 'failed' && output.generatedFile?.downloadable">
+                可下载最近一次成功生成的 v{{ output.generatedFile.downloadableVersion }}。
+              </small>
+            </div>
+            <button
+              v-if="canDownloadGeneratedFile(output)"
+              type="button"
+              class="ghost-button"
+              :disabled="isActionPending(output.documentId, 'download-generated-file')"
+              @click="$emit('download-generated-file', output)"
+            >
+              {{ isActionPending(output.documentId, 'download-generated-file') ? '下载中...' : '下载生成文件' }}
+            </button>
+          </section>
+
           <section v-if="isGenericMigratedOutput(output)" class="project-workspace__output-body" aria-label="产出卡片通用资料操作">
             <ProjectStageDocumentAttachments
               :document="getBoundDocument(output)"
@@ -317,6 +345,53 @@
                   :disabled="isOnlineFormFieldDisabled(field)"
                   @input="$emit('update-online-form-field', { key: field.key, value: $event.target.value })"
                 ></textarea>
+                <div
+                  v-else-if="field.type === 'image'"
+                  class="online-form-image-field"
+                >
+                  <div
+                    v-if="getOnlineFormImages(field.key).length"
+                    class="online-form-image-field__list"
+                  >
+                    <div
+                      v-for="(image, imageIndex) in getOnlineFormImages(field.key)"
+                      :key="image.id"
+                      class="online-form-image-field__current"
+                    >
+                      <div>
+                        <strong>{{ imageIndex + 1 }}. {{ image.originalFileName }}</strong>
+                        <small>{{ formatFileSize(image.fileSize) }}</small>
+                      </div>
+                      <div class="online-form-image-field__actions">
+                        <button
+                          type="button"
+                          class="ghost-button"
+                          :disabled="isImageDownloadPending(image)"
+                          @click="$emit('download-online-form-image', { field, image })"
+                        >
+                          {{ isImageDownloadPending(image) ? '下载中...' : '下载' }}
+                        </button>
+                        <button
+                          type="button"
+                          class="ghost-button"
+                          :disabled="isOnlineFormFieldDisabled(field) || isImageDeletePending(image)"
+                          @click="$emit('delete-online-form-image', { field, image })"
+                        >
+                          {{ isImageDeletePending(image) ? '删除中...' : '删除' }}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="online-form-image-field__upload">
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg"
+                      :disabled="isOnlineFormFieldDisabled(field) || isImageUploadPending(field) || isImageLimitReached(field)"
+                      @change="handleImageFileChange(field, $event)"
+                    />
+                    <span>{{ getImageUploadText(field) }}</span>
+                  </div>
+                </div>
                 <input
                   v-else
                   :value="onlineFormData[field.key]"
@@ -325,6 +400,9 @@
                   :disabled="isOnlineFormFieldDisabled(field)"
                   @input="$emit('update-online-form-field', { key: field.key, value: $event.target.value })"
                 />
+                <small v-if="field.description" class="online-form-field__description">
+                  {{ field.description }}
+                </small>
               </label>
             </div>
           </section>
@@ -449,7 +527,7 @@ import ProjectStageDocumentResponsibility from '../project-detail/ProjectStageDo
 import { formatCompletionStatus as formatCompletionStatusLabel } from '../../utils/format.js';
 import { isInitiationOnlineFormDocument } from '../project-detail/stageDocumentViewHelpers.js';
 
-defineEmits([
+const emit = defineEmits([
   'open-online-form',
   'open-legacy-checklist',
   'save-online-form',
@@ -467,7 +545,11 @@ defineEmits([
   'clear-responsible-user',
   'upload-attachment',
   'download-attachment',
-  'delete-attachment'
+  'delete-attachment',
+  'upload-online-form-image',
+  'download-online-form-image',
+  'delete-online-form-image',
+  'download-generated-file'
 ]);
 
 const props = defineProps({
@@ -558,6 +640,14 @@ const props = defineProps({
   getAttachmentState: {
     type: Function,
     required: true
+  },
+  onlineFormImageState: {
+    type: Object,
+    default: () => ({
+      uploadPendingFieldKey: '',
+      downloadPendingId: null,
+      deletePendingId: null
+    })
   }
 });
 
@@ -579,9 +669,79 @@ function getSchemaSections(form) {
 
 function getFieldClass(field) {
   return {
-    'form-grid__wide': field.type === 'textarea',
+    'form-grid__wide': field.type === 'textarea' || field.type === 'image',
     'online-form-field--readonly': field.readOnly
   };
+}
+
+function getOnlineFormImages(fieldKey) {
+  return (props.activeOnlineForm?.images || []).filter((image) => image.fieldKey === fieldKey);
+}
+
+function getImageLimit(field) {
+  const maxImages = Number(field?.maxImages);
+  return Number.isSafeInteger(maxImages) && maxImages > 0 ? maxImages : 3;
+}
+
+function isImageLimitReached(field) {
+  return getOnlineFormImages(field.key).length >= getImageLimit(field);
+}
+
+function getImageUploadText(field) {
+  if (isImageUploadPending(field)) {
+    return '上传中...';
+  }
+  const count = getOnlineFormImages(field.key).length;
+  const limit = getImageLimit(field);
+  if (count >= limit) {
+    return `已达上限 ${limit} 张`;
+  }
+  return `选择图片（${count}/${limit}）`;
+}
+
+function isImageUploadPending(field) {
+  return props.onlineFormImageState?.uploadPendingFieldKey === field.key;
+}
+
+function isImageDownloadPending(image) {
+  return Boolean(image?.id) && String(props.onlineFormImageState?.downloadPendingId ?? '') === String(image.id);
+}
+
+function isImageDeletePending(image) {
+  return Boolean(image?.id) && String(props.onlineFormImageState?.deletePendingId ?? '') === String(image.id);
+}
+
+function handleImageFileChange(field, event) {
+  const file = event.target.files?.[0] || null;
+  event.target.value = '';
+  if (!file) {
+    return;
+  }
+  emitOnlineFormImageUpload(field, file);
+}
+
+function emitOnlineFormImageUpload(field, file) {
+  if (isOnlineFormFieldDisabled(field) || isImageLimitReached(field)) {
+    return;
+  }
+  emit('upload-online-form-image', {
+    field,
+    file
+  });
+}
+
+function formatFileSize(size) {
+  const value = Number(size || 0);
+  if (!Number.isFinite(value) || value <= 0) {
+    return '-';
+  }
+  if (value < 1024) {
+    return `${value} B`;
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`;
+  }
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function isOnlineFormFieldDisabled(field) {
@@ -650,6 +810,29 @@ function formatReviewOpinionStatus(status) {
 
 function isAssignableInitiationOutput(output) {
   return output?.documentCode === '1.1';
+}
+
+function isInitiationGeneratedFileOutput(output) {
+  const documentCode = String(output?.documentCode || output?.targetOutputCode || '');
+  return ['1.1', '1.2', '1.3'].includes(documentCode);
+}
+
+function formatGeneratedFileStatus(generatedFile) {
+  if (!generatedFile) {
+    return '待生成';
+  }
+
+  return {
+    pending: '待生成',
+    generating: '生成中',
+    generated: `已生成 v${generatedFile.version || '-'}`,
+    failed: '生成失败',
+    superseded: '已被新版本替代'
+  }[generatedFile.status] || generatedFile.status || '待生成';
+}
+
+function canDownloadGeneratedFile(output) {
+  return output?.generatedFile?.downloadable === true && Boolean(output?.documentId);
 }
 
 function canManageOutputResponsibility(output) {

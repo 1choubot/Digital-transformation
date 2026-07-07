@@ -76,6 +76,33 @@ export async function submitStageDocumentOnlineForm(projectId, documentId, formD
   });
 }
 
+export async function uploadStageDocumentOnlineFormImage(projectId, documentId, fieldKey, file, authToken) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  return request(`/api/projects/${projectId}/stage-documents/${documentId}/online-form/images/${fieldKey}`, {
+    method: 'POST',
+    authToken,
+    body: formData
+  });
+}
+
+export async function downloadStageDocumentOnlineFormImage(projectId, documentId, imageId, authToken) {
+  return requestBlob(
+    `/api/projects/${projectId}/stage-documents/${documentId}/online-form/images/${imageId}/download`,
+    {
+      authToken
+    }
+  );
+}
+
+export async function deleteStageDocumentOnlineFormImage(projectId, documentId, imageId, authToken) {
+  return request(`/api/projects/${projectId}/stage-documents/${documentId}/online-form/images/${imageId}`, {
+    method: 'DELETE',
+    authToken
+  });
+}
+
 export async function getProjectOperationLogs(projectId, authToken = '') {
   return request(`/api/projects/${projectId}/operation-logs`, { authToken });
 }
@@ -235,6 +262,21 @@ export async function uploadStageDocumentAttachment(projectId, documentId, file,
 export async function downloadStageDocumentAttachment(projectId, documentId, attachmentId, authToken) {
   return requestBlob(
     `/api/projects/${projectId}/stage-documents/${documentId}/attachments/${attachmentId}/download`,
+    {
+      authToken
+    }
+  );
+}
+
+export async function getStageDocumentGeneratedFileStatus(projectId, documentId, authToken = '') {
+  return request(`/api/projects/${projectId}/stage-documents/${documentId}/generated-file`, {
+    authToken
+  });
+}
+
+export async function downloadStageDocumentGeneratedFile(projectId, documentId, authToken) {
+  return requestBlob(
+    `/api/projects/${projectId}/stage-documents/${documentId}/generated-file/download`,
     {
       authToken
     }

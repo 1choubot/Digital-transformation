@@ -22,6 +22,9 @@ export const env = {
   attachments: {
     storageDir: process.env.STAGE_DOCUMENT_ATTACHMENT_STORAGE_DIR || ''
   },
+  onlineFormImages: {
+    storageDir: process.env.STAGE_DOCUMENT_ONLINE_FORM_IMAGE_STORAGE_DIR || ''
+  },
   auth: {
     sessionTtlHours: readInteger('AUTH_SESSION_TTL_HOURS', 12),
     initialUser: {

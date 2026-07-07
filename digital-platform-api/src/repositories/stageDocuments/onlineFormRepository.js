@@ -29,6 +29,11 @@ import {
   selectInitiationReviewNodesForDocument,
   selectOutstandingInitiationRequirementRework
 } from './initiationReviewRepository.js';
+import {
+  INITIATION_TEMPLATE_TRIGGER_EVENT,
+  generateInitiationTemplateFile
+} from './generatedFileRepository.js';
+import { listStageDocumentOnlineFormImagesForDocument } from './onlineFormImageRepository.js';
 import { selectProjectPermissionContext } from './permissionContext.js';
 import {
   mapDocument,
@@ -43,6 +48,7 @@ const FORM_STATUS = {
 };
 
 const INITIATION_COLLABORATION_METADATA_KEY = '_collaboration';
+const INITIATION_REQUIREMENT_NOT_SUBMITTED_REASON = '请先提交 1.1 项目需求表';
 const INITIATION_COLLABORATION_PART = {
   BUSINESS: 'business',
   TECHNICAL: 'technical'
@@ -201,14 +207,18 @@ const INITIATION_FORM_DEFINITIONS = Object.freeze({
         key: 'environmentRequirements',
         title: '环境要求',
         fields: [
-          { key: 'workingTemperatureRange', label: '工作温度', type: 'text', required: false },
-          { key: 'storageTemperatureRange', label: '储存温度', type: 'text', required: false },
-          { key: 'workingHumidityRange', label: '工作湿度', type: 'text', required: false },
-          { key: 'storageHumidityRange', label: '储存湿度', type: 'text', required: false },
-          { key: 'noiseLimit', label: '噪音', type: 'text', required: false },
-          { key: 'ipProtectionGrade', label: 'IP 防护等级', type: 'text', required: false },
+          { key: 'workingTemperatureMin', label: '工作温度最小值', type: 'text', required: false },
+          { key: 'workingTemperatureMax', label: '工作温度最大值', type: 'text', required: false },
+          { key: 'storageTemperatureMin', label: '储存温度最小值', type: 'text', required: false },
+          { key: 'storageTemperatureMax', label: '储存温度最大值', type: 'text', required: false },
+          { key: 'workingHumidityMin', label: '工作湿度最小值', type: 'text', required: false },
+          { key: 'workingHumidityMax', label: '工作湿度最大值', type: 'text', required: false },
+          { key: 'storageHumidityMin', label: '储存湿度最小值', type: 'text', required: false },
+          { key: 'storageHumidityMax', label: '储存湿度最大值', type: 'text', required: false },
+          { key: 'noiseLimitValue', label: '噪音上限值', type: 'text', required: false, description: '只填写数值或文本值，模板固定 ≤ 和 dB。' },
+          { key: 'ipProtectionLevel', label: 'IP 防护等级', type: 'text', required: false, description: '只填写 IP 后面的等级值。' },
           { key: 'antiCorrosionGrade', label: '防腐等级', type: 'text', required: false },
-          { key: 'altitudeLimit', label: '海拔高度', type: 'text', required: false },
+          { key: 'altitudeLimitValue', label: '海拔高度上限值', type: 'text', required: false, description: '只填写数值或文本值，模板固定 ≤ 和 m。' },
           { key: 'explosionProofRequirement', label: '防爆要求', type: 'textarea', required: false }
         ]
       },
@@ -216,44 +226,87 @@ const INITIATION_FORM_DEFINITIONS = Object.freeze({
         key: 'siteConditions',
         title: '场地情况',
         fields: [
-          { key: 'availableSiteSize', label: '可用场地尺寸', type: 'textarea', required: false },
+          {
+            key: 'siteConditionDescription',
+            label: '可用场地尺寸/场地情况说明',
+            type: 'textarea',
+            required: false,
+            rows: 4,
+            description: '可填写说明文字；如有图片可上传最多 3 张 png/jpg/jpeg，生成项目需求表时按上传顺序嵌入该区域。'
+          },
+          {
+            key: 'siteConditionImages',
+            label: '可用场地尺寸/场地情况图片',
+            type: 'image',
+            required: false,
+            maxImages: 3,
+            accept: ['image/png', 'image/jpeg'],
+            description: '最多 3 张 png/jpg/jpeg 图片，不支持附件、OLE、PDF 或文件平台归档。'
+          },
           { key: 'powerSupply', label: '电源', type: 'text', required: false },
           { key: 'airSupply', label: '气源', type: 'text', required: false },
           { key: 'hydraulicSource', label: '液压源', type: 'text', required: false },
-          { key: 'liftingEquipment', label: '吊装设备', type: 'textarea', required: false }
+          { key: 'liftingEquipment', label: '吊装设备', type: 'textarea', required: false, rows: 3 }
         ]
       },
       {
         key: 'workpieceDescription',
         title: '工件描述',
         fields: [
-          { key: 'workpieceDimensions', label: '工件外形尺寸', type: 'text', required: true },
-          { key: 'workpieceWeight', label: '工件质量', type: 'text', required: false },
-          { key: 'workpieceMaterial', label: '工件材质', type: 'text', required: false },
-          { key: 'workpieceQuantity', label: '工件数量', type: 'text', required: false },
-          { key: 'hasWorkpieceDrawing', label: '是否有图纸', type: 'select', required: false, options: ['有', '无', '待提供'] },
-          { key: 'workpieceDrawingDescription', label: '图纸说明', type: 'textarea', required: false }
+          {
+            key: 'workpieceDescription',
+            label: '工件描述',
+            type: 'textarea',
+            required: true,
+            rows: 6,
+            description: '填写工件外形尺寸、质量、材质、数量、图纸情况；如有图片可上传最多 3 张 png/jpg/jpeg 并按顺序嵌入 Excel。'
+          },
+          {
+            key: 'workpieceImages',
+            label: '工件描述图片',
+            type: 'image',
+            required: false,
+            maxImages: 3,
+            accept: ['image/png', 'image/jpeg'],
+            description: '最多 3 张 png/jpg/jpeg 图片，不支持附件、OLE、PDF 或文件平台归档。'
+          }
         ]
       },
       {
         key: 'operationProcess',
         title: '作业工艺',
         fields: [
-          { key: 'operationWhat', label: '做什么', type: 'textarea', required: true },
-          { key: 'operationHow', label: '怎么做', type: 'textarea', required: true },
-          { key: 'hasProcessDocument', label: '是否有工艺文件', type: 'select', required: false, options: ['有', '无', '待提供'] },
-          { key: 'processDocumentDescription', label: '工艺文件说明', type: 'textarea', required: false }
+          {
+            key: 'operationProcessDescription',
+            label: '作业工艺说明',
+            type: 'textarea',
+            required: true,
+            rows: 8,
+            description: '填写做什么、怎么做、工艺文件情况；如有工艺图片可上传最多 3 张 png/jpg/jpeg 并按顺序嵌入 Excel。'
+          },
+          {
+            key: 'operationProcessImages',
+            label: '作业工艺图片',
+            type: 'image',
+            required: false,
+            maxImages: 3,
+            accept: ['image/png', 'image/jpeg'],
+            description: '最多 3 张 png/jpg/jpeg 图片，不支持附件、OLE、PDF 或文件平台归档。'
+          }
         ]
       },
       {
         key: 'targets',
         title: '目标',
         fields: [
-          { key: 'automationScope', label: '自动化环节', type: 'textarea', required: true },
-          { key: 'taktTime', label: '节拍', type: 'text', required: false },
-          { key: 'interactionMode', label: '人机交互模式', type: 'textarea', required: false },
-          { key: 'priceTarget', label: '价格', type: 'text', required: false },
-          { key: 'deliverySchedule', label: '工期', type: 'text', required: false }
+          {
+            key: 'projectTargetDescription',
+            label: '目标说明',
+            type: 'textarea',
+            required: true,
+            rows: 5,
+            description: '填写自动化环节、节拍、人机交互模式、价格、工期。'
+          }
         ]
       }
     ],
@@ -266,35 +319,82 @@ const INITIATION_FORM_DEFINITIONS = Object.freeze({
       { key: 'communicationMethod', label: '交流方式', type: 'text', required: false },
       { key: 'internalParticipants', label: '我方人员', type: 'textarea', required: true },
       { key: 'customerParticipants', label: '甲方人员', type: 'textarea', required: true },
-      { key: 'workingTemperatureRange', label: '工作温度', type: 'text', required: false },
-      { key: 'storageTemperatureRange', label: '储存温度', type: 'text', required: false },
-      { key: 'workingHumidityRange', label: '工作湿度', type: 'text', required: false },
-      { key: 'storageHumidityRange', label: '储存湿度', type: 'text', required: false },
-      { key: 'noiseLimit', label: '噪音', type: 'text', required: false },
-      { key: 'ipProtectionGrade', label: 'IP 防护等级', type: 'text', required: false },
+      { key: 'workingTemperatureMin', label: '工作温度最小值', type: 'text', required: false },
+      { key: 'workingTemperatureMax', label: '工作温度最大值', type: 'text', required: false },
+      { key: 'storageTemperatureMin', label: '储存温度最小值', type: 'text', required: false },
+      { key: 'storageTemperatureMax', label: '储存温度最大值', type: 'text', required: false },
+      { key: 'workingHumidityMin', label: '工作湿度最小值', type: 'text', required: false },
+      { key: 'workingHumidityMax', label: '工作湿度最大值', type: 'text', required: false },
+      { key: 'storageHumidityMin', label: '储存湿度最小值', type: 'text', required: false },
+      { key: 'storageHumidityMax', label: '储存湿度最大值', type: 'text', required: false },
+      { key: 'noiseLimitValue', label: '噪音上限值', type: 'text', required: false, description: '只填写数值或文本值，模板固定 ≤ 和 dB。' },
+      { key: 'ipProtectionLevel', label: 'IP 防护等级', type: 'text', required: false, description: '只填写 IP 后面的等级值。' },
       { key: 'antiCorrosionGrade', label: '防腐等级', type: 'text', required: false },
-      { key: 'altitudeLimit', label: '海拔高度', type: 'text', required: false },
+      { key: 'altitudeLimitValue', label: '海拔高度上限值', type: 'text', required: false, description: '只填写数值或文本值，模板固定 ≤ 和 m。' },
       { key: 'explosionProofRequirement', label: '防爆要求', type: 'textarea', required: false },
-      { key: 'availableSiteSize', label: '可用场地尺寸', type: 'textarea', required: false },
+      {
+        key: 'siteConditionDescription',
+        label: '可用场地尺寸/场地情况说明',
+        type: 'textarea',
+        required: false,
+        rows: 4,
+        description: '可填写说明文字；如有图片可上传最多 3 张 png/jpg/jpeg，生成项目需求表时按上传顺序嵌入该区域。'
+      },
+      {
+        key: 'siteConditionImages',
+        label: '可用场地尺寸/场地情况图片',
+        type: 'image',
+        required: false,
+        maxImages: 3,
+        accept: ['image/png', 'image/jpeg'],
+        description: '最多 3 张 png/jpg/jpeg 图片，不支持附件、OLE、PDF 或文件平台归档。'
+      },
       { key: 'powerSupply', label: '电源', type: 'text', required: false },
       { key: 'airSupply', label: '气源', type: 'text', required: false },
       { key: 'hydraulicSource', label: '液压源', type: 'text', required: false },
-      { key: 'liftingEquipment', label: '吊装设备', type: 'textarea', required: false },
-      { key: 'workpieceDimensions', label: '工件外形尺寸', type: 'text', required: true },
-      { key: 'workpieceWeight', label: '工件质量', type: 'text', required: false },
-      { key: 'workpieceMaterial', label: '工件材质', type: 'text', required: false },
-      { key: 'workpieceQuantity', label: '工件数量', type: 'text', required: false },
-      { key: 'hasWorkpieceDrawing', label: '是否有图纸', type: 'select', required: false, options: ['有', '无', '待提供'] },
-      { key: 'workpieceDrawingDescription', label: '图纸说明', type: 'textarea', required: false },
-      { key: 'operationWhat', label: '做什么', type: 'textarea', required: true },
-      { key: 'operationHow', label: '怎么做', type: 'textarea', required: true },
-      { key: 'hasProcessDocument', label: '是否有工艺文件', type: 'select', required: false, options: ['有', '无', '待提供'] },
-      { key: 'processDocumentDescription', label: '工艺文件说明', type: 'textarea', required: false },
-      { key: 'automationScope', label: '自动化环节', type: 'textarea', required: true },
-      { key: 'taktTime', label: '节拍', type: 'text', required: false },
-      { key: 'interactionMode', label: '人机交互模式', type: 'textarea', required: false },
-      { key: 'priceTarget', label: '价格', type: 'text', required: false },
-      { key: 'deliverySchedule', label: '工期', type: 'text', required: false }
+      { key: 'liftingEquipment', label: '吊装设备', type: 'textarea', required: false, rows: 3 },
+      {
+        key: 'workpieceDescription',
+        label: '工件描述',
+        type: 'textarea',
+        required: true,
+        rows: 6,
+        description: '填写工件外形尺寸、质量、材质、数量、图纸情况；如有图片可上传最多 3 张 png/jpg/jpeg 并按顺序嵌入 Excel。'
+      },
+      {
+        key: 'workpieceImages',
+        label: '工件描述图片',
+        type: 'image',
+        required: false,
+        maxImages: 3,
+        accept: ['image/png', 'image/jpeg'],
+        description: '最多 3 张 png/jpg/jpeg 图片，不支持附件、OLE、PDF 或文件平台归档。'
+      },
+      {
+        key: 'operationProcessDescription',
+        label: '作业工艺说明',
+        type: 'textarea',
+        required: true,
+        rows: 8,
+        description: '填写做什么、怎么做、工艺文件情况；如有工艺图片可上传最多 3 张 png/jpg/jpeg 并按顺序嵌入 Excel。'
+      },
+      {
+        key: 'operationProcessImages',
+        label: '作业工艺图片',
+        type: 'image',
+        required: false,
+        maxImages: 3,
+        accept: ['image/png', 'image/jpeg'],
+        description: '最多 3 张 png/jpg/jpeg 图片，不支持附件、OLE、PDF 或文件平台归档。'
+      },
+      {
+        key: 'projectTargetDescription',
+        label: '目标说明',
+        type: 'textarea',
+        required: true,
+        rows: 5,
+        description: '填写自动化环节、节拍、人机交互模式、价格、工期。'
+      }
     ]
   },
   [INITIATION_REVIEW_DOCUMENT_CODE]: {
@@ -892,6 +992,58 @@ function assertDocumentApplicableForOnlineForm(document) {
   assertDocumentIsApplicable(document?.is_applicable === undefined ? true : Boolean(document.is_applicable));
 }
 
+async function selectInitiationRequirementDocumentForGate(connection, projectId, { forUpdate = false } = {}) {
+  const [rows] = await connection.execute(
+    `SELECT *
+    FROM project_stage_documents
+    WHERE project_id = ?
+      AND document_code = ?
+    LIMIT 1
+    ${forUpdate ? 'FOR UPDATE' : ''}`,
+    [projectId, INITIATION_REWORK_TARGET_DOCUMENT_CODE]
+  );
+
+  return rows[0] || null;
+}
+
+function isInitiationRequirementReadyForApproval(requirementDocument) {
+  if (!requirementDocument) {
+    return false;
+  }
+
+  const applicableValue = requirementDocument.is_applicable ?? requirementDocument.isApplicable;
+  const isApplicable = applicableValue === undefined ? true : Boolean(applicableValue);
+  const submittedOrComplete = [DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.CONFIRMED].includes(
+    getDocumentStatus(requirementDocument)
+  );
+
+  return isApplicable && submittedOrComplete && !isRevisionRequiredForForm(requirementDocument);
+}
+
+async function buildInitiationRequirementSubmitGate(connection, projectId, { forUpdate = false } = {}) {
+  const requirementDocument = await selectInitiationRequirementDocumentForGate(connection, projectId, { forUpdate });
+  const ready = isInitiationRequirementReadyForApproval(requirementDocument);
+  return {
+    ready,
+    requirementDocument,
+    blockingReasons: ready ? [] : [INITIATION_REQUIREMENT_NOT_SUBMITTED_REASON]
+  };
+}
+
+async function assertInitiationRequirementSubmittedForApproval(connection, projectId, { forUpdate = false } = {}) {
+  const gate = await buildInitiationRequirementSubmitGate(connection, projectId, { forUpdate });
+  if (gate.ready) {
+    return;
+  }
+
+  throw new StageDocumentFormError(
+    'INITIATION_REQUIREMENT_NOT_SUBMITTED',
+    '1.1 initiation requirement form must be submitted before 1.2 collaboration',
+    409,
+    ['1.1']
+  );
+}
+
 function assertProjectNotEndedForOnlineForm(project) {
   if (project?.status === PROJECT_STATUS.ENDED) {
     throw new StageDocumentFormError(
@@ -981,6 +1133,7 @@ async function assertCanEditForm({ connection, projectId, document, user, projec
 
   if (String(getDocumentCode(document)) === INITIATION_REVIEW_DOCUMENT_CODE) {
     await assertNoOutstandingInitiationRequirementRework(connection, projectId, document, { forUpdate: true });
+    await assertInitiationRequirementSubmittedForApproval(connection, projectId, { forUpdate: true });
     assertUserCanHandleInitiationCollaboration(
       user,
       projectContext || (await selectOnlineFormProjectContext(connection, projectId))
@@ -1098,7 +1251,16 @@ async function buildReviewOpinions({ connection, document, schema }) {
     .sort((left, right) => (nodeOrderIndex.get(left.nodeKey) ?? 99) - (nodeOrderIndex.get(right.nodeKey) ?? 99));
 }
 
-function mapForm({ document, schema, row, permissions, projectContext = null, blockingReasons = [], reviewOpinions = [] }) {
+function mapForm({
+  document,
+  schema,
+  row,
+  permissions,
+  projectContext = null,
+  blockingReasons = [],
+  reviewOpinions = [],
+  images = []
+}) {
   const savedFormData = parseJsonValue(row?.form_data_json, {});
   const formData = applySchemaDefaults(schema, omitInitiationCollaborationMetadata(savedFormData), projectContext);
   const collaboration = isInitiationReviewFormDocument(document)
@@ -1122,7 +1284,8 @@ function mapForm({ document, schema, row, permissions, projectContext = null, bl
     permissions,
     collaboration,
     blockingReasons,
-    reviewOpinions
+    reviewOpinions,
+    images
   };
 }
 
@@ -1167,11 +1330,18 @@ async function buildFormPermissions({ connection, projectId, document, user }) {
     const editablePart = getUserInitiationCollaborationPart(user, projectContext);
     const isEditable = isDocumentEditableForOnlineForm(document);
     const projectEnded = project?.status === PROJECT_STATUS.ENDED;
+    const requirementGate = await buildInitiationRequirementSubmitGate(connection, projectId);
     const reworkBlocker = await selectOutstandingInitiationRequirementRework(connection, projectId, document);
     const formRow = await selectFormRow(connection, document.id);
     const collaboration = getInitiationCollaboration(parseJsonValue(formRow?.form_data_json, {}));
     const currentPartSubmitted = isInitiationCollaborationPartSubmitted(collaboration, editablePart);
-    const canHandle = Boolean(editablePart) && !currentPartSubmitted && isEditable && !reworkBlocker && !projectEnded;
+    const canHandle =
+      Boolean(editablePart) &&
+      requirementGate.ready &&
+      !currentPartSubmitted &&
+      isEditable &&
+      !reworkBlocker &&
+      !projectEnded;
     const blockingReasons = [];
     if (projectEnded) {
       blockingReasons.push('项目已结束，在线表单仅可浏览');
@@ -1181,6 +1351,9 @@ async function buildFormPermissions({ connection, projectId, document, user }) {
     }
     if (!isEditable) {
       blockingReasons.push(buildDocumentNotEditableBlockingReason(document));
+    }
+    if (!requirementGate.ready) {
+      blockingReasons.push(...requirementGate.blockingReasons);
     }
     if (reworkBlocker) {
       blockingReasons.push(buildInitiationReworkNotClearedReason());
@@ -1344,7 +1517,15 @@ export async function getStageDocumentOnlineForm({ projectId, documentId, user }
     const row = await selectFormRow(connection, documentId);
     const projectContext = await selectOnlineFormProjectContext(connection, projectId);
     const reviewOpinions = await buildReviewOpinions({ connection, document, schema });
-    return mapForm({ document, schema, row, permissions, projectContext, blockingReasons, reviewOpinions });
+    const images = await listStageDocumentOnlineFormImagesForDocument({
+      executor: connection,
+      projectId,
+      documentId,
+      user,
+      project: await selectProjectPermissionContext(connection, projectId, user),
+      document
+    });
+    return mapForm({ document, schema, row, permissions, projectContext, blockingReasons, reviewOpinions, images });
   } finally {
     connection.release();
   }
@@ -1359,6 +1540,7 @@ export async function saveStageDocumentOnlineForm({ projectId, documentId, user,
   let formPermissions;
   let projectContext;
   let reviewOpinions;
+  let images = [];
 
   try {
     await connection.beginTransaction();
@@ -1418,6 +1600,14 @@ export async function saveStageDocumentOnlineForm({ projectId, documentId, user,
     formRow = await selectFormRow(connection, documentId);
     formPermissions = await buildFormPermissions({ connection, projectId, document, user });
     reviewOpinions = await buildReviewOpinions({ connection, document, schema });
+    images = await listStageDocumentOnlineFormImagesForDocument({
+      executor: connection,
+      projectId,
+      documentId,
+      user,
+      project,
+      document
+    });
     await connection.commit();
   } catch (error) {
     await connection.rollback();
@@ -1433,7 +1623,8 @@ export async function saveStageDocumentOnlineForm({ projectId, documentId, user,
     permissions: formPermissions.permissions,
     projectContext,
     blockingReasons: formPermissions.blockingReasons,
-    reviewOpinions
+    reviewOpinions,
+    images
   });
 }
 
@@ -1447,6 +1638,7 @@ export async function submitStageDocumentOnlineForm({ projectId, documentId, use
   let formPermissions;
   let projectContext;
   let reviewOpinions;
+  let images = [];
 
   const connection = await pool.getConnection();
   try {
@@ -1527,12 +1719,31 @@ export async function submitStageDocumentOnlineForm({ projectId, documentId, use
       user
     });
     reviewOpinions = await buildReviewOpinions({ connection, document: updatedFormDocument, schema });
+    images = await listStageDocumentOnlineFormImagesForDocument({
+      executor: connection,
+      projectId,
+      documentId,
+      user,
+      project,
+      document: updatedFormDocument
+    });
     await connection.commit();
   } catch (error) {
     await connection.rollback();
     throw error;
   } finally {
     connection.release();
+  }
+
+  const documentCode = String(updatedFormDocument?.document_code ?? updatedFormDocument?.documentCode ?? '');
+  if ([INITIATION_REWORK_TARGET_DOCUMENT_CODE, INITIATION_NOTICE_DOCUMENT_CODE].includes(documentCode)) {
+    await generateInitiationTemplateFile({
+      projectId,
+      documentId,
+      documentCode,
+      triggerEvent: INITIATION_TEMPLATE_TRIGGER_EVENT.ONLINE_FORM_SUBMITTED,
+      user
+    });
   }
 
   return {
@@ -1543,7 +1754,8 @@ export async function submitStageDocumentOnlineForm({ projectId, documentId, use
       permissions: formPermissions.permissions,
       projectContext,
       blockingReasons: formPermissions.blockingReasons,
-      reviewOpinions
+      reviewOpinions,
+      images
     }),
     document: updatedDocument
   };

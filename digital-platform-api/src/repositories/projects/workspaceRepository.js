@@ -5,6 +5,7 @@ import {
   getV20260629TargetOutputByCode
 } from '../../domain/stageDocumentTemplateItemsV20260629.js';
 import { getProjectStageDocumentChecklist } from '../stageDocuments/checklistRepository.js';
+import { listLatestGeneratedFilesForProject } from '../stageDocuments/generatedFileRepository.js';
 import { getProjectDetail } from './coreRepository.js';
 
 const INITIATION_STAGE_KEY = 'initiation';
@@ -123,11 +124,12 @@ function buildLegacyChecklistTarget(document, outputConfig) {
   };
 }
 
-function mapOutput(outputConfig, documentsByCode) {
+function mapOutput(outputConfig, documentsByCode, generatedFilesByDocumentId) {
   const document =
     (outputConfig.legacyDocumentCode ? documentsByCode.get(outputConfig.legacyDocumentCode) : null) ||
     documentsByCode.get(outputConfig.targetOutputCode) ||
     null;
+  const generatedFile = document?.id ? generatedFilesByDocumentId.get(Number(document.id)) || null : null;
 
   return {
     outputKey: outputConfig.targetOutputCode,
@@ -164,6 +166,7 @@ function mapOutput(outputConfig, documentsByCode) {
     formAvailable: Boolean(outputConfig.formKey && document),
     permissions: document?.permissions ?? {},
     initiationReview: document?.initiationReview ?? null,
+    generatedFile,
     legacyChecklistTarget: buildLegacyChecklistTarget(document, outputConfig),
     blockingReasons: buildDocumentBlockingReasons(document, outputConfig),
     actionHints: buildDocumentActionHints(document, outputConfig),
@@ -172,7 +175,7 @@ function mapOutput(outputConfig, documentsByCode) {
   };
 }
 
-function buildWorkspaceNode(moduleConfig, documentsByCode, project) {
+function buildWorkspaceNode(moduleConfig, documentsByCode, generatedFilesByDocumentId, project) {
   if (moduleConfig.stageKey === INITIATION_STAGE_KEY && moduleConfig.nodeKey === 'project_input') {
     return {
       templateVersion: moduleConfig.templateVersion,
@@ -198,7 +201,7 @@ function buildWorkspaceNode(moduleConfig, documentsByCode, project) {
   }
 
   const outputs = moduleConfig.outputCodes.map((targetOutputCode) =>
-    mapOutput(getV20260629TargetOutputByCode(targetOutputCode), documentsByCode)
+    mapOutput(getV20260629TargetOutputByCode(targetOutputCode), documentsByCode, generatedFilesByDocumentId)
   );
   return {
     templateVersion: moduleConfig.templateVersion,
@@ -220,7 +223,7 @@ function isCompatibilityOnlyModule(moduleConfig) {
   return moduleConfig.outputCodes.every((outputCode) => getV20260629TargetOutputByCode(outputCode)?.workspaceCompatibility);
 }
 
-function buildWorkspaceStage(stage, documents, project, runtimeTemplateVersion) {
+function buildWorkspaceStage(stage, documents, generatedFilesByDocumentId, project, runtimeTemplateVersion) {
   const documentsByCode = new Map(documents.map((document) => [document.documentCode, document]));
   const moduleConfigs = V20260629_WORKSPACE_BLUE_MODULES.filter((module) => {
     if (module.stageKey !== stage.stageKey) {
@@ -232,7 +235,7 @@ function buildWorkspaceStage(stage, documents, project, runtimeTemplateVersion) 
       : true;
   });
   const nodes = moduleConfigs.map((moduleConfig) =>
-    buildWorkspaceNode(moduleConfig, documentsByCode, project)
+    buildWorkspaceNode(moduleConfig, documentsByCode, generatedFilesByDocumentId, project)
   );
 
   return {
@@ -252,10 +255,14 @@ function buildWorkspaceStage(stage, documents, project, runtimeTemplateVersion) 
 }
 
 export async function getProjectWorkspace(projectId, user) {
-  const [detail, checklist] = await Promise.all([
+  const [detail, checklist, latestGeneratedFiles] = await Promise.all([
     getProjectDetail(projectId, user),
-    getProjectStageDocumentChecklist(projectId, user)
+    getProjectStageDocumentChecklist(projectId, user),
+    listLatestGeneratedFilesForProject(projectId)
   ]);
+  const generatedFilesByDocumentId = new Map(
+    latestGeneratedFiles.map((file) => [Number(file.stageDocumentId), file])
+  );
 
   const documentsByStageKey = new Map(
     (checklist.stages || []).map((stage) => [stage.stageKey, stage.documents || []])
@@ -267,7 +274,7 @@ export async function getProjectWorkspace(projectId, user) {
 
   const stages = (detail.stages || []).map((stage) => {
     const documents = documentsByStageKey.get(stage.stageKey) || [];
-    return buildWorkspaceStage(stage, documents, detail.project, runtimeTemplateVersion);
+    return buildWorkspaceStage(stage, documents, generatedFilesByDocumentId, detail.project, runtimeTemplateVersion);
   });
 
   return {

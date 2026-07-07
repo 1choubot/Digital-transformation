@@ -114,6 +114,16 @@ function isInitiationNoticeOnlineFormReady(relatedDocumentsByCode) {
   );
 }
 
+function isInitiationRequirementReadyForApprovalCollaboration(relatedDocumentsByCode) {
+  const initiationRequirement = relatedDocumentsByCode?.get('1.1');
+  return (
+    Boolean(initiationRequirement) &&
+    [DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.CONFIRMED].includes(initiationRequirement.status) &&
+    !isRevisionRequired(initiationRequirement) &&
+    !isLinkedInitiationRequirementReworkPending(relatedDocumentsByCode)
+  );
+}
+
 function buildInitiationNoticeActionText(row) {
   return String(row.project_code ?? '').trim()
     ? '提交 1.3 项目立项通知'
@@ -400,7 +410,7 @@ async function selectInitiationApprovalCollaborationTodos(user) {
   return rows
     .map((row) => {
       const relatedDocumentsByCode = relatedDocumentsByProjectId.get(row.project_id) ?? null;
-      if (isLinkedInitiationRequirementReworkPending(relatedDocumentsByCode)) {
+      if (!isInitiationRequirementReadyForApprovalCollaboration(relatedDocumentsByCode)) {
         return null;
       }
 

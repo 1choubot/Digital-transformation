@@ -29,6 +29,13 @@ function assertCanAdvanceProject(projectRow) {
       'Project is already completed and cannot be advanced'
     );
   }
+
+  if (projectRow.status === PROJECT_STATUS.ENDED) {
+    throw new ProjectStageAdvanceError(
+      'PROJECT_ALREADY_ENDED',
+      'Project has ended and cannot be advanced'
+    );
+  }
 }
 
 function assertUserCanAdvanceProject(user, projectRow) {

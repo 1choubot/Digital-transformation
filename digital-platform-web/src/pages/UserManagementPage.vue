@@ -1,13 +1,19 @@
 <template>
-  <section class="page-stack animate-fadeIn">
-    <!-- 无权限警告 -->
-    <section v-if="!canAccessUserManagement" class="state-panel state-panel--error panel">
-      <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10" />
-        <line x1="12" y1="8" x2="12" y2="12" />
-      </svg>
-      <h3>无权限访问此页面</h3>
-      <p>用户管理控制台仅具备平台管理员权限的用户方可进入。本机制保护管理入口本身，不代表底层文档权限。</p>
+  <section class="page-stack">
+    <PageHeader
+      eyebrow="基础配置"
+      title="用户管理"
+      :current-user="currentUser"
+      subtitle="维护数字化平台账号、组织角色和基础状态；不代表文件平台权限。"
+    >
+      <template #actions>
+        <button type="button" class="ghost-button" @click="navigate('/projects')">返回项目总览</button>
+      </template>
+    </PageHeader>
+
+    <section v-if="!canAccessUserManagement" class="state-panel state-panel--error">
+      <h3>无权限访问</h3>
+      <p>用户管理仅平台管理员可进入。该入口只保护用户管理本身，不代表项目、资料或文件权限。</p>
     </section>
 
     <template v-else>
@@ -478,10 +484,10 @@ import {
   updateUser
 } from '../api/users.js';
 import { toReadableApiError } from '../api/http.js';
+import PageHeader from '../components/PageHeader.vue';
 import {
   formatBusinessDepartment,
-  formatOrganizationRole,
-  formatUser
+  formatOrganizationRole
 } from '../utils/format.js';
 
 const props = defineProps({

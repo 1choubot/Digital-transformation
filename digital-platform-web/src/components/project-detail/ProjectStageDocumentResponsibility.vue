@@ -4,7 +4,7 @@
       <span>资料责任人</span>
       <select
         v-model="selections[document.id]"
-        :disabled="candidatesLoading || pending"
+        :disabled="disabled || candidatesLoading || pending"
       >
         <option value="">未分配</option>
         <option
@@ -23,7 +23,7 @@
       <button
         type="button"
         class="ghost-button"
-        :disabled="candidatesLoading || pending"
+        :disabled="disabled || candidatesLoading || pending"
         @click="$emit('save', document)"
       >
         {{ pending ? '保存中...' : '保存责任人' }}
@@ -31,12 +31,13 @@
       <button
         type="button"
         class="ghost-button"
-        :disabled="pending || !document.responsibleUserId"
+        :disabled="disabled || pending || !document.responsibleUserId"
         @click="$emit('clear', document)"
       >
         清空
       </button>
     </div>
+    <p v-if="disabled && disabledReason" class="inline-muted">{{ disabledReason }}</p>
   </div>
 </template>
 
@@ -65,6 +66,14 @@ defineProps({
   pending: {
     type: Boolean,
     default: false
+  },
+  disabled: {
+    type: Boolean,
+    default: false
+  },
+  disabledReason: {
+    type: String,
+    default: ''
   },
   selections: {
     type: Object,

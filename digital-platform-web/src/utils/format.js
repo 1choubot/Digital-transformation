@@ -4,6 +4,7 @@ export const statusText = {
   paused: '暂停',
   delayed: '延期',
   completed: '完成',
+  ended: '已结束',
   not_started: '未开始',
   current: '当前阶段',
   not_submitted: '待提交',

@@ -155,7 +155,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'VALIDATION_ERROR') {
-    return '请补充项目编号、项目名称、客户和项目经理。';
+    return '请补充项目名称、客户和客户联系方式。';
   }
 
   if (error.code === 'INVALID_PROJECT_MODE') {
@@ -219,7 +219,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'PROJECT_CODE_GATE_NOT_READY') {
-    return '项目编号需在 1.2 多节点审批最终通过、1.3 项目立项通知提交且相关返工清除后填写。';
+    return '项目编号需在 1.2 项目立项审批表填写阶段保存；当前存在未清除的 1.1 返工，暂不能更新。';
   }
 
   if (error.code === 'PROJECT_NOT_FOUND') {
@@ -255,23 +255,51 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'INITIATION_REVIEW_REQUIRES_DEDICATED_ENDPOINT') {
-    return '1.2 项目立项审批表需使用专用多节点审批，不能走普通资料确认或退回。';
+    return '1.2 项目立项审批表需使用专用评价和总经理最终审批，不能走普通资料确认或退回。';
   }
 
   if (error.code === 'INITIATION_REVIEW_DOCUMENT_NOT_SUBMITTED') {
-    return '请先通过普通资料入口提交 1.2 项目立项审批表。';
+    return '请先通过在线表单提交 1.2 项目立项审批表。';
+  }
+
+  if (error.code === 'ONLINE_FORM_SUBMISSION_REQUIRED') {
+    return '该资料必须通过在线表单提交，不能使用普通资料提交入口。';
+  }
+
+  if (error.code === 'ONLINE_FORM_REVISION_COMPLETION_REQUIRED') {
+    return '该资料返工必须通过在线表单重提完成，不能使用普通完成返工入口。';
+  }
+
+  if (error.code === 'INITIATION_REWORK_NOT_CLEARED') {
+    return '请先完成 1.1 项目需求表返工，再重新填写或处理 1.2 项目立项审批表。';
   }
 
   if (error.code === 'INVALID_INITIATION_REVIEW_NODE_STATUS') {
-    return '当前 1.2 审批节点不是待审批状态，请刷新后重试。';
+    return '当前 1.2 评价/最终审批节点不是待处理状态，请刷新后重试。';
   }
 
   if (error.code === 'INITIATION_REVIEW_PREREQUISITE_NOT_READY') {
-    return '商务评价和技术评价均通过后，才能处理总经理审批。';
+    return '营销评价和研发评价均完成后，才能处理总经理审批。';
   }
 
-  if (error.code === 'INITIATION_REVIEW_REWORK_BLOCKED') {
-    return '1.1 项目需求表返工未清除，暂不能通过被退回的 1.2 审批节点。';
+  if (error.code === 'INITIATION_EVALUATION_TEXT_REQUIRED') {
+    return '请填写评价文本。';
+  }
+
+  if (error.code === 'INITIATION_EVALUATION_CANNOT_RETURN') {
+    return '营销评价和研发评价只能提交评价文本，不能执行退回。';
+  }
+
+  if (error.code === 'INITIATION_NOTICE_GATE_NOT_READY') {
+    return '1.2 项目立项审批表尚未最终通过，暂不能填写或提交 1.3 项目立项通知。';
+  }
+
+  if (error.code === 'FORM_REQUIRED_FIELDS_MISSING') {
+    return '请补充在线表单必填字段。';
+  }
+
+  if (error.code === 'FORM_RESPONSIBLE_USER_REQUIRED') {
+    return '请先分配资料责任人。';
   }
 
   if (error.code === 'REVISION_TARGETS_REQUIRED') {

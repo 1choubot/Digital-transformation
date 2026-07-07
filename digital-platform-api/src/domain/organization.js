@@ -175,23 +175,7 @@ export function canApproveStageDocument(user, { project = null, document = null 
   });
 }
 
-export function canSubmitStageDocument(user, { project = null, document = null } = {}) {
-  if (isGeneralManagerUser(user)) {
-    return true;
-  }
-
-  if (isCenterManagerUser(user)) {
-    return isStageDocumentRelatedToDepartment({
-      project,
-      document,
-      department: user.department
-    });
-  }
-
-  if (isProjectManagerForProject(user, project)) {
-    return true;
-  }
-
+export function canSubmitStageDocument(user, { document = null } = {}) {
   const responsibleUserId = document?.responsible_user_id ?? document?.responsibleUserId;
   return Boolean(responsibleUserId) && String(responsibleUserId) === String(user?.id);
 }

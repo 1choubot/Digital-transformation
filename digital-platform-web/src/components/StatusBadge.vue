@@ -23,6 +23,7 @@ const tone = computed(() => {
   if (props.status === 'returned_by_general_manager') return 'warn';
   if (props.status === 'paused') return 'paused';
   if (props.status === 'cancelled') return 'paused';
+  if (props.status === 'ended') return 'paused';
   if (props.status === 'confirmed') return 'done';
   if (props.status === 'completed') return 'done';
   if (props.status === 'approved') return 'done';

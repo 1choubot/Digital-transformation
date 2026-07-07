@@ -13,10 +13,22 @@
       <div><span>项目编号</span><strong>{{ formatProjectCode(detail.project.projectCode) }}</strong></div>
       <div><span>项目名称</span><strong>{{ detail.project.projectName }}</strong></div>
       <div><span>客户</span><strong>{{ detail.project.customerName }}</strong></div>
+      <div><span>客户联系人</span><strong>{{ detail.project.customerContactPerson || '-' }}</strong></div>
+      <div><span>客户联系方式</span><strong>{{ detail.project.customerContact || '-' }}</strong></div>
       <div><span>项目模式</span><strong>{{ formatProjectMode(detail.project.projectMode) }}</strong></div>
       <div><span>项目经理</span><strong>{{ formatUser(detail.project.projectManagerUser) }}</strong></div>
+      <div><span>商务负责人</span><strong>{{ formatUser(detail.project.businessResponsibleUser) }}</strong></div>
+      <div><span>技术负责人</span><strong>{{ formatUser(detail.project.technicalResponsibleUser) }}</strong></div>
       <div><span>参与部门</span><strong>{{ formatDepartments(detail.project.participatingDepartments) }}</strong></div>
       <div><span>项目状态</span><StatusBadge :status="detail.project.status" /></div>
+      <div v-if="detail.project.status === 'ended'" class="info-list__wide">
+        <span>结束原因</span>
+        <strong>{{ detail.project.endedReason || '-' }}</strong>
+      </div>
+      <div v-if="detail.project.status === 'ended'">
+        <span>结束时间</span>
+        <strong>{{ formatDateTime(detail.project.endedAt) }}</strong>
+      </div>
       <div><span>创建人</span><strong>{{ formatUser(detail.project.createdBy) }}</strong></div>
       <div><span>计划开始</span><strong>{{ formatDate(detail.project.plannedStartDate) }}</strong></div>
       <div><span>计划完成</span><strong>{{ formatDate(detail.project.plannedEndDate) }}</strong></div>
@@ -29,6 +41,7 @@
 import StatusBadge from '../StatusBadge.vue';
 import {
   formatDate,
+  formatDateTime,
   formatDepartments,
   formatProjectCode,
   formatProjectMode,

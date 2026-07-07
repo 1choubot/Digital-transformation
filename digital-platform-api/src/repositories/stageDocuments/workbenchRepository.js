@@ -1,11 +1,17 @@
 import { pool } from '../../db/pool.js';
 import {
+  BUSINESS_DEPARTMENT,
   canAdvanceProjectStage,
   isCenterManagerUser,
   isGeneralManagerAssistantUser,
   isSystemAdminUser
 } from '../../domain/organization.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
+import {
+  INITIATION_NOTICE_DOCUMENT_CODE,
+  INITIATION_REVIEW_DOCUMENT_CODE,
+  isInitiationOnlineFormDocument
+} from '../../domain/initiationReview.js';
 import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import { attachStageDocumentPermissions } from './accessControl.js';
 import {
@@ -13,9 +19,11 @@ import {
   isRevisionRequired,
   isRevisionResubmitted,
   isReviewCompletionMode,
+  isStageDocumentComplete,
   mapDocument
 } from './shared.js';
 import {
+  attachInitiationReviewToStageDocumentRows,
   INITIATION_REVIEW_TODO_TYPE,
   selectInitiationReviewWorkbenchTodos
 } from './initiationReviewRepository.js';
@@ -26,6 +34,12 @@ const WORKBENCH_TODO_TYPES = [
   INITIATION_REVIEW_TODO_TYPE,
   'stage_advance'
 ];
+
+const INITIATION_COLLABORATION_METADATA_KEY = '_collaboration';
+const INITIATION_COLLABORATION_PART = {
+  BUSINESS: 'business',
+  TECHNICAL: 'technical'
+};
 
 function mapWorkbenchProject(row) {
   return {
@@ -45,17 +59,100 @@ function buildDocumentTargetRoute(item, user) {
   return `/projects/${item.projectId}?taskMode=document&documentId=${item.documentId}`;
 }
 
+function parseJsonValue(value, fallback = null) {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function getInitiationCollaborationFromRow(row) {
+  const formData = parseJsonValue(row.form_data_json, {});
+  const source =
+    formData?.[INITIATION_COLLABORATION_METADATA_KEY] &&
+    typeof formData[INITIATION_COLLABORATION_METADATA_KEY] === 'object'
+      ? formData[INITIATION_COLLABORATION_METADATA_KEY]
+      : {};
+  return {
+    businessSubmitted: source.businessSubmitted === true,
+    technicalSubmitted: source.technicalSubmitted === true
+  };
+}
+
 function buildStageTargetRoute(item, taskMode) {
   return `/projects/${item.projectId}?taskMode=${taskMode}&stageId=${item.stageId}`;
 }
 
-function buildDocumentTodo({ row, user, type, actionText }) {
+function isLinkedInitiationRequirementReworkPending(relatedDocumentsByCode) {
+  const initiationApproval = relatedDocumentsByCode?.get('1.2');
+  const initiationRequirement = relatedDocumentsByCode?.get('1.1');
+  if (!initiationApproval || !initiationRequirement || !isRevisionRequired(initiationRequirement)) {
+    return false;
+  }
+
+  const revisionSourceDocumentId =
+    initiationRequirement.revisionSourceDocumentId ?? initiationRequirement.revision_source_document_id ?? null;
+  const initiationDocumentId = initiationApproval.id ?? initiationApproval.documentId ?? null;
+  return Boolean(revisionSourceDocumentId) && String(revisionSourceDocumentId) === String(initiationDocumentId);
+}
+
+function isInitiationNoticeOnlineFormReady(relatedDocumentsByCode) {
+  const initiationApproval = relatedDocumentsByCode?.get('1.2');
+  return (
+    Boolean(initiationApproval) &&
+    isStageDocumentComplete(initiationApproval) &&
+    !isLinkedInitiationRequirementReworkPending(relatedDocumentsByCode)
+  );
+}
+
+function isInitiationRequirementReadyForApprovalCollaboration(relatedDocumentsByCode) {
+  const initiationRequirement = relatedDocumentsByCode?.get('1.1');
+  return (
+    Boolean(initiationRequirement) &&
+    [DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.CONFIRMED].includes(initiationRequirement.status) &&
+    !isRevisionRequired(initiationRequirement) &&
+    !isLinkedInitiationRequirementReworkPending(relatedDocumentsByCode)
+  );
+}
+
+function buildInitiationNoticeActionText(row) {
+  return String(row.project_code ?? '').trim()
+    ? '提交 1.3 项目立项通知'
+    : '填写项目编号并提交 1.3 项目立项通知';
+}
+
+function buildDocumentTodo({ row, user, type, actionText, relatedDocumentsByCode = null }) {
   const project = mapWorkbenchProject(row);
   const document = attachStageDocumentPermissions({
     user,
     project,
-    document: mapDocument(row)
+    document: mapDocument(row),
+    relatedDocumentsByCode
   });
+  let displayActionText = actionText;
+  if (type === 'document_responsibility' && isInitiationOnlineFormDocument(row) && !row.collaboration_part) {
+    if (
+      (row.document_code === '1.2' && isLinkedInitiationRequirementReworkPending(relatedDocumentsByCode)) ||
+      (row.document_code === '1.3' && !isInitiationNoticeOnlineFormReady(relatedDocumentsByCode))
+    ) {
+      displayActionText = '查看在线表单前置状态';
+    } else if (row.document_code === '1.3') {
+      displayActionText = buildInitiationNoticeActionText(row);
+    } else if (isRevisionRequired(row) || row.status === DOCUMENT_STATUS.RETURNED) {
+      displayActionText = '通过在线表单重提';
+    } else {
+      displayActionText = '填写/提交在线表单';
+    }
+  }
   const item = {
     type,
     projectId: row.project_id,
@@ -82,7 +179,8 @@ function buildDocumentTodo({ row, user, type, actionText }) {
     revisionResubmitted: document.revisionResubmitted,
     isApplicable: document.isApplicable,
     status: row.status,
-    actionText,
+    collaborationPart: row.collaboration_part ?? null,
+    actionText: displayActionText,
     createdAt: row.responsibility_updated_at || row.submitted_at || row.updated_at,
     updatedAt: row.responsibility_updated_at || row.submitted_at || row.updated_at,
     targetRoute: '',
@@ -91,6 +189,42 @@ function buildDocumentTodo({ row, user, type, actionText }) {
 
   item.targetRoute = buildDocumentTargetRoute(item, user);
   return item;
+}
+
+async function selectRelatedInitiationDocumentsByProjectId(projectIds, user) {
+  const uniqueProjectIds = [...new Set(projectIds.filter((projectId) => projectId !== null && projectId !== undefined))];
+  if (uniqueProjectIds.length === 0) {
+    return new Map();
+  }
+
+  const [rows] = await pool.execute(
+    `SELECT
+      d.*,
+      u.account AS responsible_account,
+      u.display_name AS responsible_display_name,
+      u.department AS responsible_department,
+      u.organization_role AS responsible_organization_role,
+      u.role AS responsible_role,
+      u.is_enabled AS responsible_is_enabled,
+      u.file_platform_user_id AS responsible_file_platform_user_id
+    FROM project_stage_documents d
+    LEFT JOIN users u
+      ON u.id = d.responsible_user_id
+    WHERE d.project_id IN (${uniqueProjectIds.map(() => '?').join(', ')})
+      AND d.document_code IN ('1.1', '1.2', '1.3')`,
+    uniqueProjectIds
+  );
+  const rowsWithInitiationReview = await attachInitiationReviewToStageDocumentRows(pool, rows, user);
+  const relatedDocumentsByProjectId = new Map();
+
+  for (const document of rowsWithInitiationReview.map(mapDocument)) {
+    if (!relatedDocumentsByProjectId.has(document.projectId)) {
+      relatedDocumentsByProjectId.set(document.projectId, new Map());
+    }
+    relatedDocumentsByProjectId.get(document.projectId).set(document.documentCode, document);
+  }
+
+  return relatedDocumentsByProjectId;
 }
 
 function buildStageTodo({ row, type, actionText, taskMode }) {
@@ -149,7 +283,10 @@ async function selectDocumentResponsibilityTodos(user) {
     LEFT JOIN users u
       ON u.id = d.responsible_user_id
     WHERE d.responsible_user_id = ?
+      AND p.status <> ?
       AND d.is_applicable = 1
+      AND d.document_code <> ?
+      AND d.document_code <> ?
       AND (
         d.status IN (?, ?)
         OR (
@@ -171,6 +308,9 @@ async function selectDocumentResponsibilityTodos(user) {
       d.id ASC`,
     [
       user.id,
+      PROJECT_STATUS.ENDED,
+      INITIATION_REVIEW_DOCUMENT_CODE,
+      INITIATION_NOTICE_DOCUMENT_CODE,
       DOCUMENT_STATUS.NOT_SUBMITTED,
       DOCUMENT_STATUS.RETURNED,
       COMPLETION_MODE.APPROVAL_REQUIRED,
@@ -179,11 +319,17 @@ async function selectDocumentResponsibilityTodos(user) {
     ]
   );
 
+  const relatedDocumentsByProjectId = await selectRelatedInitiationDocumentsByProjectId(
+    rows.map((row) => row.project_id),
+    user
+  );
+
   return rows.map((row) =>
     buildDocumentTodo({
       row,
       user,
       type: 'document_responsibility',
+      relatedDocumentsByCode: relatedDocumentsByProjectId.get(row.project_id) ?? null,
       actionText: isRevisionRequired(row)
         ? isReviewCompletionMode(getDocumentCompletionMode(row))
           ? '返工重提'
@@ -193,6 +339,180 @@ async function selectDocumentResponsibilityTodos(user) {
           : '提交资料'
     })
   );
+}
+
+async function selectInitiationApprovalCollaborationTodos(user) {
+  if (isGeneralManagerAssistantUser(user) || isSystemAdminUser(user)) {
+    return [];
+  }
+
+  const [rows] = await pool.execute(
+    `SELECT
+      d.*,
+      f.form_data_json,
+      p.id AS project_id,
+      p.project_code,
+      p.project_name,
+      p.project_manager_user_id,
+      p.participating_departments,
+      p.status AS project_status,
+      p.updated_at AS project_updated_at,
+      p.business_responsible_user_id,
+      p.technical_responsible_user_id,
+      s.id AS stage_id,
+      u.account AS responsible_account,
+      u.display_name AS responsible_display_name,
+      u.department AS responsible_department,
+      u.organization_role AS responsible_organization_role,
+      u.role AS responsible_role,
+      u.is_enabled AS responsible_is_enabled,
+      u.file_platform_user_id AS responsible_file_platform_user_id,
+      0 AS has_department_responsible
+    FROM project_stage_documents d
+    INNER JOIN projects p
+      ON p.id = d.project_id
+    LEFT JOIN project_stage_document_forms f
+      ON f.stage_document_id = d.id
+    LEFT JOIN project_stages s
+      ON s.project_id = d.project_id
+      AND s.stage_order = d.stage_order
+    LEFT JOIN users u
+      ON u.id = d.responsible_user_id
+    WHERE d.document_code = ?
+      AND d.is_applicable = 1
+      AND p.status <> ?
+      AND d.status NOT IN (?, ?)
+      AND (
+        p.business_responsible_user_id = ?
+        OR p.technical_responsible_user_id = ?
+      )
+    ORDER BY
+      COALESCE(d.responsibility_updated_at, d.updated_at) DESC,
+      p.project_code ASC,
+      d.stage_order ASC,
+      d.document_order ASC,
+      d.id ASC`,
+    [
+      INITIATION_REVIEW_DOCUMENT_CODE,
+      PROJECT_STATUS.ENDED,
+      DOCUMENT_STATUS.SUBMITTED,
+      DOCUMENT_STATUS.CONFIRMED,
+      user.id,
+      user.id
+    ]
+  );
+
+  const relatedDocumentsByProjectId = await selectRelatedInitiationDocumentsByProjectId(
+    rows.map((row) => row.project_id),
+    user
+  );
+
+  return rows
+    .map((row) => {
+      const relatedDocumentsByCode = relatedDocumentsByProjectId.get(row.project_id) ?? null;
+      if (!isInitiationRequirementReadyForApprovalCollaboration(relatedDocumentsByCode)) {
+        return null;
+      }
+
+      const part =
+        row.business_responsible_user_id && String(row.business_responsible_user_id) === String(user.id)
+          ? INITIATION_COLLABORATION_PART.BUSINESS
+          : row.technical_responsible_user_id && String(row.technical_responsible_user_id) === String(user.id)
+            ? INITIATION_COLLABORATION_PART.TECHNICAL
+            : null;
+      if (!part) {
+        return null;
+      }
+
+      const collaboration = getInitiationCollaborationFromRow(row);
+      if (
+        (part === INITIATION_COLLABORATION_PART.BUSINESS && collaboration.businessSubmitted) ||
+        (part === INITIATION_COLLABORATION_PART.TECHNICAL && collaboration.technicalSubmitted)
+      ) {
+        return null;
+      }
+
+      return buildDocumentTodo({
+        row: {
+          ...row,
+          collaboration_part: part
+        },
+        user,
+        type: 'document_responsibility',
+        relatedDocumentsByCode,
+        actionText:
+          part === INITIATION_COLLABORATION_PART.BUSINESS
+            ? '填写/提交 1.2 基础模块和商务模块'
+            : '填写/提交 1.2 技术模块'
+      });
+    })
+    .filter(Boolean);
+}
+
+async function selectInitiationNoticeSyntheticTodos(user) {
+  if (!isCenterManagerUser(user) || user.department !== BUSINESS_DEPARTMENT.MARKETING_CENTER) {
+    return [];
+  }
+
+  const [rows] = await pool.execute(
+    `SELECT
+      d.*,
+      p.id AS project_id,
+      p.project_code,
+      p.project_name,
+      p.project_manager_user_id,
+      p.participating_departments,
+      p.status AS project_status,
+      p.updated_at AS project_updated_at,
+      s.id AS stage_id,
+      u.account AS responsible_account,
+      u.display_name AS responsible_display_name,
+      u.department AS responsible_department,
+      u.organization_role AS responsible_organization_role,
+      u.role AS responsible_role,
+      u.is_enabled AS responsible_is_enabled,
+      u.file_platform_user_id AS responsible_file_platform_user_id,
+      1 AS has_department_responsible
+    FROM project_stage_documents d
+    INNER JOIN projects p
+      ON p.id = d.project_id
+    LEFT JOIN project_stages s
+      ON s.project_id = d.project_id
+      AND s.stage_order = d.stage_order
+    LEFT JOIN users u
+      ON u.id = d.responsible_user_id
+    WHERE d.document_code = '1.3'
+      AND d.is_applicable = 1
+      AND p.status <> ?
+      AND d.status NOT IN (?, ?)
+      AND (
+        d.responsible_user_id IS NULL
+        OR d.responsible_user_id <> ?
+      )
+    ORDER BY
+      p.project_code ASC,
+      d.stage_order ASC,
+      d.document_order ASC,
+      d.id ASC`,
+    [PROJECT_STATUS.ENDED, DOCUMENT_STATUS.SUBMITTED, DOCUMENT_STATUS.CONFIRMED, user.id]
+  );
+
+  const relatedDocumentsByProjectId = await selectRelatedInitiationDocumentsByProjectId(
+    rows.map((row) => row.project_id),
+    user
+  );
+
+  return rows
+    .filter((row) => isInitiationNoticeOnlineFormReady(relatedDocumentsByProjectId.get(row.project_id) ?? null))
+    .map((row) =>
+      buildDocumentTodo({
+        row,
+        user,
+        type: 'document_responsibility',
+        relatedDocumentsByCode: relatedDocumentsByProjectId.get(row.project_id) ?? null,
+        actionText: buildInitiationNoticeActionText(row)
+      })
+    );
 }
 
 async function selectDocumentReviewTodos(user) {
@@ -228,6 +548,7 @@ async function selectDocumentReviewTodos(user) {
       ON s.project_id = d.project_id
       AND s.stage_order = d.stage_order
     WHERE d.is_applicable = 1
+      AND p.status <> ?
       AND d.document_code <> '1.2'
       AND d.status = ?
       AND d.completion_mode = ?
@@ -251,7 +572,7 @@ async function selectDocumentReviewTodos(user) {
       d.stage_order ASC,
       d.document_order ASC,
       d.id ASC`,
-    [DOCUMENT_STATUS.SUBMITTED, COMPLETION_MODE.APPROVAL_REQUIRED, user.department, user.department]
+    [PROJECT_STATUS.ENDED, DOCUMENT_STATUS.SUBMITTED, COMPLETION_MODE.APPROVAL_REQUIRED, user.department, user.department]
   );
 
   return rows.map((row) =>
@@ -315,6 +636,7 @@ async function selectStageAdvanceTodos(user) {
     WHERE s.is_current = 1
       AND s.stage_order < 8
       AND p.status <> ?
+      AND p.status <> ?
       AND EXISTS (
         SELECT 1
         FROM project_stage_documents stage_documents
@@ -338,8 +660,21 @@ async function selectStageAdvanceTodos(user) {
                   FROM project_initiation_review_nodes initiation_nodes
                   WHERE initiation_nodes.stage_document_id = incomplete_documents.id
                   GROUP BY initiation_nodes.stage_document_id
-                  HAVING SUM(initiation_nodes.node_status = 'approved') = 3
-                    AND COUNT(*) = 3
+                  HAVING COUNT(*) = 3
+                    AND SUM(
+                      initiation_nodes.node_key = 'business_review'
+                      AND initiation_nodes.node_status = 'approved'
+                      AND NULLIF(TRIM(COALESCE(initiation_nodes.comment, '')), '') IS NOT NULL
+                    ) = 1
+                    AND SUM(
+                      initiation_nodes.node_key = 'technical_review'
+                      AND initiation_nodes.node_status = 'approved'
+                      AND NULLIF(TRIM(COALESCE(initiation_nodes.comment, '')), '') IS NOT NULL
+                    ) = 1
+                    AND SUM(
+                      initiation_nodes.node_key = 'general_review'
+                      AND initiation_nodes.node_status = 'approved'
+                    ) = 1
                 )
                 OR EXISTS (
                   SELECT 1
@@ -370,6 +705,7 @@ async function selectStageAdvanceTodos(user) {
     [
       ...params,
       PROJECT_STATUS.COMPLETED,
+      PROJECT_STATUS.ENDED,
       DOCUMENT_STATUS.RETURNED,
       COMPLETION_MODE.SUBMIT_ONLY,
       COMPLETION_MODE.CONDITIONAL_SUBMIT,
@@ -431,6 +767,8 @@ function sortWorkbenchItems(items) {
 export async function getMyWorkbench(user) {
   const groups = await Promise.all([
     selectDocumentResponsibilityTodos(user),
+    selectInitiationApprovalCollaborationTodos(user),
+    selectInitiationNoticeSyntheticTodos(user),
     selectDocumentReviewTodos(user),
     selectInitiationReviewWorkbenchTodos(pool, user),
     selectStageAdvanceTodos(user)

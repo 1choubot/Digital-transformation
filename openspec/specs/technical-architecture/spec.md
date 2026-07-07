@@ -261,71 +261,973 @@ TBD - created by archiving change define-technical-architecture. Update Purpose 
 
 ### Requirement: 1.2 专用多节点审批架构
 
-系统 MUST 使用专用架构规划 `1.2 项目立项审批表` 多节点审批，不得复用 legacy 阶段审批流作为当前主路径，也不得引入通用审批流引擎。
+系统 MUST 使用专用架构规划 `1.2 项目立项审批表` 的评价/最终审批，不得复用 legacy 阶段审批流作为当前主路径，也不得引入通用审批流引擎。该架构 MUST 从旧 approval nodes 口径调整为营销评价、研发评价和总经理最终审批。
 
-#### Scenario: 使用专用节点结构
+#### Scenario: 使用专用评价审批结构
 
-- **WHEN** 后续实现 `1.2 项目立项审批表` 多节点审批
-- **THEN** 系统 SHOULD 新增 `project_initiation_review_nodes` 或等价专用结构保存节点状态
-- **AND** 节点结构 MUST 能表达商务评价、技术评价和总经理审批状态
+- **WHEN** 后续实现 `1.2 项目立项审批表` 评价/审批
+- **THEN** 系统 SHOULD 新增 `project_initiation_evaluations`、`project_initiation_approval`、扩展 `project_initiation_review_nodes` 或等价专用结构保存评价和最终审批状态
+- **AND** 结构 MUST 能表达营销评价文本、研发评价文本、总经理审批结果、意见、操作人和时间
 
-#### Scenario: 节点状态枚举不引入节点提交状态
+#### Scenario: 不再用商务技术通过状态表达评价
 
-- **WHEN** 后续实现 `1.2 项目立项审批表` 专用节点状态
-- **THEN** 节点状态 MUST 至少能表达 `waiting_document_submission`
-- **AND** 节点状态 MUST 能表达 `pending`
-- **AND** 节点状态 MUST 能表达 `approved`
-- **AND** 节点状态 MUST 能表达 `returned_blocked_by_rework`
-- **AND** 节点状态 MUST 能表达 `not_started` 或 `waiting_prerequisite`
-- **AND** 节点状态 MAY 能表达 `invalidated`，用于总经理节点因商务或技术退回而失效
-- **AND** 节点状态 MUST NOT 使用需要前端 `1.2` 节点提交按钮才能继续审批的 `submitted` 状态
-- **AND** `submitted_by_user_id` / `submitted_at` 若保留，MUST 只作为普通 `1.2` 资料提交触发多节点激活的追溯字段
+- **WHEN** 系统保存营销评价或研发评价
+- **THEN** 系统 MUST 保存评价文本、评价人和评价时间
+- **AND** 系统 MUST NOT 要求营销评价或研发评价保存通过/不通过结果
 
-#### Scenario: 既有项目幂等初始化 1.2 审批节点
+#### Scenario: 总经理审批状态
 
-- **WHEN** 后续 migration 或幂等初始化逻辑处理既有项目中适用的 `1.2 项目立项审批表`
-- **THEN** 系统 MUST 为其创建 `business_review`、`technical_review` 和 `general_review` 三类专用节点
-- **AND** 当 `1.2 status = not_submitted` 时，`business_review` 和 `technical_review` MUST 等待资料提交且不得生成审批待办
-- **AND** 当 `1.2 status = submitted` 时，`business_review` 和 `technical_review` MUST 初始化为待处理或可处理状态
-- **AND** 当既有 `1.2 status = confirmed` 时，系统 MUST 将其作为资料已提交过的兼容输入，使 `business_review` 和 `technical_review` 初始化为待处理或可处理状态
-- **AND** 当 `1.2 status = returned` 时，`business_review` 和 `technical_review` MUST 等待普通 `1.2` 资料重新提交且不得生成审批待办
-- **AND** `general_review` MUST 初始化为未开始或等待前置状态，直到商务评价和技术评价均通过
-- **AND** 既有普通 `1.2 status = confirmed` MUST NOT 被回填或解释为多节点最终通过
-- **AND** 旧 confirmed 状态 MUST NOT 绕过第 1 阶段推进或项目编号门禁
+- **WHEN** 系统保存总经理最终审批
+- **THEN** 系统 MUST 保存审批结果、审批意见、审批人和审批时间
+- **AND** 系统 MUST 支持审批通过和审批不通过
 
-#### Scenario: 普通资料提交激活 1.2 节点
+#### Scenario: 总经理审批前置校验
 
-- **WHEN** 普通 `1.2 项目立项审批表` 资料提交或上传使基础状态达到 `submitted`
-- **THEN** 系统 MUST 激活 `business_review` 和 `technical_review` 并进入并行待审批
-- **AND** 第一版 MUST NOT 新增独立节点提交按钮或独立节点提交流程
+- **WHEN** 总经理尝试审批 `1.2 项目立项审批表`
+- **THEN** 后端 MUST 校验营销评价和研发评价均已完成
+- **AND** 后端 MUST 在两项评价完成前拒绝审批动作
+
+#### Scenario: 总经理不通过事务
+
+- **WHEN** 总经理审批不通过 `1.2 项目立项审批表`
+- **THEN** 系统 MUST 在同一事务中保存审批不通过状态、触发 `1.1` 精准返工、标记 `1.2` 需重新填写并记录业务日志
+
+#### Scenario: 项目阶段资料状态仍保留
+
+- **WHEN** 系统保存 `1.2` 评价和审批状态
+- **THEN** `project_stage_documents.status` MUST 仍保留资料基础状态
+- **AND** `1.2` 最终完成 MUST 由基础状态、在线表单、评价、审批和精准返工状态共同派生
 
 #### Scenario: 不复用 legacy 阶段审批主路径
 
-- **WHEN** 系统实现 `1.2` 多节点审批
+- **WHEN** 系统实现 `1.2` 评价/审批
 - **THEN** 系统 MUST NOT 将 legacy 阶段审批流作为当前主路径
 - **AND** legacy 阶段审批历史不得成为第 1 阶段推进或项目编号门禁依据
 
 #### Scenario: 不做通用审批流引擎
 
-- **WHEN** 系统实现 `1.2` 多节点审批
+- **WHEN** 系统实现 `1.2` 评价/审批
 - **THEN** 系统 MUST 将能力限定为 `1.2 项目立项审批表` 专用流程
 - **AND** 系统 MUST NOT 新增 BPM、可视化流程编排、任意节点配置器或通用审批流引擎
 
-#### Scenario: 项目阶段资料状态仍保留
-
-- **WHEN** 系统保存 `1.2` 多节点审批状态
-- **THEN** `project_stage_documents.status` MUST 仍保留资料基础状态
-- **AND** `1.2` 最终完成 MUST 由基础状态、多节点状态和精准返工状态共同派生
-
 #### Scenario: 文件平台仍暂停
 
-- **WHEN** 系统处理 `1.2` 多节点审批、节点日志、精准返工或阶段推进门禁
+- **WHEN** 系统处理 `1.2` 在线表单、评价、审批、业务日志、精准返工或阶段推进门禁
 - **THEN** 系统 MUST NOT 调用文件管理平台 API
 - **AND** 系统 MUST NOT 恢复文件平台 folder mapping、归档状态或文件平台下载入口
 
-#### Scenario: 已确认规则必须按本 change 实现
+### Requirement: 项目阶段节点工作区架构
 
-- **WHEN** 后续实现 `1.2 项目立项审批表` 多节点审批
-- **THEN** 系统 MUST 按本 change 已确认规则实现商务/技术并行、营销中心负责人商务审批、研发中心负责人技术审批、总经理待办后置生成和退回节点及后续节点重跑
-- **AND** 系统 MUST NOT 因这些固定规则引入通用审批流引擎
+系统 MUST 支持以稳定后端配置或稳定枚举提供项目阶段节点视图，并 MUST 将节点状态从关联产出和业务状态派生，而不是为蓝色节点建立独立完成状态。第一版后端节点配置/稳定枚举只必须覆盖立项阶段完整映射；8 阶段导航框架是全局骨架，不等同于 8 阶段全部节点映射一次性完成。
+
+#### Scenario: 节点配置来源
+- **WHEN** 后端提供项目工作区阶段节点视图
+- **THEN** 系统 MUST 使用后端配置、稳定枚举或等价受控结构表达 8 阶段导航框架和已配置节点
+- **AND** 系统 MUST NOT 依赖前端硬编码完整业务流程作为权威来源
+
+#### Scenario: 节点到产出映射
+- **WHEN** 后端返回节点工作区数据
+- **THEN** 系统 MUST 返回节点与一个或多个阶段资料产出的映射
+- **AND** 第一版 MUST 支持立项阶段节点到 `1.1`、`1.2`、`1.3` 的映射
+
+#### Scenario: 其他阶段映射可暂缺
+- **WHEN** 后端返回方案设计、合同签订、详细设计、生产制作、预验收、终验收或结题阶段的节点视图
+- **THEN** 这些阶段的节点映射 MAY 为空、占位或指向旧资料清单入口
+- **AND** 系统 MUST NOT 要求本 change 一次性补齐其他 7 个阶段的全部节点和产出映射
+- **AND** 后续阶段节点和产出映射 MUST 通过后续 change 逐步补齐
+
+#### Scenario: 节点状态派生
+- **WHEN** 系统计算节点状态
+- **THEN** 系统 MUST 从阶段资料项、在线表单、评价/审批记录、精准返工和 `completionMode` 派生状态
+- **AND** 系统 MUST NOT 为蓝色节点保存独立完成状态
+
+#### Scenario: 节点状态派生第一版范围
+- **WHEN** 系统实现节点状态派生逻辑
+- **THEN** 第一版只 MUST 完整覆盖立项阶段节点状态派生规则
+- **AND** 系统 MUST NOT 因其他阶段节点状态派生尚未完整实现而阻塞立项阶段规则
+
+#### Scenario: 节点视图不替代资料清单
+- **WHEN** 系统实现项目工作区
+- **THEN** 系统 MUST 保留 64 项阶段资料作为产出数据底座
+- **AND** 系统 MUST NOT 建立脱离阶段资料体系的第二套产出状态
+
+### Requirement: 在线表单架构规划
+
+系统 MUST 为立项阶段在线表单规划 schema、表单数据、提交记录和权限校验能力，并 MUST 将表单提交结果与阶段资料完成状态保持一致。
+
+#### Scenario: 表单 schema
+- **WHEN** 系统实现 `1.1`、`1.2` 或 `1.3` 在线表单
+- **THEN** 系统 MUST 有结构化 form schema 或等价字段定义
+- **AND** 字段定义 SHOULD 来源于对应 xlsx/docx 模板的业务字段设计
+
+#### Scenario: 表单数据
+- **WHEN** 用户保存在线表单草稿或提交在线表单
+- **THEN** 系统 MUST 保存结构化表单数据、操作人和操作时间
+- **AND** 系统 MUST 能关联项目、阶段和阶段资料项
+
+#### Scenario: 表单提交回写资料状态
+- **WHEN** 用户提交 `1.1`、`1.2` 或 `1.3` 在线表单
+- **THEN** 系统 MUST 将提交结果回写或派生到对应阶段资料项基础状态和完成状态
+- **AND** 系统 MUST 保持阶段推进和项目编号门禁读取同一派生完成口径
+
+#### Scenario: 在线表单是立项表单产出的唯一提交入口
+- **WHEN** 系统处理 `1.1 项目需求表`、`1.2 项目立项审批表` 或 `1.3 项目立项通知` 的提交
+- **THEN** 系统 MUST 只允许在线表单提交服务驱动对应资料基础状态变化
+- **AND** 普通阶段资料提交接口 MUST 被后端拒绝，除非调用方是在线表单提交事务内部的受控服务路径
+- **AND** 受控内部路径 MUST 使用明确的内部标记或等价机制，普通路由不得传递该标记
+- **AND** 系统 MUST NOT 为旧数据状态保留绕过在线表单提交的兼容路径
+
+#### Scenario: 立项在线表单产出写入口收敛
+- **WHEN** 系统处理 `1.1 项目需求表`、`1.2 项目立项审批表` 或 `1.3 项目立项通知` 的基础状态、完成状态或精准返工状态
+- **THEN** 系统 MUST 将这些资料视为 initiation online form only documents
+- **AND** 普通资料提交接口 MUST NOT 改变这些资料的提交或完成状态
+- **AND** 普通返工完成接口 MUST NOT 清除这些资料的 `revision_required` 或写入返工完成状态
+- **AND** 旧资料确认/退回接口 MUST NOT 承载 `1.2` 评价或最终审批
+- **AND** 允许写入口 MUST 限定为在线表单提交、`1.2` 专用评价/审批、总经理审批不通过触发的 `1.1` 精准返工和必要的责任人分配/适用性维护
+- **AND** 系统 MUST NOT 因旧资料清单、工作台 target route 或旧数据状态绕过这些写入口边界
+
+#### Scenario: 在线表单重提清除返工
+- **WHEN** `1.1` 或 `1.3` 这类在线表单专用 submit-only 资料存在 `revision_required`
+- **AND** 责任人按权限重新提交在线表单
+- **THEN** 系统 MUST 在在线表单提交事务内清除返工标记并写入返工完成追溯字段
+- **AND** 系统 MUST 写入在线表单提交日志和返工完成日志
+- **AND** 系统 MUST NOT 允许普通返工完成接口完成同一状态变化
+
+#### Scenario: 在线表单提交事务一致性
+- **WHEN** 用户提交 `1.1`、`1.2` 或 `1.3` 在线表单
+- **THEN** 表单 upsert、资料状态更新、`1.2` 评价/审批激活或重置、业务日志 MUST 在同一事务中提交或回滚
+- **AND** 系统 MUST NOT 出现表单已提交但资料基础状态未提交的半状态
+- **AND** 提交成功响应 MUST 基于提交后的最新资料状态重新计算在线表单权限
+- **AND** 当资料状态已为 `submitted`、`confirmed` 或等价完成状态时，响应中的 `canEdit` 和 `canSubmit` MUST 为 false
+
+#### Scenario: 表单权限校验
+- **WHEN** 用户填写、编辑或提交在线表单
+- **THEN** 系统 MUST 按资料责任人、营销中心负责人、总经理或后端权限字段校验
+- **AND** 系统 MUST NOT 因项目查看权限、日志查看权限或节点查看权限放宽表单操作权限
+
+#### Scenario: canSubmitDocument 不表达立项在线表单提交能力
+- **WHEN** 后端返回阶段资料清单、工作台资料责任待办或其他通用资料权限字段
+- **THEN** `canSubmitDocument` MUST 只表示普通资料提交接口的可用性
+- **AND** `1.1 项目需求表`、`1.2 项目立项审批表` 和 `1.3 项目立项通知` 的 `canSubmitDocument` MUST 为 false
+- **AND** 这些资料的填写、保存和提交能力 MUST 由在线表单接口返回的 `permissions.canEdit` 和 `permissions.canSubmit` 表达
+- **AND** 前端 MUST NOT 用 `canSubmitDocument` 决定这些资料是否可以在线表单提交
+
+#### Scenario: 1.2 重填前置由服务端统一校验
+- **WHEN** 系统处理 `1.2 项目立项审批表` 在线表单保存、在线表单提交或评价/审批节点激活
+- **AND** 同项目 `1.1 项目需求表` 存在关联来源为该 `1.2` 的未清除返工
+- **THEN** 后端 MUST 拒绝保存、提交或激活评价节点
+- **AND** 后端 MUST 使用稳定错误码表达需先完成 `1.1` 返工
+- **AND** 工作台查询 MUST NOT 返回可处理的 `1.2` 评价或最终审批待办
+
+### Requirement: 旧字段和旧审批数据兼容策略
+
+系统 MUST 兼容已有项目字段，并 MUST 在实现新 `1.2` 评价/审批模型前设计旧三节点审批数据的迁移或解释策略。
+
+#### Scenario: 旧项目字段保留
+- **WHEN** 既有项目包含项目经理、项目模式、参与中心、计划时间或立项日期
+- **THEN** 系统 MUST 继续读取和展示这些字段
+- **AND** 系统 MUST NOT 因新建项目轻量化而删除既有字段
+
+#### Scenario: 新项目创建字段放宽
+- **WHEN** 新项目创建请求只包含项目名称、客户和客户联系方式
+- **THEN** 系统 MUST 支持创建项目
+- **AND** 系统 MUST NOT 要求项目经理、项目模式、参与中心、计划时间或立项日期作为创建必填字段
+- **AND** 第二阶段补录能力 MUST 通过后续 change 另行规划和实现
+
+#### Scenario: 旧三节点审批数据不得直接视为新模型完成
+- **WHEN** 既有项目存在 `business_review`、`technical_review` 或 `general_review` 等旧三节点审批数据
+- **THEN** 系统 MUST 在实现前明确迁移或解释策略
+- **AND** 系统 MUST NOT 直接将旧三节点审批通过解释为新模型中的营销评价完成、研发评价完成和总经理最终审批通过，除非迁移规则显式确认
+
+### Requirement: 项目入口与工作区导航前端架构边界
+
+技术架构 MUST 将本 change 限定为前端信息架构调整：项目总览作为跨项目入口，项目工作区作为单项目内部导航与产出工作入口；第一版 MUST 复用现有后端接口，不新增数据库结构或后端权限模型。
+
+#### Scenario: 前端路由和导航调整为主
+- **WHEN** 团队实现本 change
+- **THEN** 实现重点 MUST 放在前端主导航、路由入口、项目总览入口和项目工作区布局
+- **AND** 系统 MUST NOT 因本 change 新增后端服务模块、数据库表、migration 或后端权限模型
+
+#### Scenario: 旧项目列表组件不是产品入口
+- **WHEN** 团队实施 `/projects` 路由和主导航调整
+- **THEN** `/projects` MUST 进入项目总览或等价项目总览体验
+- **AND** `ProjectListPage.vue` MAY 仅作为源码文件和开发回退能力保留
+- **AND** 前端 MUST NOT 新增 `/projects/list` 或其他用户可见旧项目列表产品入口
+
+#### Scenario: 复用现有接口
+- **WHEN** 前端实现项目总览和项目工作区导航
+- **THEN** 前端 MUST 复用 `/api/projects/overview-dashboard`、`/api/projects/:id`、`/api/projects/:id/workspace`、`/api/projects/:id/stage-document-checklist` 和 `/api/projects/:id/stage-documents/:documentId/online-form`
+- **AND** 第一版 MUST NOT 要求新增项目入口、蓝色节点点击或产出工作区后端接口
+
+#### Scenario: 权限来源仍以后端为准
+- **WHEN** 前端展示节点产出、在线表单、评价或审批入口
+- **THEN** 前端 MUST 使用现有后端接口返回的权限字段、online form permissions 和 blockingReasons
+- **AND** 前端 MUST NOT 通过主导航、路由或蓝色节点本地状态自行推断业务操作权限
+
+### Requirement: 项目工作区组件拆分架构
+
+前端架构 SHOULD 将项目工作区拆分为阶段导航、蓝色节点列表和节点产出工作区等可维护组件；该拆分 MUST 保持项目总览和项目工作区职责分离。
+
+#### Scenario: 项目总览不承载阶段导航
+- **WHEN** 前端展示项目总览
+- **THEN** 页面 MUST 只承担跨项目入口、项目摘要、新建项目和进入工作区职责
+- **AND** 页面 MUST NOT 承载单项目 8 阶段内部导航
+
+#### Scenario: 项目工作区承载内部导航
+- **WHEN** 前端展示项目工作区
+- **THEN** 页面 MUST 承载左侧 8 阶段导航、阶段蓝色节点和节点产出工作区
+- **AND** 组件拆分 MUST NOT 改变后端接口职责或业务状态来源
+
+#### Scenario: 节点产出工作区不直接等于表单
+- **WHEN** 前端实现节点产出工作区组件
+- **THEN** 组件 MUST 先展示产出状态、责任人、阻塞原因和动作入口
+- **AND** 在线表单 MUST 由用户点击填写资料或查看在线表单后打开
+- **AND** 组件 MUST NOT 将点击蓝色节点直接实现为进入编辑表单
+
+### Requirement: 第一版阶段范围架构边界
+
+技术架构 MUST 将第一版完整范围限定为立项阶段，其他 7 个阶段只允许占位、旧资料清单入口或后续配置状态，不得因本 change 扩大为全阶段节点重建。
+
+#### Scenario: 立项阶段完整落地
+- **WHEN** 第一版实现项目工作区导航
+- **THEN** 立项阶段 MUST 完整展示项目输入、项目市场调研、项目立项审批和项目立项通知节点
+- **AND** 立项阶段 MUST 保留既有在线表单入口、评价/审批入口和阻塞原因展示
+
+#### Scenario: 其他阶段不在线表单化
+- **WHEN** 第一版展示其他 7 个阶段
+- **THEN** 系统 MAY 展示占位、旧资料清单入口或后续配置状态
+- **AND** 技术架构 MUST NOT 要求本 change 补齐其他 7 个阶段完整蓝色节点映射
+- **AND** 技术架构 MUST NOT 要求本 change 将其他阶段产出在线表单化
+
+#### Scenario: 不恢复排除能力
+- **WHEN** 团队实施项目入口和工作区导航调整
+- **THEN** 系统 MUST NOT 因本 change 恢复文件平台联动
+- **AND** 系统 MUST NOT 新增日报、周报、通知推送、账号管理或通用审批流能力
+
+### Requirement: 立项责任人分配授权 helper 边界
+
+技术架构 MUST 使用专用授权 helper 表达立项在线表单责任人分配权限，避免通过全局项目责任人管理权限或项目查看权限放宽 `1.1 / 1.2` 分配能力。
+
+#### Scenario: 专用 helper 范围
+- **WHEN** 后端判断 `1.1 项目需求表` 或 `1.2 项目立项审批表` 的责任人分配权限
+- **THEN** 后端 MUST 使用 `canManageInitiationOnlineFormResponsibility` 或等价专用 helper
+- **AND** 该 helper MUST 只允许营销中心负责人
+- **AND** 该 helper MUST 排除总经理助理、系统管理员、研发中心负责人和非营销中心负责人
+
+#### Scenario: 返回权限和写接口复用同一口径
+- **WHEN** 后端构建阶段资料清单、项目工作区产出权限或执行责任人保存/清空接口
+- **THEN** `1.1 / 1.2` 的 `canManageResponsibility` 返回值和写接口授权 MUST 复用同一专用 helper 或等价共享逻辑
+- **AND** 系统 MUST NOT 在返回权限与实际写接口之间维护两套不一致规则
+
+#### Scenario: 不放宽全局责任人管理 helper
+- **WHEN** 实现该修复
+- **THEN** 后端 MUST NOT 直接放宽全局 `canManageProjectResponsibility` 或等价全局 helper
+- **AND** 其他阶段资料责任人分配权限 MUST 保持既有规则
+
+#### Scenario: 1.3 不进入责任人分配 helper
+- **WHEN** 后端判断 `1.3 项目立项通知`
+- **THEN** 专用责任人分配 helper MUST 返回 false
+- **AND** 系统 MUST NOT 通过资料责任人分配接口表达 `1.3` 默认处理人
+
+### Requirement: 前端体验统一架构边界
+
+前端信息架构和视觉体验统一 MUST 不改变后端业务状态机、权限模型、数据库结构或接口边界。前端 MUST 继续以 API 返回的 `permissions`、`blockingReasons`、`status` 和在线表单权限字段驱动按钮可用性和状态展示。
+
+#### Scenario: 不改变后端业务状态机
+- **WHEN** 团队实施前端项目入口、项目工作区、旧资料清单辅助区或工作台深链体验统一
+- **THEN** 实现 MUST NOT 改变立项阶段 `1.1 / 1.2 / 1.3` 已确认业务规则
+- **AND** 实现 MUST NOT 新增或改变后端资料提交、在线表单提交、评价审批、返工清除或阶段推进状态机
+
+#### Scenario: 不新增权限判断来源
+- **WHEN** 前端展示节点产出、在线表单、责任人分配、评价审批或旧资料清单操作
+- **THEN** 前端 MUST 使用后端返回的权限字段、在线表单权限、`blockingReasons` 和状态字段控制入口可见性与可用性
+- **AND** 前端 MUST NOT 因 UI 统一新增本地业务权限来源
+
+#### Scenario: 不新增后端接口
+- **WHEN** 第一版统一项目总览、项目工作区、我的工作台和旧资料清单体验
+- **THEN** 前端 MUST 复用现有项目总览、项目详情、项目工作区、阶段资料清单和在线表单接口
+- **AND** 本 change MUST NOT 要求新增后端接口、数据库表、migration 或后端权限模型
+
+#### Scenario: API 字段不足记录为后续 change
+- **WHEN** 实施 UI 统一时发现现有 API 字段不足以表达按钮权限、阻塞原因、状态或深链定位
+- **THEN** 团队 MUST 记录为后续独立 change
+- **AND** 团队 MUST NOT 在本 change 中临时扩展接口或用前端推断替代后端字段
+
+#### Scenario: 样式和组件边界收敛
+- **WHEN** 后续实现前端体验统一
+- **THEN** 前端 MUST 收敛 App shell、页面头部、阶段导航、蓝色节点列表、节点产出区、在线表单动作区和旧清单辅助区的组件边界
+- **AND** 样式实现 MUST 避免继续向全局 `styles.css` 无序堆叠与页面职责强耦合的规则
+
+### Requirement: 流程图变化分类机制
+
+技术架构 MUST 要求后续流程图更新先完成变化分类和影响分析，再进入实现；团队 MUST NOT 直接按流程图视觉变化修改业务代码、数据库、接口、权限或前端入口。
+
+#### Scenario: 流程图更新先分类
+- **WHEN** 团队收到新的项目流程图或流程图修订版
+- **THEN** 团队 MUST 先将变化分类为文案/备注变化、资料模板变化、蓝色节点变化、审批/返工规则变化、在线表单变化或项目模式变化
+- **AND** 团队 MUST 在分类完成前不得直接修改业务代码
+
+#### Scenario: 蓝色节点变化不等同于资料模板变化
+- **WHEN** 流程图只新增、拆分或调整蓝色业务节点而未确认新增产出资料
+- **THEN** 技术架构 MUST 将其优先视为项目工作区节点映射变化
+- **AND** 系统 MUST NOT 因蓝色节点变化自动新增数据库字段、资料模板或 completionMode
+
+#### Scenario: 资料模板变化必须独立评审
+- **WHEN** 流程图变化疑似涉及新增资料、删除资料、资料改名、阶段移动、必填性变化或 completionMode 变化
+- **THEN** 团队 MUST 通过独立 change 评审阶段资料模板、初始化、齐套、工作台、返工和归档触发影响
+- **AND** 团队 MUST NOT 将该变化混入纯前端节点映射 change
+
+#### Scenario: 草稿和成品拆分原则
+- **WHEN** 流程图中准备节点和签订节点共用一个成品产出块
+- **THEN** 技术架构 MUST 优先将其识别为流程图漏画草稿产出
+- **AND** 后续实现 MUST 按草稿产出候选和成品产出候选分别评审模板、状态、权限和完成规则
+
+#### Scenario: 不长期支持伪多对一
+- **WHEN** 后续迁移技术协议、销售合同或采购合同相关准备/签订节点
+- **THEN** 系统 MUST NOT 长期用同一个成品资料状态承载准备、审核、签订和成品完成多个业务状态
+- **AND** 团队 MUST 通过独立 change 明确草稿资料和成品资料的关系
+
+#### Scenario: 成本估算表为多节点协作例外
+- **WHEN** 后续迁移成本估算和价格估算相关节点
+- **THEN** 技术架构 MAY 允许 `成本估算表` 作为真实多人或多节点协作同一产出
+- **AND** 该例外 MUST NOT 放宽其他准备/签订类资料的草稿和成品拆分原则
+
+#### Scenario: 架构边界保持当前状态机
+- **WHEN** 本 change 完成 20260629 流程图影响分析
+- **THEN** 系统 MUST 继续保持当前后端业务状态机、权限模型、数据库结构和接口边界
+- **AND** 系统 MUST NOT 因本 change 修改立项阶段在线表单、`1.2` 专用评价审批、精准返工或阶段推进逻辑
+
+#### Scenario: 旧资料清单辅助区不得一次性删除
+- **WHEN** 后续逐阶段迁移 20260629 蓝色节点
+- **THEN** 技术架构 MUST 允许旧资料清单作为辅助兼容区继续存在
+- **AND** 团队 MUST NOT 因流程图更新一次性删除其他 7 阶段旧资料操作入口
+
+### Requirement: 20260629 71 项候选规划不得产生运行时架构变更
+
+技术架构 MUST 将 `plan-stage-document-template-v20260629-71-v1` 限定为资料模板候选规划 change；该 change MUST NOT 产生数据库迁移、资料初始化、状态机、权限、API 或前端运行时变更。
+
+#### Scenario: 不产生 migration 或新初始化
+- **WHEN** 本 change 完成规划和 OpenSpec 校验
+- **THEN** 系统 MUST NOT 新增、修改或执行数据库 migration
+- **AND** 系统 MUST NOT 初始化 71 项候选模板或改写既有项目资料数据
+
+#### Scenario: 71 项规划不等同于运行时模板
+- **WHEN** 团队完成 20260629 图面产出 + 4 个草稿修正形成的 71 项候选规划
+- **THEN** 技术架构 MUST 仍将其视为目标模板输入
+- **AND** 运行时模板切换 MUST 由后续独立 implementation change 完成
+
+#### Scenario: 不改变状态机和权限来源
+- **WHEN** 71 项候选清单暗示新的审批、签收、责任人或返工关系
+- **THEN** 系统 MUST NOT 在本 change 中修改状态机、权限判断、工作台任务生成、阶段推进门禁或业务日志语义
+- **AND** 后续如需实现，MUST 通过独立 change 明确规格和验证
+
+#### Scenario: 不实现在线表单或复杂流程引擎
+- **WHEN** 71 项候选包含成本估算、草稿合同、供应商评价、生产记录或资料移交等可能需要结构化表单或复杂审批的资料
+- **THEN** 系统 MUST NOT 在本 change 中新增在线表单、专用审批流、通用流程引擎或复杂状态机
+- **AND** 第一版目标模板 MUST 默认按文件上传或附件上传能力规划
+
+#### Scenario: 不临时扩展接口字段
+- **WHEN** 候选清单包含当前 API 尚未返回的资料、节点或状态
+- **THEN** 后端 MUST NOT 在本 change 中新增接口字段或临时返回候选资料
+- **AND** 前端 MUST NOT 依赖规划文档硬编码候选资料
+
+#### Scenario: 文件平台和项目模式不混入
+- **WHEN** 后续评审 71 项候选模板
+- **THEN** 团队 MUST NOT 将文件平台联动、自研/外采项目模式、第二阶段补录或流程引擎能力混入本 planning change
+- **AND** 这些能力如需实现 MUST 由独立 change 管理
+
+#### Scenario: 后续拆分目标模板实现和工作区迁移
+- **WHEN** 团队准备实施 20260629 目标资料模板和项目工作区调整
+- **THEN** 团队 SHOULD 将后续工作拆分为目标模板实现 change 和逐阶段工作区迁移 change
+- **AND** 团队 MUST NOT 在本 planning change 中同时处理模板切换、蓝色模块迁移、在线表单和复杂审批
+
+### Requirement: v20260629 工作区大框架架构边界
+
+技术架构 MUST 将 `implement-project-workspace-v20260629-template-shell-v1` 限定为目标模板配置和项目工作区 shell 第一版实现边界；本 shell 实现 MUST 避免在同一 change 中引入新项目默认模板切换、旧项目迁移、通用操作迁移、流程引擎、在线表单大扩展、文件平台联动、付款流或项目模式分支。
+
+#### Scenario: shell change 不切换运行模板
+- **WHEN** 本 change 定义 `v20260629` 配置或受控开关设计
+- **THEN** 系统 MUST NOT 将其作为新项目默认运行模板
+- **AND** 新项目默认模板切换 MUST 由后续独立 change 实现
+
+#### Scenario: shell change 不迁移旧项目
+- **WHEN** 系统存在 20260625 64 项旧项目
+- **THEN** 本 change MUST NOT 自动补初始化、迁移或改写旧项目资料状态
+- **AND** 旧项目迁移 MUST 由后续独立 change 实现
+
+#### Scenario: 不引入通用流程引擎
+- **WHEN** 后续实现 `v20260629` 目标模板和产出卡片
+- **THEN** 技术架构 MUST NOT 将蓝色模块或产出卡片实现为通用 BPM/流程引擎
+- **AND** 第一版 MUST 优先复用阶段资料、附件、状态、权限和操作日志等既有边界
+
+#### Scenario: 产出卡片第一版不迁移通用操作执行
+- **WHEN** shell 第一版显示产出卡片
+- **THEN** 系统 MAY 展示非立项资料的处理入口，并将用户定位到旧资料清单对应资料
+- **AND** 系统 MUST NOT 在本 change 中默认迁移通用文件上传、提交、审核或退回执行能力
+- **AND** 系统 MUST NOT 创建第二套上传、提交、审核或退回执行逻辑
+- **AND** 这些执行能力 MUST 后续按阶段独立迁移
+
+#### Scenario: 不做在线表单大扩展
+- **WHEN** 后续迁移非立项阶段产出卡片
+- **THEN** 系统 MUST 默认按文件上传或附件上传能力实现
+- **AND** 哪些资料升级为在线表单、专用审批或复杂状态机 MUST 由后续逐阶段 change 单独确认
+
+#### Scenario: 不做文件平台联动
+- **WHEN** 产出卡片承载附件上传或文件上传入口
+- **THEN** 第一版 MUST NOT 调用文件管理平台、创建文件平台目录或依赖文件平台权限
+- **AND** 文件平台联动如需恢复 MUST 继续由独立 change 管理
+
+#### Scenario: 不混入付款发票项目模式
+- **WHEN** `v20260629` 目标模板包含发票、付款、启动通知、发货通知或项目模式相关语义
+- **THEN** 本大框架第一版 MUST NOT 实现付款流、发票流、自研/外采项目模式分支或第二阶段补录
+- **AND** 这些能力必须后续独立规划和实现
+
+#### Scenario: shell 实现必须分层验证
+- **WHEN** 本 shell change 修改后端模板配置、工作区接口或前端工作区
+- **THEN** 团队 MUST 分别验证 API check、Web build、OpenSpec validate 和浏览器/人工验收
+- **AND** 验收 MUST 覆盖 8 阶段、蓝色模块、产出卡片、旧资料清单兼容区和立项在线表单不回退
+
+### Requirement: 旧资料清单通用操作迁移架构边界
+
+技术架构 MUST 将 `migrate-stage-document-common-actions-to-workspace-cards-v1` 限定为把现有旧资料清单通用操作迁移到项目工作区产出卡片的规划和第一版实现边界；本 change MUST 禁止第二套状态机、复杂流程引擎、v20260629 71 项模板切换和数据库 migration。
+
+#### Scenario: 禁止数据库 migration
+- **WHEN** 本 change 规划或实现产出卡片通用操作迁移
+- **THEN** 系统 MUST NOT 新增资料表结构、修改数据库 schema 或写 migration
+- **AND** 第一版 MUST 复用现有资料、附件、权限、状态和日志数据结构
+
+#### Scenario: 禁止第二套状态机和流程引擎
+- **WHEN** 产出卡片承载上传、提交、审核、退回、返工或适用性操作
+- **THEN** 系统 MUST NOT 引入第二套资料状态机、通用 BPM 或复杂流程引擎
+- **AND** 系统 MUST 复用现有阶段资料状态流转和阶段推进边界
+
+#### Scenario: 禁止第二套执行规则
+- **WHEN** 前端从旧资料清单迁移通用操作到上方产出卡片
+- **THEN** 系统 MUST NOT 创建第二套上传、提交、审核、退回、返工、不适用或恢复适用规则
+- **AND** 产出卡片 MUST 调用或封装现有能力，而不是重新定义执行语义
+
+#### Scenario: 禁止 71 模板切换
+- **WHEN** 本 change 完成规划或第一版实现
+- **THEN** 系统 MUST NOT 将 v20260629 71 项模板设为新项目默认模板
+- **AND** 系统 MUST NOT 把新增 71 项候选落库或补初始化旧项目
+
+#### Scenario: 文件平台联动不在本 change 处理
+- **WHEN** 产出卡片承载附件上传、附件下载或附件删除
+- **THEN** 系统 MUST 继续遵守当前在线平台附件边界
+- **AND** 系统 MUST NOT 在本 change 中处理 file-platform-integration-v1 或恢复文件平台联动
+
+#### Scenario: 分阶段验证
+- **WHEN** 本 change 后续 implementation 修改后端资料接口、项目工作区数据聚合或前端产出卡片
+- **THEN** 团队 MUST 分别验证 API check、Web build、OpenSpec validate 和浏览器/人工验收
+- **AND** 验收 MUST 覆盖上方产出卡片通用操作、下方旧资料清单降级、立项在线表单不回退、71 模板未切换、旧项目未迁移，以及桌面/移动不重叠不溢出
+
+### Requirement: 覆盖核查架构边界
+
+技术架构 MUST 将 `audit-workspace-card-coverage-before-legacy-checklist-cleanup-v1` 限定为旧资料清单清理前的覆盖率核查口径和规划；本 change MUST NOT 切换 71 模板、删除或隐藏旧资料清单、改数据库、迁移旧项目或新增执行逻辑。
+
+#### Scenario: 禁止数据库和 migration
+- **WHEN** 本 change 建立覆盖率核查口径
+- **THEN** 系统 MUST NOT 修改数据库 schema 或写 migration
+- **AND** 覆盖核查 MUST 复用现有模板配置、workspace 聚合结果和阶段资料状态作为输入
+
+#### Scenario: 禁止 71 模板切换
+- **WHEN** 覆盖核查引用 v20260629 71 项目标模板配置
+- **THEN** 系统 MUST NOT 将 v20260629 71 项设为新项目默认模板
+- **AND** 系统 MUST NOT 把 71 项候选落库或补初始化旧项目
+
+#### Scenario: 禁止旧清单清理执行
+- **WHEN** 覆盖核查形成旧资料清单清理建议
+- **THEN** 本 change MUST NOT 隐藏、折叠、删除旧资料清单组件或移除旧资料清单入口
+- **AND** 清理执行 MUST 通过后续独立 change 管理
+
+#### Scenario: 禁止新增业务执行逻辑
+- **WHEN** 覆盖核查识别上方 workspace card 操作覆盖
+- **THEN** 系统 MUST NOT 新增第二套上传、提交、审核、退回、返工或不适用执行规则
+- **AND** 覆盖核查 MUST 只判断现有主入口和现有能力覆盖情况
+
+#### Scenario: 不处理其他 active changes
+- **WHEN** 本 change 处于规划或后续执行阶段
+- **THEN** 团队 MUST NOT 在本 change 中处理 `file-platform-integration-v1` 或 `define-digital-platform-v1`
+- **AND** 文件平台联动和数字平台定义 MUST 保持独立 change 边界
+
+### Requirement: 旧模板兼容 workspace 输出架构边界
+
+技术架构 MUST 支持将当前运行 64 项中的旧模板兼容资料映射到 workspace card，同时 MUST 区分 v20260629 71 项目标模板输出和旧模板兼容输出。
+
+#### Scenario: 兼容输出不改变 71 项目标模板计数
+- **WHEN** 系统为 `3.3` 和 `5.4` 增加 workspace card
+- **THEN** 技术实现 MUST NOT 将这两个兼容输出追加计入 `V20260629_TARGET_TEMPLATE_OUTPUT_COUNT`
+- **AND** v20260629 目标模板输出数量 MUST 继续为 71
+- **AND** 系统 MUST NOT 因兼容输出把 71 项目标模板解释为 73 项
+
+#### Scenario: 兼容输出只绑定现有资料
+- **WHEN** workspace shell 返回 `3.3` 或 `5.4` 兼容 output/card
+- **THEN** 该 output/card MUST 通过 `legacyDocumentCode` 绑定当前运行资料
+- **AND** 系统 MUST NOT 创建新资料模板项、写入项目资料记录、补初始化旧项目或执行旧项目迁移
+
+#### Scenario: 复用现有状态和操作架构
+- **WHEN** 用户通过 `3.3` 或 `5.4` 兼容卡片处理资料
+- **THEN** 系统 MUST 复用现有资料状态、权限、附件、业务日志和通用操作接口
+- **AND** 系统 MUST NOT 新增第二套上传、提交、审核、退回、返工、不适用或恢复适用规则
+- **AND** 系统 MUST NOT 引入合同审核流、采购审核流、BPM 或流程引擎
+
+#### Scenario: 不处理其他 active changes
+- **WHEN** 本 change 处于规划或实现阶段
+- **THEN** 团队 MUST NOT 在本 change 中处理 `file-platform-integration-v1` 或 `define-digital-platform-v1`
+- **AND** 文件平台联动和数字平台定义 MUST 保持独立 change 边界
+
+### Requirement: 旧资料清单折叠架构边界
+
+技术架构 MUST 将本 change 限定为前端展示层调整：旧资料清单可默认折叠为兼容资料区，但 MUST NOT 引入数据库 migration、后端 API 变更、v20260629 71 项模板切换、旧项目迁移、旧清单删除或第二套资料执行规则。
+
+#### Scenario: 不修改后端和数据库
+- **WHEN** 本 change 实现兼容资料区默认折叠
+- **THEN** 系统 MUST NOT 修改后端 API、数据库 schema 或 migration
+- **AND** 系统 MUST NOT 新增或修改项目资料初始化、阶段推进、业务日志、附件或权限后端逻辑
+
+#### Scenario: 不切换模板或迁移旧项目
+- **WHEN** 本 change 完成
+- **THEN** 系统 MUST NOT 将 v20260629 71 项模板切换为新项目默认模板
+- **AND** 系统 MUST NOT 迁移旧项目、补初始化旧项目或把 71 项候选落库
+
+#### Scenario: 不删除旧资料清单组件
+- **WHEN** 前端将旧资料清单默认折叠为兼容资料区
+- **THEN** 实现 MUST NOT 删除、物理移除或完全隐藏旧资料清单组件
+- **AND** 隐藏或删除旧资料清单 MUST 继续通过后续独立 change 决定
+
+#### Scenario: 不新增第二套执行规则
+- **WHEN** 用户通过上方 workspace card 或展开后的兼容资料区查看资料
+- **THEN** 系统 MUST 继续复用现有资料状态、权限、附件、业务日志和通用操作接口
+- **AND** 系统 MUST NOT 新增第二套上传、提交、审核、退回、返工、不适用或恢复适用规则
+
+#### Scenario: 不处理其他 active changes
+- **WHEN** 本 change 处于规划或实现阶段
+- **THEN** 团队 MUST NOT 在本 change 中处理 `file-platform-integration-v1` 或 `define-digital-platform-v1`
+- **AND** 文件平台联动和数字平台定义 MUST 保持独立 change 边界
+
+### Requirement: v20260629 新项目默认模板启用架构边界
+
+技术架构 MUST 将本 change 限定为新项目默认模板版本切换和必要 smoke 更新；实现 MUST NOT 改数据库 schema、写 migration、迁移旧项目、处理文件平台联动、删除兼容资料区或新增第二套业务状态机。
+
+#### Scenario: 复用现有模板版本和初始化结构
+- **WHEN** 团队实现 v20260629 新项目默认模板启用
+- **THEN** 实现 MUST 优先复用现有模板版本、阶段资料模板、项目级资料初始化和阶段资料查询结构
+- **AND** 实现 MUST NOT 新增数据库表、修改 schema 或写 migration
+
+#### Scenario: 新旧项目并存
+- **WHEN** 系统同时存在 20260625 旧项目和 v20260629 新项目
+- **THEN** 架构 MUST 允许按项目已有资料记录和模板版本判断资料集合、阶段推进、工作台和项目工作区状态
+- **AND** 系统 MUST NOT 假设全库项目只有一个阶段资料模板版本
+
+#### Scenario: 兼容输出与目标模板分层
+- **WHEN** 实现使用 v20260629 目标模板初始化新项目
+- **THEN** 架构 MUST 区分 `V20260629_TARGET_TEMPLATE_OUTPUTS` 和 `V20260629_WORKSPACE_COMPATIBILITY_OUTPUTS`
+- **AND** `LC33 / LC54` MUST NOT 进入新项目初始化、目标模板计数或模板校验
+
+#### Scenario: 不处理文件平台联动
+- **WHEN** v20260629 新项目默认模板启用
+- **THEN** 系统 MUST 继续使用当前在线平台附件边界
+- **AND** 系统 MUST NOT 调用文件管理平台 API、创建文件平台目录或恢复文件平台归档状态
+
+#### Scenario: 不新增流程引擎
+- **WHEN** v20260629 71 项模板包含草稿合同、供应商评价、生产记录或资料移交等资料
+- **THEN** 第一版实现 MUST 默认按文件上传或附件上传能力承载非立项资料
+- **AND** 系统 MUST NOT 因模板启用新增 BPM、通用流程引擎、付款流、发票流或项目模式分支
+
+#### Scenario: 不删除兼容资料区
+- **WHEN** 新项目默认模板切换到 v20260629
+- **THEN** 系统 MUST NOT 删除、隐藏或物理移除兼容资料区
+- **AND** 兼容资料区清理 MUST 继续通过后续独立 change 决定
+
+#### Scenario: 分层验证
+- **WHEN** 本 change implementation 修改模板默认版本、项目初始化或 smoke
+- **THEN** 团队 MUST 验证 API check、OpenSpec validate、必要 Web build 和人工/代码路径验收
+- **AND** 验收 MUST 覆盖新建项目 71 项、旧项目 64 项、`LC33 / LC54` 不进入新项目、立项在线表单不回退、兼容资料区不删除
+
+### Requirement: v20260629 运行稳定验证架构边界
+
+技术架构 MUST 将本 change 限定为 v20260629 新项目运行基线验证和阻塞 bug 修复；实现 MUST NOT 借稳定验证引入数据库 migration、旧项目迁移、文件平台联动、复杂流程引擎、第二套资料状态机或兼容资料区删除。
+
+#### Scenario: 验证优先级分层
+- **WHEN** 团队执行 v20260629 新项目运行稳定验证
+- **THEN** 团队 MUST 先用 API smoke 验证数据层、模板版本、资料集合、权限和阶段推进基础
+- **AND** 团队 MUST 再用人工浏览器验收验证页面和交互
+- **AND** 浏览器自动化 MAY 使用但不是强制项
+
+#### Scenario: 使用新建测试项目验证
+- **WHEN** 团队验证 v20260629 新项目运行基线
+- **THEN** 验证 MUST 使用新建测试项目或专门测试数据
+- **AND** 团队 MUST NOT 通过迁移旧项目、补初始化旧项目或改写旧项目资料记录来制造测试条件
+
+#### Scenario: 允许修复阻塞 bug
+- **WHEN** 验证发现 v20260629 新项目运行阻塞 bug
+- **THEN** 本 change MAY 修改既有后端、前端或 smoke 以修复阻塞问题
+- **AND** 修复 MUST 优先复用现有项目创建、阶段资料、workspace、workbench、阶段推进、在线表单和兼容资料区入口
+
+#### Scenario: 禁止新增第二套规则
+- **WHEN** 本 change 修复 v20260629 新项目运行问题
+- **THEN** 系统 MUST NOT 新增第二套资料状态机、第二套上传/提交/审核/退回/返工/不适用规则或通用流程引擎
+- **AND** 系统 MUST 继续复用现有资料状态、权限、附件、业务日志和阶段推进边界
+
+#### Scenario: 禁止数据库和迁移
+- **WHEN** 本 change 处于规划、实现或验证阶段
+- **THEN** 系统 MUST NOT 修改数据库 schema 或写 migration
+- **AND** 系统 MUST NOT 迁移旧项目、补初始化旧项目或自动回滚已创建项目
+
+#### Scenario: 文件平台和复杂流程后置
+- **WHEN** v20260629 新项目资料涉及附件、草稿合同、供应商评价、生产记录或资料移交
+- **THEN** 本 change MUST 继续使用当前在线平台附件边界
+- **AND** 系统 MUST NOT 调用文件管理平台 API、创建文件平台目录、恢复文件平台归档状态、实现付款流、发票流或项目模式分支
+
+#### Scenario: 兼容资料区继续保留
+- **WHEN** 本 change 验证新旧项目兼容资料区
+- **THEN** 系统 MUST NOT 删除、隐藏或物理移除兼容资料区
+- **AND** 兼容资料区清理 MUST 继续通过后续独立 change 决定
+
+#### Scenario: 不处理其他 active changes
+- **WHEN** 本 change 处于规划、实现或验证阶段
+- **THEN** 团队 MUST NOT 在本 change 中处理 `file-platform-integration-v1` 或 `define-digital-platform-v1`
+- **AND** 文件平台联动和数字平台定义 MUST 保持独立 change 边界
+
+### Requirement: 立项阶段修正架构边界
+
+技术架构 MUST 将本 change 限定为立项阶段责任人与退回路径修正；后续实现 MAY 修改 API/Web 和必要数据库字段或等价绑定，但 MUST NOT 引入 BPM、通用流程引擎、第二套资料状态机或文件平台联动。
+
+#### Scenario: 规划阶段不改业务代码
+- **WHEN** 本 change 处于规划阶段
+- **THEN** 团队 MUST NOT 修改 `digital-platform-api/src/**`
+- **AND** 团队 MUST NOT 修改 `digital-platform-web/src/**`
+- **AND** 团队 MUST NOT 修改数据库 schema 或写 migration
+
+#### Scenario: 后续实现可改现有入口
+- **WHEN** 本 change 进入后续实现阶段
+- **THEN** 实现 MAY 修改项目创建 API、项目详情 API、立项在线表单 API、评价审批 API、新建项目页面和项目详情页面
+- **AND** 实现 MAY 增加商务负责人、技术负责人所需的项目字段或等价稳定绑定
+- **AND** 实现 MUST 复用现有权限、在线表单、审批、状态和业务日志能力
+
+#### Scenario: 禁止流程引擎和第二套状态机
+- **WHEN** 实现立项阶段责任人和退回路径
+- **THEN** 系统 MUST NOT 引入 BPM 或通用流程引擎
+- **AND** 系统 MUST NOT 创建第二套资料状态机、第二套审批状态机或第二套上传/提交/审核规则
+
+#### Scenario: 文件平台保持后置
+- **WHEN** 在线表单内容需要被查看或理解为流程图中的自动生成文件
+- **THEN** 系统 MUST 以在线表单内容浏览作为第一版边界
+- **AND** 系统 MUST NOT 导出 Word/PDF、生成附件、调用文件平台 API 或创建文件平台文件
+
+#### Scenario: 旧项目兼容后续明确
+- **WHEN** 后续实现需要处理没有商务负责人或技术负责人的旧项目
+- **THEN** 旧项目兼容策略 MUST 在实现阶段明确
+- **AND** 本 change MUST NOT 在规划阶段迁移旧项目、补初始化旧项目或改写旧项目历史数据
+
+### Requirement: 立项在线表单模板对齐架构边界
+
+技术架构 MUST 支持后续通过在线表单 schema 扩展对齐真实模板，同时 MUST NOT 在本 change 引入文件平台、文件生成、数据库 migration 或第二套流程状态机。
+
+#### Scenario: 在线表单数据复用现有存储
+- **WHEN** 后续实现扩展 `1.1`、`1.2`、`1.3` 在线表单 schema
+- **THEN** 系统 MUST 优先复用现有在线表单数据存储
+- **AND** schema MUST 支持分组、评分项或表格型结构、只读/自动带出字段和通知预览
+- **AND** 本 change MUST NOT 引入旧 schema 兼容层
+- **AND** 在线表单读取 MUST 以当前 schema 为准
+- **AND** 旧简化 `form_data_json` MUST NOT 转换或迁移为新字段结构
+- **AND** 实现阶段若证明必须调整数据库结构，MUST 通过独立明确的数据库设计和 migration 评审处理
+
+#### Scenario: 不生成文件不接文件平台
+- **WHEN** 用户保存、提交或查看 `1.1`、`1.2`、`1.3` 在线表单
+- **THEN** 系统 MUST NOT 生成 Excel、Word、PDF 或普通附件
+- **AND** 系统 MUST NOT 调用文件平台或模板套打能力
+- **AND** 系统 MUST NOT 将在线表单完成状态绑定到文件平台文件
+
+#### Scenario: 不引入第二套审批或状态机
+- **WHEN** 后续实现 `1.2 项目立项审批表` 的商务模块、技术模块和三方意见展示
+- **THEN** 系统 MUST 继续复用现有 `1.2` 商务评价、技术评价、总经理审批流
+- **AND** 系统 MUST NOT 在普通表单里创建第二套商务评价、技术评价或总经理审批状态机
+- **AND** 系统 MUST NOT 改变项目结束、退回、返工主流程
+
+#### Scenario: 本规划 change 不修改业务代码
+- **WHEN** 本规划 change 处于 proposal/design/spec/tasks 阶段
+- **THEN** 变更 MUST 只包含规划文档和 OpenSpec artifacts
+- **AND** 变更 MUST NOT 修改 `digital-platform-api/src/**`
+- **AND** 变更 MUST NOT 修改 `digital-platform-web/src/**`
+- **AND** 变更 MUST NOT 修改数据库 schema 或 migration
+
+### Requirement: 立项协同表单实现架构边界
+
+技术架构 MUST 支持本 change 在实现阶段修改 API/Web 业务代码和必要的 schema 初始化逻辑；本 change MUST NOT 写独立数据库 migration 文件，MUST NOT 批量迁移旧项目，MUST NOT 生成 Excel / Word / PDF 或接入文件平台。
+
+#### Scenario: 客户联系人持久化
+- **WHEN** 系统需要保存新建项目客户联系人
+- **THEN** 系统 MUST 使用稳定项目主数据字段或等价持久化能力
+- **AND** 旧项目缺少客户联系人时 MUST 允许为空
+- **AND** 系统 MUST NOT 批量补写旧项目客户联系人
+
+#### Scenario: 1.2 协同状态持久化
+- **WHEN** 系统保存 `1.2` 商务部分和技术部分完成状态
+- **THEN** 系统 SHOULD 优先复用现有在线表单数据存储
+- **AND** 协同状态 MUST NOT 新增第二套审批状态机或资料状态机
+
+#### Scenario: 不写独立 migration 文件
+- **WHEN** 本 change 完成实现
+- **THEN** 本 change MUST NOT 新增 migration 文件
+- **AND** 若后续生成文件元数据或更复杂协同查询需要结构化字段，MUST 通过后续独立数据库设计处理
+
+### Requirement: 1.2 协同填写复用现有架构
+
+技术架构 MUST 让 `1.2` 协同填写复用现有在线表单、权限、工作台、评价审批、业务日志和阶段资料状态边界，不得引入第二套审批状态机或通用流程引擎。
+
+#### Scenario: 不新增第二套审批流
+- **WHEN** 系统实现 `1.2` 商务负责人和技术负责人协同填写
+- **THEN** 系统 MUST 继续复用现有商务评价、技术评价、总经理审批节点
+- **AND** 系统 MUST NOT 在普通表单里创建第二套商务评价、技术评价或总经理审批流
+
+#### Scenario: 不新增第二套资料状态机
+- **WHEN** 系统实现商务部分和技术部分完成状态
+- **THEN** 系统 MUST 将其作为 `1.2` 在线表单内部协同状态或等价稳定状态
+- **AND** 系统 MUST NOT 创建第二套上传、提交、审核、退回或返工规则
+
+#### Scenario: 不引入 BPM
+- **WHEN** 系统实现协同填写和评价审批启动门禁
+- **THEN** 系统 MUST NOT 引入 BPM、通用流程引擎、可视化流程编排或任意节点配置器
+
+### Requirement: 模板文件生成后置架构边界
+
+技术架构 MUST 将 Excel / Word / PDF 生成、模板填充、文件存储、下载预览、文件版本和文件平台联动作为后续独立设计点；本 change MUST NOT 表达为已经完成文件生成。
+
+#### Scenario: 本 change 不生成文件
+- **WHEN** 本 change 完成实现
+- **THEN** 系统 MUST NOT 生成 Excel、Word、PDF、普通附件或文件平台文件
+- **AND** 系统 MUST NOT 新增模板填充库、文件生成 worker 或文件存储编排
+
+#### Scenario: 文件生成后续独立设计
+- **WHEN** 后续实现模板文件生成
+- **THEN** 团队 MUST 独立明确模板填充规则、生成触发点、失败重试、覆盖或版本化策略、存储位置、预览下载权限和业务日志
+- **AND** 后续实现 MUST 明确是否接入文件平台
+
+#### Scenario: 文件平台保持独立 change
+- **WHEN** 后续需要将生成文件归档或同步到文件平台
+- **THEN** 文件平台联动 MUST 通过后续独立 change 处理
+- **AND** 本 change MUST NOT 处理 `file-platform-integration-v1`
+
+### Requirement: 旧项目和兼容区保持边界
+
+技术架构 MUST 保持旧项目迁移、旧数据兼容展示和兼容资料区删除为后续独立事项。
+
+#### Scenario: 不迁移旧项目
+- **WHEN** 本 change 处于实现阶段
+- **THEN** 系统 MUST NOT 自动迁移旧项目
+- **AND** 系统 MUST NOT 补初始化旧项目或改写旧项目历史资料状态
+
+#### Scenario: 不删除兼容资料区
+- **WHEN** 本 change 完成实现
+- **THEN** 系统 MUST NOT 删除、隐藏或物理移除兼容资料区
+- **AND** 兼容资料区清理 MUST 通过后续独立 change 决定
+
+#### Scenario: 不处理其他 active changes
+- **WHEN** 本 change 完成实现
+- **THEN** 团队 MUST NOT 在本 change 中处理 `file-platform-integration-v1` 或 `define-digital-platform-v1`
+- **AND** 文件平台联动和数字平台定义 MUST 保持独立 change 边界
+
+### Requirement: 文件生成能力可复用
+
+技术架构 MUST 将立项阶段模板文件生成设计为全局文件生成能力的首个竖切；后续其他阶段 SHOULD 能复用同一文件生成、文件记录、权限检查和产出展示模型。
+
+#### Scenario: 后续阶段复用同一模型
+- **WHEN** 后续阶段需要从结构化表单或业务数据生成模板文件
+- **THEN** 系统 SHOULD 复用同一模板定位、数据映射、渲染、文件记录、权限检查和下载模型
+- **AND** 系统 SHOULD 避免为每个资料项复制一次性硬编码生成逻辑
+
+#### Scenario: 立项阶段首个竖切
+- **WHEN** 团队实现文件生成能力
+- **THEN** `1.1 / 1.2 / 1.3` SHOULD 作为首个端到端竖切
+- **AND** 该竖切 SHOULD 暴露后续阶段复用所需的后端边界
+
+### Requirement: 文件生成后端统一治理
+
+技术架构 MUST 由后端统一治理模板路径、生成器、文件记录、权限检查和下载/查看接口；模板填充逻辑 MUST NOT 散落到前端。
+
+#### Scenario: 前端不直接填充模板
+- **WHEN** 用户查看或下载生成文件
+- **THEN** 前端 SHOULD 调用后端文件状态和下载/查看接口
+- **AND** 前端 MUST NOT 直接填充 Excel 或 Word 模板
+
+#### Scenario: 后端统一权限检查
+- **WHEN** 用户请求文件状态、元数据、查看或下载
+- **THEN** 后端 MUST 统一检查项目和资料查看权限
+- **AND** 无权限请求 MUST NOT 泄露存储路径或模板元数据
+
+#### Scenario: 模板和生成器统一治理
+- **WHEN** 系统执行模板文件生成
+- **THEN** 后端 MUST 统一管理模板路径、模板键、数据映射和渲染器调用
+- **AND** 文件生成失败 MUST 可记录和诊断
+
+#### Scenario: mapping registry 统一治理
+- **WHEN** 系统执行模板填充
+- **THEN** 后端 MUST 通过统一 mapping registry 或 mapping manifest 解析模板目标位置和来源字段
+- **AND** mapping 逻辑 MUST NOT 散落硬编码在控制器、页面组件或单个业务流程函数中
+
+#### Scenario: 禁止请求传入任意模板路径
+- **WHEN** 业务接口触发文件生成
+- **THEN** 接口 MUST NOT 接收任意模板路径参数
+- **AND** 后端 MUST 从模板注册表、配置或白名单中解析模板路径
+
+#### Scenario: 模板路径错误可追踪
+- **WHEN** 模板缺失、路径不可读或格式不支持
+- **THEN** 文件记录 MUST 进入 failed 或等价状态并记录原因
+- **AND** 服务 MUST NOT 因模板路径错误崩溃
+- **AND** 无权限响应 MUST NOT 泄露本地模板路径
+
+### Requirement: 文件平台保持独立
+
+技术架构 MUST 将文件平台联动、归档、同步和平台权限映射作为后续独立 change；本 change MUST NOT 处理 `file-platform-integration-v1`。
+
+#### Scenario: 不处理文件平台 change
+- **WHEN** 本 planning change 完成
+- **THEN** 系统 MUST NOT 修改或实现 `file-platform-integration-v1`
+- **AND** 文件平台目录、归档、同步、平台下载权限 MUST 留到后续独立 change
+
+#### Scenario: 本系统内部存储可作为第一版方向
+- **WHEN** 后续实现第一版模板文件生成
+- **THEN** 系统 MAY 使用本系统内部存储和文件记录
+- **AND** 是否接入文件平台 MUST 通过独立设计决定
+
+### Requirement: 文件元数据设计先行
+
+技术架构 MUST 在实现文件生成持久化前明确文件记录模型；规划阶段 MUST NOT 写数据库 migration。
+
+#### Scenario: 规划阶段不写 migration
+- **WHEN** 本 planning change 完成
+- **THEN** 系统 MUST NOT 新增数据库 migration
+- **AND** 系统 MUST NOT 新增文件记录表实现
+
+#### Scenario: 后续实现前先设计字段
+- **WHEN** 后续实现需要文件元数据表
+- **THEN** 团队 MUST 先明确项目、资料、表单、模板、版本、状态、文件名、存储路径、生成操作者、生成时间和失败原因等字段
+- **AND** 团队 MUST 明确源表单提交时间或版本、源表单数据 hash、不可变源快照引用、触发事件、审批快照、模板版本或模板 hash
+- **AND** 旧项目旧表单迁移策略 MUST 独立评估
+
+#### Scenario: 历史文件不依赖可变当前数据解释
+- **WHEN** 系统展示或审计历史生成文件
+- **THEN** 系统 MUST 能通过生成时源快照、源 hash 和模板版本解释该文件
+- **AND** 系统 MUST NOT 只依赖当前在线表单数据或当前审批节点数据解释历史文件
+
+### Requirement: 旧项目和文件格式风险保持边界
+
+技术架构 MUST 将旧项目旧表单迁移、PDF 转换、深度预览和复杂格式保真验证作为后续独立事项。
+
+#### Scenario: 不迁移旧项目
+- **WHEN** 本 planning change 完成
+- **THEN** 系统 MUST NOT 自动迁移旧项目
+- **AND** 系统 MUST NOT 补旧项目表单数据或生成历史文件
+
+#### Scenario: PDF 转换后续处理
+- **WHEN** 后续需要将 Excel 或 Word 转为 PDF
+- **THEN** PDF 转换 MUST 通过后续独立 change 或独立设计处理
+- **AND** 本 change MUST NOT 承诺 PDF 已生成
+
+### Requirement: 后端统一模板文件生成治理
+技术架构 MUST 将模板注册、mapping manifest、模板渲染、文件记录、内部存储、权限检查和下载接口统一放在后端治理，不得散落到前端或单个 route handler。
+
+#### Scenario: 后端统一生成
+- **WHEN** 系统生成 `1.1 / 1.2 / 1.3` 模板文件
+- **THEN** 生成逻辑 MUST 通过后端统一 service 或 repository 执行
+- **AND** route handler 和前端组件 MUST NOT 直接填充模板
+
+#### Scenario: mapping registry 统一治理
+- **WHEN** 系统解析模板字段映射
+- **THEN** 后端 MUST 使用统一 mapping registry 或 manifest
+- **AND** mapping 逻辑 MUST NOT 散落硬编码在控制器、页面组件或单个流程函数中
+
+#### Scenario: 不追加模板外快照内容
+- **WHEN** 后端渲染 Excel 或 Word 模板
+- **THEN** 渲染器 MUST 只写入 mapping manifest 指定的单元格、表格区域、占位符或等价目标位置
+- **AND** 渲染器 MUST NOT 在模板外追加系统生成内容快照区域
+
+#### Scenario: Excel 模板单元格精准替换
+- **WHEN** 后端渲染 `.xlsx` 模板
+- **THEN** 渲染器 MUST 精准替换当前行内的目标 cell
+- **AND** 渲染器 MUST 同时支持 `<c .../>` 自闭合 cell 和 `<c ...>...</c>` cell
+- **AND** 渲染器 MUST NOT 因写入目标 cell 删除相邻标签 cell
+
+#### Scenario: Excel 图片嵌入由 manifest 和受控存储驱动
+- **WHEN** 后端渲染 `1.1 项目需求表` `.xlsx`
+- **THEN** 图片嵌入 MUST 只消费 manifest 声明的 `excelImage` 目标区域
+- **AND** 图片源 MUST 来自后端受控的 `1.1` 在线表单图片存储
+- **AND** 渲染器 MUST 写入必要的 OOXML media、drawing、relationship 和 content-type 条目
+- **AND** 渲染器 MUST support up to 3 images per target area and place them in stable upload order
+- **AND** 渲染器 MUST aspect-fit each image within its allocated subregion and MUST NOT stretch images to a mismatched rectangle
+- **AND** 渲染器 MUST keep image anchors out of the text subregions for site, workpiece, and operation-process sections
+- **AND** 当图片存在时，渲染器 MUST split or adjust merged regions so text remains visible and images do not obscure the filled text
+- **AND** 渲染器 MUST NOT 接受前端传入的图片本地路径、任意 OOXML drawing 规则或文件平台文件
+- **AND** 未上传图片时 MUST 保持文本生成可用且不报错
+
+#### Scenario: 模板空值保留和格式化填充
+- **WHEN** manifest 声明空值保留模板原文
+- **THEN** 渲染器 MUST 在源值为空时不清空模板说明或占位文本
+- **AND** 后端 mapping MUST 支持 value builder 或等价机制生成带固定符号、单位和前缀的模板句式
+
+#### Scenario: 1.2 Excel 评分列按 manifest 写入
+- **WHEN** 后端渲染 `1.2 项目立项审批表`
+- **THEN** manifest MUST 将表头、评分、信息收集说明、责任人和审批意见映射到真实模板的合并区左上角或填充列
+- **AND** 渲染器 MUST NOT 将在线表单评分值写入固定条款内容列或评价标准列
+- **AND** 渲染器 MUST preserve `C/H` 固定模板内容 and `A22` remarks when writing `K/L/O` scoring values
+- **AND** manifest MUST NOT map reviewer names into signer cells `I19/I20/I21`
+- **AND** date value builders MUST format review dates without UTC serialization artifacts
+
+#### Scenario: DOCX 表格 target 由 manifest 驱动
+- **WHEN** 后端渲染 `1.3 项目立项通知`
+- **THEN** 渲染器 MUST 消费 manifest 中声明的 Word 表格单元格 target
+- **AND** 渲染器 MUST NOT 只依赖未声明的固定数组或隐式字段顺序
+
+#### Scenario: DOCX 固定文本替换由 manifest 驱动
+- **WHEN** 后端渲染 `1.3 项目立项通知` 的落款日期
+- **THEN** 渲染器 MUST 只执行 manifest 声明的固定文本替换 target
+- **AND** API callers MUST NOT provide arbitrary DOCX paths or arbitrary replacement rules
+- **AND** missing fixed replacement text MUST fail generation instead of silently preserving the template sample date
+
+### Requirement: 模板路径白名单
+技术架构 MUST 通过后端模板注册表、配置或白名单解析模板路径；业务接口不得接收任意模板路径参数。
+
+#### Scenario: 禁止请求传路径
+- **WHEN** API 请求生成、查看或下载模板文件
+- **THEN** 请求 MUST NOT 携带或影响本地模板路径
+- **AND** 后端 MUST 从受控注册表解析 templateKey
+
+#### Scenario: 模板根目录可部署配置
+- **WHEN** 部署环境不使用默认本地模板目录
+- **THEN** 后端 MAY 通过环境变量或等价配置指定模板根目录
+- **AND** 该配置 MUST 只影响后端模板注册表解析
+- **AND** 业务接口 MUST NOT 接受任意模板路径参数
+
+#### Scenario: 模板路径错误可追踪
+- **WHEN** 模板缺失、路径不可读或格式不支持
+- **THEN** 系统 MUST 将生成记录标记为 `failed` 或等价状态并记录原因
+- **AND** 服务 MUST NOT 因模板路径错误崩溃
+- **AND** 无权限响应 MUST NOT 泄露本地路径
+
+### Requirement: 内部存储和源快照审计
+技术架构 MUST 使用数字化平台内部存储保存第一版生成文件，并 MUST 为历史文件保存生成时源快照、源 hash、审批快照和模板 hash。
+
+#### Scenario: 历史文件可追溯
+- **WHEN** 用户审计历史生成文件
+- **THEN** 系统 MUST 能通过记录中的源快照、源 hash、触发事件、模板 hash 和可选审批快照解释文件来源
+- **AND** 对图片参与生成的文件，源快照和源 hash MUST include uploaded image content hashes, not only image ids or file names
+- **AND** 系统 MUST NOT 只依赖当前可变表单数据解释历史文件
+
+#### Scenario: 1.2 审批快照
+- **WHEN** 系统生成 `1.2 项目立项审批表`
+- **THEN** 记录 MUST 保存商务评价、技术评价和总经理审批意见、人员、时间的生成时快照
+
+### Requirement: 文件平台和 PDF 后置
+技术架构 MUST 保持文件平台联动和 PDF 转换为后续独立能力；本 runtime change MUST NOT 处理 `file-platform-integration-v1`。
+
+#### Scenario: 不接文件平台
+- **WHEN** 本 change 实现模板文件生成
+- **THEN** 系统 MUST 使用数字化平台内部存储和权限
+- **AND** 系统 MUST NOT 调用文件管理平台 API 或写入文件平台归档状态
+
+#### Scenario: 不生成 PDF
+- **WHEN** 用户下载生成文件
+- **THEN** 系统 MUST 返回对应 `.xlsx` 或 `.docx` 文件
+- **AND** 系统 MUST NOT 生成 PDF 或承诺 PDF 转换
 

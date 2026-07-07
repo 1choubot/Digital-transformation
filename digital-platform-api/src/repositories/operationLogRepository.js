@@ -6,6 +6,7 @@ const MAX_OPERATION_LOG_LIMIT = 100;
 export const OPERATION_ACTION_TYPE = {
   PROJECT_CREATED: 'project.created',
   PROJECT_CODE_UPDATED: 'project.code_updated',
+  PROJECT_ENDED: 'project.ended',
   DOCUMENT_SUBMITTED: 'document.submitted',
   DOCUMENT_CONFIRMED: 'document.confirmed',
   DOCUMENT_RETURNED: 'document.returned',
@@ -16,6 +17,12 @@ export const OPERATION_ACTION_TYPE = {
   DOCUMENT_RESPONSIBLE_CHANGED: 'document.responsible_changed',
   DOCUMENT_ATTACHMENT_UPLOADED: 'document.attachment_uploaded',
   DOCUMENT_ATTACHMENT_DELETED: 'document.attachment_deleted',
+  FORM_IMAGE_UPLOADED: 'form.image_uploaded',
+  FORM_IMAGE_DELETED: 'form.image_deleted',
+  TEMPLATE_FILE_GENERATED: 'template_file.generated',
+  TEMPLATE_FILE_FAILED: 'template_file.failed',
+  FORM_UPDATED: 'form.updated',
+  FORM_SUBMITTED: 'form.submitted',
   APPROVAL_SUBMITTED: 'approval.submitted',
   APPROVAL_CENTER_APPROVED: 'approval.center_approved',
   APPROVAL_CENTER_RETURNED: 'approval.center_returned',
@@ -32,6 +39,9 @@ export const OPERATION_ACTION_TYPE = {
   INITIATION_REVIEW_GENERAL_ACTIVATED: 'initiation_review.general_activated',
   INITIATION_REVIEW_RESTORED: 'initiation_review.restored',
   INITIATION_REVIEW_COMPLETED: 'initiation_review.completed',
+  INITIATION_EVALUATION_SUBMITTED: 'initiation.evaluation.submitted',
+  INITIATION_APPROVAL_APPROVED: 'initiation.approval.approved',
+  INITIATION_APPROVAL_RETURNED: 'initiation.approval.returned',
   STAGE_ADVANCED: 'stage.advanced',
   PROJECT_COMPLETED: 'project.completed'
 };
@@ -41,7 +51,8 @@ export const OPERATION_TARGET_TYPE = {
   STAGE: 'stage',
   APPROVAL: 'approval',
   STAGE_DOCUMENT: 'stage_document',
-  INITIATION_REVIEW: 'initiation_review'
+  INITIATION_REVIEW: 'initiation_review',
+  ONLINE_FORM: 'online_form'
 };
 
 export class OperationLogLimitError extends Error {

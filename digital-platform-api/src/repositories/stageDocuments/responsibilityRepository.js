@@ -3,6 +3,13 @@ import {
   canBeResponsibleUser,
   canManageProjectResponsibility
 } from '../../domain/organization.js';
+import { PROJECT_STATUS } from '../../domain/projects.js';
+import {
+  INITIATION_NOTICE_DOCUMENT_CODE,
+  INITIATION_REVIEW_DOCUMENT_CODE,
+  INITIATION_REWORK_TARGET_DOCUMENT_CODE,
+  isInitiationOnlineFormDocument
+} from '../../domain/initiationReview.js';
 import {
   insertOperationLog,
   OPERATION_ACTION_TYPE,
@@ -19,6 +26,7 @@ import {
   selectProjectPermissionContext,
   selectResponsibleUserPermissionContext
 } from './permissionContext.js';
+import { canManageInitiationOnlineFormResponsibility } from './accessControl.js';
 
 function normalizeResponsibleUserId(value) {
   if (value === null) {
@@ -38,6 +46,45 @@ function normalizeResponsibleUserId(value) {
 }
 
 function assertUserCanManageResponsibility({ user, project, currentDocument, targetResponsibleUser }) {
+  if (project?.status === PROJECT_STATUS.ENDED) {
+    throw new StageDocumentResponsibilityError(
+      'PROJECT_ALREADY_ENDED',
+      'Project has ended and stage document responsibility cannot be changed',
+      409,
+      ['projectId']
+    );
+  }
+
+  if (currentDocument.document_code === INITIATION_REVIEW_DOCUMENT_CODE) {
+    throw new StageDocumentResponsibilityError(
+      'FORBIDDEN_OPERATION',
+      'Initiation approval uses business and technical responsible users and does not support separate stage document responsibility assignment',
+      403,
+      ['documentId']
+    );
+  }
+
+  if (currentDocument.document_code === INITIATION_REWORK_TARGET_DOCUMENT_CODE) {
+    if (!canManageInitiationOnlineFormResponsibility(user, currentDocument)) {
+      throw new StageDocumentResponsibilityError(
+        'FORBIDDEN_OPERATION',
+        'Only marketing center manager can assign initiation stage document responsibility',
+        403,
+        ['organizationRole']
+      );
+    }
+    return;
+  }
+
+  if (currentDocument.document_code === INITIATION_NOTICE_DOCUMENT_CODE || isInitiationOnlineFormDocument(currentDocument)) {
+    throw new StageDocumentResponsibilityError(
+      'FORBIDDEN_OPERATION',
+      'Initiation notice does not support separate stage document responsibility assignment',
+      403,
+      ['documentId']
+    );
+  }
+
   if (!canManageProjectResponsibility(user, project, {
     document: currentDocument,
     targetResponsibleUser

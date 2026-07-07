@@ -209,71 +209,17 @@
               <span class="mode-value">{{ formatProjectMode(project.projectMode) }}</span>
             </div>
 
-            <!-- 经理列 -->
-            <div class="overview-project__manager">
-              <span class="column-lbl">经理</span>
-              <span class="manager-value">{{ formatUser(project.projectManagerUser) }}</span>
-            </div>
-
-            <!-- 状态 -->
-            <div class="cell-status" @click.stop>
-              <StatusBadge :status="project.status" />
-            </div>
-
-            <!-- 当前阶段 -->
-            <div class="overview-project__stage">
-              <span class="column-lbl">当前阶段</span>
-              <strong class="stage-name-text">{{ formatCurrentStage(project) }}</strong>
-              <span v-if="project.currentStageIssue" class="stage-warning-badge">{{ formatStageIssue(project.currentStageIssue) }}</span>
-            </div>
-
-            <!-- 齐套率 -->
-            <div class="overview-project__completion">
-              <span class="column-lbl">当前阶段齐套率</span>
-              <div class="rate-bar-container">
-                <strong class="rate-number">{{ formatCompletionPercent(project.currentStageCompletenessSummary) }}</strong>
-                <div v-if="project.currentStageCompletenessSummary" class="progress-bar-bg">
-                  <div class="progress-bar-fill" :style="{ width: `${project.currentStageCompletenessSummary.completionPercent}%` }"></div>
-                </div>
-              </div>
-              <small class="rate-summary-lbl">{{ formatCompletionSummary(project.currentStageCompletenessSummary) }}</small>
-            </div>
-          </div>
-
-          <!-- 未完成资料清单 -->
-          <div class="overview-project__documents" @click.stop>
-            <div class="docs-summary-header">
-              <div class="docs-count-pill" :class="{ 'docs-count-pill--alert': project.currentStageIncompleteRequiredDocuments.length > 0 }">
-                <span>未完成适用必填资料</span>
-                <strong>{{ project.currentStageIncompleteRequiredDocuments.length }}</strong>
-              </div>
-            </div>
-
-            <details v-if="project.currentStageIncompleteRequiredDocuments.length > 0" class="docs-details">
-              <summary class="docs-toggle-btn">
-                <span>展开未齐套文件清单</span>
-                <span class="toggle-icon"></span>
-              </summary>
-              <ul class="incomplete-docs-list">
-                <li v-for="document in project.currentStageIncompleteRequiredDocuments" :key="document.id" class="doc-list-item">
-                  <span class="doc-code">{{ document.documentCode }}</span>
-                  <strong class="doc-name">{{ document.documentName }}</strong>
-                  <StatusBadge :status="document.status" />
-                </li>
-              </ul>
-            </details>
-
-            <p v-else-if="project.currentStageCompletenessSummary" class="checklist-finished-placeholder">
-              <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              <span>当前阶段已全部齐套（无未完成适用必填资料）。</span>
-            </p>
-
-            <p v-else class="checklist-empty-placeholder">
-              {{ formatStageIssue(project.currentStageIssue) || '暂无齐套及清单摘要数据。' }}
-            </p>
-          </div>
+        <article v-for="project in projects" :key="project.id" class="project-table__row">
+          <span class="mono">{{ formatProjectCode(project.projectCode) }}</span>
+          <strong>{{ project.projectName }}</strong>
+          <span>{{ project.customerName }} / {{ project.customerContactPerson || '-' }}</span>
+          <span>{{ formatProjectMode(project.projectMode) }}</span>
+          <span>{{ formatUser(project.projectManagerUser) }}</span>
+          <StatusBadge :status="project.status" />
+          <span>{{ project.currentStage?.stageName || '-' }}</span>
+          <span>{{ formatUser(project.createdBy) }}</span>
+          <span>{{ formatDate(project.plannedStartDate) }} 至 {{ formatDate(project.plannedEndDate) }}</span>
+          <button type="button" class="ghost-button" @click="navigate(`/projects/${project.id}`)">查看详情</button>
         </article>
       </div>
 

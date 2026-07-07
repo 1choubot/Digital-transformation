@@ -172,6 +172,14 @@ export async function initializeProjectStageDocuments(executor, projectId) {
     'SELECT COUNT(*) AS count FROM project_stage_documents WHERE project_id = ?',
     [projectId]
   );
+  const existingCount = Number(beforeRows[0].count);
+  if (existingCount > 0) {
+    return {
+      expectedCount: templateRows.length,
+      insertedCount: 0
+    };
+  }
+
   const placeholders = templateRows.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
   const values = templateRows.flatMap((template) => [
     projectId,
@@ -230,7 +238,7 @@ export async function initializeProjectStageDocuments(executor, projectId) {
 
   return {
     expectedCount: templateRows.length,
-    insertedCount: Number(afterRows[0].count) - Number(beforeRows[0].count)
+    insertedCount: Number(afterRows[0].count) - existingCount
   };
 }
 
@@ -248,8 +256,14 @@ async function selectChecklistProject(projectId) {
     `SELECT
       id,
       project_manager_user_id,
+      business_responsible_user_id,
+      technical_responsible_user_id,
       created_by_user_id,
-      participating_departments
+      participating_departments,
+      status,
+      ended_reason,
+      ended_by_user_id,
+      ended_at
     FROM projects
     WHERE id = ?
     LIMIT 1`,
@@ -301,10 +315,13 @@ export async function getProjectStageDocumentChecklist(projectId, user = null) {
     };
   });
   const documentsWithReworkContext = attachReworkCandidatesToDocuments(documentsWithRevisionSource);
+  const relatedDocumentsByCode = new Map(
+    documentsWithReworkContext.map((document) => [document.documentCode, document])
+  );
   const visibleDocuments =
     user && project
       ? filterStageDocumentsForUser({ user, project, documents: documentsWithReworkContext }).map((document) =>
-          attachStageDocumentPermissions({ user, project, document })
+          attachStageDocumentPermissions({ user, project, document, relatedDocumentsByCode })
         )
       : documentsWithReworkContext;
 

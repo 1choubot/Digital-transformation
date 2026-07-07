@@ -1,9 +1,17 @@
 <template>
-  <section class="page-stack animate-fadeIn">
-    <!-- 说明提示 -->
-    <p class="manual-status-note">
-      提示：这里展示的是分配给您的资料项。资料状态为手工标记状态，不代表文件已上传或在线表单已填写。
-    </p>
+  <section class="page-stack">
+    <PageHeader
+      eyebrow="我的待办"
+      title="我的工作台"
+      :current-user="currentUser"
+      subtitle="工作台汇总待我填写资料、待我评价/审批和待我推进阶段事项，进入项目工作区后只定位目标，不自动打开在线表单。"
+    >
+      <template #actions>
+        <button type="button" class="ghost-button" :disabled="loading" @click="loadWorkbench">
+          {{ loading ? '加载中...' : '重新加载' }}
+        </button>
+      </template>
+    </PageHeader>
 
     <!-- 筛选面板（整合重新加载按钮） -->
     <section class="panel task-filter-panel">
@@ -58,96 +66,70 @@
 
       <!-- 数据加载中 -->
       <div v-if="loading" class="state-panel state-panel--inline">
-        <div class="loading-wave">
-          <div class="wave-bar"></div>
-          <div class="wave-bar"></div>
-          <div class="wave-bar"></div>
-        </div>
-        <p>正在努力加载您的专属资料任务，请稍候...</p>
+        <p>正在加载我的工作台...</p>
       </div>
 
-      <!-- 错误提示 -->
       <div v-else-if="errorMessage" class="state-panel state-panel--error">
-        <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="12" y1="8" x2="12" y2="12" />
-          <line x1="12" y1="16" x2="12.01" y2="16" />
-        </svg>
-        <div class="error-details">
-          <h3>资料任务加载失败</h3>
-          <p>{{ errorMessage }}</p>
-        </div>
-        <button type="button" class="primary-button inline-btn" @click="loadTasks">重试</button>
+        <h3>我的工作台加载失败</h3>
+        <p>{{ errorMessage }}</p>
+        <button type="button" class="primary-button" @click="loadWorkbench">重试</button>
       </div>
 
-      <!-- 暂无数据 -->
-      <div v-else-if="filteredTasks.length === 0" class="state-panel state-panel--empty">
-        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-        </svg>
-        <h3>暂无匹配的资料任务</h3>
-        <p>当前筛选条件下，没有分配给您的适用资料项。</p>
+      <div v-else-if="filteredItems.length === 0" class="state-panel state-panel--inline">
+        <h3>暂无匹配待办</h3>
+        <p>当前筛选下没有需要你处理的事项。</p>
       </div>
 
-      <!-- 任务表格 -->
-      <div v-else class="table-container">
-        <div class="task-table">
-          <div class="task-table__head">
-            <span>项目信息</span>
-            <span>当前阶段</span>
-            <span>资料项名称</span>
-            <span>资料类型</span>
-            <span>当前状态</span>
-            <span>退回原因</span>
-            <span>责任更新时间</span>
-            <span class="text-right">操作</span>
+      <div v-else class="task-list">
+        <article
+          v-for="item in filteredItems"
+          :key="itemKey(item)"
+          class="task-card"
+          :class="`task-card--${taskTone(item)}`"
+        >
+          <div class="task-card__header">
+            <div class="task-cell task-cell--project">
+              <span class="mono">{{ formatProjectCode(item.projectCode) }}</span>
+              <strong>{{ item.projectName }}</strong>
+            </div>
+            <span class="stage-document-pill">{{ formatTodoType(item.type, item) }}</span>
           </div>
 
-          <div class="task-table__body">
-            <article v-for="task in paginatedTasks" :key="task.documentId" class="task-table__row">
-              <div class="task-cell task-cell--project">
-                <span class="mono-badge">{{ task.projectCode }}</span>
-                <strong class="project-name">{{ task.projectName }}</strong>
-              </div>
-              <div class="task-cell task-cell--stage">
-                <span class="stage-text">{{ task.stageName || `第 ${task.stageOrder} 阶段` }}</span>
-                <span class="stage-sub">第 {{ task.stageOrder }} 阶段</span>
-              </div>
-              <div class="task-cell task-cell--document">
-                <span class="mono-code">{{ task.documentCode }}</span>
-                <strong class="document-name">{{ task.documentName }}</strong>
-              </div>
-              <div class="task-cell">
-                <span :class="['type-badge', task.isRequired ? 'type-badge--required' : 'type-badge--suggest']">
-                  {{ formatTaskRequired(task.isRequired) }}
-                </span>
-              </div>
-              <div class="task-cell">
-                <StatusBadge :status="task.status" />
-              </div>
-              <div class="task-cell task-cell--reason">
-                <span :class="{ 'reason-text': task.returnReason, 'empty-placeholder': !task.returnReason }">
-                  {{ task.returnReason || '-' }}
-                </span>
-              </div>
-              <div class="task-cell">
-                <time class="time-text">{{ formatDateTime(task.responsibilityUpdatedAt) }}</time>
-              </div>
-              <div class="task-cell text-right">
-                <button type="button" class="action-button" @click="navigate(`/projects/${task.projectId}`)">
-                  <span>查看项目</span>
-                  <svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                    <polyline points="12 5 19 12 12 19" />
-                  </svg>
-                </button>
-              </div>
-            </article>
+          <div class="task-card__meta">
+            <div>
+              <span>阶段</span>
+              <strong>{{ item.stageName || `第 ${item.stageOrder} 阶段` }}</strong>
+              <small>第 {{ item.stageOrder }} 阶段</small>
+            </div>
+            <div>
+              <span>资料项</span>
+              <strong>{{ item.documentName || '-' }}</strong>
+              <small class="mono">{{ item.documentCode || '-' }}</small>
+            </div>
+            <div>
+              <span>完成规则</span>
+              <strong>{{ item.completionMode ? formatCompletionMode(item.completionMode) : '-' }}</strong>
+            </div>
+            <div>
+              <span>状态</span>
+              <strong>{{ item.completionStatus ? formatCompletionStatus(item.completionStatus) : formatStatus(item.status) }}</strong>
+            </div>
+            <div>
+              <span>更新时间</span>
+              <time>{{ formatDateTime(item.updatedAt || item.createdAt) }}</time>
+            </div>
           </div>
-        </div>
+
+          <div class="task-card__footer">
+            <div>
+              <span>入口动作</span>
+              <strong>{{ formatActionText(item) }}</strong>
+            </div>
+            <button type="button" class="primary-button" @click="openTodo(item)">
+              进入项目工作区
+            </button>
+          </div>
+        </article>
       </div>
     </section>
 
@@ -231,8 +213,14 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { listMyStageDocumentTasks } from '../api/me.js';
 import { toReadableApiError } from '../api/http.js';
-import StatusBadge from '../components/StatusBadge.vue';
-import { formatDateTime, formatUser } from '../utils/format.js';
+import PageHeader from '../components/PageHeader.vue';
+import {
+  formatCompletionMode,
+  formatCompletionStatus,
+  formatDateTime,
+  formatProjectCode,
+  formatStatus
+} from '../utils/format.js';
 
 const props = defineProps({
   authToken: {
@@ -251,8 +239,13 @@ const props = defineProps({
 
 const emit = defineEmits(['auth-expired']);
 
-// 筛选与数据状态
-const selectedStatus = ref('pending');
+const typeOptions = [
+  { value: 'document_responsibility', label: '待我填写资料' },
+  { value: 'document_review', label: '待我评价/审批' },
+  { value: 'stage_advance', label: '待我推进阶段' }
+];
+
+const selectedType = ref('all');
 const projectKeyword = ref('');
 const loading = ref(false);
 const errorMessage = ref('');
@@ -326,21 +319,44 @@ const visiblePages = computed(() => {
   if (end - start + 1 < maxButtons) {
     start = Math.max(1, end - maxButtons + 1);
   }
-  for (let i = start; i <= end; i++) {
-    range.push(i);
+
+  return summary.value.byType?.[type] || 0;
+}
+
+function itemKey(item) {
+  return [item.type, item.projectId, item.stageId || '', item.documentId || '', item.nodeKey || ''].join(':');
+}
+
+function formatTodoType(type, item = null) {
+  if (type === 'initiation_review') {
+    return '待我评价/审批';
   }
   return range;
 });
 
-function changePage(page) {
-  if (page >= 1 && page <= totalPages.value) {
-    currentPage.value = page;
+  if (item?.revisionRequired && type === 'document_responsibility') {
+    return '待我填写资料';
   }
 }
 
-// 搜索时重置页码
-function handleSearchInput() {
-  currentPage.value = 1;
+function taskTone(item) {
+  if (item.type === 'stage_advance') {
+    return 'stage';
+  }
+
+  if (item.type === 'document_review' || item.type === 'initiation_review') {
+    return 'review';
+  }
+
+  return 'document';
+}
+
+function formatActionText(item) {
+  if (item.type === 'initiation_review') {
+    return item.nodeName || item.actionText || '-';
+  }
+
+  return item.actionText || '-';
 }
 
 function formatTaskRequired(value) {

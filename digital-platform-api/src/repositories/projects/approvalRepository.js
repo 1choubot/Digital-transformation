@@ -10,6 +10,7 @@ import {
   getStageApprovalRule,
   isValidCloseoutApprovalCenter
 } from '../../domain/projectApproval.js';
+import { PROJECT_STATUS } from '../../domain/projects.js';
 import { pool } from '../../db/pool.js';
 import { buildStageCompletenessSummary, mapGateDocument } from '../stageDocuments/shared.js';
 import {
@@ -156,6 +157,15 @@ function assertStageDocumentsComplete(gateSummary) {
 }
 
 function assertCanSubmitOrResubmit({ user, project, stage, rule, expectedStatuses }) {
+  if (project.status === PROJECT_STATUS.ENDED) {
+    throw new ProjectApprovalError(
+      'PROJECT_ALREADY_ENDED',
+      'Project has ended and stage approval cannot be submitted',
+      409,
+      ['projectId']
+    );
+  }
+
   if (!canUserSubmitStageApproval(user, project)) {
     throw new ProjectApprovalError(
       PROJECT_APPROVAL_ERROR.PROJECT_APPROVAL_FORBIDDEN,
@@ -207,7 +217,16 @@ function assertPendingApprovalStatus(stage) {
   }
 }
 
-function buildApprovalActionContext({ action, user, stage, rule, returnComment }) {
+function buildApprovalActionContext({ action, user, project, stage, rule, returnComment }) {
+  if (project.status === PROJECT_STATUS.ENDED) {
+    throw new ProjectApprovalError(
+      'PROJECT_ALREADY_ENDED',
+      'Project has ended and stage approval cannot be handled',
+      409,
+      ['projectId']
+    );
+  }
+
   if (!canUserHandleStageApproval(user)) {
     throw new ProjectApprovalError(
       PROJECT_APPROVAL_ERROR.PROJECT_APPROVAL_FORBIDDEN,
@@ -490,8 +509,8 @@ async function approveOrReturnStageApproval({ projectId, stageId, user, action, 
 
   try {
     await connection.beginTransaction();
-    const { stage, rule } = await loadApprovalTarget(connection, { projectId, stageId, lock: true });
-    const actionContext = buildApprovalActionContext({ action, user, stage, rule, returnComment });
+    const { project, stage, rule } = await loadApprovalTarget(connection, { projectId, stageId, lock: true });
+    const actionContext = buildApprovalActionContext({ action, user, project, stage, rule, returnComment });
 
     if (action === 'approve') {
       const gateSummary = await buildStageGateSummaryForUpdate(connection, projectId, stage.stage_order);

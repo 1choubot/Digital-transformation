@@ -1,18 +1,90 @@
 <template>
-  <section class="page-stack animate-fadeIn">
-    <!-- 核心统计指标卡片网格 — 风格与用户管理一致 -->
-    <section class="dashboard-stats-grid" aria-label="项目总览指标">
-      <div class="stat-card stat-card--blue">
-        <div class="stat-info">
-          <span class="stat-label">项目总数</span>
-          <strong class="stat-value">{{ summary.totalProjects }}</strong>
-        </div>
-        <div class="stat-icon-wrapper">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-            <line x1="12" y1="11" x2="12" y2="17" />
-            <polyline points="9 14 12 11 15 14" />
-          </svg>
+  <section class="page-stack">
+    <PageHeader
+      eyebrow="跨项目入口"
+      title="项目总览"
+      :current-user="currentUser"
+      subtitle="齐套率基于资料 completionMode、基础状态和适用性派生完成状态计算。"
+    >
+      <template #actions>
+        <button
+          v-if="canCreateProject"
+          type="button"
+          class="primary-button"
+          @click="navigate('/projects/new')"
+        >
+          新建项目
+        </button>
+        <button type="button" class="ghost-button" :disabled="loading" @click="loadDashboard">
+          {{ loading ? '加载中...' : '重新加载' }}
+        </button>
+      </template>
+    </PageHeader>
+
+    <section class="overview-summary-grid" aria-label="项目总览指标">
+      <div class="overview-metric">
+        <span>项目总数</span>
+        <strong>{{ summary.totalProjects }}</strong>
+      </div>
+      <div class="overview-metric">
+        <span>进行中</span>
+        <strong>{{ summary.activeProjects }}</strong>
+      </div>
+      <div class="overview-metric">
+        <span>已完成</span>
+        <strong>{{ summary.completedProjects }}</strong>
+      </div>
+      <div class="overview-metric">
+        <span>风险/延期</span>
+        <strong>{{ summary.riskProjects }}</strong>
+      </div>
+      <button type="button" class="overview-metric overview-metric--button" @click="navigate('/my-workbench')">
+        <span>我的待办资料</span>
+        <strong>{{ summary.myPendingStageDocumentTasks }}</strong>
+      </button>
+    </section>
+
+    <p class="manual-status-note">
+      “我的待办资料”为当前登录用户全局待处理资料数量，不随项目状态、当前阶段或关键字筛选变化。
+    </p>
+
+    <section class="panel overview-filter-panel">
+      <form class="overview-filters" @submit.prevent="loadDashboard">
+        <label>
+          <span>项目状态</span>
+          <select v-model="statusFilter" :disabled="loading" @change="loadDashboard">
+            <option v-for="option in statusOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+        <label>
+          <span>当前阶段</span>
+          <select v-model="stageOrderFilter" :disabled="loading" @change="loadDashboard">
+            <option value="">全部阶段</option>
+            <option v-for="option in stageOrderOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+        <label>
+          <span>关键字</span>
+          <input
+            v-model="keywordFilter"
+            type="search"
+            autocomplete="off"
+            placeholder="项目编号、项目名称或客户名称"
+          />
+        </label>
+        <button type="submit" class="primary-button" :disabled="loading">应用筛选</button>
+      </form>
+    </section>
+
+    <section class="panel overview-list-panel">
+      <div class="panel-toolbar">
+        <div>
+          <strong>项目总览列表</strong>
+          <span>共 {{ projects.length }} 个项目，按项目编号和项目 ID 稳定排序。</span>
         </div>
       </div>
 
@@ -185,15 +257,19 @@
 
       <!-- 高保真卡片列表 -->
       <div v-else class="overview-list">
-        <article v-for="project in projects" :key="project.projectId" class="overview-project">
-
-          <!-- 核心信息行 -->
+        <article
+          v-for="project in projects"
+          :key="project.projectId"
+          class="overview-project"
+          @click="handleProjectCardClick($event, project)"
+        >
           <div class="overview-project__main">
             <div class="overview-project__identity">
-              <span class="mono-badge">{{ project.projectCode }}</span>
-              <strong class="project-name">{{ project.projectName }}</strong>
-              <small class="project-meta-desc">
-                {{ project.customerName }} <span class="divider">/</span> {{ formatProjectMode(project.projectMode) }} <span class="divider">/</span> 经理: {{ formatUser(project.projectManagerUser) }}
+              <span class="mono">{{ formatProjectCode(project.projectCode) }}</span>
+              <strong>{{ project.projectName }}</strong>
+              <small>
+                {{ project.customerName }} / {{ project.customerContactPerson || '-' }} / {{ formatProjectMode(project.projectMode) }} /
+                {{ formatUser(project.projectManagerUser) }}
               </small>
             </div>
 
@@ -202,9 +278,10 @@
             </div>
 
             <div class="overview-project__stage">
-              <span class="column-lbl">当前阶段</span>
-              <strong class="stage-name-text">{{ formatCurrentStage(project) }}</strong>
-              <span v-if="project.currentStageIssue" class="stage-warning-badge">{{ formatStageIssue(project.currentStageIssue) }}</span>
+              <span>当前阶段</span>
+              <strong>{{ formatCurrentStage(project) }}</strong>
+              <small v-if="project.currentStageIssue">{{ formatStageIssue(project.currentStageIssue) }}</small>
+              <small v-else-if="project.status === 'ended'">结束原因：{{ project.endedReason || '-' }}</small>
             </div>
 
             <!-- 齐套率仪表盘 -->
@@ -224,12 +301,8 @@
               <strong class="date-text">{{ formatDate(project.plannedStartDate) }} 至 {{ formatDate(project.plannedEndDate) }}</strong>
               <small class="creator-lbl">创建人: {{ formatUser(project.createdBy) }}</small>
             </div>
-
-            <button type="button" class="action-button-main" @click="navigate(`/projects/${project.projectId}`)">
-              <span>进入详情</span>
-              <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <polyline points="9 18 15 12 9 6" />
-              </svg>
+            <button type="button" class="ghost-button" @click.stop="navigateToProject(project)">
+              进入工作区
             </button>
           </div>
 
@@ -302,6 +375,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { getProjectOverviewDashboard } from '../api/projects.js';
 import { toReadableApiError } from '../api/http.js';
+import PageHeader from '../components/PageHeader.vue';
 import StatusBadge from '../components/StatusBadge.vue';
 import { formatDate, formatProjectMode, formatUser } from '../utils/format.js';
 
@@ -336,7 +410,8 @@ const statusOptions = [
   { value: 'risk', label: '风险' },
   { value: 'paused', label: '暂停' },
   { value: 'delayed', label: '延期' },
-  { value: 'completed', label: '完成' }
+  { value: 'completed', label: '完成' },
+  { value: 'ended', label: '已结束' }
 ];
 
 const stageOrderOptions = Array.from({ length: 8 }, (_, index) => ({
@@ -387,6 +462,9 @@ onUnmounted(() => {
 
 const summary = computed(() => dashboard.value.summary || emptySummary);
 const projects = computed(() => dashboard.value.projects || []);
+const canCreateProject = computed(() =>
+  ['general_manager', 'center_manager'].includes(props.currentUser?.organizationRole)
+);
 
 function formatCurrentStage(project) {
   if (project.currentStageName) {
@@ -397,6 +475,10 @@ function formatCurrentStage(project) {
 
   if (project.status === 'completed') {
     return '项目已完成';
+  }
+
+  if (project.status === 'ended') {
+    return '项目已结束';
   }
 
   return formatStageIssue(project.currentStageIssue) || '-';
@@ -418,6 +500,22 @@ function formatCompletionSummary(summaryValue) {
     return '暂无齐套摘要';
   }
   return `适用必填 ${summaryValue.requiredTotal} 项，已确认 ${summaryValue.confirmedRequiredCount} 项，未完成 ${summaryValue.incompleteRequiredCount} 项`;
+}
+
+function navigateToProject(project) {
+  props.navigate(`/projects/${project.projectId}`);
+}
+
+function isInteractiveElement(element) {
+  return Boolean(element?.closest?.('button, a, input, select, textarea, summary, details'));
+}
+
+function handleProjectCardClick(event, project) {
+  if (isInteractiveElement(event.target)) {
+    return;
+  }
+
+  navigateToProject(project);
 }
 
 async function loadDashboard() {

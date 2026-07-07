@@ -20,15 +20,79 @@ import {
   isInitiationReviewDocumentCode
 } from '../../domain/initiationReview.js';
 import { normalizeReturnReason } from '../../domain/stageDocumentStatus.js';
-import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
+import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
+import { PROJECT_STATUS } from '../../domain/projects.js';
 import {
   insertOperationLog,
   OPERATION_ACTION_TYPE,
   OPERATION_TARGET_TYPE
 } from '../operationLogRepository.js';
-import { mapDocument } from './shared.js';
+import {
+  INITIATION_TEMPLATE_TRIGGER_EVENT,
+  generateInitiationTemplateFile
+} from './generatedFileRepository.js';
+import { deriveStageDocumentCompletion, mapDocument } from './shared.js';
 
 export const INITIATION_REVIEW_TODO_TYPE = 'initiation_review';
+
+const INITIATION_REVIEW_RETURN_ACTION = {
+  RETURN_TO_MARKET_RESEARCH: 'return_to_market_research',
+  PROJECT_END: 'project_end'
+};
+
+const INITIATION_COLLABORATION_METADATA_KEY = '_collaboration';
+
+function buildResetInitiationCollaboration() {
+  return {
+    businessSubmitted: false,
+    businessSubmittedByUserId: null,
+    businessSubmittedAt: null,
+    technicalSubmitted: false,
+    technicalSubmittedByUserId: null,
+    technicalSubmittedAt: null
+  };
+}
+
+function parseJsonValue(value, fallback = {}) {
+  if (!value) {
+    return fallback;
+  }
+  if (typeof value === 'object') {
+    return value;
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+async function resetInitiationCollaborationFormForRefill(connection, documentId) {
+  const [rows] = await connection.execute(
+    `SELECT id, form_data_json
+    FROM project_stage_document_forms
+    WHERE stage_document_id = ?
+    LIMIT 1
+    FOR UPDATE`,
+    [documentId]
+  );
+
+  if (rows.length === 0) {
+    return;
+  }
+
+  const formData = parseJsonValue(rows[0].form_data_json, {});
+  formData[INITIATION_COLLABORATION_METADATA_KEY] = buildResetInitiationCollaboration();
+  await connection.execute(
+    `UPDATE project_stage_document_forms
+    SET form_data_json = ?,
+      status = 'draft',
+      submitted_by_user_id = NULL,
+      submitted_at = NULL
+    WHERE id = ?`,
+    [JSON.stringify(formData), rows[0].id]
+  );
+}
 
 export class InitiationReviewError extends Error {
   constructor(code, message, statusCode = 400, details = []) {
@@ -38,6 +102,61 @@ export class InitiationReviewError extends Error {
     this.statusCode = statusCode;
     this.details = details;
   }
+}
+
+function normalizeInitiationReviewReturnAction(nodeKey, value) {
+  const action = String(value || INITIATION_REVIEW_RETURN_ACTION.RETURN_TO_MARKET_RESEARCH).trim();
+  const allowedActions =
+    nodeKey === INITIATION_REVIEW_NODE_KEY.GENERAL
+      ? new Set(Object.values(INITIATION_REVIEW_RETURN_ACTION))
+      : new Set([INITIATION_REVIEW_RETURN_ACTION.RETURN_TO_MARKET_RESEARCH]);
+
+  if (!allowedActions.has(action)) {
+    throw new InitiationReviewError(
+      'INVALID_INITIATION_REVIEW_RETURN_ACTION',
+      'Invalid initiation review return action',
+      400,
+      ['returnAction']
+    );
+  }
+
+  return action;
+}
+
+function normalizeProjectEndReason(value) {
+  const reason = String(value ?? '').trim();
+  if (!reason) {
+    throw new InitiationReviewError(
+      'PROJECT_END_REASON_REQUIRED',
+      'Project end reason is required',
+      400,
+      ['endReason']
+    );
+  }
+
+  return reason;
+}
+
+async function assertProjectNotEndedForInitiationReview(connection, projectId) {
+  const [rows] = await connection.execute(
+    `SELECT id, status
+    FROM projects
+    WHERE id = ?
+    LIMIT 1
+    FOR UPDATE`,
+    [projectId]
+  );
+  const project = rows[0];
+  if (project?.status === PROJECT_STATUS.ENDED) {
+    throw new InitiationReviewError(
+      'PROJECT_ALREADY_ENDED',
+      'Project has ended and initiation review cannot be operated',
+      409,
+      ['projectId']
+    );
+  }
+
+  return project;
 }
 
 function getDocumentId(document) {
@@ -68,6 +187,30 @@ function isDocumentApplicable(document) {
 
 function getNodeStatus(node) {
   return node?.nodeStatus ?? node?.node_status ?? null;
+}
+
+function hasNodeComment(node) {
+  return String(node?.comment ?? '').trim() !== '';
+}
+
+function isEvaluationNodeKey(nodeKey) {
+  return [INITIATION_REVIEW_NODE_KEY.BUSINESS, INITIATION_REVIEW_NODE_KEY.TECHNICAL].includes(nodeKey);
+}
+
+function isMappedNodeSatisfied(node) {
+  if (node.nodeStatus !== INITIATION_REVIEW_NODE_STATUS.APPROVED) {
+    return false;
+  }
+
+  return !isEvaluationNodeKey(node.nodeKey) || hasNodeComment(node);
+}
+
+function isRawNodeSatisfied(node) {
+  if (node?.node_status !== INITIATION_REVIEW_NODE_STATUS.APPROVED) {
+    return false;
+  }
+
+  return !isEvaluationNodeKey(node.node_key) || hasNodeComment(node);
 }
 
 function cloneRowWithInitiationReview(row, initiationReview) {
@@ -138,6 +281,8 @@ function mapNode(row, user = null, document = null, blockedByRework = false) {
     invalidatedReason: row.invalidated_reason ?? null,
     canApprove: canAct,
     canReturn: canAct,
+    canEvaluate: canAct && row.node_key !== INITIATION_REVIEW_NODE_KEY.GENERAL,
+    canFinalApprove: canAct && row.node_key === INITIATION_REVIEW_NODE_KEY.GENERAL,
     canAct
   };
 }
@@ -172,6 +317,71 @@ function isReworkBlockingInitiationDocument({ initiationDocument, reworkTargetDo
   return Boolean(sourceDocumentId) && String(sourceDocumentId) === String(getDocumentId(initiationDocument));
 }
 
+export function buildInitiationReworkNotClearedReason() {
+  return '请先完成 1.1 项目需求表返工，再重新填写/提交 1.2 项目立项审批表';
+}
+
+function buildInitiationReworkNotClearedDetails({ initiationDocument, reworkTargetDocument }) {
+  return {
+    requirementDocumentId: getDocumentId(reworkTargetDocument),
+    requirementDocumentCode: INITIATION_REWORK_TARGET_DOCUMENT_CODE,
+    initiationDocumentId: getDocumentId(initiationDocument),
+    initiationDocumentCode: INITIATION_REVIEW_DOCUMENT_CODE
+  };
+}
+
+function buildInitiationReworkNotClearedError({ initiationDocument, reworkTargetDocument }) {
+  return new InitiationReviewError(
+    'INITIATION_REWORK_NOT_CLEARED',
+    '1.1 revision must be cleared before refilling or reviewing 1.2 initiation approval',
+    409,
+    buildInitiationReworkNotClearedDetails({ initiationDocument, reworkTargetDocument })
+  );
+}
+
+export async function selectOutstandingInitiationRequirementRework(
+  connection,
+  projectId,
+  initiationDocument,
+  { forUpdate = false } = {}
+) {
+  if (!isInitiationReviewDocument(initiationDocument)) {
+    return null;
+  }
+
+  const [rows] = await connection.execute(
+    `SELECT *
+    FROM project_stage_documents
+    WHERE project_id = ?
+      AND document_code = ?
+      AND revision_required = 1
+      AND revision_source_document_id = ?
+    LIMIT 1
+    ${forUpdate ? 'FOR UPDATE' : ''}`,
+    [projectId, INITIATION_REWORK_TARGET_DOCUMENT_CODE, getDocumentId(initiationDocument)]
+  );
+
+  return rows[0] || null;
+}
+
+export async function assertNoOutstandingInitiationRequirementRework(
+  connection,
+  projectId,
+  initiationDocument,
+  { forUpdate = false } = {}
+) {
+  const reworkTargetDocument = await selectOutstandingInitiationRequirementRework(
+    connection,
+    projectId,
+    initiationDocument,
+    { forUpdate }
+  );
+
+  if (reworkTargetDocument) {
+    throw buildInitiationReworkNotClearedError({ initiationDocument, reworkTargetDocument });
+  }
+}
+
 function buildInitiationReviewPayload({ document, nodes, reworkTargetDocument = null, user = null }) {
   const nodesByKey = new Map(nodes.map((node) => [node.node_key, node]));
   const blockedByRework = isReworkBlockingInitiationDocument({
@@ -187,19 +397,23 @@ function buildInitiationReviewPayload({ document, nodes, reworkTargetDocument = 
     isDocumentApplicable(document) &&
     isBaseSubmitted &&
     !blockedByRework &&
-    mappedNodes.every((node) => node.nodeStatus === INITIATION_REVIEW_NODE_STATUS.APPROVED);
+    mappedNodes.every(isMappedNodeSatisfied);
   const blockingReasons = [];
 
   if (!isBaseSubmitted) {
     blockingReasons.push(
       getDocumentStatus(document) === DOCUMENT_STATUS.RETURNED
-        ? '1.2 资料基础状态为 returned，需先通过普通资料入口重新提交'
-        : '1.2 资料尚未通过普通资料入口提交'
+        ? '1.2 资料基础状态为 returned，需先通过在线表单重新提交'
+        : '1.2 资料尚未通过在线表单提交'
     );
   }
   for (const node of mappedNodes) {
-    if (node.nodeStatus !== INITIATION_REVIEW_NODE_STATUS.APPROVED) {
-      blockingReasons.push(`${node.nodeName}未最终通过`);
+    if (!isMappedNodeSatisfied(node)) {
+      blockingReasons.push(
+        node.nodeKey === INITIATION_REVIEW_NODE_KEY.GENERAL
+          ? `${node.nodeName}未最终通过`
+          : `${node.nodeName}未完成评价文本`
+      );
     }
   }
   if (blockedByRework) {
@@ -428,6 +642,59 @@ export async function mapDocumentWithInitiationReview(executor, row, user = null
   return mapDocument(attachedRow);
 }
 
+export async function assertInitiationNoticeSubmitGateReady(connection, projectId) {
+  const [rows] = await connection.execute(
+    `SELECT
+      id,
+      project_id,
+      document_code,
+      document_name,
+      status,
+      completion_mode,
+      is_applicable,
+      revision_required,
+      revision_source_document_id
+    FROM project_stage_documents
+    WHERE project_id = ?
+      AND document_code IN (?, ?)
+    FOR UPDATE`,
+    [projectId, INITIATION_REVIEW_DOCUMENT_CODE, INITIATION_REWORK_TARGET_DOCUMENT_CODE]
+  );
+
+  const rowsWithInitiationReview = await attachInitiationReviewToStageDocumentRows(connection, rows);
+  const byCode = new Map(rowsWithInitiationReview.map((row) => [row.document_code, row]));
+  const initiationApproval = byCode.get(INITIATION_REVIEW_DOCUMENT_CODE);
+  const initiationRequirement = byCode.get(INITIATION_REWORK_TARGET_DOCUMENT_CODE);
+  const details = [];
+
+  if (
+    !initiationApproval ||
+    initiationApproval.completion_mode !== COMPLETION_MODE.APPROVAL_REQUIRED ||
+    !deriveStageDocumentCompletion(initiationApproval).isComplete
+  ) {
+    details.push(INITIATION_REVIEW_DOCUMENT_CODE);
+  }
+
+  if (
+    initiationApproval &&
+    initiationRequirement &&
+    isRevisionRequired(initiationRequirement) &&
+    Boolean(getRevisionSourceDocumentId(initiationRequirement)) &&
+    String(getRevisionSourceDocumentId(initiationRequirement)) === String(getDocumentId(initiationApproval))
+  ) {
+    details.push(INITIATION_REWORK_TARGET_DOCUMENT_CODE);
+  }
+
+  if (details.length > 0) {
+    throw new InitiationReviewError(
+      'INITIATION_NOTICE_GATE_NOT_READY',
+      'Initiation notice can be submitted only after initiation approval and rework clearance',
+      409,
+      details
+    );
+  }
+}
+
 async function selectInitiationDocumentForUpdate(connection, projectId, documentId) {
   const [rows] = await connection.execute(
     `SELECT *
@@ -538,13 +805,22 @@ function assertBaseDocumentSubmitted(document) {
 
 function assertNoOutstandingLinkedRework({ document, reworkTargetDocument }) {
   if (isReworkBlockingInitiationDocument({ initiationDocument: document, reworkTargetDocument })) {
+    throw buildInitiationReworkNotClearedError({ initiationDocument: document, reworkTargetDocument });
+  }
+}
+
+function normalizeNodeComment(nodeKey, comment) {
+  const text = String(comment ?? '').trim();
+  if ([INITIATION_REVIEW_NODE_KEY.BUSINESS, INITIATION_REVIEW_NODE_KEY.TECHNICAL].includes(nodeKey) && !text) {
     throw new InitiationReviewError(
-      'INITIATION_REVIEW_REWORK_BLOCKED',
-      '1.1 revision must be cleared before approving returned initiation review node',
-      409,
-      ['revisionRequired']
+      'INITIATION_EVALUATION_TEXT_REQUIRED',
+      'Evaluation text is required',
+      400,
+      ['comment']
     );
   }
+
+  return text || null;
 }
 
 function findNode(nodes, nodeKey) {
@@ -553,14 +829,14 @@ function findNode(nodes, nodeKey) {
 
 function areParallelNodesApproved(nodes) {
   return (
-    findNode(nodes, INITIATION_REVIEW_NODE_KEY.BUSINESS)?.node_status === INITIATION_REVIEW_NODE_STATUS.APPROVED &&
-    findNode(nodes, INITIATION_REVIEW_NODE_KEY.TECHNICAL)?.node_status === INITIATION_REVIEW_NODE_STATUS.APPROVED
+    isRawNodeSatisfied(findNode(nodes, INITIATION_REVIEW_NODE_KEY.BUSINESS)) &&
+    isRawNodeSatisfied(findNode(nodes, INITIATION_REVIEW_NODE_KEY.TECHNICAL))
   );
 }
 
 function areAllNodesApproved(nodes) {
   return INITIATION_REVIEW_NODE_DEFINITIONS.every(
-    (definition) => findNode(nodes, definition.nodeKey)?.node_status === INITIATION_REVIEW_NODE_STATUS.APPROVED
+    (definition) => isRawNodeSatisfied(findNode(nodes, definition.nodeKey))
   );
 }
 
@@ -613,6 +889,9 @@ function buildInitiationReviewLogDetails({
   extra = {}
 }) {
   const definition = getInitiationReviewNodeDefinition(node.node_key);
+  const isEvaluationNode = [INITIATION_REVIEW_NODE_KEY.BUSINESS, INITIATION_REVIEW_NODE_KEY.TECHNICAL].includes(
+    node.node_key
+  );
   return {
     projectId,
     stageDocumentId: document.id,
@@ -626,8 +905,32 @@ function buildInitiationReviewLogDetails({
     operatedAt: new Date().toISOString(),
     comment,
     returnReason,
+    ...(isEvaluationNode
+      ? {
+          evaluationType:
+            node.node_key === INITIATION_REVIEW_NODE_KEY.BUSINESS ? 'marketing_evaluation' : 'rd_evaluation',
+          evaluatorUserId: actorUserId,
+          evaluationText: comment
+        }
+      : {
+          approvalResult: actionStatusToApprovalResult(toStatus),
+          approverUserId: actorUserId,
+          approvalOpinion: comment || returnReason
+        }),
     ...extra
   };
+}
+
+function actionStatusToApprovalResult(status) {
+  if (status === INITIATION_REVIEW_NODE_STATUS.APPROVED) {
+    return 'approved';
+  }
+
+  if (status === INITIATION_REVIEW_NODE_STATUS.RETURNED_BLOCKED_BY_REWORK) {
+    return 'returned';
+  }
+
+  return null;
 }
 
 async function insertInitiationNodeLog({
@@ -644,6 +947,9 @@ async function insertInitiationNodeLog({
   extra = {}
 }) {
   const definition = getInitiationReviewNodeDefinition(node.node_key);
+  const isEvaluationNode = [INITIATION_REVIEW_NODE_KEY.BUSINESS, INITIATION_REVIEW_NODE_KEY.TECHNICAL].includes(
+    node.node_key
+  );
   await insertOperationLog(connection, {
     projectId,
     actorUserId: userId,
@@ -651,9 +957,13 @@ async function insertInitiationNodeLog({
     targetType: OPERATION_TARGET_TYPE.INITIATION_REVIEW,
     targetId: node.id,
     summary:
-      action === 'approve'
-        ? `1.2 ${definition?.nodeName ?? node.node_key}通过：${document.document_name}`
-        : `1.2 ${definition?.nodeName ?? node.node_key}退回：${document.document_name}`,
+      isEvaluationNode
+        ? action === 'approve'
+          ? `1.2 ${definition?.nodeName ?? node.node_key}已提交：${document.document_name}`
+          : `1.2 ${definition?.nodeName ?? node.node_key}拒绝并退回市场调研：${document.document_name}`
+        : action === 'approve'
+          ? `1.2 ${definition?.nodeName ?? node.node_key}通过：${document.document_name}`
+          : `1.2 ${definition?.nodeName ?? node.node_key}不通过：${document.document_name}`,
     details: buildInitiationReviewLogDetails({
       projectId,
       document,
@@ -692,7 +1002,7 @@ async function maybeLogInitiationReviewCompleted({ connection, projectId, docume
     actionType: OPERATION_ACTION_TYPE.INITIATION_REVIEW_COMPLETED,
     targetType: OPERATION_TARGET_TYPE.INITIATION_REVIEW,
     targetId: document.id,
-    summary: `1.2 多节点审批最终完成：${document.document_name}`,
+    summary: `1.2 评价与最终审批完成：${document.document_name}`,
     details: {
       projectId,
       stageDocumentId: document.id,
@@ -717,6 +1027,7 @@ export async function activateInitiationReviewNodesForDocument({
     return null;
   }
 
+  await assertNoOutstandingInitiationRequirementRework(connection, projectId, document, { forUpdate: true });
   await ensureInitiationReviewNodesForDocument(connection, document, userId);
   const { nodes } = await selectInitiationReviewNodeForUpdate(
     connection,
@@ -739,7 +1050,7 @@ export async function activateInitiationReviewNodesForDocument({
     WHERE project_id = ?
       AND stage_document_id = ?
       AND node_key IN (?, ?)
-      AND node_status IN (?, ?, ?)`,
+      AND node_status IN (?, ?, ?, ?)`,
     [
       INITIATION_REVIEW_NODE_STATUS.PENDING,
       userId,
@@ -749,7 +1060,8 @@ export async function activateInitiationReviewNodesForDocument({
       INITIATION_REVIEW_NODE_KEY.TECHNICAL,
       INITIATION_REVIEW_NODE_STATUS.WAITING_DOCUMENT_SUBMISSION,
       INITIATION_REVIEW_NODE_STATUS.INVALIDATED,
-      INITIATION_REVIEW_NODE_STATUS.WAITING_PREREQUISITE
+      INITIATION_REVIEW_NODE_STATUS.WAITING_PREREQUISITE,
+      INITIATION_REVIEW_NODE_STATUS.RETURNED_BLOCKED_BY_REWORK
     ]
   );
   await connection.execute(
@@ -782,7 +1094,7 @@ export async function activateInitiationReviewNodesForDocument({
     actionType: OPERATION_ACTION_TYPE.INITIATION_REVIEW_SUBMITTED,
     targetType: OPERATION_TARGET_TYPE.INITIATION_REVIEW,
     targetId: document.id,
-    summary: `提交资料并启动 1.2 多节点审批：${document.document_name}`,
+    summary: `提交在线表单并启动 1.2 营销/研发评价：${document.document_name}`,
     details: {
       projectId,
       stageDocumentId: document.id,
@@ -812,13 +1124,17 @@ export async function approveInitiationReviewNode({
 }) {
   const connection = providedConnection || (await pool.getConnection());
   const ownsConnection = !providedConnection;
+  let shouldGenerateTemplateFile = false;
+  let generatedProjectId = projectId;
+  let generatedDocumentId = documentId;
 
   try {
     if (ownsConnection) {
       await connection.beginTransaction();
     }
 
-  assertInitiationReviewNodeKey(nodeKey);
+    assertInitiationReviewNodeKey(nodeKey);
+    await assertProjectNotEndedForInitiationReview(connection, projectId);
   const document = await selectInitiationDocumentForUpdate(connection, projectId, documentId);
   await ensureInitiationReviewNodesForDocument(connection, document);
   assertNodeReviewer(user, nodeKey);
@@ -831,12 +1147,13 @@ export async function approveInitiationReviewNode({
   if (nodeKey === INITIATION_REVIEW_NODE_KEY.GENERAL && !areParallelNodesApproved(nodes)) {
     throw new InitiationReviewError(
       'INITIATION_REVIEW_PREREQUISITE_NOT_READY',
-      'Business and technical review must be approved before general review',
+      'Marketing and R&D evaluations must be submitted before general approval',
       409,
       ['nodeKey']
     );
   }
 
+  const normalizedComment = normalizeNodeComment(nodeKey, comment);
   await connection.execute(
     `UPDATE project_initiation_review_nodes
     SET node_status = ?,
@@ -847,7 +1164,7 @@ export async function approveInitiationReviewNode({
       invalidated_at = NULL,
       invalidated_reason = NULL
     WHERE id = ?`,
-    [INITIATION_REVIEW_NODE_STATUS.APPROVED, String(comment ?? '').trim() || null, user.id, node.id]
+    [INITIATION_REVIEW_NODE_STATUS.APPROVED, normalizedComment, user.id, node.id]
   );
 
   await insertInitiationNodeLog({
@@ -859,7 +1176,7 @@ export async function approveInitiationReviewNode({
     action: 'approve',
     fromStatus: node.node_status,
     toStatus: INITIATION_REVIEW_NODE_STATUS.APPROVED,
-    comment: String(comment ?? '').trim() || null
+    comment: normalizedComment
   });
 
   const refreshedNodes = (await selectInitiationReviewNodes(connection, [documentId], { forUpdate: true })).map(
@@ -878,7 +1195,7 @@ export async function approveInitiationReviewNode({
       actionType: OPERATION_ACTION_TYPE.INITIATION_REVIEW_GENERAL_ACTIVATED,
       targetType: OPERATION_TARGET_TYPE.INITIATION_REVIEW,
       targetId: activatedGeneral?.id ?? documentId,
-      summary: `1.2 总经理审批待办已生成：${document.document_name}`,
+      summary: `1.2 总经理最终审批待办已生成：${document.document_name}`,
       details: {
         projectId,
         stageDocumentId: document.id,
@@ -890,7 +1207,7 @@ export async function approveInitiationReviewNode({
       }
     });
   }
-  await maybeLogInitiationReviewCompleted({
+  const completed = await maybeLogInitiationReviewCompleted({
     connection,
     projectId,
     document,
@@ -898,11 +1215,25 @@ export async function approveInitiationReviewNode({
     userId: user.id,
     reworkTargetDocument
   });
+  shouldGenerateTemplateFile =
+    ownsConnection &&
+    completed &&
+    nodeKey === INITIATION_REVIEW_NODE_KEY.GENERAL &&
+    String(document.document_code) === INITIATION_REVIEW_DOCUMENT_CODE;
 
   const updatedDocument = await selectInitiationDocumentForUpdate(connection, projectId, documentId);
     const result = await mapDocumentWithInitiationReview(connection, updatedDocument, user);
     if (ownsConnection) {
       await connection.commit();
+    }
+    if (shouldGenerateTemplateFile) {
+      await generateInitiationTemplateFile({
+        projectId: generatedProjectId,
+        documentId: generatedDocumentId,
+        documentCode: INITIATION_REVIEW_DOCUMENT_CODE,
+        triggerEvent: INITIATION_TEMPLATE_TRIGGER_EVENT.INITIATION_REVIEW_GENERAL_APPROVED,
+        user
+      });
     }
     return result;
   } catch (error) {
@@ -1030,7 +1361,9 @@ export async function returnInitiationReviewNode({
   documentId,
   nodeKey,
   user,
-  returnReason
+  returnReason,
+  returnAction,
+  endReason
 }) {
   const connection = providedConnection || (await pool.getConnection());
   const ownsConnection = !providedConnection;
@@ -1040,15 +1373,31 @@ export async function returnInitiationReviewNode({
       await connection.beginTransaction();
     }
 
-  assertInitiationReviewNodeKey(nodeKey);
-  const normalizedReason = normalizeReturnReason(returnReason);
-  const document = await selectInitiationDocumentForUpdate(connection, projectId, documentId);
-  await ensureInitiationReviewNodesForDocument(connection, document);
-  assertNodeReviewer(user, nodeKey);
-  assertBaseDocumentSubmitted(document);
-  const { node, nodes } = await selectInitiationReviewNodeForUpdate(connection, documentId, nodeKey);
-  assertNodePending(node);
-  const reworkTargetDocument = await selectReworkTargetForUpdate(connection, projectId);
+    assertInitiationReviewNodeKey(nodeKey);
+    const normalizedReturnAction = normalizeInitiationReviewReturnAction(nodeKey, returnAction);
+    const normalizedReason =
+      normalizedReturnAction === INITIATION_REVIEW_RETURN_ACTION.PROJECT_END
+        ? normalizeProjectEndReason(endReason ?? returnReason)
+        : normalizeReturnReason(returnReason);
+    await assertProjectNotEndedForInitiationReview(connection, projectId);
+    const document = await selectInitiationDocumentForUpdate(connection, projectId, documentId);
+    await ensureInitiationReviewNodesForDocument(connection, document);
+    assertNodeReviewer(user, nodeKey);
+    assertBaseDocumentSubmitted(document);
+    const { node, nodes } = await selectInitiationReviewNodeForUpdate(connection, documentId, nodeKey);
+    assertNodePending(node);
+    if (nodeKey === INITIATION_REVIEW_NODE_KEY.GENERAL && !areParallelNodesApproved(nodes)) {
+      throw new InitiationReviewError(
+        'INITIATION_REVIEW_PREREQUISITE_NOT_READY',
+        'Marketing and R&D evaluations must be submitted before general approval',
+        409,
+        ['nodeKey']
+      );
+    }
+    const reworkTargetDocument =
+      normalizedReturnAction === INITIATION_REVIEW_RETURN_ACTION.RETURN_TO_MARKET_RESEARCH
+        ? await selectReworkTargetForUpdate(connection, projectId)
+        : null;
 
   await connection.execute(
     `UPDATE project_initiation_review_nodes
@@ -1060,13 +1409,115 @@ export async function returnInitiationReviewNode({
     WHERE id = ?`,
     [INITIATION_REVIEW_NODE_STATUS.RETURNED_BLOCKED_BY_REWORK, normalizedReason, user.id, node.id]
   );
-  const invalidatedNode = await invalidateGeneralReviewAfterParallelReturn({
+
+  if (normalizedReturnAction === INITIATION_REVIEW_RETURN_ACTION.PROJECT_END) {
+    await connection.execute(
+      `UPDATE projects
+      SET status = ?,
+        ended_reason = ?,
+        ended_by_user_id = ?,
+        ended_at = CURRENT_TIMESTAMP
+      WHERE id = ?`,
+      [PROJECT_STATUS.ENDED, normalizedReason, user.id, projectId]
+    );
+    await insertInitiationNodeLog({
+      connection,
+      projectId,
+      document,
+      node,
+      userId: user.id,
+      action: 'return',
+      fromStatus: node.node_status,
+      toStatus: INITIATION_REVIEW_NODE_STATUS.RETURNED_BLOCKED_BY_REWORK,
+      returnReason: normalizedReason,
+      extra: {
+        returnAction: normalizedReturnAction,
+        projectEnd: {
+          status: PROJECT_STATUS.ENDED,
+          endReason: normalizedReason,
+          endedByUserId: user.id,
+          endedAt: new Date().toISOString()
+        }
+      }
+    });
+    await insertOperationLog(connection, {
+      projectId,
+      actorUserId: user.id,
+      actionType: OPERATION_ACTION_TYPE.PROJECT_ENDED,
+      targetType: OPERATION_TARGET_TYPE.PROJECT,
+      targetId: projectId,
+      summary: `项目结束：${normalizedReason}`,
+      details: {
+        projectId,
+        sourceDocumentId: document.id,
+        sourceDocumentCode: document.document_code,
+        nodeKey,
+        endReason: normalizedReason,
+        endedByUserId: user.id,
+        endedAt: new Date().toISOString()
+      }
+    });
+
+    const updatedDocument = await selectInitiationDocumentForUpdate(connection, projectId, documentId);
+    const result = await mapDocumentWithInitiationReview(connection, updatedDocument, user);
+    if (ownsConnection) {
+      await connection.commit();
+    }
+    return result;
+  }
+
+  const resetEvaluationNodes =
+    nodeKey === INITIATION_REVIEW_NODE_KEY.GENERAL
+      ? [INITIATION_REVIEW_NODE_KEY.BUSINESS, INITIATION_REVIEW_NODE_KEY.TECHNICAL]
+      : [
+          nodeKey === INITIATION_REVIEW_NODE_KEY.BUSINESS
+            ? INITIATION_REVIEW_NODE_KEY.TECHNICAL
+            : INITIATION_REVIEW_NODE_KEY.BUSINESS
+        ];
+  const generalInvalidation = await invalidateGeneralReviewAfterParallelReturn({
     connection,
     projectId,
     documentId,
     nodeKey,
     nodes
   });
+
+  if (resetEvaluationNodes.length > 0) {
+    await connection.execute(
+      `UPDATE project_initiation_review_nodes
+      SET node_status = ?,
+        comment = NULL,
+        return_reason = NULL,
+        submitted_by_user_id = NULL,
+        submitted_at = NULL,
+        reviewed_by_user_id = NULL,
+        reviewed_at = NULL,
+        invalidated_at = NULL,
+        invalidated_reason = NULL
+      WHERE project_id = ?
+        AND stage_document_id = ?
+        AND node_key IN (${resetEvaluationNodes.map(() => '?').join(', ')})`,
+      [
+        INITIATION_REVIEW_NODE_STATUS.WAITING_DOCUMENT_SUBMISSION,
+        projectId,
+        documentId,
+        ...resetEvaluationNodes
+      ]
+    );
+  }
+  await connection.execute(
+    `UPDATE project_stage_documents
+    SET status = ?,
+      returned_by_user_id = ?,
+      returned_at = CURRENT_TIMESTAMP,
+      return_reason = ?,
+      confirmed_by_user_id = NULL,
+      confirmed_at = NULL
+    WHERE project_id = ?
+      AND id = ?`,
+    [DOCUMENT_STATUS.RETURNED, user.id, normalizedReason, projectId, documentId]
+  );
+  await resetInitiationCollaborationFormForRefill(connection, documentId);
   await markInitiationReworkTarget({
     connection,
     projectId,
@@ -1093,8 +1544,17 @@ export async function returnInitiationReviewNode({
         targetDocumentId: reworkTargetDocument.id,
         targetDocumentCode: reworkTargetDocument.document_code
       },
-      invalidatedNode,
-      retainedParallelNodes: buildRetainedParallelNodeContext(nodeKey, nodes)
+      refilledDocument: {
+        documentId: document.id,
+        documentCode: document.document_code,
+        fromStatus: document.status,
+        toStatus: DOCUMENT_STATUS.RETURNED,
+        responsibleUserId: document.responsible_user_id
+      },
+      returnAction: normalizedReturnAction,
+      resetEvaluationNodes,
+      retainedParallelNodes: buildRetainedParallelNodeContext(nodeKey, nodes),
+      generalInvalidation
     }
   });
 
@@ -1141,6 +1601,10 @@ export async function restoreInitiationReviewNodesAfterReworkCleared({
   );
   const sourceDocument = sourceRows[0];
   if (!sourceDocument) {
+    return { restoredCount: 0 };
+  }
+
+  if (sourceDocument.status === DOCUMENT_STATUS.RETURNED) {
     return { restoredCount: 0 };
   }
 
@@ -1208,7 +1672,10 @@ function buildWorkbenchTask(row, user) {
     reviewerRole: row.reviewer_role,
     reviewerDepartment: row.reviewer_department,
     status: row.node_status,
-    actionText: `处理${definition?.nodeName ?? '1.2 节点审批'}`,
+    actionText:
+      row.node_key === INITIATION_REVIEW_NODE_KEY.GENERAL
+        ? '处理总经理最终审批'
+        : `提交${definition?.nodeName ?? '1.2 评价'}`,
     createdAt: row.submitted_at || row.created_at,
     updatedAt: row.updated_at,
     targetRoute: '',
@@ -1259,6 +1726,7 @@ export async function selectInitiationReviewWorkbenchTodos(executor, user) {
       d.stage_name,
       p.project_code,
       p.project_name,
+      p.status AS project_status,
       s.id AS stage_id
     FROM project_initiation_review_nodes n
     INNER JOIN project_stage_documents d
@@ -1268,19 +1736,28 @@ export async function selectInitiationReviewWorkbenchTodos(executor, user) {
     LEFT JOIN project_stages s
       ON s.project_id = n.project_id
       AND s.stage_order = d.stage_order
+    LEFT JOIN project_stage_documents requirement_rework
+      ON requirement_rework.project_id = n.project_id
+      AND requirement_rework.document_code = ?
+      AND requirement_rework.revision_required = 1
+      AND requirement_rework.revision_source_document_id = d.id
     WHERE n.node_status = ?
       AND n.node_key IN (${nodeKeys.map(() => '?').join(', ')})
       AND d.document_code = ?
       AND d.is_applicable = 1
+      AND p.status <> ?
       AND d.status IN (?, ?)
+      AND requirement_rework.id IS NULL
     ORDER BY
       COALESCE(n.submitted_at, n.updated_at) ASC,
       p.project_code ASC,
       n.id ASC`,
     [
+      INITIATION_REWORK_TARGET_DOCUMENT_CODE,
       INITIATION_REVIEW_NODE_STATUS.PENDING,
       ...nodeKeys,
       INITIATION_REVIEW_DOCUMENT_CODE,
+      PROJECT_STATUS.ENDED,
       DOCUMENT_STATUS.SUBMITTED,
       DOCUMENT_STATUS.CONFIRMED
     ]

@@ -1,10 +1,12 @@
 <template>
-  <section class="panel stage-documents">
+  <section class="panel stage-documents stage-documents--legacy">
     <div class="panel-heading">
       <div>
-        <span class="section-eyebrow">阶段资料清单</span>
-        <h3>资料级审核状态</h3>
+        <span class="section-eyebrow">旧模板兼容明细</span>
+        <h3>兼容资料区明细</h3>
         <p class="manual-status-note">
+          本区域用于旧模板兼容查看和资料级状态核对；立项阶段 1.1 / 1.2 / 1.3 主操作请在上方节点产出卡片完成。
+          已迁移到上方产出卡片的资料，本区域不再显示主操作按钮，只保留只读摘要、兼容提示和定位入口。
           阶段资料按 completionMode 计算完成状态：提交即完成资料提交后完成，需审核资料审核通过后完成，条件资料未触发时不阻塞。
           附件保存在在线平台，不展示文件平台归档状态。
           不适用是人工业务判断，用于说明该项目当前不需要该资料。
@@ -131,9 +133,12 @@
             v-for="document in stage.documents"
             :key="document.documentCode"
             class="stage-document-card"
+            :data-stage-document-id="document.id || null"
+            :data-stage-document-code="document.documentCode || null"
             :class="{
               'stage-document-card--not-applicable': !isApplicable(document),
-              'stage-document-card--revision-required': isRevisionRequired(document)
+              'stage-document-card--revision-required': isRevisionRequired(document),
+              'stage-document-card--compatibility': isMigratedToWorkspaceCard(document)
             }"
           >
             <div class="stage-document-card__main">
@@ -196,41 +201,72 @@
 
             <div class="stage-document-card__body">
               <ProjectStageDocumentTrace :document="document" />
-              <ProjectInitiationReviewPanel
-                v-if="document.initiationReview"
-                :document="document"
-                :is-action-pending="isActionPending"
-                @approve-node="$emit('approve-initiation-review-node', $event)"
-                @return-node="$emit('return-initiation-review-node', $event)"
-              />
-              <ProjectStageDocumentAttachments
-                :document="document"
-                :state="getAttachmentState(document.id)"
-                @upload="$emit('upload-attachment', $event)"
-                @download="$emit('download-attachment', $event)"
-                @delete="$emit('delete-attachment', $event)"
-              />
-              <ProjectStageDocumentActions
-                :document="document"
-                :responsibility-candidates="responsibilityCandidates"
-                :responsibility-candidates-loading="responsibilityCandidatesLoading"
-                :responsibility-selections="responsibilitySelections"
-                :can-submit-document="canSubmitDocument(document)"
-                :can-confirm-return-document="canConfirmReturnDocument(document)"
-                :can-manage-responsibility="canManageResponsibility(document)"
-                :can-change-applicability="canChangeApplicability(document)"
-                :return-reasons="returnReasons"
-                :not-applicable-reasons="notApplicableReasons"
-                :is-action-pending="isActionPending"
-                @submit-document="$emit('submit-document', $event)"
-                @confirm-document="$emit('confirm-document', $event)"
-                @return-document="$emit('return-document', $event)"
-                @complete-revision-document="$emit('complete-revision-document', $event)"
-                @mark-not-applicable="$emit('mark-not-applicable', $event)"
-                @restore-applicable="$emit('restore-applicable', $event)"
-                @save-responsible-user="$emit('save-responsible-user', $event)"
-                @clear-responsible-user="$emit('clear-responsible-user', $event)"
-              />
+              <section
+                v-if="isInitiationOnlineFormDocument(document)"
+                class="stage-document-card__actions"
+                aria-label="立项阶段资料辅助提示"
+              >
+                <h4>立项阶段在线表单</h4>
+                <span class="stage-document-actions__empty">
+                  请在上方项目工作区处理立项阶段在线表单。
+                </span>
+              </section>
+              <template v-else>
+                <ProjectInitiationReviewPanel
+                  v-if="document.initiationReview"
+                  :document="document"
+                  :is-action-pending="isActionPending"
+                  @approve-node="$emit('approve-initiation-review-node', $event)"
+                  @return-node="$emit('return-initiation-review-node', $event)"
+                />
+                <section
+                  v-if="isMigratedToWorkspaceCard(document)"
+                  class="stage-document-card__actions stage-document-card__actions--compatibility"
+                  aria-label="旧资料清单兼容提示"
+                >
+                  <h4>兼容提示</h4>
+                  <p class="inline-muted">
+                    该资料的主操作已迁移到上方项目工作区产出卡片；下方旧资料清单仅保留只读状态和附件摘要。
+                  </p>
+                  <button
+                    type="button"
+                    class="ghost-button"
+                    @click="$emit('locate-output-card', document)"
+                  >
+                    到上方产出卡片处理
+                  </button>
+                </section>
+                <ProjectStageDocumentAttachments
+                  :document="document"
+                  :state="getAttachmentState(document.id)"
+                  :read-only="isMigratedToWorkspaceCard(document)"
+                  @upload="$emit('upload-attachment', $event)"
+                  @download="$emit('download-attachment', $event)"
+                  @delete="$emit('delete-attachment', $event)"
+                />
+                <ProjectStageDocumentActions
+                  v-if="!isMigratedToWorkspaceCard(document)"
+                  :document="document"
+                  :responsibility-candidates="responsibilityCandidates"
+                  :responsibility-candidates-loading="responsibilityCandidatesLoading"
+                  :responsibility-selections="responsibilitySelections"
+                  :can-submit-document="canSubmitDocument(document)"
+                  :can-confirm-return-document="canConfirmReturnDocument(document)"
+                  :can-manage-responsibility="canManageResponsibility(document)"
+                  :can-change-applicability="canChangeApplicability(document)"
+                  :return-reasons="returnReasons"
+                  :not-applicable-reasons="notApplicableReasons"
+                  :is-action-pending="isActionPending"
+                  @submit-document="$emit('submit-document', $event)"
+                  @confirm-document="$emit('confirm-document', $event)"
+                  @return-document="$emit('return-document', $event)"
+                  @complete-revision-document="$emit('complete-revision-document', $event)"
+                  @mark-not-applicable="$emit('mark-not-applicable', $event)"
+                  @restore-applicable="$emit('restore-applicable', $event)"
+                  @save-responsible-user="$emit('save-responsible-user', $event)"
+                  @clear-responsible-user="$emit('clear-responsible-user', $event)"
+                />
+              </template>
             </div>
           </article>
         </div>
@@ -254,6 +290,7 @@ import {
   formatRevisionSummary,
   formatResponsibleUser,
   isApplicable,
+  isInitiationOnlineFormDocument,
   isRevisionRequired,
   isResponsibleUserDisabled,
   stageCompleteness,
@@ -273,10 +310,11 @@ defineEmits([
   'clear-responsible-user',
   'upload-attachment',
   'download-attachment',
-  'delete-attachment'
+  'delete-attachment',
+  'locate-output-card'
 ]);
 
-defineProps({
+const props = defineProps({
   checklist: {
     type: Object,
     default: null
@@ -348,6 +386,21 @@ defineProps({
   getAttachmentState: {
     type: Function,
     required: true
+  },
+  migratedWorkspaceDocumentKeys: {
+    type: Array,
+    default: () => []
   }
 });
+
+function getDocumentMigrationKeys(document) {
+  return [
+    document?.id ? `id:${document.id}` : null,
+    document?.documentCode ? `code:${document.documentCode}` : null
+  ].filter(Boolean);
+}
+
+function isMigratedToWorkspaceCard(document) {
+  return getDocumentMigrationKeys(document).some((key) => props.migratedWorkspaceDocumentKeys.includes(key));
+}
 </script>

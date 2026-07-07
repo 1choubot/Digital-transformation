@@ -9,9 +9,15 @@ import {
   completeStageDocumentRevisionHandler,
   createProjectHandler,
   deleteStageDocumentAttachmentHandler,
+  deleteStageDocumentOnlineFormImageHandler,
   downloadStageDocumentAttachmentHandler,
+  downloadStageDocumentGeneratedFileHandler,
+  downloadStageDocumentOnlineFormImageHandler,
   getProjectDetailHandler,
   getProjectOverviewDashboardHandler,
+  getProjectWorkspaceHandler,
+  getStageDocumentOnlineFormHandler,
+  getStageDocumentGeneratedFileStatusHandler,
   listStageApprovalHistoryHandler,
   getStageDocumentChecklistHandler,
   listProjectOperationLogsHandler,
@@ -24,11 +30,14 @@ import {
   returnInitiationReviewNodeHandler,
   returnStageDocumentHandler,
   resubmitStageApprovalHandler,
+  saveStageDocumentOnlineFormHandler,
   submitStageDocumentHandler,
+  submitStageDocumentOnlineFormHandler,
   submitStageApprovalHandler,
   updateProjectCodeHandler,
   updateStageDocumentResponsibleUserHandler,
-  uploadStageDocumentAttachmentHandler
+  uploadStageDocumentAttachmentHandler,
+  uploadStageDocumentOnlineFormImageHandler
 } from './projectRouteHandlers.js';
 
 export const projectsRouter = Router();
@@ -66,6 +75,12 @@ projectsRouter.get(
   '/:projectId/stage-document-checklist',
   requireAuth,
   asyncHandler(getStageDocumentChecklistHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/workspace',
+  requireAuth,
+  asyncHandler(getProjectWorkspaceHandler)
 );
 
 projectsRouter.post(
@@ -126,6 +141,54 @@ projectsRouter.post(
   '/:projectId/stage-documents/:documentId/revision/complete',
   requireAuth,
   asyncHandler(completeStageDocumentRevisionHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/stage-documents/:documentId/online-form',
+  requireAuth,
+  asyncHandler(getStageDocumentOnlineFormHandler)
+);
+
+projectsRouter.put(
+  '/:projectId/stage-documents/:documentId/online-form',
+  requireAuth,
+  asyncHandler(saveStageDocumentOnlineFormHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/stage-documents/:documentId/online-form/submit',
+  requireAuth,
+  asyncHandler(submitStageDocumentOnlineFormHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/stage-documents/:documentId/online-form/images/:fieldKey',
+  requireAuth,
+  asyncHandler(uploadStageDocumentOnlineFormImageHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/stage-documents/:documentId/online-form/images/:imageId/download',
+  requireAuth,
+  asyncHandler(downloadStageDocumentOnlineFormImageHandler)
+);
+
+projectsRouter.delete(
+  '/:projectId/stage-documents/:documentId/online-form/images/:imageId',
+  requireAuth,
+  asyncHandler(deleteStageDocumentOnlineFormImageHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/stage-documents/:documentId/generated-file',
+  requireAuth,
+  asyncHandler(getStageDocumentGeneratedFileStatusHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/stage-documents/:documentId/generated-file/download',
+  requireAuth,
+  asyncHandler(downloadStageDocumentGeneratedFileHandler)
 );
 
 projectsRouter.post(

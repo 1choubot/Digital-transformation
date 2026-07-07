@@ -54,6 +54,10 @@ export async function getProjectDetail(projectId, authToken = '') {
   return request(`/api/projects/${projectId}`, { authToken });
 }
 
+export async function getProjectWorkspace(projectId, authToken = '') {
+  return request(`/api/projects/${projectId}/workspace`, { authToken });
+}
+
 export async function updateProjectCode(projectId, projectCode, authToken) {
   return request(`/api/projects/${projectId}/project-code`, {
     method: 'PUT',
@@ -64,6 +68,53 @@ export async function updateProjectCode(projectId, projectCode, authToken) {
 
 export async function getProjectStageDocumentChecklist(projectId, authToken = '') {
   return request(`/api/projects/${projectId}/stage-document-checklist`, { authToken });
+}
+
+export async function getStageDocumentOnlineForm(projectId, documentId, authToken = '') {
+  return request(`/api/projects/${projectId}/stage-documents/${documentId}/online-form`, { authToken });
+}
+
+export async function saveStageDocumentOnlineForm(projectId, documentId, formData, authToken) {
+  return request(`/api/projects/${projectId}/stage-documents/${documentId}/online-form`, {
+    method: 'PUT',
+    authToken,
+    body: JSON.stringify({ formData })
+  });
+}
+
+export async function submitStageDocumentOnlineForm(projectId, documentId, formData, authToken) {
+  return request(`/api/projects/${projectId}/stage-documents/${documentId}/online-form/submit`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ formData })
+  });
+}
+
+export async function uploadStageDocumentOnlineFormImage(projectId, documentId, fieldKey, file, authToken) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  return request(`/api/projects/${projectId}/stage-documents/${documentId}/online-form/images/${fieldKey}`, {
+    method: 'POST',
+    authToken,
+    body: formData
+  });
+}
+
+export async function downloadStageDocumentOnlineFormImage(projectId, documentId, imageId, authToken) {
+  return requestBlob(
+    `/api/projects/${projectId}/stage-documents/${documentId}/online-form/images/${imageId}/download`,
+    {
+      authToken
+    }
+  );
+}
+
+export async function deleteStageDocumentOnlineFormImage(projectId, documentId, imageId, authToken) {
+  return request(`/api/projects/${projectId}/stage-documents/${documentId}/online-form/images/${imageId}`, {
+    method: 'DELETE',
+    authToken
+  });
 }
 
 export async function getProjectOperationLogs(projectId, authToken = '') {
@@ -154,11 +205,22 @@ export async function approveInitiationReviewNode(projectId, documentId, nodeKey
   });
 }
 
-export async function returnInitiationReviewNode(projectId, documentId, nodeKey, returnReason, authToken) {
+export async function returnInitiationReviewNode(
+  projectId,
+  documentId,
+  nodeKey,
+  returnReason,
+  authToken,
+  options = {}
+) {
   return request(`/api/projects/${projectId}/stage-documents/${documentId}/initiation-review/${nodeKey}/return`, {
     method: 'POST',
     authToken,
-    body: JSON.stringify({ returnReason })
+    body: JSON.stringify({
+      returnReason,
+      ...(options.returnAction ? { returnAction: options.returnAction } : {}),
+      ...(options.endReason ? { endReason: options.endReason } : {})
+    })
   });
 }
 
@@ -214,6 +276,21 @@ export async function uploadStageDocumentAttachment(projectId, documentId, file,
 export async function downloadStageDocumentAttachment(projectId, documentId, attachmentId, authToken) {
   return requestBlob(
     `/api/projects/${projectId}/stage-documents/${documentId}/attachments/${attachmentId}/download`,
+    {
+      authToken
+    }
+  );
+}
+
+export async function getStageDocumentGeneratedFileStatus(projectId, documentId, authToken = '') {
+  return request(`/api/projects/${projectId}/stage-documents/${documentId}/generated-file`, {
+    authToken
+  });
+}
+
+export async function downloadStageDocumentGeneratedFile(projectId, documentId, authToken) {
+  return requestBlob(
+    `/api/projects/${projectId}/stage-documents/${documentId}/generated-file/download`,
     {
       authToken
     }

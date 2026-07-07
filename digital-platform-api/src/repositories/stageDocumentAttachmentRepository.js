@@ -129,6 +129,10 @@ function assertDocumentApplicable(document) {
   }
 }
 
+function isProjectEnded(project) {
+  return project?.status === 'ended';
+}
+
 async function assertProjectExists(executor, projectId) {
   const [rows] = await executor.execute('SELECT id FROM projects WHERE id = ? LIMIT 1', [projectId]);
   if (rows.length === 0) {
@@ -141,8 +145,14 @@ async function selectAttachmentProject(executor, projectId) {
     `SELECT
       id,
       project_manager_user_id,
+      business_responsible_user_id,
+      technical_responsible_user_id,
       created_by_user_id,
-      participating_departments
+      participating_departments,
+      status,
+      ended_reason,
+      ended_by_user_id,
+      ended_at
     FROM projects
     WHERE id = ?
     LIMIT 1`,
@@ -293,7 +303,12 @@ export async function assertStageDocumentAttachmentUploadTarget({ projectId, doc
   const project = await selectAttachmentProject(pool, projectId);
   const document = await selectStageDocument(pool, projectId, documentId);
   assertDocumentApplicable(document);
-  assertCanUploadAttachment({ user, document });
+  if (isProjectEnded(project)) {
+    throwForbiddenAttachmentOperation(['projectId']);
+  }
+  if (!canUploadStageDocumentAttachment(user, { project, document })) {
+    throwForbiddenAttachmentOperation(['documentId']);
+  }
 }
 
 export async function listStageDocumentAttachments({ projectId, documentId, user }) {
@@ -339,7 +354,12 @@ export async function uploadStageDocumentAttachment({ projectId, documentId, use
     const project = await selectAttachmentProject(connection, projectId);
     const document = await selectStageDocument(connection, projectId, documentId, { forUpdate: true });
     assertDocumentApplicable(document);
-    assertCanUploadAttachment({ user, document });
+    if (isProjectEnded(project)) {
+      throwForbiddenAttachmentOperation(['projectId']);
+    }
+    if (!canUploadStageDocumentAttachment(user, { project, document })) {
+      throwForbiddenAttachmentOperation(['documentId']);
+    }
 
     const stored = await writeStageDocumentAttachmentFile(storageKey, uploadFile.buffer);
     fileWritten = true;

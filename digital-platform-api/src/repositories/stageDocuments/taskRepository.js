@@ -1,5 +1,10 @@
 import { pool } from '../../db/pool.js';
+import { PROJECT_STATUS } from '../../domain/projects.js';
 import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
+import {
+  INITIATION_NOTICE_DOCUMENT_CODE,
+  INITIATION_REVIEW_DOCUMENT_CODE
+} from '../../domain/initiationReview.js';
 import {
   mapStageDocumentTask,
   STAGE_DOCUMENT_TASK_ERROR,
@@ -96,7 +101,7 @@ export function normalizeStageDocumentTaskFilters(query = {}) {
 }
 
 export async function listMyStageDocumentTasks(userId, filters) {
-  const params = [userId, ...filters.statuses];
+  const params = [userId, PROJECT_STATUS.ENDED, ...filters.statuses];
   const projectFilter = filters.projectId === null ? '' : 'AND d.project_id = ?';
   const statusFilter =
     filters.status === 'pending'
@@ -167,6 +172,8 @@ export async function listMyStageDocumentTasks(userId, filters) {
       ON s.project_id = d.project_id
       AND s.stage_order = d.stage_order
     WHERE d.responsible_user_id = ?
+      AND p.status <> ?
+      AND d.document_code NOT IN (?, ?)
       ${statusFilter}
       AND d.is_applicable = 1
       ${projectFilter}
@@ -184,7 +191,13 @@ export async function listMyStageDocumentTasks(userId, filters) {
       d.stage_order ASC,
       d.document_order ASC,
       d.id ASC`,
-    params
+    [
+      userId,
+      PROJECT_STATUS.ENDED,
+      INITIATION_REVIEW_DOCUMENT_CODE,
+      INITIATION_NOTICE_DOCUMENT_CODE,
+      ...params.slice(2)
+    ]
   );
 
   const tasks = rows.map(mapStageDocumentTask);

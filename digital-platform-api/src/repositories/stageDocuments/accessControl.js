@@ -1,4 +1,5 @@
 import {
+  BUSINESS_DEPARTMENT,
   canManageProjectResponsibility,
   canManageStageDocumentApplicability,
   canSubmitStageDocument,
@@ -11,8 +12,13 @@ import {
   isSystemAdminUser,
   isValidBusinessDepartment
 } from '../../domain/organization.js';
+import { PROJECT_STATUS } from '../../domain/projects.js';
 import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
-import { isInitiationReviewDocument } from '../../domain/initiationReview.js';
+import {
+  INITIATION_REWORK_TARGET_DOCUMENT_CODE,
+  isInitiationOnlineFormDocument,
+  isInitiationReviewDocument
+} from '../../domain/initiationReview.js';
 import {
   getDocumentCompletionMode,
   isReviewCompletionMode,
@@ -27,6 +33,14 @@ function getProjectManagerUserId(project) {
 
 function getProjectCreatorUserId(project) {
   return project?.created_by_user_id ?? project?.createdByUserId ?? null;
+}
+
+function getBusinessResponsibleUserId(project) {
+  return project?.business_responsible_user_id ?? project?.businessResponsibleUserId ?? null;
+}
+
+function getTechnicalResponsibleUserId(project) {
+  return project?.technical_responsible_user_id ?? project?.technicalResponsibleUserId ?? null;
 }
 
 function getResponsibleUserId(document) {
@@ -63,6 +77,19 @@ function isCurrentUserProjectCreator(user, project) {
   return Boolean(creatorUserId) && String(creatorUserId) === String(user?.id);
 }
 
+function isCurrentUserProjectResponsible(user, project) {
+  const businessResponsibleUserId = getBusinessResponsibleUserId(project);
+  const technicalResponsibleUserId = getTechnicalResponsibleUserId(project);
+  return (
+    (Boolean(businessResponsibleUserId) && String(businessResponsibleUserId) === String(user?.id)) ||
+    (Boolean(technicalResponsibleUserId) && String(technicalResponsibleUserId) === String(user?.id))
+  );
+}
+
+export function isProjectEnded(project) {
+  return (project?.status ?? project?.project_status ?? null) === PROJECT_STATUS.ENDED;
+}
+
 function isGlobalBusinessViewer(user) {
   return isGeneralManagerUser(user) || isGeneralManagerAssistantUser(user) || isCenterManagerUser(user);
 }
@@ -75,7 +102,8 @@ export function canViewCompleteStageDocumentSet(user, project) {
   return (
     isGlobalBusinessViewer(user) ||
     isCurrentUserProjectCreator(user, project) ||
-    isCurrentUserProjectManager(user, project)
+    isCurrentUserProjectManager(user, project) ||
+    isCurrentUserProjectResponsible(user, project)
   );
 }
 
@@ -169,11 +197,23 @@ export function canDownloadStageDocumentAttachment(user, { project, document }) 
   return canViewStageDocumentAttachments(user, { project, document });
 }
 
-export function canUploadStageDocumentAttachment(user, { document }) {
+export function canUploadStageDocumentAttachment(user, { project = null, document }) {
+  if (isProjectEnded(project)) {
+    return false;
+  }
+
+  if (isInitiationOnlineFormDocument(document)) {
+    return false;
+  }
+
   return isDocumentApplicable(document) && isCurrentUserResponsible(user, document);
 }
 
 function canAccessStageDocumentAttachmentForDelete(user, { project, document }) {
+  if (isProjectEnded(project)) {
+    return false;
+  }
+
   if (isSystemAdminUser(user) || isGeneralManagerAssistantUser(user)) {
     return false;
   }
@@ -190,6 +230,10 @@ function canAccessStageDocumentAttachmentForDelete(user, { project, document }) 
 }
 
 export function canDeleteStageDocumentAttachment(user, { project = null, document, attachment = null }) {
+  if (isProjectEnded(project)) {
+    return false;
+  }
+
   if (isSystemAdminUser(user) || isGeneralManagerAssistantUser(user)) {
     return false;
   }
@@ -209,24 +253,44 @@ export function canDeleteStageDocumentAttachment(user, { project = null, documen
   );
 }
 
-export function buildStageDocumentPermissions({ user, project, document }) {
+export function canManageInitiationOnlineFormResponsibility(user, document) {
+  const documentCode = String(document?.document_code ?? document?.documentCode ?? '').trim();
+  if (documentCode !== INITIATION_REWORK_TARGET_DOCUMENT_CODE) {
+    return false;
+  }
+
+  if (isSystemAdminUser(user) || isGeneralManagerAssistantUser(user)) {
+    return false;
+  }
+
+  return isCenterManagerUser(user) && user.department === BUSINESS_DEPARTMENT.MARKETING_CENTER;
+}
+
+export function buildStageDocumentPermissions({ user, project, document, relatedDocumentsByCode = null }) {
   const canViewAttachments = canViewStageDocumentAttachments(user, { project, document });
   const canDownloadAttachment = canDownloadStageDocumentAttachment(user, { project, document });
-  const canUploadAttachment = canUploadStageDocumentAttachment(user, { document });
-  const canReviewDocument = canReviewStageDocument(user, document);
+  const projectEnded = isProjectEnded(project);
+  const canUploadAttachment = !projectEnded && canUploadStageDocumentAttachment(user, { project, document });
+  const canReviewDocument = !projectEnded && canReviewStageDocument(user, document);
+  const isOnlineFormOnlyDocument = isInitiationOnlineFormDocument(document);
   const canSubmitDocument =
+    !projectEnded &&
     !isGeneralManagerAssistantUser(user) &&
     !isSystemAdminUser(user) &&
+    !isOnlineFormOnlyDocument &&
     canSubmitStageDocument(user, { project, document });
-  const canManageResponsibility =
-    !isGeneralManagerAssistantUser(user) &&
-    !isSystemAdminUser(user) &&
-    canManageProjectResponsibility(user, project, { document });
+  const canManageResponsibility = isOnlineFormOnlyDocument
+    ? !projectEnded && canManageInitiationOnlineFormResponsibility(user, document)
+    : !isGeneralManagerAssistantUser(user) &&
+      !isSystemAdminUser(user) &&
+      !projectEnded &&
+      canManageProjectResponsibility(user, project, { document });
   const canChangeApplicability =
+    !projectEnded &&
     !isGeneralManagerAssistantUser(user) &&
     !isSystemAdminUser(user) &&
     canManageStageDocumentApplicability(user, { project, document });
-  const canDeleteAttachment = canDeleteStageDocumentAttachment(user, { project, document });
+  const canDeleteAttachment = !projectEnded && canDeleteStageDocumentAttachment(user, { project, document });
 
   return {
     canViewAttachments,
@@ -240,8 +304,8 @@ export function buildStageDocumentPermissions({ user, project, document }) {
   };
 }
 
-export function attachStageDocumentPermissions({ user, project, document }) {
-  const permissions = buildStageDocumentPermissions({ user, project, document });
+export function attachStageDocumentPermissions({ user, project, document, relatedDocumentsByCode = null }) {
+  const permissions = buildStageDocumentPermissions({ user, project, document, relatedDocumentsByCode });
 
   return {
     ...document,

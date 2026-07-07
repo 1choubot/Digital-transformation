@@ -10,6 +10,7 @@ import {
   createProject,
   getProjectDetail,
   getProjectOverviewDashboard,
+  getProjectWorkspace,
   listStageApprovalHistory,
   listProjects,
   normalizeProjectOverviewDashboardFilters,
@@ -29,7 +30,16 @@ import {
   approveInitiationReviewNode,
   getProjectStageDocumentChecklist,
   completeProjectStageDocumentRevision,
+  deleteStageDocumentOnlineFormImage,
+  getStageDocumentOnlineForm,
+  getStageDocumentGeneratedFileDownload,
+  getStageDocumentGeneratedFileStatus,
+  getStageDocumentOnlineFormImageDownload,
   returnInitiationReviewNode,
+  saveStageDocumentOnlineForm,
+  STAGE_DOCUMENT_ONLINE_FORM_IMAGE_ERROR,
+  submitStageDocumentOnlineForm,
+  uploadStageDocumentOnlineFormImage,
   updateProjectStageDocumentApplicability,
   updateProjectStageDocumentResponsibleUser,
   updateProjectStageDocumentStatus
@@ -44,7 +54,7 @@ import {
   uploadStageDocumentAttachment
 } from '../repositories/stageDocumentAttachmentRepository.js';
 import { readMultipartFile } from '../middleware/multipartFile.js';
-import { searchActiveProjectsForDailyReports } from '../repositories/dailyReportRepository.js';
+import { STAGE_DOCUMENT_ONLINE_FORM_IMAGE_MAX_FILE_SIZE } from '../storage/stageDocumentOnlineFormImageStorage.js';
 
 function parsePositiveId(rawValue, fieldName) {
   const id = Number.parseInt(rawValue, 10);
@@ -119,6 +129,14 @@ function parseAttachmentId(rawValue) {
     rawValue,
     STAGE_DOCUMENT_ATTACHMENT_ERROR.INVALID_ATTACHMENT_ID,
     'attachmentId'
+  );
+}
+
+function parseOnlineFormImageId(rawValue) {
+  return parseAttachmentPositiveId(
+    rawValue,
+    STAGE_DOCUMENT_ONLINE_FORM_IMAGE_ERROR.INVALID_IMAGE_ID,
+    'imageId'
   );
 }
 
@@ -246,6 +264,15 @@ export async function getStageDocumentChecklistHandler(req, res) {
   });
 }
 
+export async function getProjectWorkspaceHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workspace = await getProjectWorkspace(projectId, req.auth.user);
+
+  res.json({
+    data: workspace
+  });
+}
+
 export async function advanceProjectStageHandler(req, res) {
   const projectId = parseProjectId(req.params.projectId);
   const detail = await advanceProjectStage(projectId, req.auth.user);
@@ -341,6 +368,54 @@ export async function completeStageDocumentRevisionHandler(req, res) {
   });
 }
 
+export async function getStageDocumentOnlineFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const documentId = parseDocumentId(req.params.documentId);
+  const form = await getStageDocumentOnlineForm({
+    projectId,
+    documentId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: {
+      form
+    }
+  });
+}
+
+export async function saveStageDocumentOnlineFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const documentId = parseDocumentId(req.params.documentId);
+  const form = await saveStageDocumentOnlineForm({
+    projectId,
+    documentId,
+    user: req.auth.user,
+    formData: req.body?.formData
+  });
+
+  res.json({
+    data: {
+      form
+    }
+  });
+}
+
+export async function submitStageDocumentOnlineFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const documentId = parseDocumentId(req.params.documentId);
+  const result = await submitStageDocumentOnlineForm({
+    projectId,
+    documentId,
+    user: req.auth.user,
+    formData: req.body?.formData
+  });
+
+  res.json({
+    data: result
+  });
+}
+
 export async function approveInitiationReviewNodeHandler(req, res) {
   const projectId = parseProjectId(req.params.projectId);
   const documentId = parseDocumentId(req.params.documentId);
@@ -367,7 +442,9 @@ export async function returnInitiationReviewNodeHandler(req, res) {
     documentId,
     nodeKey: req.params.nodeKey,
     user: req.auth.user,
-    returnReason: req.body?.returnReason ?? req.body?.comment
+    returnReason: req.body?.returnReason ?? req.body?.comment,
+    returnAction: req.body?.returnAction ?? req.body?.returnTarget,
+    endReason: req.body?.endReason
   });
 
   res.json({
@@ -471,6 +548,128 @@ export async function downloadStageDocumentAttachmentHandler(req, res) {
       }
     );
   });
+}
+
+export async function getStageDocumentGeneratedFileStatusHandler(req, res) {
+  const projectId = parseAttachmentProjectId(req.params.projectId);
+  const documentId = parseAttachmentDocumentId(req.params.documentId);
+
+  await assertProjectViewable(projectId, req.auth.user);
+  const status = await getStageDocumentGeneratedFileStatus({
+    projectId,
+    documentId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: status
+  });
+}
+
+export async function downloadStageDocumentGeneratedFileHandler(req, res) {
+  const projectId = parseAttachmentProjectId(req.params.projectId);
+  const documentId = parseAttachmentDocumentId(req.params.documentId);
+
+  await assertProjectViewable(projectId, req.auth.user);
+  const download = await getStageDocumentGeneratedFileDownload({
+    projectId,
+    documentId,
+    user: req.auth.user
+  });
+
+  await new Promise((resolve, reject) => {
+    res.download(
+      download.filePath,
+      download.fileName,
+      {
+        headers: {
+          'Content-Type': download.mimeType,
+          'Content-Length': String(download.fileSize)
+        }
+      },
+      (error) => {
+        if (error && !res.headersSent) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      }
+    );
+  });
+}
+
+export async function uploadStageDocumentOnlineFormImageHandler(req, res) {
+  const projectId = parseAttachmentProjectId(req.params.projectId);
+  const documentId = parseAttachmentDocumentId(req.params.documentId);
+  const fieldKey = String(req.params.fieldKey || '').trim();
+
+  await assertProjectViewable(projectId, req.auth.user);
+  const file = await readMultipartFile(req, {
+    maxFileSize: STAGE_DOCUMENT_ONLINE_FORM_IMAGE_MAX_FILE_SIZE
+  });
+  const image = await uploadStageDocumentOnlineFormImage({
+    projectId,
+    documentId,
+    fieldKey,
+    user: req.auth.user,
+    file
+  });
+
+  res.status(201).json({
+    data: image
+  });
+}
+
+export async function downloadStageDocumentOnlineFormImageHandler(req, res) {
+  const projectId = parseAttachmentProjectId(req.params.projectId);
+  const documentId = parseAttachmentDocumentId(req.params.documentId);
+  const imageId = parseOnlineFormImageId(req.params.imageId);
+
+  await assertProjectViewable(projectId, req.auth.user);
+  const download = await getStageDocumentOnlineFormImageDownload({
+    projectId,
+    documentId,
+    imageId,
+    user: req.auth.user
+  });
+
+  await new Promise((resolve, reject) => {
+    res.download(
+      download.filePath,
+      download.originalFileName,
+      {
+        headers: {
+          'Content-Type': download.mimeType,
+          'Content-Length': String(download.fileSize)
+        }
+      },
+      (error) => {
+        if (error && !res.headersSent) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      }
+    );
+  });
+}
+
+export async function deleteStageDocumentOnlineFormImageHandler(req, res) {
+  const projectId = parseAttachmentProjectId(req.params.projectId);
+  const documentId = parseAttachmentDocumentId(req.params.documentId);
+  const imageId = parseOnlineFormImageId(req.params.imageId);
+
+  await assertProjectViewable(projectId, req.auth.user);
+  await deleteStageDocumentOnlineFormImage({
+    projectId,
+    documentId,
+    imageId,
+    user: req.auth.user
+  });
+
+  res.status(204).send();
 }
 
 export async function deleteStageDocumentAttachmentHandler(req, res) {

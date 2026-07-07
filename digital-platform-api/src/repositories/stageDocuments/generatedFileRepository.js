@@ -187,11 +187,10 @@ function formatChineseDateValue(value) {
 
 const TEMPLATE_VALUE_BUILDERS = Object.freeze({
   projectNameHeader: (values) => buildPrefixedTemplateValue('项目名称：', values),
-  projectCodeHeader: (values) => buildPrefixedTemplateValue('项目号：', values),
   customerNameHeader: (values) => buildPrefixedTemplateValue('客户名称：', values),
-  customerContactPersonHeader: (values) => buildPrefixedTemplateValue('项目联系人：', values),
-  customerContactHeader: (values) => buildPrefixedTemplateValue('联系方式：', values),
-  projectResponsibleHeader: (values) => buildPrefixedTemplateValue('项目负责人：', values),
+  customerContactPersonHeader: (values) => buildPrefixedTemplateValue('客户项目联系人：', values),
+  customerContactHeader: (values) => buildPrefixedTemplateValue('联系电话：', values),
+  projectResponsibleHeader: (values) => buildPrefixedTemplateValue('本公司商务负责人：', values),
   projectResponsibleContactHeader: (values) => buildPrefixedTemplateValue('联系方式：', values),
   temperatureRange: ([min, max]) => {
     if (!cleanTemplateValue(min) && !cleanTemplateValue(max)) {
@@ -359,6 +358,7 @@ function buildSourceObject(snapshot, reviewSnapshot) {
     document: snapshot.document,
     form: snapshot.formData,
     formImages,
+    noticeProjectList: snapshot.noticeProjectList || { cutoff: null, rows: [] },
     review: buildReviewSnapshotByKey(reviewSnapshot),
     static: {
       noticeTitle: NOTICE_TEMPLATE.title,
@@ -421,6 +421,38 @@ async function buildExcelImageValues(manifest, source) {
   return imageValues;
 }
 
+function buildExcelRichCheckboxValues(manifest, source) {
+  return manifest.mappings
+    .filter((mapping) => mapping.targetType === 'excelRichCheckbox')
+    .map((mapping) => {
+      const [value] = getMappingSourceValues(mapping, source);
+      return {
+        target: mapping.target,
+        checked: cleanTemplateValue(value) === cleanTemplateValue(mapping.checkedValue),
+        checkedSymbol: mapping.checkedSymbol,
+        uncheckedSymbol: mapping.uncheckedSymbol,
+        fallbackText: mapping.fallbackText,
+        checkboxFont: mapping.checkboxFont,
+        textFont: mapping.textFont
+      };
+    });
+}
+
+function buildWordTableRowsValues(manifest, source) {
+  return manifest.mappings
+    .filter((mapping) => mapping.targetType === 'wordTableRows')
+    .map((mapping) => {
+      const rows = getByPath(source, mapping.source?.path);
+      return {
+        target: mapping.target,
+        rows: (Array.isArray(rows) ? rows : []).map((row) =>
+          (mapping.columns || []).map((column) => normalizeDisplayValue(getByPath(row, column.sourcePath)))
+        ),
+        removeRowsAfterTemplate: mapping.removeRowsAfterTemplate !== false
+      };
+    });
+}
+
 async function renderGeneratedBuffer({ manifest, templateBuffer, snapshot, reviewSnapshot }) {
   const source = buildSourceObject(snapshot, reviewSnapshot);
   validateRequiredMappings(manifest, source);
@@ -438,7 +470,11 @@ async function renderGeneratedBuffer({ manifest, templateBuffer, snapshot, revie
         ])
     );
     const imageValues = await buildExcelImageValues(manifest, source);
-    return renderXlsxTemplate(templateBuffer, { cellValues, imageValues });
+    return renderXlsxTemplate(templateBuffer, {
+      cellValues,
+      imageValues,
+      richCheckboxValues: buildExcelRichCheckboxValues(manifest, source)
+    });
   }
 
   if (manifest.fileType === 'docx') {
@@ -456,8 +492,9 @@ async function renderGeneratedBuffer({ manifest, templateBuffer, snapshot, revie
       }));
     return renderDocxTemplate(templateBuffer, {
       tableCellValues,
+      tableRows: buildWordTableRowsValues(manifest, source),
       textReplacements,
-      clearRowsAfterDataRow: true
+      clearRowsAfterDataRow: !manifest.mappings.some((mapping) => mapping.targetType === 'wordTableRows')
     });
   }
 
@@ -624,6 +661,52 @@ async function selectForm(executor, documentId) {
   );
 
   return rows[0] || null;
+}
+
+async function selectNoticeProjectList(executor, currentProjectId, currentSubmittedAt) {
+  if (!currentSubmittedAt) {
+    return { cutoff: null, rows: [] };
+  }
+
+  const [rows] = await executor.execute(
+    `SELECT
+      p.id,
+      p.project_code,
+      p.project_name,
+      p.customer_name,
+      f.form_data_json,
+      f.submitted_at
+    FROM project_stage_document_forms f
+    INNER JOIN project_stage_documents d
+      ON d.id = f.stage_document_id
+    INNER JOIN projects p
+      ON p.id = f.project_id
+    WHERE d.document_code = ?
+      AND f.status = 'submitted'
+      AND f.submitted_at <= ?
+      AND NULLIF(TRIM(COALESCE(p.project_code, '')), '') IS NOT NULL
+    ORDER BY f.submitted_at ASC, p.id ASC`,
+    [INITIATION_NOTICE_DOCUMENT_CODE, currentSubmittedAt]
+  );
+
+  const mappedRows = rows.map((row, index) => {
+    const formData = parseJsonValue(row.form_data_json, {});
+    return {
+      sequenceNumber: String(index + 1),
+      projectId: row.id,
+      projectCode: row.project_code ?? '',
+      projectName: row.project_name ?? '',
+      customerName: row.customer_name ?? '',
+      initiationDate: formData?.initiationDate ?? '',
+      submittedAt: row.submitted_at ?? null,
+      isCurrentProject: String(row.id) === String(currentProjectId)
+    };
+  });
+
+  return {
+    cutoff: currentSubmittedAt,
+    rows: mappedRows
+  };
 }
 
 async function selectReviewSnapshot(executor, documentId) {
@@ -831,6 +914,10 @@ async function buildGenerationContext({ executor, projectId, documentId, manifes
   const project = mapProject(projectRow);
   const document = mapDocument(documentRow);
   const form = mapForm(formRow);
+  const noticeProjectList =
+    manifest.documentCode === INITIATION_NOTICE_DOCUMENT_CODE
+      ? await selectNoticeProjectList(executor, projectId, form?.submittedAt ?? null)
+      : null;
   const formImagesByFieldKey = {};
   for (const image of formImages) {
     if (!formImagesByFieldKey[image.fieldKey]) {
@@ -848,19 +935,23 @@ async function buildGenerationContext({ executor, projectId, documentId, manifes
       storageKey: image.storageKey
     });
   }
+  const formData = {
+    ...(form?.formData || {}),
+    projectName: form?.formData?.projectName || project.projectName,
+    customerName: form?.formData?.customerName || project.customerName,
+    customerContactPerson: form?.formData?.customerContactPerson || project.customerContactPerson,
+    customerContact: form?.formData?.customerContact || project.customerContact,
+    customerUnit: form?.formData?.customerUnit || project.customerName,
+    sequenceNumber: form?.formData?.sequenceNumber || '1'
+  };
+  if (manifest.documentCode === INITIATION_NOTICE_DOCUMENT_CODE) {
+    formData.projectCode = form?.formData?.projectCode || project.projectCode;
+  }
+
   const snapshot = {
     project,
     document,
-    formData: {
-      ...(form?.formData || {}),
-      projectCode: form?.formData?.projectCode || project.projectCode,
-      projectName: form?.formData?.projectName || project.projectName,
-      customerName: form?.formData?.customerName || project.customerName,
-      customerContactPerson: form?.formData?.customerContactPerson || project.customerContactPerson,
-      customerContact: form?.formData?.customerContact || project.customerContact,
-      customerUnit: form?.formData?.customerUnit || project.customerName,
-      sequenceNumber: form?.formData?.sequenceNumber || '1'
-    },
+    formData,
     form: form
       ? {
           id: form.id,
@@ -871,6 +962,7 @@ async function buildGenerationContext({ executor, projectId, documentId, manifes
         }
       : null,
     formImages: formImagesByFieldKey,
+    noticeProjectList,
     capturedAt: new Date().toISOString()
   };
   const hashSourceSnapshot = {
@@ -878,7 +970,8 @@ async function buildGenerationContext({ executor, projectId, documentId, manifes
     document,
     formData: snapshot.formData,
     form: snapshot.form,
-    formImages: formImagesByFieldKey
+    formImages: formImagesByFieldKey,
+    noticeProjectList
   };
 
   return {

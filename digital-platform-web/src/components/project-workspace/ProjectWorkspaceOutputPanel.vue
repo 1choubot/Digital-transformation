@@ -28,7 +28,7 @@
         </div>
         <div>
           <dt>项目编号</dt>
-          <dd>{{ node.projectInput.projectCode || '待在 1.2 填写' }}</dd>
+          <dd>{{ node.projectInput.projectCode || '待在 1.3 填写' }}</dd>
         </div>
         <div>
           <dt>商务负责人</dt>

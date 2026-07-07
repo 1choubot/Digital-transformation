@@ -47,7 +47,7 @@ const TEMPLATE_REGISTRY = Object.freeze({
     templateKey: INITIATION_TEMPLATE_KEY.APPROVAL,
     templatePath: templatePath('项目立项审批表-模板.xlsx'),
     fileType: 'xlsx',
-    templateVersion: '20260706-initiation-approval'
+    templateVersion: '20260707-initiation-approval-v1'
   }),
   [INITIATION_TEMPLATE_KEY.NOTICE]: Object.freeze({
     templateKey: INITIATION_TEMPLATE_KEY.NOTICE,
@@ -100,6 +100,21 @@ function excelImage(range, sourcePath, label, required = false, options = {}) {
   };
 }
 
+function excelRichCheckbox(cellRef, sourcePath, label, checkedValue, required = false, options = {}) {
+  return {
+    targetType: 'excelRichCheckbox',
+    target: cellRef,
+    source: source(sourcePath, label, required),
+    checkedValue,
+    checkedSymbol: 'R',
+    uncheckedSymbol: '£',
+    fallbackText: ` ${label}`,
+    checkboxFont: 'Wingdings 2',
+    textFont: '宋体',
+    ...options
+  };
+}
+
 function wordTableCell(tableIndex, rowIndex, cellIndex, sourcePath, label, required = false) {
   return {
     targetType: 'wordTableCell',
@@ -133,6 +148,20 @@ function wordTextReplacement(matchText, builder, sourcePaths, label, required = 
     },
     source: sourceGroup(sourcePaths, label, required),
     valueBuilder: builder
+  };
+}
+
+function wordTableRows(tableIndex, templateRowIndex, sourcePath, columns, label, required = false, options = {}) {
+  return {
+    targetType: 'wordTableRows',
+    target: {
+      tableIndex,
+      templateRowIndex
+    },
+    source: source(sourcePath, label, required),
+    columns,
+    removeRowsAfterTemplate: true,
+    ...options
   };
 }
 
@@ -191,55 +220,56 @@ export const INITIATION_TEMPLATE_MANIFESTS = Object.freeze({
     fileType: 'xlsx',
     generatedFileNamePrefix: '项目立项审批表',
     triggerEvent: INITIATION_TEMPLATE_TRIGGER_EVENT.INITIATION_REVIEW_GENERAL_APPROVED,
-    requiredSources: ['project.projectName', 'project.projectCode', 'project.customerName', 'form.projectCode'],
+    requiredSources: ['project.projectName', 'project.customerName', 'form.projectExecutionMode'],
     formatRetention: ['preserve workbook sheets', 'preserve scoring table layout', 'preserve borders/fonts/row heights/column widths'],
     mappings: [
       cellBuilder('A2', 'projectNameHeader', ['project.projectName', 'form.projectName'], '项目名称', true),
-      cellBuilder('I2', 'projectCodeHeader', ['project.projectCode', 'form.projectCode'], '项目号/项目编号', true),
-      cellBuilder('A4', 'customerNameHeader', ['project.customerName', 'form.customerName'], '客户名称', true),
-      cellBuilder('A5', 'customerContactPersonHeader', ['project.customerContactPerson', 'form.customerContactPerson'], '项目联系人'),
-      cellBuilder('A6', 'customerContactHeader', ['project.customerContact', 'form.customerContact'], '客户联系方式'),
-      cellBuilder('I5', 'projectResponsibleHeader', ['project.businessResponsibleName', 'form.projectResponsiblePerson'], '项目负责人'),
-      cellBuilder('I6', 'projectResponsibleContactHeader', ['form.projectResponsibleContact'], '项目负责人联系方式'),
-      cell('K8', 'form.partyAttributeScore', '甲方属性分值', true),
-      cell('L8', 'form.partyAttributeInformationNotes', '甲方属性信息收集说明'),
-      cell('O8', 'form.partyAttributeResponsiblePerson', '甲方属性责任人'),
-      cell('K9', 'form.enterpriseInfoScore', '甲方企业信息分值', true),
-      cell('L9', 'form.enterpriseInfoInformationNotes', '甲方企业信息信息收集说明'),
-      cell('O9', 'form.enterpriseInfoResponsiblePerson', '甲方企业信息责任人'),
-      cell('K10', 'form.identityRoleScore', '身份角色分值', true),
-      cell('L10', 'form.identityRoleInformationNotes', '身份角色信息收集说明'),
-      cell('O10', 'form.identityRoleResponsiblePerson', '身份角色责任人'),
-      cell('K11', 'form.companyAdvantagesScore', '公司竞争优势分值', true),
-      cell('L11', 'form.companyAdvantagesInformationNotes', '公司竞争优势信息收集说明'),
-      cell('O11', 'form.companyAdvantagesResponsiblePerson', '公司竞争优势责任人'),
-      cell('K12', 'form.businessModeBackgroundScore', '商务形式及背调分值', true),
-      cell('L12', 'form.businessModeBackgroundInformationNotes', '商务形式及背调信息收集说明'),
-      cell('O12', 'form.businessModeBackgroundResponsiblePerson', '商务形式及背调责任人'),
-      cell('K13', 'form.relationshipLevelScore', '商务关系层级分值', true),
-      cell('L13', 'form.relationshipLevelInformationNotes', '商务关系层级信息收集说明'),
-      cell('O13', 'form.relationshipLevelResponsiblePerson', '商务关系层级责任人'),
-      cell('K14', 'form.projectSituationScore', '项目情况分值', true),
-      cell('L14', 'form.projectSituationInformationNotes', '项目情况信息收集说明'),
-      cell('O14', 'form.projectSituationResponsiblePerson', '项目情况责任人'),
-      cell('K15', 'form.specialEnvironmentScore', '特殊环境要求分值', true),
-      cell('L15', 'form.specialEnvironmentInformationNotes', '特殊环境要求信息收集说明'),
-      cell('O15', 'form.specialEnvironmentResponsiblePerson', '特殊环境要求责任人'),
-      cell('K16', 'form.industryThresholdScore', '行业门槛分值', true),
-      cell('L16', 'form.industryThresholdInformationNotes', '行业门槛信息收集说明'),
-      cell('O16', 'form.industryThresholdResponsiblePerson', '行业门槛责任人'),
-      cell('K17', 'form.technologyMaturityScore', '技术成熟度分值', true),
-      cell('L17', 'form.technologyMaturityInformationNotes', '技术成熟度信息收集说明'),
-      cell('O17', 'form.technologyMaturityResponsiblePerson', '技术成熟度责任人'),
-      cell('K18', 'form.referenceCasesScore', '可借鉴案例分值', true),
-      cell('L18', 'form.referenceCasesInformationNotes', '可借鉴案例信息收集说明'),
-      cell('O18', 'form.referenceCasesResponsiblePerson', '可借鉴案例责任人'),
-      cellBuilder('A19', 'businessReviewOpinion', ['review.business.comment'], '营销中心意见', false, { preserveTemplateWhenEmpty: true }),
-      cellBuilder('M19', 'reviewDate', ['review.business.reviewedAt', 'review.business.submittedAt'], '营销日期', false, { preserveTemplateWhenEmpty: true }),
-      cellBuilder('A20', 'technicalReviewOpinion', ['review.technical.comment'], '研发中心意见', false, { preserveTemplateWhenEmpty: true }),
-      cellBuilder('M20', 'reviewDate', ['review.technical.reviewedAt', 'review.technical.submittedAt'], '研发日期', false, { preserveTemplateWhenEmpty: true }),
-      cellBuilder('A21', 'generalReviewOpinion', ['review.general.comment'], '总经理意见', false, { preserveTemplateWhenEmpty: true }),
-      cellBuilder('M21', 'reviewDate', ['review.general.reviewedAt', 'review.general.submittedAt'], '总经理日期', false, { preserveTemplateWhenEmpty: true })
+      cellBuilder('A3', 'customerNameHeader', ['project.customerName', 'form.customerName'], '客户名称', true),
+      cellBuilder('A4', 'customerContactPersonHeader', ['project.customerContactPerson', 'form.customerContactPerson'], '客户项目联系人'),
+      cellBuilder('G4', 'customerContactHeader', ['project.customerContact', 'form.customerContact'], '客户项目联系电话'),
+      cellBuilder('J4', 'projectResponsibleHeader', ['project.businessResponsibleName', 'form.projectResponsiblePerson'], '本公司商务负责人'),
+      cellBuilder('M4', 'projectResponsibleContactHeader', ['form.projectResponsibleContact'], '本公司商务负责人联系电话'),
+      cell('K6', 'form.customerEnterpriseAttributeScore', '客户企业属性分值', true),
+      cell('L6', 'form.customerEnterpriseAttributeInformationNotes', '客户企业属性信息收集说明'),
+      cell('O6', 'form.customerEnterpriseAttributeResponsiblePerson', '客户企业属性责任人'),
+      cell('K7', 'form.projectSourceScore', '项目来源分值', true),
+      cell('L7', 'form.projectSourceInformationNotes', '项目来源信息收集说明'),
+      cell('O7', 'form.projectSourceResponsiblePerson', '项目来源责任人'),
+      cell('K8', 'form.projectPositioningScore', '项目定位分值', true),
+      cell('L8', 'form.projectPositioningInformationNotes', '项目定位信息收集说明'),
+      cell('O8', 'form.projectPositioningResponsiblePerson', '项目定位责任人'),
+      cell('K9', 'form.businessCompetitionConditionScore', '商务竞争条件分值', true),
+      cell('L9', 'form.businessCompetitionConditionInformationNotes', '商务竞争条件信息收集说明'),
+      cell('O9', 'form.businessCompetitionConditionResponsiblePerson', '商务竞争条件责任人'),
+      cell('K10', 'form.projectBudgetScore', '项目预算分值', true),
+      cell('L10', 'form.projectBudgetInformationNotes', '项目预算信息收集说明'),
+      cell('O10', 'form.projectBudgetResponsiblePerson', '项目预算责任人'),
+      cell('K11', 'form.paymentConditionScore', '付款条件分值', true),
+      cell('L11', 'form.paymentConditionInformationNotes', '付款条件信息收集说明'),
+      cell('O11', 'form.paymentConditionResponsiblePerson', '付款条件责任人'),
+      cell('K12', 'form.projectRequirementScore', '项目需求分值', true),
+      cell('L12', 'form.projectRequirementInformationNotes', '项目需求信息收集说明'),
+      cell('O12', 'form.projectRequirementResponsiblePerson', '项目需求责任人'),
+      cell('K13', 'form.specialEnvironmentScore', '特殊环境要求分值', true),
+      cell('L13', 'form.specialEnvironmentInformationNotes', '特殊环境要求信息收集说明'),
+      cell('O13', 'form.specialEnvironmentResponsiblePerson', '特殊环境要求责任人'),
+      cell('K14', 'form.industryThresholdScore', '行业门槛分值', true),
+      cell('L14', 'form.industryThresholdInformationNotes', '行业门槛信息收集说明'),
+      cell('O14', 'form.industryThresholdResponsiblePerson', '行业门槛责任人'),
+      cell('K15', 'form.technologyMaturityScore', '技术成熟度分值', true),
+      cell('L15', 'form.technologyMaturityInformationNotes', '技术成熟度信息收集说明'),
+      cell('O15', 'form.technologyMaturityResponsiblePerson', '技术成熟度责任人'),
+      cell('K16', 'form.rdModeScore', '研发模式分值', true),
+      cell('L16', 'form.rdModeInformationNotes', '研发模式信息收集说明'),
+      cell('O16', 'form.rdModeResponsiblePerson', '研发模式责任人'),
+      cellBuilder('A17', 'businessReviewOpinion', ['review.business.comment'], '营销中心意见', false, { preserveTemplateWhenEmpty: true }),
+      cellBuilder('M17', 'reviewDate', ['review.business.reviewedAt', 'review.business.submittedAt'], '营销日期', false, { preserveTemplateWhenEmpty: true }),
+      cellBuilder('A18', 'technicalReviewOpinion', ['review.technical.comment'], '研发中心意见', false, { preserveTemplateWhenEmpty: true }),
+      cellBuilder('M18', 'reviewDate', ['review.technical.reviewedAt', 'review.technical.submittedAt'], '研发日期', false, { preserveTemplateWhenEmpty: true }),
+      cellBuilder('A19', 'generalReviewOpinion', ['review.general.comment'], '总经理意见', false, { preserveTemplateWhenEmpty: true }),
+      cellBuilder('M19', 'reviewDate', ['review.general.reviewedAt', 'review.general.submittedAt'], '总经理日期', false, { preserveTemplateWhenEmpty: true }),
+      excelRichCheckbox('D20', 'form.projectExecutionMode', '自研模式', '自研模式', true),
+      excelRichCheckbox('G20', 'form.projectExecutionMode', '供应链模式', '供应链模式', true)
     ]
   }),
   [INITIATION_NOTICE_DOCUMENT_CODE]: Object.freeze({
@@ -249,14 +279,23 @@ export const INITIATION_TEMPLATE_MANIFESTS = Object.freeze({
     fileType: 'docx',
     generatedFileNamePrefix: '关于确定项目名称及编号的通知',
     triggerEvent: INITIATION_TEMPLATE_TRIGGER_EVENT.ONLINE_FORM_SUBMITTED,
-    requiredSources: ['project.projectCode', 'project.projectName', 'project.customerName'],
+    requiredSources: ['project.projectCode', 'noticeProjectList.rows'],
     formatRetention: ['preserve document paragraphs', 'preserve table style where possible', 'preserve fonts and paragraph format'],
     mappings: [
-      wordTableCell('firstTable', 'dataRow', 0, 'form.sequenceNumber', '序号'),
-      wordTableCell('firstTable', 'dataRow', 1, 'project.projectCode', '项目编号', true),
-      wordTableCell('firstTable', 'dataRow', 2, 'project.projectName', '项目名称', true),
-      wordTableCell('firstTable', 'dataRow', 3, 'project.customerName', '客户单位', true),
-      wordTableCell('firstTable', 'dataRow', 4, 'form.initiationDate', '立项日期'),
+      wordTableRows(
+        'firstTable',
+        'dataRow',
+        'noticeProjectList.rows',
+        [
+          { sourcePath: 'sequenceNumber', label: '序号' },
+          { sourcePath: 'projectCode', label: '项目编号' },
+          { sourcePath: 'projectName', label: '项目名称' },
+          { sourcePath: 'customerName', label: '客户单位' },
+          { sourcePath: 'initiationDate', label: '立项日期' }
+        ],
+        '项目编号累计清单',
+        true
+      ),
       wordTextReplacement('2026年2月9日', 'noticeChineseDate', ['form.noticeDate'], '通知落款日期')
     ]
   })

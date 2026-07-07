@@ -40,6 +40,14 @@ function buildInlineCell(cellRef, value, existingAttributes = '') {
   return `<c r="${cellRef}"${styleAttribute} t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
 }
 
+function buildInlineRichCheckboxCell(cellRef, { checkboxSymbol, fallbackText, checkboxFont, textFont }, existingAttributes = '') {
+  const styleMatch = existingAttributes.match(/\ss="[^"]*"/);
+  const styleAttribute = styleMatch ? styleMatch[0] : '';
+  const normalizedCheckboxFont = checkboxFont || 'Wingdings 2';
+  const normalizedTextFont = textFont || '宋体';
+  return `<c r="${cellRef}"${styleAttribute} t="inlineStr"><is><r><rPr><sz val="12"/><rFont val="${escapeXml(normalizedCheckboxFont)}"/><charset val="134"/></rPr><t>${escapeXml(checkboxSymbol)}</t></r><r><rPr><sz val="12"/><rFont val="${escapeXml(normalizedTextFont)}"/><charset val="134"/><scheme val="minor"/></rPr><t xml:space="preserve">${escapeXml(fallbackText || '')}</t></r></is></c>`;
+}
+
 function normalizeCellInput(input) {
   if (input && typeof input === 'object' && !Array.isArray(input)) {
     return {
@@ -145,6 +153,117 @@ function setEntry(entries, name, data, { compressionMethod = 8 } = {}) {
     compressionMethod,
     externalAttributes: 0
   });
+}
+
+function replaceFirstRichTextRunText(xml, value) {
+  const runMatch = String(xml || '').match(/<r\b[\s\S]*?<\/r>/);
+  if (!runMatch) {
+    return null;
+  }
+
+  const updatedRun = runMatch[0].replace(/<t(\s[^>]*)?>[\s\S]*?<\/t>/, (match, attributes = '') => {
+    return `<t${attributes}>${escapeXml(value)}</t>`;
+  });
+  if (updatedRun === runMatch[0]) {
+    return null;
+  }
+
+  return `${xml.slice(0, runMatch.index)}${updatedRun}${xml.slice(runMatch.index + runMatch[0].length)}`;
+}
+
+function updateSharedStringRichCheckbox(sharedStringsXml, index, symbol) {
+  const matches = [...String(sharedStringsXml || '').matchAll(/<si\b[\s\S]*?<\/si>/g)];
+  const match = matches[index];
+  if (!match) {
+    return {
+      xml: sharedStringsXml,
+      updated: false
+    };
+  }
+
+  const updatedSi = replaceFirstRichTextRunText(match[0], symbol);
+  if (!updatedSi) {
+    return {
+      xml: sharedStringsXml,
+      updated: false
+    };
+  }
+
+  return {
+    xml: `${sharedStringsXml.slice(0, match.index)}${updatedSi}${sharedStringsXml.slice(match.index + match[0].length)}`,
+    updated: true
+  };
+}
+
+function buildRichCheckboxFallback(cellRef, checkbox, cellXml) {
+  const symbol = checkbox.checked ? checkbox.checkedSymbol || 'R' : checkbox.uncheckedSymbol || '£';
+  const existingAttributes = cellXml?.match(/^<c\b([^>]*)>/)?.[1] || '';
+  return buildInlineRichCheckboxCell(
+    cellRef,
+    {
+      checkboxSymbol: symbol,
+      fallbackText: checkbox.fallbackText,
+      checkboxFont: checkbox.checkboxFont,
+      textFont: checkbox.textFont
+    },
+    existingAttributes
+  );
+}
+
+function updateXlsxRichCheckboxes(buffer, { richCheckboxValues = [] } = {}) {
+  const checkboxes = (richCheckboxValues || []).filter((checkbox) => checkbox?.target);
+  if (checkboxes.length === 0) {
+    return buffer;
+  }
+
+  const entries = readZipEntries(buffer);
+  const sheetEntry = getEntry(entries, 'xl/worksheets/sheet1.xml');
+  if (!sheetEntry) {
+    throw new Error('OOXML entry not found: xl/worksheets/sheet1.xml');
+  }
+
+  const sharedStringsEntry = getEntry(entries, 'xl/sharedStrings.xml');
+  let sheetXml = sheetEntry.data.toString('utf8');
+  let sharedStringsXml = sharedStringsEntry?.data.toString('utf8') || '';
+  let sharedStringsChanged = false;
+
+  for (const checkbox of checkboxes) {
+    const cellRef = String(checkbox.target || '').trim();
+    const symbol = checkbox.checked ? checkbox.checkedSymbol || 'R' : checkbox.uncheckedSymbol || '£';
+    const cellPattern = new RegExp(`<c\\b(?=[^>]*\\br="${cellRef}")[^>]*?(?:\\/>|>[\\s\\S]*?<\\/c>)`);
+    const cellMatch = sheetXml.match(cellPattern);
+    if (!cellMatch) {
+      continue;
+    }
+
+    const cellXml = cellMatch[0];
+    if (/\bt="s"/.test(cellXml) && sharedStringsXml) {
+      const sharedStringIndex = Number(cellXml.match(/<v>([\s\S]*?)<\/v>/)?.[1]);
+      const result = updateSharedStringRichCheckbox(sharedStringsXml, sharedStringIndex, symbol);
+      if (result.updated) {
+        sharedStringsXml = result.xml;
+        sharedStringsChanged = true;
+        continue;
+      }
+    }
+
+    if (/\bt="inlineStr"/.test(cellXml)) {
+      const updatedCell = replaceFirstRichTextRunText(cellXml, symbol);
+      if (updatedCell) {
+        sheetXml = sheetXml.replace(cellXml, updatedCell);
+        continue;
+      }
+    }
+
+    sheetXml = sheetXml.replace(cellXml, buildRichCheckboxFallback(cellRef, checkbox, cellXml));
+  }
+
+  sheetEntry.data = Buffer.from(sheetXml, 'utf8');
+  if (sharedStringsEntry && sharedStringsChanged) {
+    sharedStringsEntry.data = Buffer.from(sharedStringsXml, 'utf8');
+  }
+
+  return writeZipEntries(entries);
 }
 
 function nextRelationshipId(relsXml) {
@@ -690,9 +809,10 @@ function addImagesToXlsxPackage(buffer, imageValues = []) {
   return writeZipEntries(entries);
 }
 
-export function renderXlsxTemplate(templateBuffer, { cellValues, imageValues = [] }) {
+export function renderXlsxTemplate(templateBuffer, { cellValues, imageValues = [], richCheckboxValues = [] }) {
   const withCells = updateXlsxCells(templateBuffer, { cellValues });
-  return addImagesToXlsxPackage(withCells, imageValues);
+  const withRichCheckboxes = updateXlsxRichCheckboxes(withCells, { richCheckboxValues });
+  return addImagesToXlsxPackage(withRichCheckboxes, imageValues);
 }
 
 function setWordCellText(cellXml, value) {
@@ -792,23 +912,72 @@ function buildWordTableTargets(tableCellValues) {
   return targets;
 }
 
-function updateWordTables(documentXml, { tableCellValues = [], clearRowsAfterDataRow = false } = {}) {
+function buildWordTableRowTargets(tableRows) {
+  const targets = new Map();
+  for (const item of tableRows || []) {
+    const tableIndex = resolveWordTableIndex(item.target?.tableIndex);
+    const templateRowIndex = resolveWordRowIndex(item.target?.templateRowIndex);
+    if (!Number.isSafeInteger(tableIndex) || tableIndex < 0) {
+      throw new Error(`Invalid Word table target index: ${item.target?.tableIndex}`);
+    }
+    if (!Number.isSafeInteger(templateRowIndex) || templateRowIndex < 0) {
+      throw new Error(`Invalid Word row target index: ${item.target?.templateRowIndex}`);
+    }
+
+    targets.set(String(tableIndex), {
+      templateRowIndex,
+      rows: Array.isArray(item.rows) ? item.rows : [],
+      removeRowsAfterTemplate: item.removeRowsAfterTemplate !== false
+    });
+  }
+  return targets;
+}
+
+function replaceWordTableRowsFromTemplate(tableXml, rowTarget) {
+  const rowMatches = [...tableXml.matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)];
+  const templateRow = rowMatches[rowTarget.templateRowIndex];
+  if (!templateRow) {
+    throw new Error(`Invalid Word document XML: target row not found ${rowTarget.templateRowIndex}`);
+  }
+
+  const templateCellCount = [...templateRow[0].matchAll(/<w:tc\b[\s\S]*?<\/w:tc>/g)].length;
+  const generatedRows = rowTarget.rows.map((values) => {
+    if (values.length > templateCellCount) {
+      throw new Error(`Invalid Word table row mapping: too many values for row ${rowTarget.templateRowIndex}`);
+    }
+    return replaceWordRowCells(templateRow[0], values);
+  });
+
+  const start = templateRow.index;
+  const replacementEnd = rowTarget.removeRowsAfterTemplate
+    ? rowMatches[rowMatches.length - 1].index + rowMatches[rowMatches.length - 1][0].length
+    : templateRow.index + templateRow[0].length;
+
+  return `${tableXml.slice(0, start)}${generatedRows.join('')}${tableXml.slice(replacementEnd)}`;
+}
+
+function updateWordTables(documentXml, { tableCellValues = [], tableRows = [], clearRowsAfterDataRow = false } = {}) {
   const tableMatches = [...documentXml.matchAll(/<w:tbl\b[\s\S]*?<\/w:tbl>/g)];
   if (tableMatches.length === 0) {
     throw new Error('Invalid Word document XML: table not found');
   }
 
   const targets = buildWordTableTargets(tableCellValues);
+  const rowTargets = buildWordTableRowTargets(tableRows);
   const updatedTables = new Map();
 
   tableMatches.forEach((tableMatch, tableIndex) => {
     const tableTargets = targets.get(String(tableIndex));
-    if (!tableTargets && !clearRowsAfterDataRow) {
+    const tableRowTarget = rowTargets.get(String(tableIndex));
+    if (!tableTargets && !tableRowTarget && !clearRowsAfterDataRow) {
       return;
     }
 
+    let workingTableXml = tableRowTarget
+      ? replaceWordTableRowsFromTemplate(tableMatch[0], tableRowTarget)
+      : tableMatch[0];
     let rowIndex = 0;
-    const updatedTableXml = tableMatch[0].replace(/<w:tr\b[\s\S]*?<\/w:tr>/g, (rowXml) => {
+    workingTableXml = workingTableXml.replace(/<w:tr\b[\s\S]*?<\/w:tr>/g, (rowXml) => {
       const rowTargets = tableTargets?.get(String(rowIndex));
       let nextRowXml = rowXml;
       let result = null;
@@ -835,7 +1004,7 @@ function updateWordTables(documentXml, { tableCellValues = [], clearRowsAfterDat
         }
       }
     }
-    updatedTables.set(tableMatch[0], updatedTableXml);
+    updatedTables.set(tableMatch[0], workingTableXml);
   });
 
   return [...updatedTables.entries()].reduce(
@@ -862,10 +1031,10 @@ function updateWordTextReplacements(documentXml, { textReplacements = [] } = {})
 
 export function renderDocxTemplate(
   templateBuffer,
-  { tableCellValues = [], textReplacements = [], clearRowsAfterDataRow = false }
+  { tableCellValues = [], tableRows = [], textReplacements = [], clearRowsAfterDataRow = false }
 ) {
   return updateZipTextEntry(templateBuffer, 'word/document.xml', (documentXml) => {
-    const updatedTablesXml = updateWordTables(documentXml, { tableCellValues, clearRowsAfterDataRow });
+    const updatedTablesXml = updateWordTables(documentXml, { tableCellValues, tableRows, clearRowsAfterDataRow });
     return updateWordTextReplacements(updatedTablesXml, { textReplacements });
   });
 }

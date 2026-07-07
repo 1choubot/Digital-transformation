@@ -126,7 +126,7 @@ function isInitiationRequirementReadyForApprovalCollaboration(relatedDocumentsBy
 
 function buildInitiationNoticeActionText(row) {
   return String(row.project_code ?? '').trim()
-    ? '提交 1.3 项目立项通知'
+    ? '确认项目编号并提交 1.3 项目立项通知'
     : '填写项目编号并提交 1.3 项目立项通知';
 }
 

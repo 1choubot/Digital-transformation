@@ -40,6 +40,54 @@
             我的工作台
           </button>
           <button
+            v-if="canUseDailyReport"
+            type="button"
+            :class="{ active: route.name === 'daily-report' }"
+            @click="navigate('/daily-report')"
+          >
+            填日报
+          </button>
+          <button
+            v-if="canUseDailyReport"
+            type="button"
+            :class="{ active: route.name === 'daily-reports' }"
+            @click="navigate('/daily-reports')"
+          >
+            我的日报
+          </button>
+          <button
+            v-if="canUseWeeklyReport"
+            type="button"
+            :class="{ active: route.name === 'weekly-report' }"
+            @click="navigate('/weekly-report')"
+          >
+            填周报
+          </button>
+          <button
+            v-if="canUseWeeklyReport"
+            type="button"
+            :class="{ active: route.name === 'weekly-reports' }"
+            @click="navigate('/weekly-reports')"
+          >
+            我的周报
+          </button>
+          <button
+            v-if="canReadWeeklyOverview"
+            type="button"
+            :class="{ active: isWeeklyOverviewEntryActive }"
+            @click="navigate('/weekly-overview')"
+          >
+            周报审批
+          </button>
+          <button
+            v-if="canReadCenterDailyReport"
+            type="button"
+            :class="{ active: route.name === 'center-daily-report' }"
+            @click="navigate('/center-daily-report')"
+          >
+            中心日报
+          </button>
+          <button
             v-if="canAccessUserManagement"
             type="button"
             :class="{ active: route.name === 'users' }"
@@ -93,6 +141,58 @@
         :navigate="navigate"
         @auth-expired="handleAuthExpired"
       />
+      <DailyReportPage
+        v-else-if="route.name === 'daily-report'"
+        :auth-token="authToken"
+        :current-user="currentUser"
+        :report-id="route.params?.reportId || ''"
+        :navigate="navigate"
+        @auth-expired="handleAuthExpired"
+      />
+      <DailyReportListPage
+        v-else-if="route.name === 'daily-reports'"
+        :auth-token="authToken"
+        :current-user="currentUser"
+        :navigate="navigate"
+        @auth-expired="handleAuthExpired"
+      />
+      <WeeklyReportPage
+        v-else-if="route.name === 'weekly-report'"
+        :auth-token="authToken"
+        :current-user="currentUser"
+        :report-id="route.params?.reportId || ''"
+        :navigate="navigate"
+        @auth-expired="handleAuthExpired"
+      />
+      <WeeklyReportListPage
+        v-else-if="route.name === 'weekly-reports'"
+        :auth-token="authToken"
+        :current-user="currentUser"
+        :navigate="navigate"
+        @auth-expired="handleAuthExpired"
+      />
+      <WeeklyReportReviewListPage
+        v-else-if="route.name === 'weekly-overview'"
+        :auth-token="authToken"
+        :current-user="currentUser"
+        :navigate="navigate"
+        @auth-expired="handleAuthExpired"
+      />
+      <WeeklyReportReviewPage
+        v-else-if="route.name === 'weekly-report-review'"
+        :auth-token="authToken"
+        :current-user="currentUser"
+        :report-id="route.params?.reportId || ''"
+        :route="route"
+        :navigate="navigate"
+        @auth-expired="handleAuthExpired"
+      />
+      <CenterDailyReportPage
+        v-else-if="route.name === 'center-daily-report'"
+        :auth-token="authToken"
+        :current-user="currentUser"
+        @auth-expired="handleAuthExpired"
+      />
       <UserManagementPage
         v-else-if="route.name === 'users'"
         :auth-token="authToken"
@@ -119,12 +219,19 @@ import {
   storeAuthSession,
   updateStoredUser
 } from './auth/session.js';
+import CenterDailyReportPage from './pages/CenterDailyReportPage.vue';
+import DailyReportListPage from './pages/DailyReportListPage.vue';
+import DailyReportPage from './pages/DailyReportPage.vue';
 import LoginPage from './pages/LoginPage.vue';
 import MyStageDocumentTasksPage from './pages/MyStageDocumentTasksPage.vue';
 import ProjectCreatePage from './pages/ProjectCreatePage.vue';
 import ProjectDetailPage from './pages/ProjectDetailPage.vue';
 import ProjectOverviewDashboardPage from './pages/ProjectOverviewDashboardPage.vue';
 import UserManagementPage from './pages/UserManagementPage.vue';
+import WeeklyReportListPage from './pages/WeeklyReportListPage.vue';
+import WeeklyReportPage from './pages/WeeklyReportPage.vue';
+import WeeklyReportReviewListPage from './pages/WeeklyReportReviewListPage.vue';
+import WeeklyReportReviewPage from './pages/WeeklyReportReviewPage.vue';
 import { useHashRouter } from './router.js';
 import { formatUserMeta, formatUserName } from './utils/format.js';
 
@@ -140,8 +247,23 @@ const canAccessUserManagement = computed(
 const canCurrentUserCreateProject = computed(() =>
   ['general_manager', 'center_manager'].includes(currentUser.value?.organizationRole)
 );
+const canUseDailyReport = computed(() => currentUser.value?.organizationRole === 'employee');
+const canUseWeeklyReport = computed(() =>
+  ['employee', 'center_manager'].includes(currentUser.value?.organizationRole)
+);
+const canReadWeeklyOverview = computed(() =>
+  ['center_manager', 'general_manager', 'general_manager_assistant'].includes(currentUser.value?.organizationRole)
+);
+const canReadCenterDailyReport = computed(() =>
+  ['center_manager', 'general_manager', 'general_manager_assistant', 'system_admin'].includes(
+    currentUser.value?.organizationRole
+  )
+);
 const isProjectOverviewEntryActive = computed(() =>
   ['project-overview-dashboard', 'project-detail'].includes(route.value.name)
+);
+const isWeeklyOverviewEntryActive = computed(() =>
+  ['weekly-overview', 'weekly-report-review'].includes(route.value.name)
 );
 
 function setAuth(token, user) {

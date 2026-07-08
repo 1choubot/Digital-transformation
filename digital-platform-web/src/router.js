@@ -25,6 +25,45 @@ function parseHash() {
     return { name: 'my-workbench', path, query };
   }
 
+  if (path === '/daily-report') {
+    return { name: 'daily-report', path, query };
+  }
+
+  if (path === '/daily-reports') {
+    return { name: 'daily-reports', path, query };
+  }
+
+  const dailyReportMatch = path.match(/^\/daily-report\/(\d+)$/);
+  if (dailyReportMatch) {
+    return { name: 'daily-report', path, params: { reportId: dailyReportMatch[1] }, query };
+  }
+
+  if (path === '/weekly-report') {
+    return { name: 'weekly-report', path, query };
+  }
+
+  if (path === '/weekly-reports') {
+    return { name: 'weekly-reports', path, query };
+  }
+
+  if (path === '/weekly-overview') {
+    return { name: 'weekly-overview', path, query };
+  }
+
+  const weeklyReportMatch = path.match(/^\/weekly-report\/(\d+)$/);
+  if (weeklyReportMatch) {
+    return { name: 'weekly-report', path, params: { reportId: weeklyReportMatch[1] }, query };
+  }
+
+  const weeklyReportReviewMatch = path.match(/^\/weekly-report-review\/(\d+)$/);
+  if (weeklyReportReviewMatch) {
+    return { name: 'weekly-report-review', path, params: { reportId: weeklyReportReviewMatch[1] }, query };
+  }
+
+  if (path === '/center-daily-report') {
+    return { name: 'center-daily-report', path, query };
+  }
+
   const detailMatch = path.match(/^\/projects\/(\d+)$/);
   if (detailMatch) {
     return { name: 'project-detail', path, params: { projectId: detailMatch[1] }, query };

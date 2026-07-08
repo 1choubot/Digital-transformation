@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requireReportProjectSearchUser } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import {
   advanceProjectStageHandler,
@@ -22,6 +22,7 @@ import {
   getStageDocumentChecklistHandler,
   listProjectOperationLogsHandler,
   listProjectsHandler,
+  listMyActiveProjectsHandler,
   listStageDocumentAttachmentsHandler,
   markStageDocumentNotApplicableHandler,
   restoreStageDocumentApplicableHandler,
@@ -43,6 +44,13 @@ export const projectsRouter = Router();
 
 projectsRouter.get('/', requireAuth, asyncHandler(listProjectsHandler));
 projectsRouter.post('/', requireAuth, asyncHandler(createProjectHandler));
+
+projectsRouter.get(
+  '/my-active',
+  requireAuth,
+  requireReportProjectSearchUser,
+  asyncHandler(listMyActiveProjectsHandler)
+);
 
 projectsRouter.put(
   '/:projectId/project-code',

@@ -55,6 +55,7 @@ import {
 } from '../repositories/stageDocumentAttachmentRepository.js';
 import { readMultipartFile } from '../middleware/multipartFile.js';
 import { STAGE_DOCUMENT_ONLINE_FORM_IMAGE_MAX_FILE_SIZE } from '../storage/stageDocumentOnlineFormImageStorage.js';
+import { searchActiveProjectsForDailyReports } from '../repositories/dailyReportRepository.js';
 
 function parsePositiveId(rawValue, fieldName) {
   const id = Number.parseInt(rawValue, 10);
@@ -185,6 +186,20 @@ export async function listProjectsHandler(req, res) {
 
   res.json({
     data: projects
+  });
+}
+
+export async function listMyActiveProjectsHandler(req, res) {
+  const projects = await searchActiveProjectsForDailyReports({
+    q: req.query.q,
+    limit: req.query.limit,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: {
+      projects
+    }
   });
 }
 

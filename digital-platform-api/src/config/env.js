@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { WeeklyRestMode } from '../domain/reports.js';
 
 dotenv.config();
 
@@ -16,6 +17,20 @@ function readInteger(name, fallback) {
   return value;
 }
 
+function readString(name, fallback = '') {
+  const raw = process.env[name];
+  return raw === undefined ? fallback : raw;
+}
+
+function readDefaultWeeklyRestMode() {
+  const restMode = readString('REPORT_DEFAULT_WEEKLY_REST_MODE', WeeklyRestMode.DOUBLE_REST);
+  if (![WeeklyRestMode.SINGLE_REST, WeeklyRestMode.DOUBLE_REST].includes(restMode)) {
+    throw new Error('REPORT_DEFAULT_WEEKLY_REST_MODE must be single_rest or double_rest');
+  }
+
+  return restMode;
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: readInteger('PORT', 3001),
@@ -24,6 +39,15 @@ export const env = {
   },
   onlineFormImages: {
     storageDir: process.env.STAGE_DOCUMENT_ONLINE_FORM_IMAGE_STORAGE_DIR || ''
+  },
+  dailyReportAttachments: {
+    storageDir: process.env.DAILY_REPORT_ATTACHMENT_STORAGE_DIR || ''
+  },
+  reports: {
+    defaultWeeklyRestMode: readDefaultWeeklyRestMode()
+  },
+  centerDailyScheduler: {
+    enabled: readString('CENTER_DAILY_SCHEDULER_ENABLED', 'false') === 'true'
   },
   auth: {
     sessionTtlHours: readInteger('AUTH_SESSION_TTL_HOURS', 12),

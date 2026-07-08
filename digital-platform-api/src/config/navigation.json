@@ -1,0 +1,84 @@
+{
+  "modules": [
+    {
+      "code": "project",
+      "name": "项目管理",
+      "children": [
+        {
+          "code": "project-list",
+          "name": "项目总览",
+          "route": "/projects"
+        },
+        {
+          "code": "project-create",
+          "name": "新建项目",
+          "route": "/projects/new"
+        }
+      ]
+    },
+    {
+      "code": "daily",
+      "name": "日报管理",
+      "children": [
+        {
+          "code": "daily-report",
+          "name": "日报填写",
+          "route": "/daily-report"
+        },
+        {
+          "code": "daily-reports",
+          "name": "我的日报列表",
+          "route": "/daily-reports"
+        },
+        {
+          "code": "center-daily-report",
+          "name": "中心日报汇总",
+          "route": "/center-daily-report"
+        }
+      ]
+    },
+    {
+      "code": "weekly",
+      "name": "周报管理",
+      "children": [
+        {
+          "code": "weekly-report",
+          "name": "周报填写",
+          "route": "/weekly-report"
+        },
+        {
+          "code": "weekly-reports",
+          "name": "我的周报列表",
+          "route": "/weekly-reports"
+        },
+        {
+          "code": "weekly-overview",
+          "name": "周报汇总及考评",
+          "route": "/weekly-overview"
+        }
+      ]
+    },
+    {
+      "code": "dashboard",
+      "name": "过程追踪看板",
+      "children": [
+        {
+          "code": "my-stage-document-tasks",
+          "name": "我的资料任务",
+          "route": "/my-stage-document-tasks"
+        }
+      ]
+    },
+    {
+      "code": "admin",
+      "name": "系统设置",
+      "children": [
+        {
+          "code": "user-management",
+          "name": "用户管理",
+          "route": "/users"
+        }
+      ]
+    }
+  ]
+}

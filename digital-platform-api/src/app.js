@@ -3,6 +3,7 @@ import { authRouter } from './routes/auth.js';
 import { centerDailyReportsRouter } from './routes/centerDailyReports.js';
 import { dailyReportsRouter } from './routes/dailyReports.js';
 import { meRouter } from './routes/me.js';
+import { navigationRouter } from './routes/navigation.js';
 import { projectsRouter } from './routes/projects.js';
 import { usersRouter } from './routes/users.js';
 import { weeklyReportsRouter } from './routes/weeklyReports.js';
@@ -20,6 +21,7 @@ export function createApp() {
   app.use('/api/auth', authRouter);
   app.use('/api/me', meRouter);
   app.use('/api/users', usersRouter);
+  app.use('/api/navigation', navigationRouter);
   app.use('/api/projects', projectsRouter);
   app.use('/api/daily-reports', dailyReportsRouter);
   app.use('/api/center-daily-reports', centerDailyReportsRouter);

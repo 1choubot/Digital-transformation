@@ -77,6 +77,19 @@ function parseHash() {
     return { name: 'weekly-report-review', path, params: { reportId: weeklyReportReviewMatch[1] }, query };
   }
 
+  const nodeMatch = path.match(/^\/projects\/(\d+)\/node\/([^/]+)$/);
+  if (nodeMatch) {
+    return {
+      name: 'project-detail',
+      path,
+      params: {
+        projectId: nodeMatch[1],
+        nodeCode: decodeURIComponent(nodeMatch[2])
+      },
+      query
+    };
+  }
+
   const detailMatch = path.match(/^\/projects\/(\d+)$/);
   if (detailMatch) {
     return { name: 'project-detail', path, params: { projectId: detailMatch[1] }, query };

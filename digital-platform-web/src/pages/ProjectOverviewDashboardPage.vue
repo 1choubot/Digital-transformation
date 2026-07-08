@@ -7,107 +7,125 @@
       subtitle="齐套率基于资料 completionMode、基础状态和适用性派生完成状态计算。"
     >
       <template #actions>
-        <button
+        <el-button
           v-if="canCreateProject"
-          type="button"
-          class="primary-button"
+          type="primary"
           @click="navigate('/projects/new')"
         >
           新建项目
-        </button>
-        <button type="button" class="ghost-button" :disabled="loading" @click="loadDashboard">
-          {{ loading ? '加载中...' : '重新加载' }}
-        </button>
+        </el-button>
+        <el-button :loading="loading" @click="loadDashboard">重新加载</el-button>
       </template>
     </PageHeader>
 
-    <section class="overview-summary-grid" aria-label="项目总览指标">
-      <div class="overview-metric">
-        <span>项目总数</span>
-        <strong>{{ summary.totalProjects }}</strong>
-      </div>
-      <div class="overview-metric">
-        <span>进行中</span>
-        <strong>{{ summary.activeProjects }}</strong>
-      </div>
-      <div class="overview-metric">
-        <span>已完成</span>
-        <strong>{{ summary.completedProjects }}</strong>
-      </div>
-      <div class="overview-metric">
-        <span>风险/延期</span>
-        <strong>{{ summary.riskProjects }}</strong>
-      </div>
-      <button type="button" class="overview-metric overview-metric--button" @click="navigate('/my-stage-document-tasks')">
-        <span>我的待办资料</span>
-        <strong>{{ summary.myPendingStageDocumentTasks }}</strong>
-      </button>
-    </section>
+    <el-row class="overview-summary-grid" :gutter="12" aria-label="项目总览指标">
+      <el-col :xs="24" :sm="12" :md="8" :lg="5">
+        <el-card class="overview-metric-card" shadow="never">
+          <el-statistic title="项目总数" :value="summary.totalProjects" />
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :md="8" :lg="5">
+        <el-card class="overview-metric-card" shadow="never">
+          <el-statistic title="进行中" :value="summary.activeProjects" />
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :md="8" :lg="5">
+        <el-card class="overview-metric-card" shadow="never">
+          <el-statistic title="已完成" :value="summary.completedProjects" />
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :md="8" :lg="5">
+        <el-card class="overview-metric-card" shadow="never">
+          <el-statistic title="风险/延期" :value="summary.riskProjects" />
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :md="8" :lg="4">
+        <el-card
+          class="overview-metric-card overview-metric-card--button"
+          shadow="never"
+          role="button"
+          tabindex="0"
+          @click="navigate('/my-stage-document-tasks')"
+          @keydown.enter.prevent="navigate('/my-stage-document-tasks')"
+          @keydown.space.prevent="navigate('/my-stage-document-tasks')"
+        >
+          <el-statistic title="我的待办资料" :value="summary.myPendingStageDocumentTasks" />
+        </el-card>
+      </el-col>
+    </el-row>
 
     <p class="manual-status-note">
       “我的待办资料”为当前登录用户全局待处理资料数量，不随项目状态、当前阶段或关键字筛选变化。
     </p>
 
-    <section class="panel overview-filter-panel">
-      <form class="overview-filters" @submit.prevent="loadDashboard">
-        <label>
-          <span>项目状态</span>
-          <select v-model="statusFilter" :disabled="loading" @change="loadDashboard">
-            <option v-for="option in statusOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
-        </label>
-        <label>
-          <span>当前阶段</span>
-          <select v-model="stageOrderFilter" :disabled="loading" @change="loadDashboard">
-            <option value="">全部阶段</option>
-            <option v-for="option in stageOrderOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
-        </label>
-        <label>
-          <span>关键字</span>
-          <input
+    <el-card class="overview-filter-card" shadow="never">
+      <el-form class="overview-filters" label-position="top" @submit.prevent="loadDashboard">
+        <el-form-item label="项目状态">
+          <el-select v-model="statusFilter" :disabled="loading" @change="loadDashboard">
+            <el-option
+              v-for="option in statusOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="当前阶段">
+          <el-select v-model="stageOrderFilter" :disabled="loading" @change="loadDashboard">
+            <el-option label="全部阶段" value="" />
+            <el-option
+              v-for="option in stageOrderOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关键字" class="overview-filters__keyword">
+          <el-input
             v-model="keywordFilter"
-            type="search"
-            autocomplete="off"
+            clearable
             placeholder="项目编号、项目名称或客户名称"
+            @keyup.enter="loadDashboard"
           />
-        </label>
-        <button type="submit" class="primary-button" :disabled="loading">应用筛选</button>
-      </form>
-    </section>
+        </el-form-item>
+        <el-form-item class="overview-filters__actions">
+          <el-button type="primary" :loading="loading" native-type="submit">应用筛选</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
 
-    <section class="panel overview-list-panel">
-      <div class="panel-toolbar">
+    <el-card class="overview-list-panel" shadow="never">
+      <template #header>
         <div>
           <strong>项目总览列表</strong>
           <span>共 {{ projects.length }} 个项目，按项目编号和项目 ID 稳定排序。</span>
         </div>
-      </div>
+      </template>
 
-      <div v-if="loading" class="state-panel state-panel--inline">
-        <p>正在加载项目总览...</p>
-      </div>
+      <el-skeleton v-if="loading" :rows="5" animated />
 
-      <div v-else-if="errorMessage" class="state-panel state-panel--error">
-        <h3>项目总览加载失败</h3>
-        <p>{{ errorMessage }}</p>
-        <button type="button" class="primary-button" @click="loadDashboard">重试</button>
-      </div>
+      <el-alert
+        v-else-if="errorMessage"
+        title="项目总览加载失败"
+        :description="errorMessage"
+        type="error"
+        show-icon
+        :closable="false"
+      >
+        <template #default>
+          <el-button type="primary" size="small" @click="loadDashboard">重试</el-button>
+        </template>
+      </el-alert>
 
-      <div v-else-if="projects.length === 0" class="state-panel state-panel--inline">
-        <h3>暂无匹配项目</h3>
-        <p>当前筛选条件下没有可展示的项目。</p>
-      </div>
+      <el-empty v-else-if="projects.length === 0" description="当前筛选条件下没有可展示的项目。" />
 
       <div v-else class="overview-list">
-        <article
+        <el-card
           v-for="project in projects"
           :key="project.projectId"
           class="overview-project"
+          shadow="never"
           @click="handleProjectCardClick($event, project)"
         >
           <div class="overview-project__main">
@@ -136,9 +154,9 @@
               <strong>{{ formatDate(project.plannedStartDate) }} 至 {{ formatDate(project.plannedEndDate) }}</strong>
               <small>创建人：{{ formatUser(project.createdBy) }}</small>
             </div>
-            <button type="button" class="ghost-button" @click.stop="navigateToProject(project)">
+            <el-button @click.stop="navigateToProject(project)">
               进入工作区
-            </button>
+            </el-button>
           </div>
 
           <div class="overview-project__documents">
@@ -146,18 +164,19 @@
               <span>可查看未完成资料</span>
               <strong>{{ project.currentStageIncompleteRequiredDocuments.length }}</strong>
             </div>
-            <details v-if="project.currentStageIncompleteRequiredDocuments.length > 0">
-              <summary>查看可见资料</summary>
-              <ul>
-                <li v-for="document in project.currentStageIncompleteRequiredDocuments" :key="document.id">
-                  <span class="mono">{{ document.documentCode }}</span>
-                  <strong>{{ document.documentName }}</strong>
-                  <span>{{ formatCompletionMode(document.completionMode) }}</span>
-                  <span>{{ formatCompletionStatus(document.completionStatus) }}</span>
-                  <StatusBadge :status="document.status" />
-                </li>
-              </ul>
-            </details>
+            <el-collapse v-if="project.currentStageIncompleteRequiredDocuments.length > 0">
+              <el-collapse-item title="查看可见资料" :name="String(project.projectId)">
+                <ul>
+                  <li v-for="document in project.currentStageIncompleteRequiredDocuments" :key="document.id">
+                    <span class="mono">{{ document.documentCode }}</span>
+                    <strong>{{ document.documentName }}</strong>
+                    <span>{{ formatCompletionMode(document.completionMode) }}</span>
+                    <span>{{ formatCompletionStatus(document.completionStatus) }}</span>
+                    <StatusBadge :status="document.status" />
+                  </li>
+                </ul>
+              </el-collapse-item>
+            </el-collapse>
             <p v-else-if="project.currentStageCompletenessSummary">
               当前阶段适用资料均已按完成规则完成。
             </p>
@@ -165,9 +184,9 @@
               {{ formatStageIssue(project.currentStageIssue) || '当前账号暂无可查看的齐套明细。' }}
             </p>
           </div>
-        </article>
+        </el-card>
       </div>
-    </section>
+    </el-card>
   </section>
 </template>
 
@@ -292,7 +311,11 @@ function navigateToProject(project) {
 }
 
 function isInteractiveElement(element) {
-  return Boolean(element?.closest?.('button, a, input, select, textarea, summary, details'));
+  return Boolean(
+    element?.closest?.(
+      'button, a, input, select, textarea, [role="button"], .el-select, .el-input, .el-collapse, .el-collapse-item__header'
+    )
+  );
 }
 
 function handleProjectCardClick(event, project) {

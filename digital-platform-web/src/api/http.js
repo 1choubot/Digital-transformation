@@ -159,7 +159,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'INVALID_PROJECT_MODE') {
-    return '项目模式无效，请选择自研模式或供应链/外包模式。';
+    return '项目模式无效，请选择自研模式、供货商模式或外协模式。';
   }
 
   if (error.code === 'INVALID_PARTICIPATING_DEPARTMENT') {

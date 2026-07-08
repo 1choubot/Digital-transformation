@@ -6,7 +6,7 @@ import {
 } from '../../domain/organization.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
 import { PROJECT_APPROVAL_ERROR } from '../../domain/projectApproval.js';
-import { STANDARD_PROJECT_STAGES, STAGE_STATUS } from '../../domain/stages.js';
+import { STAGE_STATUS } from '../../domain/stages.js';
 import { buildStageCompletenessSummary, mapGateDocument } from '../stageDocuments/shared.js';
 import { attachInitiationReviewToStageDocumentRows } from '../stageDocuments/initiationReviewRepository.js';
 import {
@@ -67,24 +67,24 @@ function assertSingleCurrentStage(stageRows) {
     );
   }
 
-  const expectedStage = STANDARD_PROJECT_STAGES.find((stage) => stage.stageOrder === currentStage.stage_order);
-  if (!expectedStage || expectedStage.stageKey !== currentStage.stage_key) {
-    throw new ProjectStageAdvanceError(
-      'INVALID_PROJECT_STAGE_STATE',
-      'Current stage is not a standard project stage'
-    );
-  }
-
   return currentStage;
 }
 
 function assertNextStageCanReceiveAdvance(stageRows, currentStage) {
-  if (currentStage.stage_order === STANDARD_PROJECT_STAGES.length) {
+  const orderedStages = [...stageRows].sort((left, right) => left.stage_order - right.stage_order);
+  const currentIndex = orderedStages.findIndex((stage) => stage.id === currentStage.id);
+  if (currentIndex === -1) {
+    throw new ProjectStageAdvanceError(
+      'INVALID_PROJECT_STAGE_STATE',
+      'Current stage is not part of this project stage list'
+    );
+  }
+
+  if (currentIndex === orderedStages.length - 1) {
     return null;
   }
 
-  const expectedNextOrder = currentStage.stage_order + 1;
-  const nextStage = stageRows.find((stage) => stage.stage_order === expectedNextOrder);
+  const nextStage = orderedStages[currentIndex + 1];
 
   if (!nextStage) {
     throw new ProjectStageAdvanceError(
@@ -94,7 +94,6 @@ function assertNextStageCanReceiveAdvance(stageRows, currentStage) {
   }
 
   if (
-    nextStage.stage_order !== expectedNextOrder ||
     nextStage.stage_status !== STAGE_STATUS.NOT_STARTED ||
     Boolean(nextStage.is_current)
   ) {
@@ -184,10 +183,7 @@ async function buildCurrentStageGateSummary(connection, projectId, stageOrder) {
   );
 
   if (rows.length === 0) {
-    throw new ProjectStageAdvanceError(
-      'STAGE_ADVANCE_CHECKLIST_NOT_INITIALIZED',
-      'Current stage document checklist is not initialized'
-    );
+    return buildStageCompletenessSummary([]);
   }
 
   const rowsWithInitiationReview = await attachInitiationReviewToStageDocumentRows(connection, rows);

@@ -7,6 +7,7 @@ import {
   isValidBusinessDepartment
 } from '../../domain/organization.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
+import { isSelfDevelopedProjectMode } from '../../domain/projectProcessTemplates.js';
 import {
   INITIATION_NOTICE_DOCUMENT_CODE,
   INITIATION_REVIEW_DOCUMENT_CODE,
@@ -237,9 +238,11 @@ export async function createProject(project, createdByUserId) {
       endedAt: null,
       createdByUserId
     });
-    await insertInitialStages(connection, projectId);
-    await initializeProjectStageDocuments(connection, projectId);
-    await assignInitiationResponsibleUser(connection, projectId, businessResponsibleUser.id, createdByUserId);
+    await insertInitialStages(connection, projectId, project.projectMode);
+    if (isSelfDevelopedProjectMode(project.projectMode)) {
+      await initializeProjectStageDocuments(connection, projectId);
+      await assignInitiationResponsibleUser(connection, projectId, businessResponsibleUser.id, createdByUserId);
+    }
     await insertOperationLog(connection, {
       projectId,
       actorUserId: createdByUserId,

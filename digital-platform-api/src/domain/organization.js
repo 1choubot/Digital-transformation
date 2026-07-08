@@ -15,6 +15,7 @@ export const BUSINESS_DEPARTMENT = {
 
 export const PROJECT_MODE = {
   SELF_DEVELOPED: 'self_developed',
+  SUPPLIER: 'supplier',
   OUTSOURCED: 'outsourced'
 };
 

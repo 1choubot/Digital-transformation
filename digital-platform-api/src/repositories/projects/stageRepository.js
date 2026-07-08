@@ -1,7 +1,7 @@
 import { buildInitialStages } from '../../domain/stages.js';
 
-export async function insertInitialStages(connection, projectId) {
-  const stages = buildInitialStages();
+export async function insertInitialStages(connection, projectId, projectMode = null) {
+  const stages = buildInitialStages(projectMode);
   const placeholders = stages.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
   const values = stages.flatMap((stage) => [
     projectId,

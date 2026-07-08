@@ -7,7 +7,11 @@ import {
   isValidBusinessDepartment
 } from '../../domain/organization.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
-import { INITIATION_REVIEW_DOCUMENT_CODE, INITIATION_REWORK_TARGET_DOCUMENT_CODE } from '../../domain/initiationReview.js';
+import {
+  INITIATION_NOTICE_DOCUMENT_CODE,
+  INITIATION_REVIEW_DOCUMENT_CODE,
+  INITIATION_REWORK_TARGET_DOCUMENT_CODE
+} from '../../domain/initiationReview.js';
 import { canViewProjectOperationLogs } from '../stageDocuments/accessControl.js';
 import { initializeProjectStageDocuments } from '../stageDocuments/checklistRepository.js';
 import {
@@ -388,48 +392,54 @@ async function assertProjectCodeReady(connection, projectId) {
   }
 }
 
-function parseJsonValue(value, fallback = {}) {
-  if (value === null || value === undefined) {
-    return fallback;
-  }
-
-  if (typeof value !== 'string') {
-    return value;
-  }
-
-  try {
-    return JSON.parse(value);
-  } catch {
-    return fallback;
-  }
-}
-
 async function assertProjectCodeIndependentUpdateAllowed(connection, projectId) {
   const [rows] = await connection.execute(
     `SELECT
-      f.form_data_json
+      d.id
     FROM project_stage_documents d
-    LEFT JOIN project_stage_document_forms f
-      ON f.stage_document_id = d.id
     WHERE d.project_id = ?
       AND d.document_code = ?
     LIMIT 1
     FOR UPDATE`,
-    [projectId, INITIATION_REVIEW_DOCUMENT_CODE]
+    [projectId, INITIATION_NOTICE_DOCUMENT_CODE]
   );
-  const formData = parseJsonValue(rows[0]?.form_data_json, {});
-  const hasInitiationApprovalFormData =
-    formData &&
-    typeof formData === 'object' &&
-    Object.keys(formData).some((key) => key !== '_collaboration');
 
-  if (hasInitiationApprovalFormData) {
+  if (rows.length > 0) {
     throw new ProjectCodeUpdateError(
-      'PROJECT_CODE_MANAGED_BY_INITIATION_APPROVAL_FORM',
-      'Project code must be changed in the 1.2 initiation approval form',
+      'PROJECT_CODE_MANAGED_BY_INITIATION_NOTICE_FORM',
+      'Project code must be changed in the 1.3 initiation notice form',
       409,
-      ['projectCode', '1.2']
+      ['projectCode', '1.3']
     );
+  }
+}
+
+function buildProjectCodeLockName(projectCode) {
+  return `initiation-project-code:${projectCode}`.slice(0, 64);
+}
+
+async function acquireProjectCodeLock(connection, projectCode) {
+  const lockName = buildProjectCodeLockName(projectCode);
+  const [rows] = await connection.execute('SELECT GET_LOCK(?, 10) AS lockAcquired', [lockName]);
+  if (Number(rows[0]?.lockAcquired) !== 1) {
+    throw new ProjectCodeUpdateError(
+      'PROJECT_CODE_LOCK_TIMEOUT',
+      'Project code is being submitted by another request',
+      409,
+      ['projectCode']
+    );
+  }
+  return lockName;
+}
+
+async function releaseProjectCodeLock(connection, lockName) {
+  if (!lockName) {
+    return;
+  }
+  try {
+    await connection.execute('SELECT RELEASE_LOCK(?)', [lockName]);
+  } catch {
+    // The database connection will release the named lock if it is closed.
   }
 }
 
@@ -461,6 +471,7 @@ export async function updateProjectCode({ projectId, projectCode, user }) {
   }
 
   const connection = await pool.getConnection();
+  let projectCodeLockName = null;
 
   try {
     await connection.beginTransaction();
@@ -468,6 +479,7 @@ export async function updateProjectCode({ projectId, projectCode, user }) {
     assertCanUpdateProjectCode(user, projectRow);
     await assertProjectCodeReady(connection, projectId);
     await assertProjectCodeIndependentUpdateAllowed(connection, projectId);
+    projectCodeLockName = await acquireProjectCodeLock(connection, normalizedProjectCode);
     await assertProjectCodeUnique(connection, projectId, normalizedProjectCode);
 
     if (projectRow.project_code !== normalizedProjectCode) {
@@ -496,6 +508,7 @@ export async function updateProjectCode({ projectId, projectCode, user }) {
     await connection.rollback();
     throw error;
   } finally {
+    await releaseProjectCodeLock(connection, projectCodeLockName);
     connection.release();
   }
 }

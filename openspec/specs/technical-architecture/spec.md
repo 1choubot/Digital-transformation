@@ -1126,64 +1126,43 @@ TBD - created by archiving change define-technical-architecture. Update Purpose 
 - **AND** 本 change MUST NOT 承诺 PDF 已生成
 
 ### Requirement: 后端统一模板文件生成治理
-技术架构 MUST 将模板注册、mapping manifest、模板渲染、文件记录、内部存储、权限检查和下载接口统一放在后端治理，不得散落到前端或单个 route handler。
+技术架构 MUST 继续由后端统一治理模板注册、mapping manifest、模板渲染、文件记录、内部存储、权限检查和下载接口，并 MUST 适配新版 `1.2` 模板和 `1.3` 累计通知。
 
-#### Scenario: 后端统一生成
-- **WHEN** 系统生成 `1.1 / 1.2 / 1.3` 模板文件
-- **THEN** 生成逻辑 MUST 通过后端统一 service 或 repository 执行
-- **AND** route handler 和前端组件 MUST NOT 直接填充模板
+#### Scenario: 1.2 模板 registry 使用新版版本
+- **WHEN** 后端解析 `1.2 项目立项审批表` 模板
+- **THEN** 模板 registry MUST 指向 `智能制造项目管理文件模板/项目立项审批表-模板.xlsx`
+- **AND** registry SHOULD 记录新版 template version，例如 `20260707-initiation-approval-v1`
+- **AND** 业务接口 MUST NOT 接收任意模板路径
 
-#### Scenario: mapping registry 统一治理
-- **WHEN** 系统解析模板字段映射
-- **THEN** 后端 MUST 使用统一 mapping registry 或 manifest
-- **AND** mapping 逻辑 MUST NOT 散落硬编码在控制器、页面组件或单个流程函数中
+#### Scenario: 1.2 manifest 显式映射新版字段
+- **WHEN** 后端渲染新版 `1.2` 审批表
+- **THEN** manifest MUST 显式声明新版表头、商务评分项、技术评分项和意见区目标位置
+- **AND** manifest MUST 显式映射 `1.2` 项目开展模式字段到新版模板目标位置
+- **AND** manifest MUST 根据字段值勾选自研模式或供应链模式
+- **AND** 项目开展模式勾选 MUST 保留模板富文本 run 和字体，仅替换 checkbox 符号 run
+- **AND** renderer MUST NOT 用整格 Unicode 复选框文本替换 `D20/G20`
+- **AND** manifest MUST NOT 将项目开展模式绑定到系统项目模式、`projects.project_mode` 或项目主数据项目模式字段
+- **AND** manifest MUST NOT 通过字段名猜测单元格位置
+- **AND** manifest MUST NOT 映射项目编号
 
-#### Scenario: 不追加模板外快照内容
-- **WHEN** 后端渲染 Excel 或 Word 模板
-- **THEN** 渲染器 MUST 只写入 mapping manifest 指定的单元格、表格区域、占位符或等价目标位置
-- **AND** 渲染器 MUST NOT 在模板外追加系统生成内容快照区域
-
-#### Scenario: Excel 模板单元格精准替换
-- **WHEN** 后端渲染 `.xlsx` 模板
-- **THEN** 渲染器 MUST 精准替换当前行内的目标 cell
-- **AND** 渲染器 MUST 同时支持 `<c .../>` 自闭合 cell 和 `<c ...>...</c>` cell
-- **AND** 渲染器 MUST NOT 因写入目标 cell 删除相邻标签 cell
-
-#### Scenario: Excel 图片嵌入由 manifest 和受控存储驱动
-- **WHEN** 后端渲染 `1.1 项目需求表` `.xlsx`
-- **THEN** 图片嵌入 MUST 只消费 manifest 声明的 `excelImage` 目标区域
-- **AND** 图片源 MUST 来自后端受控的 `1.1` 在线表单图片存储
-- **AND** 渲染器 MUST 写入必要的 OOXML media、drawing、relationship 和 content-type 条目
-- **AND** 渲染器 MUST support up to 3 images per target area and place them in stable upload order
-- **AND** 渲染器 MUST aspect-fit each image within its allocated subregion and MUST NOT stretch images to a mismatched rectangle
-- **AND** 渲染器 MUST keep image anchors out of the text subregions for site, workpiece, and operation-process sections
-- **AND** 当图片存在时，渲染器 MUST split or adjust merged regions so text remains visible and images do not obscure the filled text
-- **AND** 渲染器 MUST NOT 接受前端传入的图片本地路径、任意 OOXML drawing 规则或文件平台文件
-- **AND** 未上传图片时 MUST 保持文本生成可用且不报错
-
-#### Scenario: 模板空值保留和格式化填充
-- **WHEN** manifest 声明空值保留模板原文
-- **THEN** 渲染器 MUST 在源值为空时不清空模板说明或占位文本
-- **AND** 后端 mapping MUST 支持 value builder 或等价机制生成带固定符号、单位和前缀的模板句式
-
-#### Scenario: 1.2 Excel 评分列按 manifest 写入
-- **WHEN** 后端渲染 `1.2 项目立项审批表`
-- **THEN** manifest MUST 将表头、评分、信息收集说明、责任人和审批意见映射到真实模板的合并区左上角或填充列
-- **AND** 渲染器 MUST NOT 将在线表单评分值写入固定条款内容列或评价标准列
-- **AND** 渲染器 MUST preserve `C/H` 固定模板内容 and `A22` remarks when writing `K/L/O` scoring values
-- **AND** manifest MUST NOT map reviewer names into signer cells `I19/I20/I21`
-- **AND** date value builders MUST format review dates without UTC serialization artifacts
-
-#### Scenario: DOCX 表格 target 由 manifest 驱动
+#### Scenario: DOCX 表格支持多行数据渲染
 - **WHEN** 后端渲染 `1.3 项目立项通知`
-- **THEN** 渲染器 MUST 消费 manifest 中声明的 Word 表格单元格 target
-- **AND** 渲染器 MUST NOT 只依赖未声明的固定数组或隐式字段顺序
+- **THEN** renderer MUST support manifest-declared multi-row table rendering
+- **AND** renderer MUST clone the template data row for each cumulative project row
+- **AND** renderer MUST remove unused empty template rows
+- **AND** renderer MUST preserve table style, borders, widths, fonts, and paragraph formatting
 
-#### Scenario: DOCX 固定文本替换由 manifest 驱动
-- **WHEN** 后端渲染 `1.3 项目立项通知` 的落款日期
-- **THEN** 渲染器 MUST 只执行 manifest 声明的固定文本替换 target
-- **AND** API callers MUST NOT provide arbitrary DOCX paths or arbitrary replacement rules
-- **AND** missing fixed replacement text MUST fail generation instead of silently preserving the template sample date
+#### Scenario: 生成失败不回滚 1.3 提交
+- **WHEN** `1.3` 提交已成功写入项目编号但通知文件生成失败
+- **THEN** 系统 MUST 记录生成失败状态
+- **AND** 系统 MUST NOT 回滚在线表单提交结果或 `projects.project_code`
+
+#### Scenario: 项目编号写入路径统一治理
+- **WHEN** 后端处理项目编号写入
+- **THEN** `1.3 项目立项通知` 提交 MUST 是立项流程项目写入 `projects.project_code` 的唯一业务入口
+- **AND** 独立项目编号更新接口 MUST NOT 对存在 `1.3` 资料项的项目写入 `projects.project_code`
+- **AND** 任何保留的遗留写入路径 MUST 复用同一项目编号命名锁或等价并发保护策略
+- **AND** 业务错误 MUST NOT 落成 500
 
 ### Requirement: 模板路径白名单
 技术架构 MUST 通过后端模板注册表、配置或白名单解析模板路径；业务接口不得接收任意模板路径参数。
@@ -1206,17 +1185,24 @@ TBD - created by archiving change define-technical-architecture. Update Purpose 
 - **AND** 无权限响应 MUST NOT 泄露本地路径
 
 ### Requirement: 内部存储和源快照审计
-技术架构 MUST 使用数字化平台内部存储保存第一版生成文件，并 MUST 为历史文件保存生成时源快照、源 hash、审批快照和模板 hash。
+技术架构 MUST 为历史生成文件保存生成时源快照、源 hash、审批快照和模板 hash；`1.3` 累计通知的源快照 MUST 覆盖累计项目清单输入。
 
-#### Scenario: 历史文件可追溯
-- **WHEN** 用户审计历史生成文件
-- **THEN** 系统 MUST 能通过记录中的源快照、源 hash、触发事件、模板 hash 和可选审批快照解释文件来源
-- **AND** 对图片参与生成的文件，源快照和源 hash MUST include uploaded image content hashes, not only image ids or file names
-- **AND** 系统 MUST NOT 只依赖当前可变表单数据解释历史文件
+#### Scenario: 1.3 累计清单进入源快照
+- **WHEN** 系统生成 `1.3 项目立项通知`
+- **THEN** 源快照 MUST 包含本次用于渲染的累计项目清单
+- **AND** 源快照 MUST 包含当前项目 `1.3` 提交时间 cutoff
+- **AND** 源 hash MUST 覆盖 cutoff 以及每行的序号、项目编号、项目名称、客户单位和立项日期
+- **AND** 历史生成文件 MUST NOT 只依赖当前可变项目表解释清单内容
 
-#### Scenario: 1.2 审批快照
-- **WHEN** 系统生成 `1.2 项目立项审批表`
-- **THEN** 记录 MUST 保存商务评价、技术评价和总经理审批意见、人员、时间的生成时快照
+#### Scenario: 1.3 重试生成不得引入未来项目
+- **WHEN** 系统重试生成旧项目的 `1.3 项目立项通知`
+- **THEN** 累计清单查询 MUST 使用该项目原始 `1.3` 提交时间 cutoff
+- **AND** 查询 MUST NOT 包含 cutoff 之后提交的项目
+
+#### Scenario: 新版 1.2 模板 hash 可追溯
+- **WHEN** 系统生成新版 `1.2 项目立项审批表`
+- **THEN** 文件记录 MUST 保存新版模板 hash 或等价模板版本信息
+- **AND** 审计时 MUST 能区分旧模板生成文件和新版模板生成文件
 
 ### Requirement: 文件平台和 PDF 后置
 技术架构 MUST 保持文件平台联动和 PDF 转换为后续独立能力；本 runtime change MUST NOT 处理 `file-platform-integration-v1`。

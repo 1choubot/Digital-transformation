@@ -53,6 +53,10 @@ const INITIATION_COLLABORATION_PART = {
   BUSINESS: 'business',
   TECHNICAL: 'technical'
 };
+const INITIATION_PROJECT_EXECUTION_MODE = Object.freeze({
+  SELF_DEVELOPED: '自研模式',
+  SUPPLY_CHAIN: '供应链模式'
+});
 
 const NOTICE_TEMPLATE = Object.freeze({
   title: '关于确定项目名称及编号的通知',
@@ -72,46 +76,40 @@ const INITIATION_APPROVAL_SCORING_SECTIONS = Object.freeze([
     editablePart: INITIATION_COLLABORATION_PART.BUSINESS,
     items: [
       {
-        key: 'partyAttribute',
-        itemName: '甲方属性',
-        clauseContent: '①包括央国企业、军工企业、上市公司、龙头企业。②在细分行业是否属于领头羊企业？',
-        evaluationStandard: '0分-以上要求均不满足；1分-龙头企业；2分-上市公司；3分-军工企业；4-5分-央国企业'
+        key: 'customerEnterpriseAttribute',
+        itemName: '客户企业属性',
+        clauseContent: '客户企业属性',
+        evaluationStandard: '0-以上均不是；1-行业龙头企业；2-国企；3-央企；4-军工企业；5-上市公司'
       },
       {
-        key: 'enterpriseInfo',
-        itemName: '甲方企业信息',
-        clauseContent: '注册资本、甲方的年销售额、甲方的人员数量、甲方的场地、硬件设施设备场地、历史风险，是否有被供应商起诉等？',
-        evaluationStandard: '0分-以上要求均不满足；1分-以上要求满足1条；2分-以上要求满足2条；3分-以上要求满足3条；4分-以上要求满足4条；5分-以上要求满足5条及以上'
+        key: 'projectSource',
+        itemName: '项目来源',
+        clauseContent: '项目来源',
+        evaluationStandard: '0-挂网信息；1-多层分包项目；2-分包项目；3-中间人提供；4-客户主动联系；5-公司人脉'
       },
       {
-        key: 'identityRole',
-        itemName: '身份角色',
-        clauseContent: '①甲方对这个项目的投资意愿是否明确？②这个项目属于甲方的什么地位，比如说生产的关键要素，比如说只是辅助的一些条件。③我们属于什么身份?',
-        evaluationStandard: '0分-以上要求均不满足；1分-以上要求满足甲方明确愿意投资项目；2分-以上要求满足甲方交由总包方，我们以分包身份项目跟进；3分-以上要求满足甲方交由乙方项目跟进；4分-以上要求满足甲方属于辅助生产节点；5分-以上要求满足甲方属于生产关键节点'
+        key: 'projectPositioning',
+        itemName: '项目定位',
+        clauseContent: '项目定位',
+        evaluationStandard: '0-无明确定位；1-降低成本；2-增加效率；3-辅助设备替换；4-关键设备替换；5-新建必需设备'
       },
       {
-        key: 'companyAdvantages',
-        itemName: '公司竞争优势',
-        clauseContent: '①项目优势主要体现在哪，公司技术？公司的影响力？②公司内部资源，包括资金，包括人脉，包括政府关系？',
-        evaluationStandard: '0分-以上要求均不满足；1分-以上要求满足技术能力满足；2分-以上要求满足公司影响力推动；3分-以上要求满足资金支持；4分-以上要求满足内部资源，人脉关系；5分-以上要求满足政府背景'
+        key: 'businessCompetitionCondition',
+        itemName: '商务竞争条件',
+        clauseContent: '商务竞争条件',
+        evaluationStandard: '0-公开招标，低价中标；1-公开招标，综合评分；2-邀请招标，低价中标；3-邀请招标，综合评分；4-多家竞争性谈判；5-独家'
       },
       {
-        key: 'businessModeBackground',
-        itemName: '商务形式及背调',
-        clauseContent: '①项目会采取什么样的商务过程，是邀标还是直接谈判？挂网，还是最低价中标？②总共几家参与？',
-        evaluationStandard: '0分-以上要求均不满足；1分-以上要求满足低价中标；2分-以上要求满足邀请招标；3分-以上要求满足公开招标；4分-以上要求满足挂网；5分-以上要求满足直接谈判'
+        key: 'projectBudget',
+        itemName: '项目预算',
+        clauseContent: '项目预算',
+        evaluationStandard: '0-无预算；1-预算不足；2-预算刚好，项目地点在外地；3-预算刚好，项目地点在重庆；4-预算充足，项目地点在外地；5-预算充足，项目地点在重庆'
       },
       {
-        key: 'relationshipLevel',
-        itemName: '商务关系层级',
-        clauseContent: '①是否和项目决策人搭上关系？②是否和公司的老板搭上关系？③是否和技术决策人搭上关系？④对于居间人，可以提前签居间合同，保证他们的利益，同时知道甲方的商务情况及核心技术，信息不能提供或不清楚，一概拒绝，暂停合作。',
-        evaluationStandard: '0分-以上要求均不满足；1分-以上要求满足1条；2分-以上要求满足2条；3分-以上要求满足3条；4-5分-以上要求满足4条'
-      },
-      {
-        key: 'projectSituation',
-        itemName: '项目情况',
-        clauseContent: '①项目体量大小？②预算多少？③项目的时间及周期?④地域位置?⑤整体性价比？⑥是否达成战略合作，并根据实际情况完成相应配合度？',
-        evaluationStandard: '0分-以上要求均不满足；1分-以上要求满足1条；2分-以上要求满足2条；3分-以上要求满足3条；4分-以上要求满足4条；5分-以上要求满足5-6条'
+        key: 'paymentCondition',
+        itemName: '付款条件',
+        clauseContent: '付款条件',
+        evaluationStandard: '0-低于模板比例或无预付款；1-预付≥10%，发货付款至全款比例≥50%；2-预付≥20%，发货付款至全款比例≥50%；3-预付≥20%，发货付款至全款比例≥60%；4-预付≥30%，发货付款至全款比例≥70%；5-预付≥30%，发货付款至全款比例≥90%'
       }
     ]
   },
@@ -120,6 +118,12 @@ const INITIATION_APPROVAL_SCORING_SECTIONS = Object.freeze([
     title: '技术模块',
     editablePart: INITIATION_COLLABORATION_PART.TECHNICAL,
     items: [
+      {
+        key: 'projectRequirement',
+        itemName: '项目需求',
+        clauseContent: '项目需求',
+        evaluationStandard: '0-无项目需求；1-需求模糊，无数据支撑；2-需求模糊，有数据支撑；3-需求明确，但无数据支撑；4-需求明确，有数据支撑；5-有目标方案文件'
+      },
       {
         key: 'specialEnvironment',
         itemName: '特殊环境要求',
@@ -139,10 +143,10 @@ const INITIATION_APPROVAL_SCORING_SECTIONS = Object.freeze([
         evaluationStandard: '0-无相关技术可查；1-只有技术概念；2-可以看到原型机；3-小范围用户使用；4-已经市场推广；5-本公司工程师工作经历相符'
       },
       {
-        key: 'referenceCases',
-        itemName: '可借鉴案例',
-        clauseContent: '可借鉴案例',
-        evaluationStandard: '0-无相关案例；1-只有个别案例；2-市场上有少量相关案例；3-市场上有大量相关案例；4-合作供应商有相关案例；5-本公司有相关项目案例'
+        key: 'rdMode',
+        itemName: '研发模式',
+        clauseContent: '研发模式',
+        evaluationStandard: '0-市场上无相关供应商；1-市场上只有个别相关产品；2-市场上有少量相关产品；3-市场上有大量相关产品；4-合作供应商有相关产品；5-本公司有相关产品'
       }
     ]
   }
@@ -406,8 +410,7 @@ const INITIATION_FORM_DEFINITIONS = Object.freeze({
         title: '表头信息',
         editablePart: INITIATION_COLLABORATION_PART.BUSINESS,
         fields: [
-          { key: 'projectName', label: '项目名称', type: 'text', required: false, readOnly: true, autoFill: 'projectName' },
-          { key: 'projectCode', label: '项目号/项目编号', type: 'text', required: true, autoFill: 'projectCode' }
+          { key: 'projectName', label: '项目名称', type: 'text', required: false, readOnly: true, autoFill: 'projectName' }
         ]
       },
       {
@@ -425,8 +428,27 @@ const INITIATION_FORM_DEFINITIONS = Object.freeze({
         title: '项目基本信息',
         editablePart: INITIATION_COLLABORATION_PART.BUSINESS,
         fields: [
-          { key: 'projectResponsiblePerson', label: '项目负责人', type: 'text', required: false, readOnly: true, autoFill: 'businessResponsibleName' },
+          { key: 'projectResponsiblePerson', label: '本公司商务负责人', type: 'text', required: false, readOnly: true, autoFill: 'businessResponsibleName' },
           { key: 'projectResponsibleContact', label: '联系方式', type: 'text', required: false }
+        ]
+      },
+      {
+        key: 'projectExecutionModeSection',
+        title: '项目开展模式',
+        editablePart: INITIATION_COLLABORATION_PART.BUSINESS,
+        fields: [
+          {
+            key: 'projectExecutionMode',
+            label: '项目开展模式',
+            type: 'select',
+            required: true,
+            options: [
+              INITIATION_PROJECT_EXECUTION_MODE.SELF_DEVELOPED,
+              INITIATION_PROJECT_EXECUTION_MODE.SUPPLY_CHAIN
+            ],
+            editablePart: INITIATION_COLLABORATION_PART.BUSINESS,
+            description: '仅用于生成 1.2 项目立项审批表，不关联系统项目模式。'
+          }
         ]
       }
     ],
@@ -434,12 +456,23 @@ const INITIATION_FORM_DEFINITIONS = Object.freeze({
     reviewOpinionSource: 'initiationReviewNodes',
     fields: [
       { key: 'projectName', label: '项目名称', type: 'text', required: false, readOnly: true, autoFill: 'projectName' },
-      { key: 'projectCode', label: '项目号/项目编号', type: 'text', required: true, autoFill: 'projectCode', editablePart: INITIATION_COLLABORATION_PART.BUSINESS },
       { key: 'customerName', label: '客户名称', type: 'text', required: false, readOnly: true, autoFill: 'customerName' },
       { key: 'customerContactPerson', label: '项目联系人', type: 'text', required: false, readOnly: true, autoFill: 'customerContactPerson' },
       { key: 'customerContact', label: '联系方式', type: 'text', required: false, readOnly: true, autoFill: 'customerContact' },
-      { key: 'projectResponsiblePerson', label: '项目负责人', type: 'text', required: false, readOnly: true, autoFill: 'businessResponsibleName' },
+      { key: 'projectResponsiblePerson', label: '本公司商务负责人', type: 'text', required: false, readOnly: true, autoFill: 'businessResponsibleName' },
       { key: 'projectResponsibleContact', label: '项目负责人联系方式', type: 'text', required: false, editablePart: INITIATION_COLLABORATION_PART.BUSINESS },
+      {
+        key: 'projectExecutionMode',
+        label: '项目开展模式',
+        type: 'select',
+        required: true,
+        options: [
+          INITIATION_PROJECT_EXECUTION_MODE.SELF_DEVELOPED,
+          INITIATION_PROJECT_EXECUTION_MODE.SUPPLY_CHAIN
+        ],
+        editablePart: INITIATION_COLLABORATION_PART.BUSINESS,
+        description: '仅用于生成 1.2 项目立项审批表，不写入系统项目模式。'
+      },
       ...buildScoringFields(INITIATION_APPROVAL_SCORING_SECTIONS)
     ]
   },
@@ -453,7 +486,7 @@ const INITIATION_FORM_DEFINITIONS = Object.freeze({
         title: '通知项目信息',
         fields: [
           { key: 'sequenceNumber', label: '序号', type: 'text', required: false, readOnly: true, defaultValue: '1' },
-          { key: 'projectCode', label: '项目编号', type: 'text', required: true, readOnly: true, autoFill: 'projectCode' },
+          { key: 'projectCode', label: '项目编号', type: 'text', required: true, autoFill: 'projectCode' },
           { key: 'projectName', label: '项目名称', type: 'text', required: false, readOnly: true, autoFill: 'projectName' },
           { key: 'customerUnit', label: '客户单位', type: 'text', required: false, readOnly: true, autoFill: 'customerName' },
           { key: 'initiationDate', label: '立项日期', type: 'date', required: false }
@@ -470,7 +503,7 @@ const INITIATION_FORM_DEFINITIONS = Object.freeze({
     ],
     fields: [
       { key: 'sequenceNumber', label: '序号', type: 'text', required: false, readOnly: true, defaultValue: '1' },
-      { key: 'projectCode', label: '项目编号', type: 'text', required: true, readOnly: true, autoFill: 'projectCode' },
+      { key: 'projectCode', label: '项目编号', type: 'text', required: true, autoFill: 'projectCode' },
       { key: 'projectName', label: '项目名称', type: 'text', required: false, readOnly: true, autoFill: 'projectName' },
       { key: 'customerUnit', label: '客户单位', type: 'text', required: false, readOnly: true, autoFill: 'customerName' },
       { key: 'initiationDate', label: '立项日期', type: 'date', required: false },
@@ -708,6 +741,23 @@ function validateRequiredFields(schema, formData, fields = schema.fields) {
       invalidScores
     );
   }
+
+  const invalidSelects = fieldsToValidate
+    .filter((field) => field.type === 'select' && Array.isArray(field.options) && field.options.length > 0)
+    .filter((field) => {
+      const rawValue = String(formData[field.key] ?? '').trim();
+      return rawValue && !field.options.includes(rawValue);
+    })
+    .map((field) => field.key);
+
+  if (invalidSelects.length > 0) {
+    throw new StageDocumentFormError(
+      'FORM_SELECT_FIELDS_INVALID',
+      'Form select fields contain unsupported values',
+      400,
+      invalidSelects
+    );
+  }
 }
 
 function isInitiationReviewFormDocument(document) {
@@ -884,13 +934,42 @@ function normalizeInitiationProjectCode(formData, { required = false } = {}) {
   if (!projectCode && required) {
     throw new StageDocumentFormError(
       'PROJECT_CODE_REQUIRED',
-      'Project code is required before submitting initiation approval business part',
+      'Project code is required before submitting initiation notice form',
       400,
       ['projectCode']
     );
   }
 
   return projectCode;
+}
+
+function buildInitiationProjectCodeLockName(projectCode) {
+  return `initiation-project-code:${projectCode}`.slice(0, 64);
+}
+
+async function acquireInitiationProjectCodeLock(connection, projectCode) {
+  const lockName = buildInitiationProjectCodeLockName(projectCode);
+  const [rows] = await connection.execute('SELECT GET_LOCK(?, 10) AS lockAcquired', [lockName]);
+  if (Number(rows[0]?.lockAcquired) !== 1) {
+    throw new StageDocumentFormError(
+      'PROJECT_CODE_LOCK_TIMEOUT',
+      'Project code is being submitted by another request',
+      409,
+      ['projectCode']
+    );
+  }
+  return lockName;
+}
+
+async function releaseInitiationProjectCodeLock(connection, lockName) {
+  if (!lockName) {
+    return;
+  }
+  try {
+    await connection.execute('SELECT RELEASE_LOCK(?)', [lockName]);
+  } catch {
+    // The database connection will release the named lock if it is closed.
+  }
 }
 
 async function assertProjectCodeUniqueForInitiationForm(connection, projectId, projectCode) {
@@ -909,7 +988,7 @@ async function assertProjectCodeUniqueForInitiationForm(connection, projectId, p
   }
 }
 
-async function updateProjectCodeFromInitiationForm({
+async function updateProjectCodeFromInitiationNoticeForm({
   connection,
   projectId,
   projectContext,
@@ -1084,11 +1163,6 @@ async function buildGateContext(connection, projectId, document, projectContext 
     } else {
       throw error;
     }
-  }
-
-  const project = projectContext || (await selectOnlineFormProjectContext(connection, projectId));
-  if (!String(project?.project_code ?? '').trim()) {
-    blockingReasons.push('1.3 项目立项通知提交前必须先填写项目编号，项目编号会带入通知表格');
   }
 
   return {
@@ -1442,21 +1516,6 @@ async function persistInitiationCollaborationForm({
     part: editablePart
   });
 
-  if (editablePart === INITIATION_COLLABORATION_PART.BUSINESS) {
-    const projectCode = normalizeInitiationProjectCode(mergedFormData, { required: submit });
-    await updateProjectCodeFromInitiationForm({
-      connection,
-      projectId,
-      projectContext,
-      projectCode,
-      user,
-      document
-    });
-    if (projectCode) {
-      mergedFormData.projectCode = projectCode;
-    }
-  }
-
   let collaboration = existingCollaboration;
   if (submit) {
     validateRequiredFields(schema, mergedFormData, getEditablePartFields(schema, editablePart));
@@ -1639,6 +1698,7 @@ export async function submitStageDocumentOnlineForm({ projectId, documentId, use
   let projectContext;
   let reviewOpinions;
   let images = [];
+  let projectCodeLockName = null;
 
   const connection = await pool.getConnection();
   try {
@@ -1665,7 +1725,25 @@ export async function submitStageDocumentOnlineForm({ projectId, documentId, use
       : null;
     if (!collaborationResult) {
       const formDataWithDefaults = applySchemaDefaults(schema, normalizedFormData, projectContext);
+      const noticeProjectCode =
+        String(getDocumentCode(document)) === INITIATION_NOTICE_DOCUMENT_CODE
+          ? normalizeInitiationProjectCode(formDataWithDefaults, { required: true })
+          : null;
+      if (noticeProjectCode) {
+        formDataWithDefaults.projectCode = noticeProjectCode;
+      }
       validateRequiredFields(schema, formDataWithDefaults);
+      if (noticeProjectCode) {
+        projectCodeLockName = await acquireInitiationProjectCodeLock(connection, noticeProjectCode);
+        await updateProjectCodeFromInitiationNoticeForm({
+          connection,
+          projectId,
+          projectContext,
+          projectCode: noticeProjectCode,
+          user,
+          document
+        });
+      }
       await upsertForm({
         connection,
         projectId,
@@ -1732,6 +1810,7 @@ export async function submitStageDocumentOnlineForm({ projectId, documentId, use
     await connection.rollback();
     throw error;
   } finally {
+    await releaseInitiationProjectCodeLock(connection, projectCodeLockName);
     connection.release();
   }
 

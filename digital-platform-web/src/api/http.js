@@ -219,7 +219,15 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'PROJECT_CODE_GATE_NOT_READY') {
-    return '项目编号需在 1.2 项目立项审批表填写阶段保存；当前存在未清除的 1.1 返工，暂不能更新。';
+    return '项目编号需在 1.3 项目立项通知提交时确定；当前存在未清除的 1.1 返工，暂不能更新。';
+  }
+
+  if (error.code === 'PROJECT_CODE_LOCK_TIMEOUT') {
+    return '项目编号正在被其他提交处理，请稍后重试。';
+  }
+
+  if (error.code === 'PROJECT_CODE_MANAGED_BY_INITIATION_NOTICE_FORM') {
+    return '项目编号需在 1.3 项目立项通知中修改并提交。';
   }
 
   if (error.code === 'PROJECT_NOT_FOUND') {

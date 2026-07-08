@@ -115,17 +115,17 @@ const V20260629_TARGET_ONLY_DOCUMENT_CODES = STAGE_DOCUMENT_TEMPLATE_ITEMS_V2026
   .filter((item) => item.documentCode === item.targetOutputCode)
   .map((item) => item.documentCode);
 const INITIATION_APPROVAL_SCORE_ITEM_KEYS = [
-  'partyAttribute',
-  'enterpriseInfo',
-  'identityRole',
-  'companyAdvantages',
-  'businessModeBackground',
-  'relationshipLevel',
-  'projectSituation',
+  'customerEnterpriseAttribute',
+  'projectSource',
+  'projectPositioning',
+  'businessCompetitionCondition',
+  'projectBudget',
+  'paymentCondition',
+  'projectRequirement',
   'specialEnvironment',
   'industryThreshold',
   'technologyMaturity',
-  'referenceCases'
+  'rdMode'
 ];
 let smokeInitiationProjectCodeCounter = 0;
 
@@ -230,20 +230,20 @@ function buildSmokePngFile(originalFileName, { width = 1, height = 1, rgba } = {
 }
 
 const INITIATION_APPROVAL_BUSINESS_SCORE_ITEM_KEYS = [
-  'partyAttribute',
-  'enterpriseInfo',
-  'identityRole',
-  'companyAdvantages',
-  'businessModeBackground',
-  'relationshipLevel',
-  'projectSituation'
+  'customerEnterpriseAttribute',
+  'projectSource',
+  'projectPositioning',
+  'businessCompetitionCondition',
+  'projectBudget',
+  'paymentCondition'
 ];
 
 const INITIATION_APPROVAL_TECHNICAL_SCORE_ITEM_KEYS = [
+  'projectRequirement',
   'specialEnvironment',
   'industryThreshold',
   'technologyMaturity',
-  'referenceCases'
+  'rdMode'
 ];
 
 function buildSmokeScoreData(itemKeys, responsiblePerson, score = '3', notesSuffix = 'information notes') {
@@ -257,10 +257,9 @@ function buildSmokeScoreData(itemKeys, responsiblePerson, score = '3', notesSuff
 }
 
 function buildSmokeInitiationBusinessFormData(patch = {}) {
-  smokeInitiationProjectCodeCounter += 1;
   return {
-    projectCode: `SMOKE-INIT-${smokeInitiationProjectCodeCounter}`,
     projectResponsibleContact: '13800000000',
+    projectExecutionMode: '自研模式',
     ...buildSmokeScoreData(INITIATION_APPROVAL_BUSINESS_SCORE_ITEM_KEYS, 'smoke business responsible', '3'),
     ...patch
   };
@@ -287,7 +286,9 @@ function buildSmokeInitiationFormData(patch = {}) {
 }
 
 function buildSmokeNoticeFormData(patch = {}) {
+  smokeInitiationProjectCodeCounter += 1;
   return {
+    projectCode: `SMOKE-INIT-${smokeInitiationProjectCodeCounter}`,
     initiationDate: '2026-07-01',
     noticeDate: '2026-07-08',
     ...patch
@@ -582,9 +583,7 @@ async function completeInitiationGate(projectId, { submitterUser, marketingManag
       projectId,
       documentId: initiationDocument.id,
       user: marketingManagerUser,
-      formData: buildSmokeInitiationBusinessFormData({
-        projectCode: `SMOKE-GATE-COMPLETE-${projectId}`
-      })
+      formData: buildSmokeInitiationBusinessFormData()
     });
     await submitStageDocumentOnlineForm({
       projectId,
@@ -939,7 +938,8 @@ async function createInitiationSmokeProject({
   return created.project.id;
 }
 
-async function prepareInitiationSmokeBase(projectId, businessUser, technicalUser, projectCode = null) {
+async function prepareInitiationSmokeBase(projectId, businessUser, technicalUser, options = {}) {
+  const normalizedOptions = options && typeof options === 'object' ? options : {};
   await pool.execute(
     `UPDATE project_stage_documents
      SET status = CASE document_code
@@ -967,18 +967,42 @@ async function prepareInitiationSmokeBase(projectId, businessUser, technicalUser
     projectId,
     documentId: initiationDocument.id,
     user: businessUser,
-    formData: buildSmokeInitiationBusinessFormData({
-      projectCode: projectCode || `SMOKE-INIT-BASE-${projectId}`
-    })
+    formData: buildSmokeInitiationBusinessFormData(normalizedOptions.businessPatch)
   });
   await submitStageDocumentOnlineForm({
     projectId,
     documentId: initiationDocument.id,
     user: technicalUser,
-    formData: buildSmokeInitiationTechnicalFormData()
+    formData: buildSmokeInitiationTechnicalFormData(normalizedOptions.technicalPatch)
   });
 
   return selectSmokeDocument(projectId, '1.2');
+}
+
+async function prepareInitiationNoticeReadyProject(projectId, { businessUser, technicalUser, generalManagerUser }) {
+  const initiationDocument = await prepareInitiationSmokeBase(projectId, businessUser, technicalUser);
+  await approveInitiationReviewNode({
+    projectId,
+    documentId: initiationDocument.id,
+    nodeKey: 'business_review',
+    user: businessUser,
+    comment: 'smoke business approval'
+  });
+  await approveInitiationReviewNode({
+    projectId,
+    documentId: initiationDocument.id,
+    nodeKey: 'technical_review',
+    user: technicalUser,
+    comment: 'smoke technical approval'
+  });
+  await approveInitiationReviewNode({
+    projectId,
+    documentId: initiationDocument.id,
+    nodeKey: 'general_review',
+    user: generalManagerUser,
+    comment: 'smoke general approval'
+  });
+  return resetInitiationNoticeForSubmit(projectId, businessUser);
 }
 
 async function assertNoInitiationWorkbenchTask(user, projectId, nodeKey = null) {
@@ -1505,31 +1529,38 @@ function collectTextMatches(xml, pattern) {
 async function readGeneratedXlsxCells(filePath) {
   const entries = readZipEntries(await fs.readFile(filePath));
   const sharedStringsEntry = entries.find((candidate) => candidate.name === 'xl/sharedStrings.xml');
-  const sharedStrings = sharedStringsEntry
-    ? [...sharedStringsEntry.data.toString('utf8').matchAll(/<si\b[\s\S]*?<\/si>/g)].map((match) =>
-        decodeSmokeXmlText(collectTextMatches(match[0], /<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g))
-      )
+  const sharedStringXmls = sharedStringsEntry
+    ? [...sharedStringsEntry.data.toString('utf8').matchAll(/<si\b[\s\S]*?<\/si>/g)].map((match) => match[0])
     : [];
+  const sharedStrings = sharedStringXmls.map((xml) =>
+    decodeSmokeXmlText(collectTextMatches(xml, /<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g))
+  );
   const sheetEntry = entries.find((candidate) => candidate.name === 'xl/worksheets/sheet1.xml');
   assert.ok(sheetEntry, 'Generated xlsx sheet1.xml missing');
   const sheetXml = sheetEntry.data.toString('utf8');
+  const stylesXml = entries.find((candidate) => candidate.name === 'xl/styles.xml')?.data.toString('utf8') || '';
   const cells = new Map();
+  const cellXmls = new Map();
+  const cellSharedStringIndexes = new Map();
 
   for (const match of sheetXml.matchAll(/<c\b(?=[^>]*\br="([A-Z]+\d+)")[^>]*?(?:\/>|>[\s\S]*?<\/c>)/g)) {
     const cellXml = match[0];
+    const cellRef = match[1];
+    cellXmls.set(cellRef, cellXml);
     let value = '';
     if (/\bt="s"/.test(cellXml)) {
       const index = Number(cellXml.match(/<v>([\s\S]*?)<\/v>/)?.[1]);
+      cellSharedStringIndexes.set(cellRef, index);
       value = sharedStrings[index] || '';
     } else if (/\bt="inlineStr"/.test(cellXml)) {
       value = decodeSmokeXmlText(collectTextMatches(cellXml, /<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g));
     } else {
       value = decodeSmokeXmlText(cellXml.match(/<v>([\s\S]*?)<\/v>/)?.[1] || '');
     }
-    cells.set(match[1], value);
+    cells.set(cellRef, value);
   }
 
-  return { cells, sheetXml, entries };
+  return { cells, sheetXml, entries, sharedStringXmls, cellXmls, cellSharedStringIndexes, stylesXml };
 }
 
 function parseXlsxDrawingMarker(anchorXml, markerName) {
@@ -1711,6 +1742,73 @@ function assertCellMatches(cells, cellRef, pattern) {
   assert.match(value, pattern, `Expected ${cellRef} to match ${pattern}, got ${value}`);
 }
 
+function getIndexedXlsxStyleXmls(stylesXml, sectionName, itemName) {
+  const section = String(stylesXml || '').match(new RegExp(`<${sectionName}\\b[^>]*>[\\s\\S]*?<\\/${sectionName}>`))?.[0] || '';
+  return [...section.matchAll(new RegExp(`<${itemName}\\b[^>]*?(?:\\/>|>[\\s\\S]*?<\\/${itemName}>)`, 'g'))].map(
+    (match) => match[0]
+  );
+}
+
+function getXlsxRunText(runXml) {
+  return decodeSmokeXmlText(collectTextMatches(runXml, /<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g));
+}
+
+function getXlsxRunFontName(runXml) {
+  return String(runXml || '').match(/<rFont\b[^>]*\bval="([^"]+)"/)?.[1] || null;
+}
+
+function getXlsxCellStyleFontName(workbook, cellRef) {
+  const cellXml = workbook.cellXmls.get(cellRef) || '';
+  const styleId = Number(cellXml.match(/\bs="(\d+)"/)?.[1]);
+  if (!Number.isSafeInteger(styleId)) {
+    return null;
+  }
+  const cellXfs = getIndexedXlsxStyleXmls(workbook.stylesXml, 'cellXfs', 'xf');
+  const fontId = Number(cellXfs[styleId]?.match(/\bfontId="(\d+)"/)?.[1]);
+  if (!Number.isSafeInteger(fontId)) {
+    return null;
+  }
+  const fonts = getIndexedXlsxStyleXmls(workbook.stylesXml, 'fonts', 'font');
+  return fonts[fontId]?.match(/<name\b[^>]*\bval="([^"]+)"/)?.[1] || null;
+}
+
+function getXlsxCellRichTextXml(workbook, cellRef) {
+  const sharedStringIndex = workbook.cellSharedStringIndexes.get(cellRef);
+  if (Number.isSafeInteger(sharedStringIndex)) {
+    return workbook.sharedStringXmls[sharedStringIndex] || '';
+  }
+  return workbook.cellXmls.get(cellRef) || '';
+}
+
+function assertExecutionModeRichCheckboxCell(workbook, cellRef, { label, checked }) {
+  assertCellContains(workbook.cells, cellRef, [label]);
+  const xml = getXlsxCellRichTextXml(workbook, cellRef);
+  const runs = [...xml.matchAll(/<r\b[\s\S]*?<\/r>/g)].map((match) => match[0]);
+  assert.ok(runs.length >= 2, `Expected ${cellRef} to keep rich text runs`);
+  assert.equal(getXlsxRunText(runs[0]), checked ? 'R' : '£');
+  const checkboxFont = getXlsxRunFontName(runs[0]) || getXlsxCellStyleFontName(workbook, cellRef);
+  assert.equal(checkboxFont, 'Wingdings 2', `Expected ${cellRef} checkbox run/effective font to be Wingdings 2`);
+  const labelRun = runs.find((run) => getXlsxRunText(run).includes(label));
+  assert.ok(labelRun, `Expected ${cellRef} to keep label run for ${label}`);
+  assert.equal(getXlsxRunFontName(labelRun), '宋体', `Expected ${cellRef} label run to keep 宋体`);
+  assert.equal(labelRun.includes('Wingdings 2'), false, `Expected ${cellRef} label run not to use Wingdings 2`);
+}
+
+function assertExecutionModeRichCheckboxes(workbook, selectedMode) {
+  assertExecutionModeRichCheckboxCell(workbook, 'D20', {
+    label: '自研模式',
+    checked: selectedMode === '自研模式'
+  });
+  assertExecutionModeRichCheckboxCell(workbook, 'G20', {
+    label: '供应链模式',
+    checked: selectedMode === '供应链模式'
+  });
+  const packageText = workbook.entries.map((entry) => entry.data.toString('utf8')).join('\n');
+  for (const forbidden of ['☑ 自研模式', '□ 自研模式', '☑ 供应链模式', '□ 供应链模式']) {
+    assert.equal(packageText.includes(forbidden), false, `Generated workbook should not contain whole-cell text ${forbidden}`);
+  }
+}
+
 async function assertGeneratedFileDownloadable({
   projectId,
   document,
@@ -1871,13 +1969,13 @@ async function assertInitiationNoticeSubmitGateRejects({ projectId, user, expect
   }), formSubmittedLogCountBefore);
 }
 
-async function submitInitiationNoticeAfterGateReady(projectId, user) {
+async function submitInitiationNoticeAfterGateReady(projectId, user, formData = buildSmokeNoticeFormData()) {
   const notice = await resetInitiationNoticeForSubmit(projectId, user);
   const result = await submitStageDocumentOnlineForm({
     projectId,
     documentId: notice.id,
     user,
-    formData: buildSmokeNoticeFormData()
+    formData
   });
   const submittedNotice = result.document;
 
@@ -2066,11 +2164,11 @@ async function runInitiationReviewSmoke({
   assert.equal(initiationTemplateForm.schema.reviewOpinionSource, 'initiationReviewNodes');
   assert.deepEqual(
     initiationTemplateForm.schema.sections.map((section) => section.key),
-    ['approvalHeader', 'customerBasicInfo', 'projectBasicInfo']
+    ['approvalHeader', 'customerBasicInfo', 'projectBasicInfo', 'projectExecutionModeSection']
   );
   assert.deepEqual(
     initiationTemplateForm.schema.sections.find((section) => section.key === 'approvalHeader').fields.map((field) => field.key),
-    ['projectName', 'projectCode']
+    ['projectName']
   );
   assert.deepEqual(
     initiationTemplateForm.schema.sections.find((section) => section.key === 'customerBasicInfo').fields.map((field) => field.key),
@@ -2080,23 +2178,30 @@ async function runInitiationReviewSmoke({
     initiationTemplateForm.schema.sections.find((section) => section.key === 'projectBasicInfo').fields.map((field) => field.key),
     ['projectResponsiblePerson', 'projectResponsibleContact']
   );
+  assert.deepEqual(
+    initiationTemplateForm.schema.sections.find((section) => section.key === 'projectExecutionModeSection').fields.map((field) => field.key),
+    ['projectExecutionMode']
+  );
+  const executionModeField = initiationTemplateForm.schema.fields.find((field) => field.key === 'projectExecutionMode');
+  assert.equal(executionModeField.required, true);
+  assert.deepEqual(executionModeField.options, ['自研模式', '供应链模式']);
   assert.equal(initiationTemplateForm.schema.scoringSections.length, 2);
   assert.deepEqual(
     initiationTemplateForm.schema.scoringSections.map((section) => section.items.length),
-    [7, 4]
+    [6, 5]
   );
-  const partyAttributeItem = initiationTemplateForm.schema.scoringSections[0].items.find(
-    (item) => item.key === 'partyAttribute'
+  const customerEnterpriseAttributeItem = initiationTemplateForm.schema.scoringSections[0].items.find(
+    (item) => item.key === 'customerEnterpriseAttribute'
   );
-  assert.ok(partyAttributeItem.clauseContent.includes('央国企业'));
-  assert.ok(partyAttributeItem.evaluationStandard.includes('4-5分-央国企业'));
+  assert.ok(customerEnterpriseAttributeItem.clauseContent.includes('客户企业属性'));
+  assert.ok(customerEnterpriseAttributeItem.evaluationStandard.includes('上市公司'));
   const specialEnvironmentItem = initiationTemplateForm.schema.scoringSections[1].items.find(
     (item) => item.key === 'specialEnvironment'
   );
   assert.ok(specialEnvironmentItem.clauseContent.includes('防爆'));
   assert.ok(specialEnvironmentItem.evaluationStandard.includes('5-以上要求均无'));
   assert.ok(
-    initiationTemplateForm.schema.fields.some((field) => field.key === 'partyAttributeInformationNotes'),
+    initiationTemplateForm.schema.fields.some((field) => field.key === 'customerEnterpriseAttributeInformationNotes'),
     '1.2 schema should keep information collection notes field'
   );
   assert.deepEqual(
@@ -2112,7 +2217,12 @@ async function runInitiationReviewSmoke({
   assert.equal(noticeTemplateForm.documentCode, '1.3');
   assert.equal(noticeTemplateForm.schema.noticeTemplate.title, '关于确定项目名称及编号的通知');
   assert.ok(noticeTemplateForm.schema.noticeTemplate.bodyParagraphs[1].includes('成本归集'));
-  assert.ok(noticeTemplateForm.blockingReasons.some((reason) => String(reason).includes('项目编号')));
+  assert.equal(
+    noticeTemplateForm.schema.fields.find((field) => field.key === 'projectCode')?.readOnly,
+    undefined
+  );
+  assert.equal(noticeTemplateForm.schema.fields.find((field) => field.key === 'projectCode')?.required, true);
+  assert.equal(noticeTemplateForm.blockingReasons.some((reason) => String(reason).includes('项目编号')), false);
   await assert.rejects(
     () =>
       getStageDocumentOnlineForm({
@@ -2189,9 +2299,7 @@ async function runInitiationReviewSmoke({
         projectId,
         documentId: initiationDocumentBeforeRequirement.id,
         user: marketingManagerUser,
-        formData: buildSmokeInitiationBusinessFormData({
-          projectCode: `SMOKE-BLOCKED-${projectId}`
-        })
+        formData: buildSmokeInitiationBusinessFormData()
       }),
     (error) =>
       error.code === 'INITIATION_REQUIREMENT_NOT_SUBMITTED' &&
@@ -2692,19 +2800,31 @@ async function runInitiationReviewSmoke({
       Array.isArray(error.details) &&
       error.details.includes('specialEnvironmentScore')
   );
+  await assert.rejects(
+    () =>
+      submitStageDocumentOnlineForm({
+        projectId,
+        documentId: initialInitiationDocument.id,
+        user: marketingManagerUser,
+        formData: buildSmokeInitiationBusinessFormData({
+          projectExecutionMode: ''
+        })
+      }),
+    (error) =>
+      error.code === 'FORM_REQUIRED_FIELDS_MISSING' &&
+      Array.isArray(error.details) &&
+      error.details.includes('projectExecutionMode')
+  );
   await assertOrdinaryOnlineFormDocumentSubmitRejected({
     projectId,
     documentCode: '1.2',
     user: managerUser
   });
-  const collaborationProjectCode = `SMOKE-INIT-COLLAB-${projectId}`;
   const businessInitiationResult = await submitStageDocumentOnlineForm({
     projectId,
     documentId: initialInitiationDocument.id,
     user: marketingManagerUser,
-    formData: buildSmokeInitiationBusinessFormData({
-      projectCode: collaborationProjectCode
-    })
+    formData: buildSmokeInitiationBusinessFormData()
   });
   assert.equal(businessInitiationResult.form.status, 'draft');
   assert.equal(businessInitiationResult.form.collaboration.businessSubmitted, true);
@@ -2725,18 +2845,7 @@ async function runInitiationReviewSmoke({
       }),
     (error) => error.code === 'FORM_PART_ALREADY_SUBMITTED' && error.statusCode === 409
   );
-  assert.equal((await getProjectDetail(projectId, marketingManagerUser)).project.projectCode, collaborationProjectCode);
-  await assert.rejects(
-    () =>
-      updateProjectCode({
-        projectId,
-        projectCode: `${collaborationProjectCode}-B`,
-        user: marketingManagerUser
-      }),
-    (error) =>
-      error instanceof ProjectCodeUpdateError &&
-      error.code === 'PROJECT_CODE_MANAGED_BY_INITIATION_APPROVAL_FORM'
-  );
+  assert.equal((await getProjectDetail(projectId, marketingManagerUser)).project.projectCode, null);
   const businessResponsibleWorkbenchAfterSubmit = await getMyWorkbench(marketingManagerUser);
   assert.equal(findInitiationCollaborationWorkbenchTodo(businessResponsibleWorkbenchAfterSubmit, projectId, 'business'), undefined);
   const technicalResponsibleWorkbenchAfterBusinessSubmit = await getMyWorkbench(managerUser);
@@ -2805,7 +2914,7 @@ async function runInitiationReviewSmoke({
         user: managerUser,
         formData: {
           ...initiationFormData,
-          partyAttributeInformationNotes: 'tampered initiation after submit'
+          customerEnterpriseAttributeInformationNotes: 'tampered initiation after submit'
         }
       }),
     (error) => error.code === 'FORM_DOCUMENT_NOT_EDITABLE' && error.statusCode === 409
@@ -2827,7 +2936,7 @@ async function runInitiationReviewSmoke({
         user: managerUser,
         formData: {
           ...initiationFormData,
-          partyAttributeInformationNotes: 'duplicate submit should fail'
+          customerEnterpriseAttributeInformationNotes: 'duplicate submit should fail'
         }
       }),
     (error) => error.code === 'FORM_DOCUMENT_NOT_EDITABLE' && error.statusCode === 409
@@ -2836,7 +2945,7 @@ async function runInitiationReviewSmoke({
   assert.equal(initiationFormRow.status, 'submitted');
   assert.deepEqual(parseFormDataJson(initiationFormRow), submittedInitiationFormData);
   assert.equal((await selectSmokeDocument(projectId, '1.2')).status, DOCUMENT_STATUS.SUBMITTED);
-  assert.equal((await getProjectDetail(projectId, marketingManagerUser)).project.projectCode, collaborationProjectCode);
+  assert.equal((await getProjectDetail(projectId, marketingManagerUser)).project.projectCode, null);
   assert.equal(await countOperationLogs({
     projectId,
     actionType: OPERATION_ACTION_TYPE.FORM_SUBMITTED,
@@ -3126,35 +3235,53 @@ async function runInitiationReviewSmoke({
   const initiationWorkbook = await readGeneratedXlsxCells(initiationGenerated.download.filePath);
   assertGeneratedFileXmlContent(initiationWorkbook.sheetXml, []);
   assertCellContains(initiationWorkbook.cells, 'A2', ['项目名称：', initiationProjectDetail.project.projectName]);
-  assertCellContains(initiationWorkbook.cells, 'I2', ['项目号：', submittedInitiationFormData.projectCode]);
-  assertCellContains(initiationWorkbook.cells, 'A4', ['客户名称：', initiationProjectDetail.project.customerName]);
-  assertCellContains(initiationWorkbook.cells, 'A5', ['项目联系人：', initiationProjectDetail.project.customerContactPerson]);
-  assertCellContains(initiationWorkbook.cells, 'A6', ['联系方式：', initiationProjectDetail.project.customerContact]);
-  assertCellContains(initiationWorkbook.cells, 'I5', ['项目负责人：', marketingManagerUser.name]);
-  assertCellContains(initiationWorkbook.cells, 'I6', ['联系方式：', submittedInitiationFormData.projectResponsibleContact]);
-  assertCellContains(initiationWorkbook.cells, 'C8', ['甲方属性']);
-  assertCellContains(initiationWorkbook.cells, 'H8', ['0分']);
-  assertCellContains(initiationWorkbook.cells, 'C15', ['特殊环境要求']);
-  assertCellContains(initiationWorkbook.cells, 'H15', ['0-']);
-  assertCellContains(initiationWorkbook.cells, 'A22', ['备注']);
+  assertCellNotContains(initiationWorkbook.cells, 'I2', ['项目号', '项目编号']);
+  assertCellContains(initiationWorkbook.cells, 'A3', ['客户名称：', initiationProjectDetail.project.customerName]);
+  assertCellContains(initiationWorkbook.cells, 'A4', ['客户项目联系人：', initiationProjectDetail.project.customerContactPerson]);
+  assertCellContains(initiationWorkbook.cells, 'G4', ['联系电话：', initiationProjectDetail.project.customerContact]);
+  assertCellContains(initiationWorkbook.cells, 'J4', ['本公司商务负责人：', marketingManagerUser.name]);
+  assertCellContains(initiationWorkbook.cells, 'M4', ['联系方式：', submittedInitiationFormData.projectResponsibleContact]);
+  assertCellContains(initiationWorkbook.cells, 'C6', ['客户企业属性']);
+  assertCellContains(initiationWorkbook.cells, 'H6', ['0-以上均不是']);
+  assertCellContains(initiationWorkbook.cells, 'C12', ['项目需求']);
+  assertCellContains(initiationWorkbook.cells, 'H12', ['0-无项目需求']);
+  assertCellContains(initiationWorkbook.cells, 'A21', ['备注']);
   for (const [itemKey, row] of [
-    ['partyAttribute', 8],
-    ['enterpriseInfo', 9],
-    ['identityRole', 10],
-    ['companyAdvantages', 11],
-    ['businessModeBackground', 12],
-    ['relationshipLevel', 13],
-    ['projectSituation', 14],
-    ['specialEnvironment', 15],
-    ['industryThreshold', 16],
-    ['technologyMaturity', 17],
-    ['referenceCases', 18]
+    ['customerEnterpriseAttribute', 6],
+    ['projectSource', 7],
+    ['projectPositioning', 8],
+    ['businessCompetitionCondition', 9],
+    ['projectBudget', 10],
+    ['paymentCondition', 11],
+    ['projectRequirement', 12],
+    ['specialEnvironment', 13],
+    ['industryThreshold', 14],
+    ['technologyMaturity', 15],
+    ['rdMode', 16]
   ]) {
     assertCellContains(initiationWorkbook.cells, `K${row}`, [submittedInitiationFormData[`${itemKey}Score`]]);
     assertCellContains(initiationWorkbook.cells, `L${row}`, [submittedInitiationFormData[`${itemKey}InformationNotes`]]);
     assertCellContains(initiationWorkbook.cells, `O${row}`, [submittedInitiationFormData[`${itemKey}ResponsiblePerson`]]);
   }
-  assertCellContains(initiationWorkbook.cells, 'A19', ['营销中心意见：', 'marketing evaluation']);
+  assertCellContains(initiationWorkbook.cells, 'A17', ['营销中心意见：', 'marketing evaluation']);
+  assertCellContains(initiationWorkbook.cells, 'I17', ['负责人（签字）：']);
+  assertCellNotContains(initiationWorkbook.cells, 'I17', [
+    marketingManagerUser.name,
+    managerUser.name,
+    generalManagerUser.name
+  ]);
+  assertCellMatches(initiationWorkbook.cells, 'M17', /^日期：\d{4}-\d{2}-\d{2}$/);
+  assertCellNotContains(initiationWorkbook.cells, 'M17', ['T', 'Z', '+08', '+00']);
+  assertCellContains(initiationWorkbook.cells, 'A18', ['研发中心意见：', 'rd evaluation']);
+  assertCellContains(initiationWorkbook.cells, 'I18', ['负责人（签字）：']);
+  assertCellNotContains(initiationWorkbook.cells, 'I18', [
+    marketingManagerUser.name,
+    managerUser.name,
+    generalManagerUser.name
+  ]);
+  assertCellMatches(initiationWorkbook.cells, 'M18', /^日期：\d{4}-\d{2}-\d{2}$/);
+  assertCellNotContains(initiationWorkbook.cells, 'M18', ['T', 'Z', '+08', '+00']);
+  assertCellContains(initiationWorkbook.cells, 'A19', ['总经理意见：', 'general approval']);
   assertCellContains(initiationWorkbook.cells, 'I19', ['负责人（签字）：']);
   assertCellNotContains(initiationWorkbook.cells, 'I19', [
     marketingManagerUser.name,
@@ -3163,58 +3290,93 @@ async function runInitiationReviewSmoke({
   ]);
   assertCellMatches(initiationWorkbook.cells, 'M19', /^日期：\d{4}-\d{2}-\d{2}$/);
   assertCellNotContains(initiationWorkbook.cells, 'M19', ['T', 'Z', '+08', '+00']);
-  assertCellContains(initiationWorkbook.cells, 'A20', ['研发中心意见：', 'rd evaluation']);
-  assertCellContains(initiationWorkbook.cells, 'I20', ['负责人（签字）：']);
-  assertCellNotContains(initiationWorkbook.cells, 'I20', [
-    marketingManagerUser.name,
-    managerUser.name,
-    generalManagerUser.name
+  assertExecutionModeRichCheckboxes(initiationWorkbook, '自研模式');
+  assertCellNotContains(initiationWorkbook.cells, 'B6', [
+    submittedInitiationFormData.customerEnterpriseAttributeScore,
+    submittedInitiationFormData.customerEnterpriseAttributeInformationNotes,
+    submittedInitiationFormData.customerEnterpriseAttributeResponsiblePerson
   ]);
-  assertCellMatches(initiationWorkbook.cells, 'M20', /^日期：\d{4}-\d{2}-\d{2}$/);
-  assertCellNotContains(initiationWorkbook.cells, 'M20', ['T', 'Z', '+08', '+00']);
-  assertCellContains(initiationWorkbook.cells, 'A21', ['总经理意见：', 'general approval']);
-  assertCellContains(initiationWorkbook.cells, 'I21', ['负责人（签字）：']);
-  assertCellNotContains(initiationWorkbook.cells, 'I21', [
-    marketingManagerUser.name,
-    managerUser.name,
-    generalManagerUser.name
+  assertCellNotContains(initiationWorkbook.cells, 'B7', [
+    submittedInitiationFormData.projectSourceInformationNotes,
+    submittedInitiationFormData.projectSourceResponsiblePerson
   ]);
-  assertCellMatches(initiationWorkbook.cells, 'M21', /^日期：\d{4}-\d{2}-\d{2}$/);
-  assertCellNotContains(initiationWorkbook.cells, 'M21', ['T', 'Z', '+08', '+00']);
-  assertCellNotContains(initiationWorkbook.cells, 'B8', [
-    submittedInitiationFormData.partyAttributeScore,
-    submittedInitiationFormData.partyAttributeInformationNotes,
-    submittedInitiationFormData.partyAttributeResponsiblePerson
-  ]);
-  assertCellNotContains(initiationWorkbook.cells, 'B9', [
-    submittedInitiationFormData.enterpriseInfoInformationNotes,
-    submittedInitiationFormData.enterpriseInfoResponsiblePerson
-  ]);
-  assertCellNotContains(initiationWorkbook.cells, 'B15', [
+  assertCellNotContains(initiationWorkbook.cells, 'B13', [
     submittedInitiationFormData.specialEnvironmentScore,
     submittedInitiationFormData.specialEnvironmentInformationNotes,
     submittedInitiationFormData.specialEnvironmentResponsiblePerson
   ]);
-  assertCellNotContains(initiationWorkbook.cells, 'C8', [
-    submittedInitiationFormData.partyAttributeInformationNotes,
-    submittedInitiationFormData.partyAttributeResponsiblePerson
+  assertCellNotContains(initiationWorkbook.cells, 'C6', [
+    submittedInitiationFormData.customerEnterpriseAttributeInformationNotes,
+    submittedInitiationFormData.customerEnterpriseAttributeResponsiblePerson
   ]);
-  assertCellNotContains(initiationWorkbook.cells, 'H8', [
-    submittedInitiationFormData.partyAttributeInformationNotes,
-    submittedInitiationFormData.partyAttributeResponsiblePerson
+  assertCellNotContains(initiationWorkbook.cells, 'H6', [
+    submittedInitiationFormData.customerEnterpriseAttributeInformationNotes,
+    submittedInitiationFormData.customerEnterpriseAttributeResponsiblePerson
   ]);
-  assertCellNotContains(initiationWorkbook.cells, 'C15', [
+  assertCellNotContains(initiationWorkbook.cells, 'C13', [
     submittedInitiationFormData.specialEnvironmentInformationNotes,
     submittedInitiationFormData.specialEnvironmentResponsiblePerson
   ]);
-  assertCellNotContains(initiationWorkbook.cells, 'H15', [
+  assertCellNotContains(initiationWorkbook.cells, 'H13', [
     submittedInitiationFormData.specialEnvironmentInformationNotes,
     submittedInitiationFormData.specialEnvironmentResponsiblePerson
   ]);
-  assert.equal(
-    parseSmokeJson(initiationGenerated.latest.source_snapshot_json, {}).formData?.projectCode,
-    submittedInitiationFormData.projectCode
+  const initiationSnapshot = parseSmokeJson(initiationGenerated.latest.source_snapshot_json, {});
+  assert.equal(Object.hasOwn(initiationSnapshot.formData || {}, 'projectCode'), false);
+  assert.equal(initiationSnapshot.formData?.projectExecutionMode, '自研模式');
+  assert.equal(initiationProjectDetail.project.projectCode, null);
+  assert.equal(initiationProjectDetail.project.projectMode, 'self_developed');
+  const supplyChainProjectId = await createInitiationSmokeProject({
+    uniqueSuffix,
+    projectManagerUser: managerUser,
+    businessResponsibleUser: marketingManagerUser,
+    technicalResponsibleUser: managerUser,
+    createdByUserId: managerUser.id,
+    label: 'supply-chain-mode',
+    smokeProjectIds
+  });
+  const supplyChainInitiationDocument = await prepareInitiationSmokeBase(
+    supplyChainProjectId,
+    marketingManagerUser,
+    managerUser,
+    {
+      businessPatch: {
+        projectExecutionMode: '供应链模式'
+      }
+    }
   );
+  await approveInitiationReviewNode({
+    projectId: supplyChainProjectId,
+    documentId: supplyChainInitiationDocument.id,
+    nodeKey: 'business_review',
+    user: marketingManagerUser,
+    comment: 'supply chain business evaluation'
+  });
+  await approveInitiationReviewNode({
+    projectId: supplyChainProjectId,
+    documentId: supplyChainInitiationDocument.id,
+    nodeKey: 'technical_review',
+    user: managerUser,
+    comment: 'supply chain rd evaluation'
+  });
+  await approveInitiationReviewNode({
+    projectId: supplyChainProjectId,
+    documentId: supplyChainInitiationDocument.id,
+    nodeKey: 'general_review',
+    user: generalManagerUser,
+    comment: 'supply chain general approval'
+  });
+  const supplyChainApprovedDocument = await selectSmokeDocument(supplyChainProjectId, '1.2');
+  const supplyChainGenerated = await assertGeneratedFileDownloadable({
+    projectId: supplyChainProjectId,
+    document: supplyChainApprovedDocument,
+    user: marketingManagerUser,
+    expectedDocumentCode: '1.2',
+    expectedFileType: 'xlsx',
+    expectedReviewSnapshot: true
+  });
+  const supplyChainWorkbook = await readGeneratedXlsxCells(supplyChainGenerated.download.filePath);
+  assertExecutionModeRichCheckboxes(supplyChainWorkbook, '供应链模式');
   await assertGeneratedFileUnauthorized({
     projectId,
     documentId: approvedInitiationDocument.id,
@@ -3242,7 +3404,19 @@ async function runInitiationReviewSmoke({
   const noticeTodoAfterInitiationApproval = findInitiationNoticeWorkbenchTodo(workbenchAfterInitiationApproval, projectId);
   assert.ok(noticeTodoAfterInitiationApproval);
   assert.equal(noticeTodoAfterInitiationApproval.permissions.canSubmitDocument, false);
-  assert.equal(noticeTodoAfterInitiationApproval.actionText, '提交 1.3 项目立项通知');
+  assert.equal(noticeTodoAfterInitiationApproval.actionText, '填写项目编号并提交 1.3 项目立项通知');
+  await assert.rejects(
+    () =>
+      updateProjectCode({
+        projectId,
+        projectCode: `SMOKE-INIT-BYPASS-${uniqueSuffix}`,
+        user: marketingManagerUser
+      }),
+    (error) =>
+      error instanceof ProjectCodeUpdateError &&
+      error.code === 'PROJECT_CODE_MANAGED_BY_INITIATION_NOTICE_FORM'
+  );
+  assert.equal((await getProjectDetail(projectId, marketingManagerUser)).project.projectCode, null);
   await pool.execute(
     `UPDATE project_stage_documents
      SET revision_required = 1,
@@ -3293,7 +3467,6 @@ async function runInitiationReviewSmoke({
          AND document_code = '1.1'`,
     [projectId]
   );
-  await pool.execute('UPDATE projects SET project_code = NULL WHERE id = ?', [projectId]);
   const gateReadyNotice = await resetInitiationNoticeForSubmit(projectId, marketingManagerUser);
   await assert.rejects(
     () =>
@@ -3316,12 +3489,15 @@ async function runInitiationReviewSmoke({
         projectId,
         documentId: gateReadyNotice.id,
         user: marketingManagerUser,
-        formData: noticeFormData
+        formData: {
+          ...noticeFormData,
+          projectCode: ''
+        }
       }),
     (error) =>
-      error.code === 'INITIATION_NOTICE_GATE_NOT_READY' &&
+      error.code === 'PROJECT_CODE_REQUIRED' &&
       Array.isArray(error.details) &&
-      error.details.some((detail) => String(detail).includes('项目编号'))
+      error.details.includes('projectCode')
   );
   await assert.rejects(
     () =>
@@ -3336,31 +3512,19 @@ async function runInitiationReviewSmoke({
   const noticeTodoWithoutProjectCode = findInitiationNoticeWorkbenchTodo(workbenchWithoutProjectCode, projectId);
   assert.ok(noticeTodoWithoutProjectCode);
   assert.equal(noticeTodoWithoutProjectCode.actionText, '填写项目编号并提交 1.3 项目立项通知');
-  await assert.rejects(
-    () =>
-      updateProjectCode({
-        projectId,
-        projectCode: `SMOKE-INIT-${uniqueSuffix}`,
-        user: marketingManagerUser
-      }),
-    (error) =>
-      error instanceof ProjectCodeUpdateError &&
-      error.code === 'PROJECT_CODE_MANAGED_BY_INITIATION_APPROVAL_FORM'
-  );
-  await pool.execute('UPDATE projects SET project_code = ? WHERE id = ?', [submittedInitiationFormData.projectCode, projectId]);
   const projectCodeDetail = await getProjectDetail(projectId, marketingManagerUser);
-  assert.equal(projectCodeDetail.project.projectCode, submittedInitiationFormData.projectCode);
+  assert.equal(projectCodeDetail.project.projectCode, null);
   const workbenchWithProjectCode = await getMyWorkbench(marketingManagerUser);
   const noticeTodoWithProjectCode = findInitiationNoticeWorkbenchTodo(workbenchWithProjectCode, projectId);
   assert.ok(noticeTodoWithProjectCode);
-  assert.equal(noticeTodoWithProjectCode.actionText, '提交 1.3 项目立项通知');
+  assert.equal(noticeTodoWithProjectCode.actionText, '填写项目编号并提交 1.3 项目立项通知');
   const gateReadyNoticeWithProjectCode = await getStageDocumentOnlineForm({
     projectId,
     documentId: gateReadyNotice.id,
     user: marketingManagerUser
   });
   assert.equal(gateReadyNoticeWithProjectCode.permissions.canSubmit, true);
-  assert.equal(gateReadyNoticeWithProjectCode.formData.projectCode, submittedInitiationFormData.projectCode);
+  assert.equal(gateReadyNoticeWithProjectCode.formData.projectCode, '');
   assert.equal(gateReadyNoticeWithProjectCode.formData.projectName, projectCodeDetail.project.projectName);
   assert.equal(gateReadyNoticeWithProjectCode.formData.customerUnit, projectCodeDetail.project.customerName);
   await assertGeneratedFileDownloadErrorHandled({
@@ -3370,7 +3534,9 @@ async function runInitiationReviewSmoke({
     expectedCode: STAGE_DOCUMENT_GENERATED_FILE_ERROR.FILE_NOT_FOUND,
     expectedStatusCode: 404
   });
-  const submittedNotice = await submitInitiationNoticeAfterGateReady(projectId, marketingManagerUser);
+  const submittedNotice = await submitInitiationNoticeAfterGateReady(projectId, marketingManagerUser, noticeFormData);
+  const projectDetailAfterNotice = await getProjectDetail(projectId, marketingManagerUser);
+  assert.equal(projectDetailAfterNotice.project.projectCode, noticeFormData.projectCode);
   const noticeGenerated = await assertGeneratedFileDownloadable({
     projectId,
     document: submittedNotice,
@@ -3379,17 +3545,244 @@ async function runInitiationReviewSmoke({
     expectedFileType: 'docx'
   });
   assert.equal(noticeGenerated.latest.trigger_event, INITIATION_TEMPLATE_TRIGGER_EVENT.ONLINE_FORM_SUBMITTED);
-  assert.equal(parseSmokeJson(noticeGenerated.latest.source_snapshot_json, {}).project?.projectCode, submittedInitiationFormData.projectCode);
+  const noticeSnapshot = parseSmokeJson(noticeGenerated.latest.source_snapshot_json, {});
+  assert.equal(noticeSnapshot.project?.projectCode, noticeFormData.projectCode);
+  assert.ok(noticeSnapshot.noticeProjectList?.cutoff);
+  assert.ok(
+    (noticeSnapshot.noticeProjectList?.rows || []).some((row) => row.projectId === projectId && row.projectCode === noticeFormData.projectCode)
+  );
   const noticeDocumentXml = await readGeneratedFileXml(noticeGenerated.download.filePath, 'word/document.xml');
   assertGeneratedFileXmlContent(noticeDocumentXml, [
-    submittedInitiationFormData.projectCode,
-    projectCodeDetail.project.projectName,
-    projectCodeDetail.project.customerName,
+    noticeFormData.projectCode,
+    projectDetailAfterNotice.project.projectName,
+    projectDetailAfterNotice.project.customerName,
     noticeFormData.initiationDate,
     '2026年7月8日'
   ]);
   assert.equal(noticeDocumentXml.includes('2026年2月9日'), false);
   assert.equal(noticeDocumentXml.includes('2026-07-08'), false);
+  assert.equal(noticeDocumentXml.includes('KRF26001'), false);
+  assert.equal(noticeDocumentXml.includes('KRF26002'), false);
+  assert.equal(noticeDocumentXml.includes('KRF26003'), false);
+
+  const futureProjectId = await createInitiationSmokeProject({
+    uniqueSuffix,
+    projectManagerUser: managerUser,
+    businessResponsibleUser: marketingManagerUser,
+    technicalResponsibleUser: managerUser,
+    createdByUserId: managerUser.id,
+    label: 'future-notice',
+    smokeProjectIds
+  });
+  const futureNotice = await prepareInitiationNoticeReadyProject(futureProjectId, {
+    businessUser: marketingManagerUser,
+    technicalUser: managerUser,
+    generalManagerUser
+  });
+  const futureNoticeFormData = buildSmokeNoticeFormData({
+    projectCode: `SMOKE-FUTURE-${uniqueSuffix}`,
+    initiationDate: '2026-07-09',
+    noticeDate: '2026-07-10'
+  });
+  await submitStageDocumentOnlineForm({
+    projectId: futureProjectId,
+    documentId: futureNotice.id,
+    user: marketingManagerUser,
+    formData: futureNoticeFormData
+  });
+  const submittedNoticeFormRowForCutoff = await selectOnlineFormRow(submittedNotice.id);
+  await pool.execute(
+    `UPDATE project_stage_document_forms
+     SET submitted_at = DATE_ADD(?, INTERVAL 1 DAY)
+     WHERE stage_document_id = ?`,
+    [submittedNoticeFormRowForCutoff.submitted_at, futureNotice.id]
+  );
+  await pool.execute(
+    `UPDATE project_stage_documents
+     SET submitted_at = DATE_ADD(?, INTERVAL 1 DAY)
+     WHERE id = ?`,
+    [submittedNoticeFormRowForCutoff.submitted_at, futureNotice.id]
+  );
+  const retriedNoticeGeneration = await generateInitiationTemplateFile({
+    projectId,
+    documentId: submittedNotice.id,
+    documentCode: '1.3',
+    triggerEvent: INITIATION_TEMPLATE_TRIGGER_EVENT.ONLINE_FORM_SUBMITTED,
+    user: marketingManagerUser
+  });
+  assert.equal(retriedNoticeGeneration.status, GENERATED_FILE_STATUS.GENERATED);
+  const retriedNoticeDownload = await getStageDocumentGeneratedFileDownload({
+    projectId,
+    documentId: submittedNotice.id,
+    user: marketingManagerUser
+  });
+  const retriedNoticeXml = await readGeneratedFileXml(retriedNoticeDownload.filePath, 'word/document.xml');
+  assert.ok(retriedNoticeXml.includes(noticeFormData.projectCode));
+  assert.equal(retriedNoticeXml.includes(futureNoticeFormData.projectCode), false);
+  const retriedNoticeSnapshot = retriedNoticeGeneration.sourceSnapshot || {};
+  assert.ok(retriedNoticeSnapshot.noticeProjectList?.cutoff);
+  assert.equal(
+    (retriedNoticeSnapshot.noticeProjectList?.rows || []).some((row) => row.projectCode === futureNoticeFormData.projectCode),
+    false
+  );
+
+  const duplicateCode = `SMOKE-DUP-NOTICE-${uniqueSuffix}`;
+  const duplicateProjectAId = await createInitiationSmokeProject({
+    uniqueSuffix,
+    projectManagerUser: managerUser,
+    businessResponsibleUser: marketingManagerUser,
+    technicalResponsibleUser: managerUser,
+    createdByUserId: managerUser.id,
+    label: 'duplicate-a',
+    smokeProjectIds
+  });
+  const duplicateProjectBId = await createInitiationSmokeProject({
+    uniqueSuffix,
+    projectManagerUser: managerUser,
+    businessResponsibleUser: marketingManagerUser,
+    technicalResponsibleUser: managerUser,
+    createdByUserId: managerUser.id,
+    label: 'duplicate-b',
+    smokeProjectIds
+  });
+  const duplicateNoticeA = await prepareInitiationNoticeReadyProject(duplicateProjectAId, {
+    businessUser: marketingManagerUser,
+    technicalUser: managerUser,
+    generalManagerUser
+  });
+  const duplicateNoticeB = await prepareInitiationNoticeReadyProject(duplicateProjectBId, {
+    businessUser: marketingManagerUser,
+    technicalUser: managerUser,
+    generalManagerUser
+  });
+  const duplicateResults = await Promise.allSettled([
+    submitStageDocumentOnlineForm({
+      projectId: duplicateProjectAId,
+      documentId: duplicateNoticeA.id,
+      user: marketingManagerUser,
+      formData: buildSmokeNoticeFormData({ projectCode: duplicateCode })
+    }),
+    submitStageDocumentOnlineForm({
+      projectId: duplicateProjectBId,
+      documentId: duplicateNoticeB.id,
+      user: marketingManagerUser,
+      formData: buildSmokeNoticeFormData({ projectCode: duplicateCode })
+    })
+  ]);
+  assert.equal(duplicateResults.filter((result) => result.status === 'fulfilled').length, 1);
+  const duplicateRejected = duplicateResults.find((result) => result.status === 'rejected');
+  assert.ok(duplicateRejected?.reason instanceof DuplicateProjectCodeError);
+  const [duplicateProjectCodeRows] = await pool.execute(
+    'SELECT COUNT(*) AS count FROM projects WHERE project_code = ?',
+    [duplicateCode]
+  );
+  assert.equal(Number(duplicateProjectCodeRows[0]?.count || 0), 1);
+  const independentMixedCode = `SMOKE-INIT-MIXED-${uniqueSuffix}`;
+  const independentMixedProjectAId = await createInitiationSmokeProject({
+    uniqueSuffix,
+    projectManagerUser: managerUser,
+    businessResponsibleUser: marketingManagerUser,
+    technicalResponsibleUser: managerUser,
+    createdByUserId: managerUser.id,
+    label: 'independent-mixed-a',
+    smokeProjectIds
+  });
+  const independentMixedProjectBId = await createInitiationSmokeProject({
+    uniqueSuffix,
+    projectManagerUser: managerUser,
+    businessResponsibleUser: marketingManagerUser,
+    technicalResponsibleUser: managerUser,
+    createdByUserId: managerUser.id,
+    label: 'independent-mixed-b',
+    smokeProjectIds
+  });
+  const independentMixedNoticeA = await prepareInitiationNoticeReadyProject(independentMixedProjectAId, {
+    businessUser: marketingManagerUser,
+    technicalUser: managerUser,
+    generalManagerUser
+  });
+  await prepareInitiationNoticeReadyProject(independentMixedProjectBId, {
+    businessUser: marketingManagerUser,
+    technicalUser: managerUser,
+    generalManagerUser
+  });
+  const independentMixedResults = await Promise.allSettled([
+    submitStageDocumentOnlineForm({
+      projectId: independentMixedProjectAId,
+      documentId: independentMixedNoticeA.id,
+      user: marketingManagerUser,
+      formData: buildSmokeNoticeFormData({ projectCode: independentMixedCode })
+    }),
+    updateProjectCode({
+      projectId: independentMixedProjectBId,
+      projectCode: independentMixedCode,
+      user: marketingManagerUser
+    })
+  ]);
+  assert.equal(independentMixedResults.filter((result) => result.status === 'fulfilled').length, 1);
+  const independentMixedRejected = independentMixedResults.find((result) => result.status === 'rejected');
+  assert.ok(independentMixedRejected?.reason instanceof ProjectCodeUpdateError);
+  assert.equal(independentMixedRejected.reason.code, 'PROJECT_CODE_MANAGED_BY_INITIATION_NOTICE_FORM');
+  const [independentMixedCodeRows] = await pool.execute(
+    'SELECT COUNT(*) AS count FROM projects WHERE project_code = ?',
+    [independentMixedCode]
+  );
+  assert.equal(Number(independentMixedCodeRows[0]?.count || 0), 1);
+  const independentOnlyCode = `SMOKE-INIT-UPDATE-ONLY-${uniqueSuffix}`;
+  const independentOnlyProjectAId = await createInitiationSmokeProject({
+    uniqueSuffix,
+    projectManagerUser: managerUser,
+    businessResponsibleUser: marketingManagerUser,
+    technicalResponsibleUser: managerUser,
+    createdByUserId: managerUser.id,
+    label: 'independent-only-a',
+    smokeProjectIds
+  });
+  const independentOnlyProjectBId = await createInitiationSmokeProject({
+    uniqueSuffix,
+    projectManagerUser: managerUser,
+    businessResponsibleUser: marketingManagerUser,
+    technicalResponsibleUser: managerUser,
+    createdByUserId: managerUser.id,
+    label: 'independent-only-b',
+    smokeProjectIds
+  });
+  await prepareInitiationNoticeReadyProject(independentOnlyProjectAId, {
+    businessUser: marketingManagerUser,
+    technicalUser: managerUser,
+    generalManagerUser
+  });
+  await prepareInitiationNoticeReadyProject(independentOnlyProjectBId, {
+    businessUser: marketingManagerUser,
+    technicalUser: managerUser,
+    generalManagerUser
+  });
+  const independentOnlyResults = await Promise.allSettled([
+    updateProjectCode({
+      projectId: independentOnlyProjectAId,
+      projectCode: independentOnlyCode,
+      user: marketingManagerUser
+    }),
+    updateProjectCode({
+      projectId: independentOnlyProjectBId,
+      projectCode: independentOnlyCode,
+      user: marketingManagerUser
+    })
+  ]);
+  assert.equal(independentOnlyResults.filter((result) => result.status === 'fulfilled').length, 0);
+  assert.ok(
+    independentOnlyResults.every(
+      (result) =>
+        result.status === 'rejected' &&
+        result.reason instanceof ProjectCodeUpdateError &&
+        result.reason.code === 'PROJECT_CODE_MANAGED_BY_INITIATION_NOTICE_FORM'
+    )
+  );
+  const [independentOnlyCodeRows] = await pool.execute(
+    'SELECT COUNT(*) AS count FROM projects WHERE project_code = ?',
+    [independentOnlyCode]
+  );
+  assert.equal(Number(independentOnlyCodeRows[0]?.count || 0), 0);
   await assertGeneratedFileUnauthorized({
     projectId,
     documentId: submittedNotice.id,
@@ -3585,7 +3978,7 @@ async function runInitiationReviewSmoke({
         user: managerUser,
         formData: {
           ...initiationFormData,
-          partyAttributeInformationNotes: 'blocked refill before 1.1 rework clear'
+          customerEnterpriseAttributeInformationNotes: 'blocked refill before 1.1 rework clear'
         }
       }),
     (error) =>
@@ -3602,7 +3995,7 @@ async function runInitiationReviewSmoke({
         user: managerUser,
         formData: {
           ...initiationFormData,
-          partyAttributeInformationNotes: 'blocked submit before 1.1 rework clear'
+          customerEnterpriseAttributeInformationNotes: 'blocked submit before 1.1 rework clear'
         }
       }),
     (error) =>
@@ -3787,7 +4180,7 @@ async function runInitiationReviewSmoke({
     user: marketingManagerUser,
     formData: buildSmokeInitiationBusinessFormData({
       projectCode: `SMOKE-INIT-REFILL-${returnProjectId}`,
-      partyAttributeInformationNotes: 'smoke project overview after general return'
+      customerEnterpriseAttributeInformationNotes: 'smoke project overview after general return'
     })
   });
   assert.equal(refillBusinessResult.form.status, 'draft');
@@ -5012,7 +5405,7 @@ async function runProjectLifecycleSmoke() {
         }),
       (error) =>
         error instanceof ProjectCodeUpdateError &&
-        error.code === 'PROJECT_CODE_MANAGED_BY_INITIATION_APPROVAL_FORM'
+        error.code === 'PROJECT_CODE_MANAGED_BY_INITIATION_NOTICE_FORM'
     );
     assert.deepEqual(await countSmokeProjectObjects(projectAId), beforeProjectCodeCountsA);
 
@@ -5025,7 +5418,7 @@ async function runProjectLifecycleSmoke() {
         }),
       (error) =>
         error instanceof ProjectCodeUpdateError &&
-        error.code === 'PROJECT_CODE_MANAGED_BY_INITIATION_APPROVAL_FORM'
+        error.code === 'PROJECT_CODE_MANAGED_BY_INITIATION_NOTICE_FORM'
     );
 
     await pool.execute(
@@ -5046,7 +5439,7 @@ async function runProjectLifecycleSmoke() {
       }),
       (error) =>
         error instanceof ProjectCodeUpdateError &&
-        error.code === 'PROJECT_CODE_MANAGED_BY_INITIATION_APPROVAL_FORM'
+        error.code === 'PROJECT_CODE_MANAGED_BY_INITIATION_NOTICE_FORM'
     );
 
     const beforeProjectCodeCountsB = await countSmokeProjectObjects(projectBId);
@@ -5059,7 +5452,7 @@ async function runProjectLifecycleSmoke() {
         }),
       (error) =>
         error instanceof ProjectCodeUpdateError &&
-        error.code === 'PROJECT_CODE_MANAGED_BY_INITIATION_APPROVAL_FORM'
+        error.code === 'PROJECT_CODE_MANAGED_BY_INITIATION_NOTICE_FORM'
     );
     assert.deepEqual(await countSmokeProjectObjects(projectBId), beforeProjectCodeCountsB);
 

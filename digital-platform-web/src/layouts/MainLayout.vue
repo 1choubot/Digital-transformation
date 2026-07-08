@@ -3,11 +3,8 @@
     <el-header class="app-header">
       <div class="brand-logo-area">
         <svg class="logo-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <path
-            d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-linecap="round"
+            stroke-linejoin="round" />
         </svg>
         <div class="brand-text">
           <span class="brand-title">数字化管理平台</span>
@@ -17,19 +14,10 @@
 
       <div class="header-main">
         <div class="header-main__top">
-          <el-menu
-            class="primary-nav"
-            mode="horizontal"
-            :default-active="activeMenuCode"
-            :ellipsis="false"
-            @select="handlePrimarySelect"
-          >
-            <el-menu-item
-              v-for="menu in visibleMenus"
-              :key="menu.code"
-              :index="menu.code"
-              @mouseenter="loadModuleNavigation(menu.code)"
-            >
+          <el-menu class="primary-nav" mode="horizontal" :default-active="activeMenuCode" :ellipsis="false"
+            @select="handlePrimarySelect">
+            <el-menu-item v-for="menu in visibleMenus" :key="menu.code" :index="menu.code"
+              @mouseenter="loadModuleNavigation(menu.code)">
               {{ menu.name }}
             </el-menu-item>
           </el-menu>
@@ -47,16 +35,8 @@
               </div>
               <button type="button" class="logout-button" :disabled="loggingOut" title="退出系统" @click="$emit('logout')">
                 <span v-if="loggingOut" class="spinner"></span>
-                <svg
-                  v-else
-                  class="logout-icon"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
+                <svg v-else class="logout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                  stroke-linecap="round" stroke-linejoin="round">
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
                 </svg>
               </button>
@@ -73,18 +53,9 @@
         </div>
 
         <div class="header-main__bottom">
-          <el-menu
-            class="secondary-nav"
-            mode="horizontal"
-            :default-active="activeSubRoute"
-            :ellipsis="false"
-            @select="handleSecondarySelect"
-          >
-            <el-menu-item
-              v-for="item in activeModuleItems"
-              :key="item.code"
-              :index="item.route"
-            >
+          <el-menu class="secondary-nav" mode="horizontal" :default-active="activeSubRoute" :ellipsis="false"
+            @select="handleSecondarySelect">
+            <el-menu-item v-for="item in activeModuleItems" :key="item.code" :index="item.route">
               {{ item.name }}
             </el-menu-item>
           </el-menu>
@@ -99,11 +70,8 @@
     <aside class="mobile-sidebar" :class="{ 'mobile-sidebar--open': isSidebarOpen }">
       <div class="mobile-brand-area">
         <svg class="logo-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <path
-            d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-linecap="round"
+            stroke-linejoin="round" />
         </svg>
         <div class="brand-text">
           <span class="brand-title">数字化管理平台</span>
@@ -112,45 +80,29 @@
 
       <nav class="sidebar-nav">
         <div v-for="menu in visibleMenus" :key="menu.code" class="mobile-nav-group">
-          <div
-            class="mobile-nav-header"
-            :class="{ 'is-active': activeMenuCode === menu.code }"
-            @click="toggleMenu(menu.code)"
-          >
+          <div class="mobile-nav-header" :class="{ 'is-active': activeMenuCode === menu.code }"
+            @click="toggleMenu(menu.code)">
             <div class="header-left-inner">
               <span>{{ menu.name }}</span>
             </div>
-            <svg
-              class="chevron-icon"
-              :class="{ rotated: openMenus[menu.code] }"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
+            <svg class="chevron-icon" :class="{ rotated: openMenus[menu.code] }" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2">
               <polyline points="6 9 12 15 18 9" />
             </svg>
           </div>
           <div class="mobile-nav-children" :class="{ 'is-open': openMenus[menu.code] }">
             <div class="nav-children-inner">
-              <button
-                v-for="item in getVisibleModuleItems(menu.code)"
-                :key="item.code"
-                type="button"
-                class="nav-child-item"
-                :class="{ active: isSubRouteActive(item.route) }"
-                @click="handleNavigate(item.route)"
-              >
+              <button v-for="item in getVisibleModuleItems(menu.code)" :key="item.code" type="button"
+                class="nav-child-item" :class="{ active: isSubRouteActive(item.route) }"
+                @click="handleNavigate(item.route)">
                 {{ item.name }}
               </button>
               <span v-if="isModuleLoading(menu.code)" class="nav-child-item nav-child-item--muted">菜单加载中...</span>
               <span v-else-if="moduleErrors[menu.code]" class="nav-child-item nav-child-item--muted">
                 {{ moduleErrors[menu.code] }}
               </span>
-              <span
-                v-else-if="moduleNavigationLoaded[menu.code] && getVisibleModuleItems(menu.code).length === 0"
-                class="nav-child-item nav-child-item--muted"
-              >
+              <span v-else-if="moduleNavigationLoaded[menu.code] && getVisibleModuleItems(menu.code).length === 0"
+                class="nav-child-item nav-child-item--muted">
                 暂无可用入口
               </span>
             </div>
@@ -447,7 +399,7 @@ onMounted(() => {
   min-width: 0;
   flex: 1;
   display: grid;
-  grid-template-rows: minmax(56px, 1fr) 28px;
+  grid-template-rows: minmax(56px, 1fr) 32px;
 }
 
 .header-main__top,
@@ -463,6 +415,8 @@ onMounted(() => {
 
 .header-main__bottom {
   align-items: center;
+  background: #f7faff;
+  border-top: 1px solid #edf2f7;
 }
 
 .primary-nav,
@@ -495,17 +449,17 @@ onMounted(() => {
 }
 
 .secondary-nav {
-  height: 28px;
+  height: 32px;
   min-width: 0;
-  margin-left: 20px;
+  margin-left: 0;
 }
 
 .secondary-nav :deep(.el-menu-item) {
-  height: 28px;
-  min-width: 88px;
+  height: 32px;
+  min-width: 112px;
   justify-content: center;
   border-bottom: 0;
-  color: #111827;
+  color: #4b5563;
   font-size: 14px;
 }
 
@@ -519,7 +473,7 @@ onMounted(() => {
 .secondary-nav__state {
   display: inline-flex;
   align-items: center;
-  height: 28px;
+  height: 32px;
   margin-left: 28px;
   color: #909399;
   font-size: 13px;
@@ -675,6 +629,7 @@ onMounted(() => {
     opacity: 0;
     transform: translateY(6px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -709,8 +664,8 @@ onMounted(() => {
   }
 
   .header-main__top {
-    flex: 1;
-    justify-content: flex-end;
+    justify-content: space-between;
+    border-bottom: 1px solid #ebeef5;
   }
 
   .header-main__bottom,

@@ -55,6 +55,7 @@ import {
 } from '../repositories/stageDocumentAttachmentRepository.js';
 import { readMultipartFile } from '../middleware/multipartFile.js';
 import { STAGE_DOCUMENT_ONLINE_FORM_IMAGE_MAX_FILE_SIZE } from '../storage/stageDocumentOnlineFormImageStorage.js';
+import { searchActiveProjectsForDailyReports } from '../repositories/dailyReportRepository.js';
 
 function parsePositiveId(rawValue, fieldName) {
   const id = Number.parseInt(rawValue, 10);

@@ -6,7 +6,7 @@ import ExcelJS from 'exceljs';
 import { createApp } from '../../src/app.js';
 import { closePool, pool } from '../../src/db/pool.js';
 import { generateSessionToken, hashPassword } from '../../src/domain/auth.js';
-import { OrganizationRole, ReportStatus, WeeklyRestMode } from '../../src/domain/reports.js';
+import { OrganizationRole, ReportStatus, WeeklyApprovalStatus, WeeklyRestMode } from '../../src/domain/reports.js';
 import { createSession } from '../../src/repositories/sessionRepository.js';
 import { getWeeklyReportExportDto } from '../../src/repositories/weeklyReportRepository.js';
 import { resolveWeeklyReportWorkdayContext } from '../../src/repositories/weeklyReportRepository.js';
@@ -439,6 +439,32 @@ test('M4 weekly report backend flow covers CRUD, evaluation, overview, and expor
     assert.equal(generalManagerFinalReview.body.data.report.finalReviewedAt.includes('T'), false);
     assert.equal(generalManagerFinalReview.body.data.report.finalReviewedAt.includes('Z'), false);
 
+    const blockedDirectUpdate = await requestJson(server.baseUrl, `/api/weekly-reports/${reportId}`, {
+      token: employee.token,
+      method: 'PUT',
+      body: buildWeeklyPayload({
+        summaries: [
+          {
+            ...buildWeeklyPayload().summaries[0],
+            completionDescription: '已评审状态不应允许直接修改'
+          }
+        ]
+      })
+    });
+    assert.equal(blockedDirectUpdate.status, 409);
+    assert.equal(blockedDirectUpdate.body.error.code, 'WEEKLY_REPORT_FORBIDDEN');
+
+    const returnedForEdit = await requestJson(server.baseUrl, `/api/weekly-reports/${reportId}/approval`, {
+      token: centerManager.token,
+      method: 'PUT',
+      body: {
+        action: 'return',
+        comment: '退回后允许员工修改'
+      }
+    });
+    assert.equal(returnedForEdit.status, 200);
+    assert.equal(returnedForEdit.body.data.report.approvalStatus, WeeklyApprovalStatus.RETURNED);
+
     const updated = await requestJson(server.baseUrl, `/api/weekly-reports/${reportId}`, {
       token: employee.token,
       method: 'PUT',
@@ -446,7 +472,7 @@ test('M4 weekly report backend flow covers CRUD, evaluation, overview, and expor
         summaries: [
           {
             ...buildWeeklyPayload().summaries[0],
-            completionDescription: '修改后应清空评分'
+            completionDescription: '退回修改后应清空评分'
           }
         ]
       })
@@ -454,6 +480,7 @@ test('M4 weekly report backend flow covers CRUD, evaluation, overview, and expor
     assert.equal(updated.status, 200);
     assert.equal(updated.body.data.report.aiScore, null);
     assert.equal(updated.body.data.report.finalScore, null);
+    assert.equal(updated.body.data.report.approvalStatus, WeeklyApprovalStatus.PENDING);
 
     const overview = await requestJson(
       server.baseUrl,
@@ -506,7 +533,7 @@ test('M4 weekly report backend flow covers CRUD, evaluation, overview, and expor
     assert.equal(worksheet.getCell('F2').value, '测试岗位');
     assert.equal(worksheet.getCell('B5').value, '日报接口开发');
     assert.equal(worksheet.getCell('C5').value, '完成日报保存与导出');
-    assert.equal(worksheet.getCell('F5').value, '修改后应清空评分');
+    assert.equal(worksheet.getCell('F5').value, '退回修改后应清空评分');
     assert.equal(worksheet.getCell('B16').value, '周报前端联调');
     assert.equal(worksheet.getCell('F16').value, null);
     assert.equal(worksheet.getCell('B24').value, employee.account);

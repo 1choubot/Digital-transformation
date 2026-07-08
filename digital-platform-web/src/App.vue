@@ -23,101 +23,422 @@
     
     <!-- 顶部导航栏 -->
     <header class="app-header">
-      <div class="app-header__inner">
-        <div class="app-header__brand">
-          <span class="app-header__eyebrow">数字化管理平台</span>
-          <h1>项目核心管理</h1>
-        </div>
-        <nav class="app-nav" aria-label="主导航">
-          <button
-            type="button"
-            :class="{ active: isProjectOverviewEntryActive }"
-            @click="navigate('/projects')"
-          >
-            项目总览
-          </button>
-          <button
-            v-if="canCurrentUserCreateProject"
-            type="button"
-            :class="{ active: route.name === 'project-create' }"
-            @click="navigate('/projects/new')"
-          >
-            新建项目
-          </button>
-          <button
-            type="button"
-            :class="{ active: route.name === 'my-workbench' }"
-            @click="navigate('/my-workbench')"
-          >
-            我的工作台
-          </button>
-          <button
-            v-if="canAccessUserManagement"
-            type="button"
-            :class="{ active: route.name === 'users' }"
-            @click="navigate('/users')"
-          >
-            用户管理
-          </button>
-        </nav>
-        <div class="current-user">
-          <div>
-            <strong>{{ formatUserName(currentUser) }}</strong>
-            <span>{{ formatUserMeta(currentUser) || '未记录部门岗位' }}</span>
+      <div class="header-left">
+        <div class="brand-logo-area">
+          <svg class="logo-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div class="brand-text">
+            <span class="brand-title">数字化管理平台</span>
+            <span class="brand-subtitle">DIGITAL MANAGEMENT</span>
           </div>
-          <button type="button" class="ghost-button" :disabled="loggingOut" @click="handleLogout">
-            {{ loggingOut ? '正在退出...' : '退出登录' }}
+        </div>
+
+        <!-- 桌面端横向导航 -->
+        <nav class="desktop-nav">
+          
+          <!-- 项目主数据 -->
+          <div v-if="!canAccessUserManagement" class="nav-group">
+            <div class="nav-group-title" :class="{ 'is-active': isGroupActive('projects') }">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="9" />
+                <rect x="14" y="3" width="7" height="5" />
+                <rect x="14" y="12" width="7" height="9" />
+                <rect x="3" y="16" width="7" height="5" />
+              </svg>
+              <span>项目管理</span>
+              <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </div>
+            <div class="nav-dropdown">
+              <button class="dropdown-item" :class="{ active: isProjectOverviewEntryActive }" @click="handleNavigate('/projects')">项目总览</button>
+              <button v-if="canCurrentUserCreateProject" class="dropdown-item" :class="{ active: route.name === 'project-create' }" @click="handleNavigate('/projects/new')">新建项目</button>
+            </div>
+          </div>
+          
+          <!-- 日报管理 -->
+          <div 
+            v-if="!canAccessUserManagement && (isDailyReportUser || canAccessCenterDailyReport)" 
+            class="nav-group"
+          >
+            <div class="nav-group-title" :class="{ 'is-active': isGroupActive('dailyReports') }">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              <span>日报管理</span>
+              <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </div>
+            <div class="nav-dropdown">
+              <button class="dropdown-item" :class="{ active: route.name === 'daily-report' }" @click="handleNavigate('/daily-report')">日报填写</button>
+              <button class="dropdown-item" :class="{ active: route.name === 'daily-reports' }" @click="handleNavigate('/daily-reports')">我的日报列表</button>
+              <button class="dropdown-item" v-if="canAccessCenterDailyReport" :class="{ active: route.name === 'center-daily-report' }" @click="handleNavigate('/center-daily-report')">中心日报汇总</button>
+            </div>
+          </div>
+
+          <!-- 周报管理 -->
+          <div 
+            v-if="!canAccessUserManagement && (isWeeklyReportUser || canAccessWeeklyReports || canAccessWeeklyOverview)" 
+            class="nav-group"
+          >
+            <div class="nav-group-title" :class="{ 'is-active': isGroupActive('weeklyReports') }">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+              <span>周报管理</span>
+              <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </div>
+            <div class="nav-dropdown nav-dropdown--wide">
+              <button class="dropdown-item" v-if="isWeeklyReportUser" :class="{ active: route.name === 'weekly-report' }" @click="handleNavigate('/weekly-report')">周报填写</button>
+              <button class="dropdown-item" v-if="canAccessWeeklyReports" :class="{ active: ['weekly-reports', 'weekly-report-review'].includes(route.name) && route.query?.from !== 'overview' }" @click="handleNavigate('/weekly-reports')">我的周报列表</button>
+              <button class="dropdown-item" v-if="canAccessWeeklyOverview" :class="{ active: route.name === 'weekly-report-overview' || (route.name === 'weekly-report-review' && route.query?.from === 'overview') }" @click="handleNavigate('/weekly-overview')">周报汇总及考评</button>
+            </div>
+          </div>
+
+          <!-- 过程追踪看板 -->
+          <div v-if="!canAccessUserManagement" class="nav-group">
+            <div class="nav-group-title" :class="{ 'is-active': isGroupActive('dashboards') }">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21.21 15.89A10 10 0 1 1 8 2.83" stroke-linecap="round"/>
+                <path d="M22 12A10 10 0 0 0 12 2v10z" stroke-linecap="round"/>
+              </svg>
+              <span>过程追踪看板</span>
+              <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </div>
+            <div class="nav-dropdown">
+              <button class="dropdown-item" :class="{ active: route.name === 'my-stage-document-tasks' }" @click="handleNavigate('/my-stage-document-tasks')">我的资料任务</button>
+            </div>
+          </div>
+
+          <!-- 系统设置 -->
+          <div v-if="canAccessUserManagement" class="nav-group">
+            <div class="nav-group-title" :class="{ 'is-active': isGroupActive('admin') }">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+              <span>系统设置</span>
+              <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </div>
+            <div class="nav-dropdown">
+              <button class="dropdown-item" :class="{ active: route.name === 'users' }" @click="handleNavigate('/users')">用户管理</button>
+            </div>
+          </div>
+        </nav>
+      </div>
+
+      <div class="header-right">
+        <div class="current-user">
+          <div class="user-avatar">
+            {{ String(currentUser.name || 'U').charAt(0) }}
+          </div>
+          <div class="user-info">
+            <strong class="user-name">{{ currentUser.name }}</strong>
+            <span class="user-role-desc">
+              {{ formatOrganizationRole(currentUser.organizationRole) }} <span class="divider">/</span>
+              {{ currentUser.department ? formatBusinessDepartment(currentUser.department) : '全局级' }}
+            </span>
+          </div>
+          <button type="button" class="logout-button" :disabled="loggingOut" @click="handleLogout" title="退出系统">
+            <span v-if="loggingOut" class="spinner"></span>
+            <svg v-else class="logout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+            </svg>
           </button>
         </div>
+        
+        <!-- 移动端侧边栏切换按钮 -->
+        <button type="button" class="mobile-menu-toggle" @click="toggleSidebar" aria-label="切换侧边栏">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
       </div>
     </header>
 
-    <main class="app-main">
-      <ProjectCreatePage
-        v-if="route.name === 'project-create'"
-        :auth-token="authToken"
-        :current-user="currentUser"
-        :navigate="navigate"
-        @auth-expired="handleAuthExpired"
-      />
-      <ProjectOverviewDashboardPage
-        v-else-if="route.name === 'project-overview-dashboard'"
-        :auth-token="authToken"
-        :current-user="currentUser"
-        :navigate="navigate"
-        @auth-expired="handleAuthExpired"
-      />
-      <ProjectDetailPage
-        v-else-if="route.name === 'project-detail'"
-        :auth-token="authToken"
-        :current-user="currentUser"
-        :project-id="route.params.projectId"
-        :task-mode="route.query?.taskMode || ''"
-        :focus-document-id="route.query?.documentId || ''"
-        :focus-stage-id="route.query?.stageId || ''"
-        :focus-node-key="route.query?.nodeKey || ''"
-        :navigate="navigate"
-      />
-      <MyStageDocumentTasksPage
-        v-else-if="route.name === 'my-workbench'"
-        :auth-token="authToken"
-        :current-user="currentUser"
-        :navigate="navigate"
-        @auth-expired="handleAuthExpired"
-      />
-      <UserManagementPage
-        v-else-if="route.name === 'users'"
-        :auth-token="authToken"
-        :current-user="currentUser"
-        :navigate="navigate"
-        @auth-expired="handleAuthExpired"
-      />
-      <section v-else class="state-panel">
-        <h2>页面不存在</h2>
-        <p>当前地址无法匹配到项目核心页面。</p>
-        <button type="button" class="primary-button" @click="navigate('/projects')">返回项目总览</button>
-      </section>
-    </main>
+    <!-- 移动端侧边栏抽屉 (保留供小屏幕使用) -->
+    <aside class="mobile-sidebar" :class="{ 'mobile-sidebar--open': isSidebarOpen }">
+      <div class="mobile-brand-area">
+        <svg class="logo-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="brand-text">
+          <span class="brand-title">数字化管理平台</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <!-- 项目主数据 -->
+        <div v-if="!canAccessUserManagement" class="mobile-nav-group">
+          <div class="mobile-nav-header" :class="{ 'is-active': isGroupActive('projects') }" @click="toggleMenu('projects')">
+            <div class="header-left-inner">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="9" />
+                <rect x="14" y="3" width="7" height="5" />
+                <rect x="14" y="12" width="7" height="9" />
+                <rect x="3" y="16" width="7" height="5" />
+              </svg>
+              <span>项目管理</span>
+            </div>
+            <svg class="chevron-icon" :class="{ 'rotated': openMenus.projects }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </div>
+          <div class="mobile-nav-children" :class="{ 'is-open': openMenus.projects }">
+            <div class="nav-children-inner">
+              <button class="nav-child-item" :class="{ active: isProjectOverviewEntryActive }" @click="handleNavigate('/projects')">项目总览</button>
+              <button v-if="canCurrentUserCreateProject" class="nav-child-item" :class="{ active: route.name === 'project-create' }" @click="handleNavigate('/projects/new')">新建项目</button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 日报管理 -->
+        <div v-if="!canAccessUserManagement && (isDailyReportUser || canAccessCenterDailyReport)" class="mobile-nav-group">
+          <div class="mobile-nav-header" :class="{ 'is-active': isGroupActive('dailyReports') }" @click="toggleMenu('dailyReports')">
+            <div class="header-left-inner">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              <span>日报管理</span>
+            </div>
+            <svg class="chevron-icon" :class="{ 'rotated': openMenus.dailyReports }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </div>
+          <div class="mobile-nav-children" :class="{ 'is-open': openMenus.dailyReports }">
+            <div class="nav-children-inner">
+              <button class="nav-child-item" :class="{ active: route.name === 'daily-report' }" @click="handleNavigate('/daily-report')">日报填写</button>
+              <button class="nav-child-item" :class="{ active: route.name === 'daily-reports' }" @click="handleNavigate('/daily-reports')">我的日报列表</button>
+              <button class="nav-child-item" v-if="canAccessCenterDailyReport" :class="{ active: route.name === 'center-daily-report' }" @click="handleNavigate('/center-daily-report')">中心日报汇总</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 周报管理 -->
+        <div v-if="!canAccessUserManagement && (isWeeklyReportUser || canAccessWeeklyReports || canAccessWeeklyOverview)" class="mobile-nav-group">
+          <div class="mobile-nav-header" :class="{ 'is-active': isGroupActive('weeklyReports') }" @click="toggleMenu('weeklyReports')">
+            <div class="header-left-inner">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+              <span>周报管理</span>
+            </div>
+            <svg class="chevron-icon" :class="{ 'rotated': openMenus.weeklyReports }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </div>
+          <div class="mobile-nav-children" :class="{ 'is-open': openMenus.weeklyReports }">
+            <div class="nav-children-inner">
+              <button class="nav-child-item" v-if="isWeeklyReportUser" :class="{ active: route.name === 'weekly-report' }" @click="handleNavigate('/weekly-report')">周报填写</button>
+              <button class="nav-child-item" v-if="canAccessWeeklyReports" :class="{ active: ['weekly-reports', 'weekly-report-review'].includes(route.name) && route.query?.from !== 'overview' }" @click="handleNavigate('/weekly-reports')">我的周报列表</button>
+              <button class="nav-child-item" v-if="canAccessWeeklyOverview" :class="{ active: route.name === 'weekly-report-overview' || (route.name === 'weekly-report-review' && route.query?.from === 'overview') }" @click="handleNavigate('/weekly-overview')">周报汇总及考评</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 过程追踪看板 -->
+        <div v-if="!canAccessUserManagement" class="mobile-nav-group">
+          <div class="mobile-nav-header" :class="{ 'is-active': isGroupActive('dashboards') }" @click="toggleMenu('dashboards')">
+            <div class="header-left-inner">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21.21 15.89A10 10 0 1 1 8 2.83" stroke-linecap="round"/>
+                <path d="M22 12A10 10 0 0 0 12 2v10z" stroke-linecap="round"/>
+              </svg>
+              <span>过程追踪看板</span>
+            </div>
+            <svg class="chevron-icon" :class="{ 'rotated': openMenus.dashboards }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </div>
+          <div class="mobile-nav-children" :class="{ 'is-open': openMenus.dashboards }">
+            <div class="nav-children-inner">
+              <button class="nav-child-item" :class="{ active: route.name === 'my-stage-document-tasks' }" @click="handleNavigate('/my-stage-document-tasks')">我的资料任务</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 系统设置 -->
+        <div v-if="canAccessUserManagement" class="mobile-nav-group">
+          <div class="mobile-nav-header" :class="{ 'is-active': isGroupActive('admin') }" @click="toggleMenu('admin')">
+            <div class="header-left-inner">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+              <span>系统设置</span>
+            </div>
+            <svg class="chevron-icon" :class="{ 'rotated': openMenus.admin }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </div>
+          <div class="mobile-nav-children" :class="{ 'is-open': openMenus.admin }">
+            <div class="nav-children-inner">
+              <button class="nav-child-item" :class="{ active: route.name === 'users' }" @click="handleNavigate('/users')">用户管理</button>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </aside>
+
+    <div 
+      v-if="isSidebarOpen" 
+      class="sidebar-overlay" 
+      @click="closeSidebar"
+    ></div>
+
+    <!-- 主体内区域容器 -->
+    <div class="main-wrapper">
+      
+      <!-- 面包屑 -->
+      <div class="page-breadcrumb-bar">
+        <span class="breadcrumb-item">数字化管理平台</span>
+        <span class="breadcrumb-separator">/</span>
+        <span class="breadcrumb-item breadcrumb-item--active">{{ currentRouteLabel }}</span>
+      </div>
+
+      <!-- 动态路由页面内容 -->
+      <main class="app-main animate-content" ref="appMainRef">
+        <ProjectCreatePage
+          v-if="route.name === 'project-create'"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          :navigate="navigate"
+          @auth-expired="handleAuthExpired"
+        />
+        <ProjectOverviewDashboardPage
+          v-else-if="['projects', 'project-overview-dashboard'].includes(route.name)"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          :navigate="navigate"
+          @auth-expired="handleAuthExpired"
+        />
+        <ProjectDetailPage
+          v-else-if="route.name === 'project-detail'"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          :project-id="route.params.projectId"
+          :navigate="navigate"
+        />
+        <MyStageDocumentTasksPage
+          v-else-if="route.name === 'my-stage-document-tasks'"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          :navigate="navigate"
+          @auth-expired="handleAuthExpired"
+        />
+        <DailyReportPage
+          v-else-if="route.name === 'daily-report'"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          :report-id="route.params?.reportId || ''"
+          :navigate="navigate"
+          @auth-expired="handleAuthExpired"
+        />
+        <DailyReportListPage
+          v-else-if="route.name === 'daily-reports'"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          :navigate="navigate"
+          @auth-expired="handleAuthExpired"
+        />
+        <WeeklyReportPage
+          v-else-if="route.name === 'weekly-report'"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          :report-id="route.params?.reportId || ''"
+          :navigate="navigate"
+          @auth-expired="handleAuthExpired"
+        />
+        <WeeklyReportListPage
+          v-else-if="route.name === 'weekly-reports'"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          :navigate="navigate"
+          @auth-expired="handleAuthExpired"
+        />
+        <WeeklyReportReviewPage
+          v-else-if="route.name === 'weekly-report-review'"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          :report-id="route.params?.reportId || ''"
+          :navigate="navigate"
+          :route="route"
+          @auth-expired="handleAuthExpired"
+        />
+        <WeeklyReportReviewListPage
+          v-else-if="route.name === 'weekly-report-overview'"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          :navigate="navigate"
+          @auth-expired="handleAuthExpired"
+        />
+        <CenterDailyReportPage
+          v-else-if="route.name === 'center-daily-report'"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          :navigate="navigate"
+          @auth-expired="handleAuthExpired"
+        />
+        <UserManagementPage
+          v-else-if="route.name === 'users'"
+          :auth-token="authToken"
+          :current-user="currentUser"
+          :navigate="navigate"
+          @auth-expired="handleAuthExpired"
+        />
+        <section v-else class="state-panel">
+          <h2>页面不存在</h2>
+          <p>当前页面无法在数字化平台路由映射表中寻得，可能已被删除或搬迁。</p>
+          <button type="button" class="primary-button" @click="navigate('/projects')">返回主控制台</button>
+        </section>
+      </main>
+    </div>
+
+    <!-- 全局提示框 -->
+    <Transition name="toast">
+      <div v-if="toastVisible" class="toast" :class="{ 'toast--error': toastType === 'error', 'toast--success': toastType === 'success' }">
+        <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <template v-if="toastType === 'error'">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </template>
+          <template v-else>
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+            <polyline points="22 4 12 14.01 9 11.01" />
+          </template>
+        </svg>
+        <span>{{ toastMessage }}</span>
+        <button type="button" class="toast-close" @click="hideToast">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -180,10 +501,9 @@ function toggleMenu(menuName) {
 
 function isGroupActive(groupName) {
   const map = {
-    projects: ['projects', 'project-create', 'project-detail'],
+    projects: ['projects', 'project-overview-dashboard', 'project-create', 'project-detail'],
     dailyReports: ['daily-report', 'daily-reports', 'center-daily-report'],
     weeklyReports: ['weekly-report', 'weekly-reports', 'weekly-report-review', 'weekly-report-overview'],
-    // 移除 project-overview-dashboard
     dashboards: ['my-stage-document-tasks'],
     admin: ['users']
   };
@@ -201,9 +521,9 @@ function handleNavigate(path) { navigate(path); closeSidebar(); }
 
 const currentRouteLabel = computed(() => {
   switch (route.value.name) {
-    case 'projects': return '项目列表';
+    case 'projects': return '项目总览';
     case 'project-create': return '新建项目';
-    // case 'project-overview-dashboard': return '项目总览';  // 已移除
+    case 'project-overview-dashboard': return '项目总览';
     case 'project-detail': return '项目详情控制台';
     case 'my-stage-document-tasks': return '我的资料任务';
     case 'users': return '用户管理';
@@ -234,6 +554,12 @@ function hideToast() {
 const canAccessUserManagement = computed(
   () => currentUser.value?.isPlatformAdmin && currentUser.value?.organizationRole === 'system_admin'
 );
+const canCurrentUserCreateProject = computed(() =>
+  ['general_manager', 'center_manager'].includes(currentUser.value?.organizationRole)
+);
+const isProjectOverviewEntryActive = computed(() =>
+  ['projects', 'project-overview-dashboard', 'project-detail'].includes(route.value.name)
+);
 const isDailyReportUser = computed(() => currentUser.value?.organizationRole === 'employee');
 const isWeeklyReportUser = computed(() => ['employee', 'center_manager'].includes(currentUser.value?.organizationRole));
 const canAccessWeeklyReports = computed(() =>
@@ -250,9 +576,6 @@ const canAccessWeeklyOverview = computed(() =>
   ['center_manager', 'general_manager', 'general_manager_assistant'].includes(
     currentUser.value?.organizationRole
   )
-);
-const isProjectOverviewEntryActive = computed(() =>
-  ['project-overview-dashboard', 'project-detail'].includes(route.value.name)
 );
 
 function setAuth(token, user) {

@@ -38,7 +38,7 @@
             v-if="savedReport"
             type="button"
             class="ghost-button"
-            @click="props.navigate('/daily-report-list')"
+            @click="props.navigate('/daily-reports')"
           >
             返回列表
           </button>

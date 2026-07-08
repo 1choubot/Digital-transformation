@@ -66,6 +66,20 @@ export const env = {
   onlineFormImages: {
     storageDir: process.env.STAGE_DOCUMENT_ONLINE_FORM_IMAGE_STORAGE_DIR || ''
   },
+  reports: {
+    templateRoot: readAbsolutePath('REPORT_TEMPLATE_ROOT', 'E:\\Digital-transformation\\docs'),
+    exportRoot: readAbsolutePath('REPORT_EXPORT_ROOT', 'E:\\Digital-transformation\\daily_and_weekly_files'),
+    defaultWeeklyRestMode: readDefaultWeeklyRestMode()
+  },
+  deepseek: {
+    apiKey: readString('DEEPSEEK_API_KEY', ''),
+    apiBase: readString('DEEPSEEK_API_BASE', 'https://api.deepseek.com/v1'),
+    model: readString('DEEPSEEK_MODEL', 'deepseek-chat')
+  },
+  centerDailyScheduler: {
+    enabled: readString('CENTER_DAILY_SCHEDULER_ENABLED', 'true') !== 'false',
+    pollCron: readString('CENTER_DAILY_SCHEDULER_POLL_CRON', '* * * * *')
+  },
   auth: {
     sessionTtlHours: readInteger('AUTH_SESSION_TTL_HOURS', 12),
     initialUser: {

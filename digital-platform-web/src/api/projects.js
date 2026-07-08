@@ -6,12 +6,14 @@ export async function listProjects(authToken = '') {
   return request('/api/projects', { authToken });
 }
 
-// 加载当前用户可用于日报/周报填写的在研项目。
+// Load projects the current user can select when filling daily or weekly reports.
 export async function searchMyActiveProjects({ keyword = '', limit = 50 } = {}, authToken = '') {
   const params = new URLSearchParams();
+
   if (keyword && keyword.trim()) {
     params.set('q', keyword.trim());
   }
+
   if (limit) {
     params.set('limit', String(limit));
   }

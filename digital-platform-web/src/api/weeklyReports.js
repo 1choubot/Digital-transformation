@@ -1,4 +1,4 @@
-import { request, toReadableApiError } from './http.js';
+import { request, requestBlob, toReadableApiError } from './http.js';
 
 export { toReadableApiError };
 
@@ -36,6 +36,18 @@ export async function getWeeklyReportPrefillSuggestion({ weekStart, force = fals
   return request(`/api/weekly-reports/prefill-suggestion${buildQuery({ weekStart, force: force ? 'true' : '' })}`, { authToken });
 }
 
+export async function getWeeklyReportAiCapability(authToken = '') {
+  return request('/api/weekly-reports/ai-capability', { authToken });
+}
+
+export async function composeWeeklyReportPrefillWithAi({ weekStart, basisHash }, authToken = '') {
+  return request('/api/weekly-reports/prefill-suggestion/ai-compose', {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ weekStart, basisHash })
+  });
+}
+
 // Create a draft or submitted weekly report.
 export async function createWeeklyReport(payload, authToken = '') {
   return request('/api/weekly-reports', {
@@ -62,12 +74,35 @@ export async function deleteWeeklyReport(reportId, authToken = '') {
   });
 }
 
+export async function evaluateWeeklyReport(reportId, { force = false } = {}, authToken = '') {
+  return request(`/api/weekly-reports/${reportId}/evaluate${buildQuery({ force: force ? 'true' : '' })}`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ force })
+  });
+}
+
+export async function saveWeeklyReportFinalReview(reportId, payload, authToken = '') {
+  return request(`/api/weekly-reports/${reportId}/final-review`, {
+    method: 'PUT',
+    authToken,
+    body: JSON.stringify(payload)
+  });
+}
+
 // Save the center manager's weekly report approval decision.
 export async function reviewWeeklyReportApproval(reportId, payload, authToken = '') {
   return request(`/api/weekly-reports/${reportId}/approval`, {
     method: 'PUT',
     authToken,
     body: JSON.stringify(payload)
+  });
+}
+
+export async function exportWeeklyReport(reportId, authToken = '') {
+  return requestBlob(`/api/weekly-reports/${reportId}/export`, {
+    method: 'POST',
+    authToken
   });
 }
 

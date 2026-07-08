@@ -19,9 +19,25 @@
             <strong class="toolbar-title">周报周期</strong>
             <span class="toolbar-subtitle">{{ form.weekStart }} 至 {{ form.weekEnd }}</span>
           </div>
-          <span v-if="savedReport" class="status-badge" :class="approvalStatusClass(savedReport.approvalStatus)">
-            {{ approvalStatusLabel(savedReport.approvalStatus) }}
-          </span>
+          <div class="toolbar-actions">
+            <span v-if="savedReport" class="status-badge" :class="approvalStatusClass(savedReport.approvalStatus)">
+              {{ approvalStatusLabel(savedReport.approvalStatus) }}
+            </span>
+            <button
+              v-if="savedReport"
+              type="button"
+              class="ghost-button"
+              :disabled="exporting"
+              @click="downloadReportExcel"
+            >
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              {{ exporting ? '正在导出' : '导出 Excel' }}
+            </button>
+          </div>
         </div>
 
         <form class="weekly-form" @submit.prevent="saveDraft">
@@ -73,6 +89,14 @@
                 <button type="button" class="ghost-button" :disabled="saving || !canEditReport" @click="refreshPrefillSuggestion">
                   刷新日报数据
                 </button>
+                <button
+                  type="button"
+                  class="ghost-button"
+                  :disabled="saving || aiComposing || !prefillState.basisHash || !canEditReport || !aiCapability.prefillAiAvailable"
+                  @click="composePrefillWithAi"
+                >
+                  {{ aiComposing ? 'AI 整理中' : 'AI 整理草稿' }}
+                </button>
                 <button type="button" class="ghost-button" :disabled="!canEditReport" @click="addSummary">
                   <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <line x1="12" y1="5" x2="12" y2="19" />
@@ -84,6 +108,9 @@
             </div>
             <div v-if="prefillState.message" class="weekly-prefill-banner">
               {{ prefillState.message }}
+            </div>
+            <div v-if="aiCapability.message && !aiCapability.prefillAiAvailable" class="weekly-prefill-banner weekly-prefill-banner--muted">
+              {{ aiCapability.message }}
             </div>
             <div class="table-container">
               <div class="weekly-edit-table weekly-edit-table--summaries">
@@ -360,8 +387,11 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { OrganizationRole, ReportStatus, WeeklyApprovalStatus } from '../constants/reports.js';
 import {
+  composeWeeklyReportPrefillWithAi,
   createWeeklyReport,
+  exportWeeklyReport,
   getWeeklyReport,
+  getWeeklyReportAiCapability,
   getWeeklyReportPrefillSuggestion,
   listWeeklyReports,
   toReadableApiError,
@@ -393,12 +423,20 @@ const emit = defineEmits(['auth-expired']);
 const activeTab = ref('form');
 const savedReport = ref(null);
 const saving = ref(false);
+const exporting = ref(false);
+const aiComposing = ref(false);
 const message = ref('');
 const errorMessage = ref('');
 const fieldErrors = reactive({});
 const projectOptions = ref([]);
 const prefillState = reactive({
   basisHash: '',
+  message: ''
+});
+const aiCapability = reactive({
+  loaded: false,
+  prefillAiAvailable: false,
+  evaluationAiAvailable: false,
   message: ''
 });
 const prefillDirty = ref(false);
@@ -723,6 +761,17 @@ function sourceChipClass(summary) {
   return 'source-chip--legacy';
 }
 
+function saveBlob(download, fallbackName) {
+  const url = URL.createObjectURL(download.blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = download.fileName || fallbackName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 async function refreshPrefillSuggestion({ force = false } = {}) {
   let shouldForcePrefill = force;
   if (savedReport.value && !force) {
@@ -746,6 +795,61 @@ async function refreshPrefillSuggestion({ force = false } = {}) {
       return;
     }
     errorMessage.value = toReadableApiError(error);
+  }
+}
+
+async function loadAiCapability() {
+  try {
+    const result = await getWeeklyReportAiCapability(props.authToken);
+    const capability = result.capability || {};
+    aiCapability.loaded = true;
+    aiCapability.prefillAiAvailable = Boolean(capability.prefillAiAvailable);
+    aiCapability.evaluationAiAvailable = Boolean(capability.evaluationAiAvailable);
+    aiCapability.message = capability.message || '';
+  } catch (error) {
+    if (error.code === 'UNAUTHENTICATED') {
+      emit('auth-expired');
+      return;
+    }
+    aiCapability.loaded = true;
+    aiCapability.prefillAiAvailable = false;
+    aiCapability.evaluationAiAvailable = false;
+    aiCapability.message = 'AI 能力状态暂不可用，当前使用规则草稿。';
+  }
+}
+
+async function composePrefillWithAi() {
+  if (!aiCapability.prefillAiAvailable) {
+    prefillState.message = aiCapability.message || 'AI 未配置，当前使用规则草稿。';
+    return;
+  }
+
+  if (!prefillState.basisHash) {
+    prefillState.message = '请先刷新日报数据后再使用 AI 整理。';
+    return;
+  }
+
+  aiComposing.value = true;
+  errorMessage.value = '';
+  try {
+    const result = await composeWeeklyReportPrefillWithAi(
+      { weekStart: form.weekStart, basisHash: prefillState.basisHash },
+      props.authToken
+    );
+    applyPrefillSuggestion(result.suggestion, { force: true });
+    prefillState.message = result.suggestion?.ai?.message || prefillState.message;
+  } catch (error) {
+    if (error.code === 'UNAUTHENTICATED') {
+      emit('auth-expired');
+      return;
+    }
+    if (error.status === 409 || error.code === 'WEEKLY_PREFILL_BASIS_CHANGED') {
+      errorMessage.value = '日报或计划数据已变化，请先刷新规则草稿。';
+      return;
+    }
+    errorMessage.value = toReadableApiError(error);
+  } finally {
+    aiComposing.value = false;
   }
 }
 
@@ -852,6 +956,20 @@ function submitReport() {
   return saveReport(ReportStatus.SUBMITTED);
 }
 
+async function downloadReportExcel() {
+  if (!savedReport.value) return;
+  exporting.value = true;
+  errorMessage.value = '';
+  try {
+    const download = await exportWeeklyReport(savedReport.value.id, props.authToken);
+    saveBlob(download, `周绩效考核表-${savedReport.value.weekEnd}.xlsx`);
+  } catch (error) {
+    errorMessage.value = toReadableApiError(error);
+  } finally {
+    exporting.value = false;
+  }
+}
+
 // Load a route-specific report or the default previous-week record.
 async function loadInitialReport() {
   if (!canUseWeeklyReport.value) {
@@ -886,6 +1004,7 @@ async function loadInitialReport() {
 }
 
 onMounted(() => {
+  void loadAiCapability();
   void loadProjectOptions();
   void loadInitialReport();
 });
@@ -1216,6 +1335,12 @@ watch(
   background: #f5faff;
   color: #303133;
   font-size: 0.9rem;
+}
+
+.weekly-prefill-banner--muted {
+  border-color: #faecd8;
+  background: #fdf6ec;
+  color: #b88230;
 }
 
 .source-chip-row {

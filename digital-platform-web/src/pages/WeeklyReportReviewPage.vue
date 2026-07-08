@@ -29,6 +29,19 @@
             </span>
           </div>
           <div class="toolbar-actions">
+            <button
+              type="button"
+              class="ghost-button"
+              :disabled="exporting"
+              @click="downloadReportExcel"
+            >
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              {{ exporting ? '导出中...' : '导出周报' }}
+            </button>
             <button type="button" class="ghost-button" @click="navigate(returnPath)">
               <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="19" y1="12" x2="5" y2="12" />
@@ -192,6 +205,147 @@
         </div>
       </section>
 
+      <!-- AI/规则评分 -->
+      <section class="panel weekly-score-panel">
+        <div class="panel-toolbar">
+          <div class="toolbar-info">
+            <strong class="toolbar-title">AI/规则参考评分</strong>
+            <span class="toolbar-subtitle">{{ scoringSubtitle }}</span>
+          </div>
+          <button
+            v-if="canEvaluateScore"
+            type="button"
+            class="primary-button"
+            :disabled="evaluating"
+            @click="evaluateScore"
+          >
+            {{ evaluating ? '评分中...' : score ? '重新评估' : '开始评分' }}
+          </button>
+        </div>
+        <div class="panel-body">
+          <div class="score-grid">
+            <div class="score-card">
+              <span class="score-label">总分</span>
+              <strong class="score-value">{{ scoreTotalText }}</strong>
+            </div>
+            <div class="score-card">
+              <span class="score-label">等级</span>
+              <strong class="score-value">{{ scoreGradeText }}</strong>
+            </div>
+            <div class="score-card">
+              <span class="score-label">来源</span>
+              <strong class="score-value">{{ scoreSourceText }}</strong>
+            </div>
+            <div class="score-card">
+              <span class="score-label">评分时间</span>
+              <strong class="score-value">{{ formatDateTime(report.aiEvaluatedAt) }}</strong>
+            </div>
+          </div>
+          <div v-if="score?.components" class="dimension-grid">
+            <div class="dimension-item">
+              <span>日报填报</span>
+              <strong>{{ dimensionValue('fillingRateScore') }}</strong>
+            </div>
+            <div class="dimension-item">
+              <span>进度完成</span>
+              <strong>{{ dimensionValue('progressScore') }}</strong>
+            </div>
+            <div class="dimension-item">
+              <span>周日报匹配</span>
+              <strong>{{ dimensionValue('matchScore') }}</strong>
+            </div>
+          </div>
+          <p v-if="report.aiEvaluationError" class="score-note">
+            AI 不可用，已使用规则评分：{{ report.aiEvaluationError }}
+          </p>
+          <p v-else-if="aiCapability.message && !aiCapability.evaluationAiAvailable" class="score-note">
+            {{ aiCapability.message }}
+          </p>
+          <section v-if="scoreMessage" class="state-panel state-panel--success state-panel--compact">
+            <p>{{ scoreMessage }}</p>
+          </section>
+          <section v-if="scoreError" class="state-panel state-panel--error state-panel--compact">
+            <p>{{ scoreError }}</p>
+          </section>
+        </div>
+      </section>
+
+      <!-- 最终评审 -->
+      <section class="panel weekly-final-review-panel">
+        <div class="panel-toolbar">
+          <div class="toolbar-info">
+            <strong class="toolbar-title">最终评分/评审</strong>
+            <span class="toolbar-subtitle">{{ canEditFinalReview ? '可保存' : '只读' }}</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="weekly-final-review-form">
+            <div class="form-field">
+              <span class="field-label">最终分数</span>
+              <div class="input-wrapper">
+                <input
+                  v-model="finalReviewForm.finalScore"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  :readonly="!canEditFinalReview"
+                  placeholder="0-100"
+                />
+              </div>
+            </div>
+            <div class="form-field">
+              <span class="field-label">最终等级</span>
+              <div class="input-wrapper">
+                <select v-model="finalReviewForm.finalGrade" :disabled="!canEditFinalReview">
+                  <option value="">自动/不填写</option>
+                  <option value="A">A</option>
+                  <option value="B">B</option>
+                  <option value="C">C</option>
+                  <option value="D">D</option>
+                  <option value="E">E</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-field form-field--full">
+              <span class="field-label">最终评语</span>
+              <textarea
+                v-model="finalReviewForm.finalComment"
+                class="form-control form-textarea"
+                :readonly="!canEditFinalReview"
+                placeholder="填写最终评语"
+              />
+            </div>
+          </div>
+          <div class="weekly-review-meta weekly-review-meta--final">
+            <div class="meta-item">
+              <span class="meta-label">最终评审人</span>
+              <strong class="meta-value">{{ finalReviewerText }}</strong>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">最终评审时间</span>
+              <strong class="meta-value">{{ formatDateTime(report.finalReviewedAt) }}</strong>
+            </div>
+          </div>
+          <div v-if="canEditFinalReview" class="form-actions">
+            <button
+              type="button"
+              class="primary-button"
+              :disabled="savingFinalReview"
+              @click="submitFinalReview"
+            >
+              {{ savingFinalReview ? '保存中...' : '保存最终评审' }}
+            </button>
+          </div>
+          <section v-if="finalReviewMessage" class="state-panel state-panel--success state-panel--compact">
+            <p>{{ finalReviewMessage }}</p>
+          </section>
+          <section v-if="finalReviewError" class="state-panel state-panel--error state-panel--compact">
+            <p>{{ finalReviewError }}</p>
+          </section>
+        </div>
+      </section>
+
       <!-- 审批 -->
       <section class="panel weekly-approval-panel">
         <div class="panel-toolbar">
@@ -245,10 +399,14 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
-import { OrganizationRole, WeeklyApprovalStatus } from '../constants/reports.js';
+import { OrganizationRole, ReportStatus, WeeklyApprovalStatus } from '../constants/reports.js';
 import {
+  evaluateWeeklyReport,
+  exportWeeklyReport,
   getWeeklyReport,
+  getWeeklyReportAiCapability,
   reviewWeeklyReportApproval,
+  saveWeeklyReportFinalReview,
   toReadableApiError
 } from '../api/weeklyReports.js';
 
@@ -285,13 +443,31 @@ const returnPath = computed(() => {
 
 const loading = ref(false);
 const savingApproval = ref(false);
+const exporting = ref(false);
+const evaluating = ref(false);
+const savingFinalReview = ref(false);
 const report = ref(null);
 const targetUser = ref(null);
 const errorMessage = ref('');
 const approvalMessage = ref('');
 const approvalError = ref('');
+const scoreMessage = ref('');
+const scoreError = ref('');
+const finalReviewMessage = ref('');
+const finalReviewError = ref('');
 const approvalForm = reactive({
   comment: ''
+});
+const finalReviewForm = reactive({
+  finalScore: '',
+  finalGrade: '',
+  finalComment: ''
+});
+const aiCapability = reactive({
+  loaded: false,
+  prefillAiAvailable: false,
+  evaluationAiAvailable: false,
+  message: ''
 });
 
 const targetUserName = computed(() => targetUser.value?.displayName || targetUser.value?.account || '-');
@@ -310,11 +486,46 @@ const canReviewApproval = computed(
     ((props.currentUser.organizationRole === OrganizationRole.CENTER_MANAGER && isEmployeeTarget.value) ||
       (props.currentUser.organizationRole === OrganizationRole.GENERAL_MANAGER && isCenterManagerTarget.value))
 );
+const isApprovedSubmitted = computed(
+  () => report.value?.status === ReportStatus.SUBMITTED && report.value?.approvalStatus === WeeklyApprovalStatus.APPROVED
+);
+const canEvaluateScore = computed(
+  () =>
+    isApprovedSubmitted.value &&
+    props.currentUser.organizationRole === OrganizationRole.CENTER_MANAGER &&
+    isEmployeeTarget.value
+);
+const canEditFinalReview = computed(
+  () =>
+    isApprovedSubmitted.value &&
+    ((props.currentUser.organizationRole === OrganizationRole.CENTER_MANAGER && isEmployeeTarget.value) ||
+      (props.currentUser.organizationRole === OrganizationRole.GENERAL_MANAGER && isCenterManagerTarget.value))
+);
+const score = computed(() => report.value?.aiScore || null);
+const scoreTotalText = computed(() =>
+  score.value?.totalScore === null || score.value?.totalScore === undefined ? '-' : String(score.value.totalScore)
+);
+const scoreGradeText = computed(() => score.value?.grade || '-');
+const scoreSourceText = computed(() => scoreSourceLabel(report.value?.aiEvaluationSource || score.value?.source));
+const scoringSubtitle = computed(() => {
+  if (!isApprovedSubmitted.value) return '审批通过后可评分';
+  if (canEvaluateScore.value) {
+    if (!aiCapability.evaluationAiAvailable) return score.value ? '已有规则评分' : 'AI 未配置，使用规则评分';
+    return score.value ? '已有评分' : '可评分';
+  }
+  return '无评分权限';
+});
 const approvalReviewerText = computed(() => {
   if (report.value?.approvalReviewedByName) {
     return report.value.approvalReviewedByName;
   }
   return report.value?.approvalReviewedByUserId ? `用户 ${report.value.approvalReviewedByUserId}` : '-';
+});
+const finalReviewerText = computed(() => {
+  if (report.value?.finalReviewedByName) {
+    return report.value.finalReviewedByName;
+  }
+  return report.value?.finalReviewedByUserId ? `用户 ${report.value.finalReviewedByUserId}` : '-';
 });
 
 // Approval state is the business status shown on review pages.
@@ -408,10 +619,37 @@ function formatDateTime(value) {
   return String(value).replace('T', ' ').slice(0, 16);
 }
 
+function scoreSourceLabel(source) {
+  const labels = {
+    ai: 'AI',
+    fallback_rule: '规则'
+  };
+  return labels[source] || '-';
+}
+
+function dimensionValue(key) {
+  const value = score.value?.components?.[key];
+  return value === null || value === undefined ? '-' : String(value);
+}
+
+function saveBlob(download, fallbackName) {
+  const url = URL.createObjectURL(download.blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = download.fileName || fallbackName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function applyReport(result) {
   report.value = result.report;
   targetUser.value = result.targetUser;
   approvalForm.comment = result.report.approvalComment || '';
+  finalReviewForm.finalScore = result.report.finalScore ?? result.report.aiScore?.totalScore ?? '';
+  finalReviewForm.finalGrade = result.report.finalGrade || result.report.aiScore?.grade || '';
+  finalReviewForm.finalComment = result.report.finalComment || '';
 }
 
 async function loadReport() {
@@ -451,7 +689,7 @@ async function submitApproval(action) {
       },
       props.authToken
     );
-    report.value = result.report;
+    applyReport({ report: result.report, targetUser: targetUser.value });
     approvalMessage.value = action === 'approve' ? '审批已通过。' : '周报已打回。';
   } catch (error) {
     approvalError.value = toReadableApiError(error);
@@ -460,7 +698,87 @@ async function submitApproval(action) {
   }
 }
 
-onMounted(loadReport);
+async function loadAiCapability() {
+  try {
+    const result = await getWeeklyReportAiCapability(props.authToken);
+    const capability = result.capability || {};
+    aiCapability.loaded = true;
+    aiCapability.prefillAiAvailable = Boolean(capability.prefillAiAvailable);
+    aiCapability.evaluationAiAvailable = Boolean(capability.evaluationAiAvailable);
+    aiCapability.message = capability.message || '';
+  } catch (error) {
+    if (error.code === 'UNAUTHENTICATED') {
+      emit('auth-expired');
+      return;
+    }
+    aiCapability.loaded = true;
+    aiCapability.prefillAiAvailable = false;
+    aiCapability.evaluationAiAvailable = false;
+    aiCapability.message = 'AI 能力状态暂不可用，将使用规则评分。';
+  }
+}
+
+async function evaluateScore() {
+  if (!canEvaluateScore.value) return;
+  evaluating.value = true;
+  scoreMessage.value = '';
+  scoreError.value = '';
+
+  try {
+    const result = await evaluateWeeklyReport(props.reportId, { force: Boolean(score.value) }, props.authToken);
+    applyReport({ report: result.report, targetUser: targetUser.value });
+    scoreMessage.value = result.cached ? '已使用现有评分。' : '评分已更新。';
+  } catch (error) {
+    scoreError.value = toReadableApiError(error);
+  } finally {
+    evaluating.value = false;
+  }
+}
+
+async function submitFinalReview() {
+  if (!canEditFinalReview.value) return;
+  savingFinalReview.value = true;
+  finalReviewMessage.value = '';
+  finalReviewError.value = '';
+
+  try {
+    const result = await saveWeeklyReportFinalReview(
+      props.reportId,
+      {
+        finalScore: finalReviewForm.finalScore,
+        finalGrade: finalReviewForm.finalGrade,
+        finalComment: finalReviewForm.finalComment
+      },
+      props.authToken
+    );
+    applyReport({ report: result.report, targetUser: targetUser.value });
+    finalReviewMessage.value = '最终评审已保存。';
+  } catch (error) {
+    finalReviewError.value = toReadableApiError(error);
+  } finally {
+    savingFinalReview.value = false;
+  }
+}
+
+async function downloadReportExcel() {
+  if (!report.value) return;
+  exporting.value = true;
+  errorMessage.value = '';
+
+  try {
+    const download = await exportWeeklyReport(report.value.id, props.authToken);
+    saveBlob(download, `周绩效考核表-${report.value.weekEnd}.xlsx`);
+  } catch (error) {
+    errorMessage.value = toReadableApiError(error);
+  } finally {
+    exporting.value = false;
+  }
+}
+
+onMounted(() => {
+  void loadAiCapability();
+  void loadReport();
+});
 </script>
 
 <style scoped>
@@ -726,6 +1044,50 @@ onMounted(loadReport);
   color: #9f3a38;
 }
 
+/* ===== 评分面板 ===== */
+.score-grid,
+.dimension-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.dimension-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 1rem;
+}
+.score-card,
+.dimension-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.8rem 1rem;
+  background: #fafafa;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+}
+.score-label,
+.dimension-item span {
+  font-size: 0.75rem;
+  color: #909399;
+}
+.score-value,
+.dimension-item strong {
+  font-size: 1rem;
+  color: #303133;
+}
+.score-note {
+  margin: 1rem 0 0;
+  padding: 0.75rem 1rem;
+  background: #fdf6ec;
+  color: #b88230;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.weekly-review-meta--final {
+  margin-top: 1rem;
+}
+
 /* ===== 只读表格 ===== */
 .table-container {
   overflow-x: auto;
@@ -982,6 +1344,10 @@ onMounted(loadReport);
     margin-bottom: 0.5rem;
   }
   .weekly-final-review-form {
+    grid-template-columns: 1fr;
+  }
+  .score-grid,
+  .dimension-grid {
     grid-template-columns: 1fr;
   }
   .form-actions {

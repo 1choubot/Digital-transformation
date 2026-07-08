@@ -341,6 +341,17 @@ function assertWeeklyReportEditable(existing) {
   }
 }
 
+function assertWeeklyReportApprovedForScoring(report, code = WEEKLY_REPORT_ERROR.EVALUATE_SUBMITTED_ONLY) {
+  if (report.status !== ReportStatus.SUBMITTED || report.approvalStatus !== WeeklyApprovalStatus.APPROVED) {
+    throw new WeeklyReportError(
+      code,
+      'Weekly report must be submitted and approved before scoring',
+      409,
+      ['approvalStatus']
+    );
+  }
+}
+
 // Approval history records the business transition separately from report content.
 async function insertWeeklyReportApprovalHistory(
   executor,
@@ -528,8 +539,8 @@ export async function getWeeklyReportWithUserForReview(reportId, executor = pool
 }
 
 // Read a report when the requester is either the owner or an authorized reviewer.
-export async function getWeeklyReportForAuthorizedRead({ reportId, requesterUser }) {
-  const target = await getWeeklyReportWithUserForReview(reportId);
+export async function getWeeklyReportForAuthorizedRead({ reportId, requesterUser }, executor = pool) {
+  const target = await getWeeklyReportWithUserForReview(reportId, executor);
   if (String(target.report.userId) === String(requesterUser.id) || canReadManagedWeeklyReport(requesterUser, target.user)) {
     return target;
   }
@@ -721,6 +732,22 @@ export async function getWeeklyReportExportDto({ reportId, userId }) {
       department: rows[0].department,
       organizationRole: rows[0].organization_role,
       role: rows[0].role
+    }
+  };
+}
+
+export async function getWeeklyReportExportDtoForAuthorizedRead({ reportId, requesterUser }, executor = pool) {
+  const target = await getWeeklyReportForAuthorizedRead({ reportId, requesterUser }, executor);
+
+  return {
+    report: target.report,
+    user: {
+      id: target.user.id,
+      account: target.user.account,
+      name: target.user.displayName,
+      department: target.user.department,
+      organizationRole: target.user.organizationRole,
+      role: target.user.role
     }
   };
 }
@@ -1001,6 +1028,7 @@ export async function saveWeeklyReportFinalReview({ reportId, evaluatorUser, fin
   if (!canFinalizeWeeklyReport(evaluatorUser, target.user)) {
     throw new WeeklyReportError(WEEKLY_REPORT_ERROR.FORBIDDEN, 'Weekly final review forbidden', 403);
   }
+  assertWeeklyReportApprovedForScoring(target.report, WEEKLY_REPORT_ERROR.INVALID_FINAL_REVIEW);
 
   await pool.execute(
     `UPDATE weekly_reports
@@ -1063,6 +1091,22 @@ export async function reviewWeeklyReportApproval({ reportId, evaluatorUser, appr
       comment: approval.comment,
       operatorUserId: evaluatorUser.id
     });
+    if (approval.action === 'return') {
+      await connection.execute(
+        `UPDATE weekly_reports
+        SET ai_score = NULL,
+          ai_evaluated_at = NULL,
+          ai_evaluation_source = NULL,
+          ai_evaluation_error = NULL,
+          final_score = NULL,
+          final_grade = NULL,
+          final_comment = NULL,
+          final_reviewed_by_user_id = NULL,
+          final_reviewed_at = NULL
+        WHERE id = ?`,
+        [reportId]
+      );
+    }
     await connection.commit();
 
     return getWeeklyReportByIdForSystem(reportId);
@@ -1082,13 +1126,7 @@ export async function getWeeklyReportEvaluationTarget({ reportId, evaluatorUser,
     throw new WeeklyReportError(WEEKLY_REPORT_ERROR.FORBIDDEN, 'Weekly report evaluation forbidden', 403);
   }
 
-  if (report.status !== ReportStatus.SUBMITTED) {
-    throw new WeeklyReportError(
-      WEEKLY_REPORT_ERROR.EVALUATE_SUBMITTED_ONLY,
-      'Only submitted weekly reports can be evaluated',
-      409
-    );
-  }
+  assertWeeklyReportApprovedForScoring(report);
 
   if (!force && report.aiScore) {
     return { report, cached: true };

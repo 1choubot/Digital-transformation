@@ -28,6 +28,20 @@
           >
             返回列表
           </button>
+          <button
+            v-if="savedReport"
+            type="button"
+            class="ghost-button"
+            :disabled="exporting"
+            @click="downloadReportExcel"
+          >
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            {{ exporting ? '正在导出' : '导出 Excel' }}
+          </button>
         </div>
       </div>
 
@@ -366,6 +380,7 @@ import {
   createDailyReport,
   deleteDailyReportAttachment,
   downloadDailyReportAttachment,
+  exportDailyReport,
   getAvailableWeeklyPlansForDailyReport,
   getDailyReport,
   searchDailyReportProjects,
@@ -411,6 +426,7 @@ const projectSearchMessage = ref('');
 const savedReport = ref(null);
 const saving = ref(false);
 const uploading = ref(false);
+const exporting = ref(false);
 const message = ref('');
 const errorMessage = ref('');
 const showDropdown = ref(false);
@@ -1016,6 +1032,20 @@ async function downloadAttachment(attachment) {
     saveBlob(download, attachment.originalFileName || 'attachment');
   } catch (error) {
     errorMessage.value = toReadableApiError(error);
+  }
+}
+
+async function downloadReportExcel() {
+  if (!savedReport.value) return;
+  exporting.value = true;
+  errorMessage.value = '';
+  try {
+    const download = await exportDailyReport(savedReport.value.id, props.authToken);
+    saveBlob(download, `项目工作日报-${savedReport.value.reportDate}.xlsx`);
+  } catch (error) {
+    errorMessage.value = toReadableApiError(error);
+  } finally {
+    exporting.value = false;
   }
 }
 

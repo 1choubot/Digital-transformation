@@ -1,4 +1,4 @@
-import { request, toReadableApiError } from './http.js';
+import { request, requestBlob, toReadableApiError } from './http.js';
 
 export { toReadableApiError };
 
@@ -37,6 +37,17 @@ export async function saveCenterDailyReportSchedule(payload, authToken = '') {
     method: 'PUT',
     authToken,
     body: JSON.stringify(payload)
+  });
+}
+
+export async function exportCenterDailyReport(payload, authToken = '') {
+  return requestBlob(`/api/center-daily-reports/export${buildQuery({ department: payload.department })}`, {
+    method: 'POST',
+    authToken,
+    headers: {
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({ date: payload.date, department: payload.department })
   });
 }
 

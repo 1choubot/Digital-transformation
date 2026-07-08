@@ -15,6 +15,7 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 import {
   normalizeWeeklyApprovalPayload,
   normalizeComparisonOverviewFilters,
+  normalizeWeeklyFinalReviewPayload,
   normalizeWeeklyReportPayload,
   normalizeIsoDate,
   parsePositiveInteger,
@@ -25,13 +26,24 @@ import {
   createWeeklyReport,
   deleteWeeklyReport,
   getWeeklyReportComparisonTable,
+  getWeeklyReportEvaluationTarget,
+  getWeeklyReportExportDtoForAuthorizedRead,
   getWeeklyReportForAuthorizedRead,
   listWeeklyComparisonOverview,
   listWeeklyReports,
   reviewWeeklyReportApproval,
+  saveWeeklyReportEvaluation,
+  saveWeeklyReportFinalReview,
   updateWeeklyReport
 } from '../repositories/weeklyReportRepository.js';
+import { evaluateWeeklyReportScore } from '../services/weeklyReportEvaluationService.js';
+import {
+  composeWeeklyPrefillWithAi,
+  getWeeklyReportAiCapability
+} from '../services/weeklyReportPrefillAiService.js';
 import { buildWeeklyReportPrefillSuggestion } from '../services/weeklyReportPrefillService.js';
+import { generateWeeklyReportWorkbook } from '../services/weeklyReportExportService.js';
+import { cleanupReportExportFile } from '../services/reportExportFile.js';
 import { upsertWeeklyRestModeAnchor, findLatestWeeklyRestModeAnchor } from '../repositories/reportSettingsRepository.js';
 import { resolveWeeklyRestMode, getWeekStart } from '../domain/reportWorkdays.js';
 import { WeeklyRestMode } from '../domain/reports.js';
@@ -44,6 +56,29 @@ weeklyReportsRouter.use(requireAuth);
 
 function parseReportId(rawValue) {
   return parsePositiveInteger(rawValue, 'reportId', WEEKLY_REPORT_ERROR.INVALID_ID);
+}
+
+async function streamWorkbookDownload(res, download) {
+  await new Promise((resolve, reject) => {
+    res.download(
+      download.filePath,
+      download.fileName,
+      {
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Length': String(download.fileSize || 0)
+        }
+      },
+      (error) => {
+        cleanupReportExportFile(download.filePath);
+        if (error && !res.headersSent) {
+          reject(error);
+          return;
+        }
+        resolve();
+      }
+    );
+  });
 }
 
 // Weekly review overview has a narrower business matrix than center daily report overview.
@@ -141,6 +176,17 @@ weeklyReportsRouter.put(
 // ── Comparison overview ──
 
 weeklyReportsRouter.get(
+  '/ai-capability',
+  asyncHandler(async (req, res) => {
+    res.json({
+      data: {
+        capability: getWeeklyReportAiCapability()
+      }
+    });
+  })
+);
+
+weeklyReportsRouter.get(
   '/prefill-suggestion',
   requireWeeklyReportWriter,
   asyncHandler(async (req, res) => {
@@ -152,6 +198,42 @@ weeklyReportsRouter.get(
     const suggestion = await buildWeeklyReportPrefillSuggestion({ user: req.auth.user, weekStart, force });
 
     // Prefill is a read-only suggestion and never creates or updates weekly report rows.
+    res.json({
+      data: {
+        suggestion
+      }
+    });
+  })
+);
+
+weeklyReportsRouter.post(
+  '/prefill-suggestion/ai-compose',
+  requireWeeklyReportWriter,
+  asyncHandler(async (req, res) => {
+    const weekStart = normalizeIsoDate(req.body?.weekStart, 'weekStart');
+    if (getWeekStart(weekStart) !== weekStart) {
+      throw new WeeklyReportError(WEEKLY_REPORT_ERROR.INVALID_WEEK, 'weekStart must be a Monday', 400, ['weekStart']);
+    }
+
+    const currentSuggestion = await buildWeeklyReportPrefillSuggestion({ user: req.auth.user, weekStart });
+    if (String(req.body?.basisHash || '') !== String(currentSuggestion.basisHash || '')) {
+      res.status(409).json({
+        error: {
+          code: WEEKLY_REPORT_ERROR.PREFILL_BASIS_CHANGED,
+          message: 'Weekly prefill basis changed'
+        },
+        data: {
+          suggestion: currentSuggestion
+        }
+      });
+      return;
+    }
+
+    const suggestion = await composeWeeklyPrefillWithAi(
+      currentSuggestion,
+      req.app.locals.weeklyReportPrefillAiClient
+    );
+
     res.json({
       data: {
         suggestion
@@ -269,6 +351,47 @@ weeklyReportsRouter.delete(
   })
 );
 
+weeklyReportsRouter.post(
+  '/:reportId/evaluate',
+  asyncHandler(async (req, res) => {
+    const reportId = parseReportId(req.params.reportId);
+    const force = req.query.force === 'true' || req.body?.force === true;
+    const target = await getWeeklyReportEvaluationTarget({ reportId, evaluatorUser: req.auth.user, force });
+
+    if (target.cached) {
+      res.json({
+        data: {
+          report: target.report,
+          cached: true
+        }
+      });
+      return;
+    }
+
+    const evaluated = await evaluateWeeklyReportScore({
+      weeklyReport: target.report,
+      dailyEvidence: target.dailyEvidence,
+      comparisonRows: target.comparisonRows,
+      expectedWorkdates: target.workdayContext.expectedWorkdates,
+      workdayContext: target.workdayContext,
+      aiClient: req.app.locals.weeklyReportEvaluationAiClient
+    });
+    const report = await saveWeeklyReportEvaluation({
+      reportId,
+      score: evaluated.score,
+      source: evaluated.source,
+      error: evaluated.error
+    });
+
+    res.json({
+      data: {
+        report,
+        cached: false
+      }
+    });
+  })
+);
+
 weeklyReportsRouter.put(
   '/:reportId/approval',
   asyncHandler(async (req, res) => {
@@ -286,5 +409,34 @@ weeklyReportsRouter.put(
         report
       }
     });
+  })
+);
+
+weeklyReportsRouter.put(
+  '/:reportId/final-review',
+  asyncHandler(async (req, res) => {
+    const reportId = parseReportId(req.params.reportId);
+    const finalReview = normalizeWeeklyFinalReviewPayload(req.body || {});
+    const report = await saveWeeklyReportFinalReview({
+      reportId,
+      evaluatorUser: req.auth.user,
+      finalReview
+    });
+
+    res.json({
+      data: {
+        report
+      }
+    });
+  })
+);
+
+weeklyReportsRouter.post(
+  '/:reportId/export',
+  asyncHandler(async (req, res) => {
+    const reportId = parseReportId(req.params.reportId);
+    const exportDto = await getWeeklyReportExportDtoForAuthorizedRead({ reportId, requesterUser: req.auth.user });
+    const download = await generateWeeklyReportWorkbook(exportDto);
+    await streamWorkbookDownload(res, download);
   })
 );

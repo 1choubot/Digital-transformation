@@ -86,6 +86,12 @@ export async function downloadDailyReportAttachment(reportId, attachmentId, auth
   });
 }
 
+export async function exportDailyReport(reportId, authToken = '') {
+  return requestBlob(`/api/daily-reports/${reportId}/export`, {
+    authToken
+  });
+}
+
 // Delete one progress image attachment.
 export async function deleteDailyReportAttachment(reportId, attachmentId, authToken = '') {
   return request(`/api/daily-reports/${reportId}/attachments/${attachmentId}`, {

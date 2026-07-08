@@ -20,6 +20,7 @@ import {
   deleteDailyReportAttachment,
   getDailyReportAttachmentDownload,
   getDailyReportById,
+  getDailyReportExportDto,
   getDailyReportPlanSuggestion,
   listAvailableWeeklyPlansForDailyReport,
   listDailyReportAttachments,
@@ -27,6 +28,8 @@ import {
   updateDailyReport,
   uploadDailyReportAttachment
 } from '../repositories/dailyReportRepository.js';
+import { generateDailyReportWorkbook } from '../services/dailyReportExportService.js';
+import { cleanupReportExportFile } from '../services/reportExportFile.js';
 
 export const dailyReportsRouter = Router();
 
@@ -39,6 +42,29 @@ function parseReportId(rawValue) {
 
 function parseAttachmentId(rawValue) {
   return parsePositiveInteger(rawValue, 'attachmentId', DAILY_REPORT_ERROR.ATTACHMENT_NOT_FOUND);
+}
+
+async function streamWorkbookDownload(res, download) {
+  await new Promise((resolve, reject) => {
+    res.download(
+      download.filePath,
+      download.fileName,
+      {
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Length': String(download.fileSize || 0)
+        }
+      },
+      (error) => {
+        cleanupReportExportFile(download.filePath);
+        if (error && !res.headersSent) {
+          reject(error);
+          return;
+        }
+        resolve();
+      }
+    );
+  });
 }
 
 dailyReportsRouter.get(
@@ -136,6 +162,16 @@ dailyReportsRouter.delete(
     await deleteDailyReport({ reportId, userId: req.auth.user.id });
 
     res.status(204).send();
+  })
+);
+
+dailyReportsRouter.get(
+  '/:reportId/export',
+  asyncHandler(async (req, res) => {
+    const reportId = parseReportId(req.params.reportId);
+    const exportDto = await getDailyReportExportDto({ reportId, userId: req.auth.user.id });
+    const download = await generateDailyReportWorkbook(exportDto);
+    await streamWorkbookDownload(res, download);
   })
 );
 

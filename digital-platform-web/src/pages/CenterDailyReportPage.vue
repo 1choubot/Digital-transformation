@@ -40,6 +40,21 @@
                 查询
               </button>
             </div>
+            <div class="filter-export">
+              <button
+                type="button"
+                class="ghost-button"
+                :disabled="loading || exporting"
+                @click="handleExport"
+              >
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                {{ exporting ? '导出中...' : '导出中心日报' }}
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -218,6 +233,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
+  exportCenterDailyReport,
   getCenterDailyReport,
   getCenterDailyReportSchedule,
   listCenterDailyReportDepartments,
@@ -247,6 +263,7 @@ const departments = ref([]);
 const report = ref(null);
 const loading = ref(false);
 const savingSchedule = ref(false);
+const exporting = ref(false);
 const errorMessage = ref('');
 const scheduleMessage = ref('');
 const filters = reactive({
@@ -381,6 +398,35 @@ async function handleSaveSchedule() {
   }
 }
 
+function saveBlob(download, fallbackName) {
+  const url = URL.createObjectURL(download.blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = download.fileName || fallbackName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function handleExport() {
+  if (!canUseCenterDailyReport.value || !filters.department) return;
+  exporting.value = true;
+  errorMessage.value = '';
+
+  try {
+    const download = await exportCenterDailyReport(
+      { date: filters.date, department: filters.department },
+      props.authToken
+    );
+    saveBlob(download, `中心日报-${filters.department}-${filters.date}.xlsx`);
+  } catch (error) {
+    handleApiError(error);
+  } finally {
+    exporting.value = false;
+  }
+}
+
 watch(
   () => filters.department,
   () => {
@@ -468,6 +514,32 @@ onMounted(async () => {
 .primary-button:disabled {
   opacity: 0.6;
   background: #a0cfff;
+  cursor: not-allowed;
+}
+.ghost-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  height: 48px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #606266;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.ghost-button:hover:not(:disabled) {
+  border-color: #c6e2ff;
+  background: #ecf5ff;
+  color: #3e63dd;
+}
+.ghost-button:disabled {
+  opacity: 0.6;
   cursor: not-allowed;
 }
 .btn-icon {
@@ -591,6 +663,11 @@ onMounted(async () => {
   display: flex;
   align-items: flex-end;
   padding-bottom: 0;   /* 与输入框底部对齐 */
+}
+
+.filter-export {
+  display: flex;
+  align-items: flex-end;
 }
 
 .schedule-panel__body {

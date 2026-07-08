@@ -31,6 +31,11 @@ function readDefaultWeeklyRestMode() {
   return restMode;
 }
 
+function readBoolean(name, fallback = false) {
+  const raw = readString(name, fallback ? 'true' : 'false');
+  return raw === 'true' || raw === '1';
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: readInteger('PORT', 3001),
@@ -44,7 +49,15 @@ export const env = {
     storageDir: process.env.DAILY_REPORT_ATTACHMENT_STORAGE_DIR || ''
   },
   reports: {
-    defaultWeeklyRestMode: readDefaultWeeklyRestMode()
+    defaultWeeklyRestMode: readDefaultWeeklyRestMode(),
+    templateRoot: readString('REPORT_TEMPLATE_ROOT', ''),
+    exportRoot: readString('REPORT_EXPORT_ROOT', '')
+  },
+  reportAi: {
+    enabled: readBoolean('REPORT_AI_ENABLED', false),
+    endpoint: readString('REPORT_AI_ENDPOINT', readString('DEEPSEEK_API_BASE', '')),
+    model: readString('REPORT_AI_MODEL', readString('DEEPSEEK_MODEL', '')),
+    apiKey: readString('REPORT_AI_API_KEY', readString('DEEPSEEK_API_KEY', ''))
   },
   centerDailyScheduler: {
     enabled: readString('CENTER_DAILY_SCHEDULER_ENABLED', 'false') === 'true'

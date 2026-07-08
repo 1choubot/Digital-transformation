@@ -21,13 +21,15 @@ import {
   getShanghaiDateString,
   saveCenterDailySchedule
 } from '../repositories/centerDailyReportRepository.js';
+import { generateCenterDailyReportWorkbook } from '../services/centerDailyReportExportService.js';
+import { cleanupReportExportFile } from '../services/reportExportFile.js';
 
 export const centerDailyReportsRouter = Router();
 
 centerDailyReportsRouter.use(requireAuth, requireCenterDailyReportReader);
 
 // Resolve the requested department and enforce center-manager scoping.
-function resolveReadableDepartment(req) {
+export function resolveReadableDepartment(req) {
   const user = req.auth.user;
   const rawDepartment = req.query.department || req.body?.department || user.department;
   const department = normalizeCenterDailyReportDepartment(rawDepartment);
@@ -44,6 +46,29 @@ function assertCanManageSchedule(user, department) {
   if (!isOwnCenterManager && !isPlatformSystemAdmin) {
     throw new AuthError('CENTER_DAILY_SCHEDULE_FORBIDDEN', 'Center daily schedule update forbidden', 403);
   }
+}
+
+async function streamWorkbookDownload(res, download) {
+  await new Promise((resolve, reject) => {
+    res.download(
+      download.filePath,
+      download.fileName,
+      {
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Length': String(download.fileSize || 0)
+        }
+      },
+      (error) => {
+        cleanupReportExportFile(download.filePath);
+        if (error && !res.headersSent) {
+          reject(error);
+          return;
+        }
+        resolve();
+      }
+    );
+  });
 }
 
 // Return the legal center selector values for the current user.
@@ -116,3 +141,16 @@ centerDailyReportsRouter.get(
   })
 );
 
+centerDailyReportsRouter.post(
+  '/export',
+  asyncHandler(async (req, res) => {
+    const department = resolveReadableDepartment(req);
+    const reportDate = req.body?.date ? normalizeCenterDailyReportDate(req.body.date) : getShanghaiDateString();
+    const report = await getCenterDailyReportDto({ department, reportDate });
+    const download = await generateCenterDailyReportWorkbook({
+      ...report,
+      generatedBy: req.auth.user
+    });
+    await streamWorkbookDownload(res, download);
+  })
+);

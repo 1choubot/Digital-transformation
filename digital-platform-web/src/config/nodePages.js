@@ -1,4 +1,4 @@
-import GenericProjectNodePage from '../pages/project-node/GenericProjectNodePage.vue';
+import BlankProjectNodePage from '../pages/project-node/BlankProjectNodePage.vue';
 import DesignPreparePage from '../pages/project-node/DesignPreparePage.vue';
 import MarketResearchPage from '../pages/project-node/MarketResearchPage.vue';
 import ProjectApprovalPage from '../pages/project-node/ProjectApprovalPage.vue';
@@ -10,10 +10,9 @@ export const nodePages = {
   market_research: MarketResearchPage,
   initiation_approval: ProjectApprovalPage,
   initiation_notice: ProjectNoticePage,
-  solution_preparation: DesignPreparePage,
-  '*': GenericProjectNodePage
+  solution_preparation: DesignPreparePage
 };
 
 export function resolveNodePage(nodeCode) {
-  return nodePages[nodeCode] || nodePages['*'];
+  return nodePages[nodeCode] || BlankProjectNodePage;
 }

@@ -2247,6 +2247,13 @@ p {
   background: #fbfcfe;
 }
 
+.initiation-review-action-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
 .initiation-review-panel__heading,
 .initiation-review-node__main {
   display: flex;

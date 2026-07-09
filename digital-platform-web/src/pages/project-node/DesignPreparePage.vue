@@ -1,15 +1,21 @@
 <template>
-  <ProjectNodeWorkspacePanel
+  <BlankProjectNodePage
     page-title="方案设计准备"
+    :project-id="projectId"
+    :auth-token="authToken"
+    :current-user="currentUser"
+    :project="project"
+    :workspace="workspace"
     :stage="stage"
     :node="node"
+    :node-code="nodeCode"
     :node-page-context="nodePageContext"
     @business-state-changed="$emit('business-state-changed', $event)"
   />
 </template>
 
 <script setup>
-import ProjectNodeWorkspacePanel from './ProjectNodeWorkspacePanel.vue';
+import BlankProjectNodePage from './BlankProjectNodePage.vue';
 
 defineEmits(['business-state-changed']);
 

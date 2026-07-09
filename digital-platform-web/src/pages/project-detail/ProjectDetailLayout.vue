@@ -86,7 +86,7 @@ import {
   downloadStageDocumentOnlineFormImage,
   getProjectDetail,
   // getProjectStageDocumentChecklist 保留为工作区文档数据源：
-  // 工作区产出面板（ProjectWorkspaceOutputPanel）通过 getOutputDocument 查找文档详情
+  // 节点专属页面通过 getOutputDocument 查找文档详情
   // （permissions、completionStatus 等），这些数据仅由 checklist API 提供，
   // workspace API 不包含完整文档详情。删除其 UI 渲染，保留数据调用。
   getProjectStageDocumentChecklist,

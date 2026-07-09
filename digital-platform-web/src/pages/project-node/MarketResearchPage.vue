@@ -20,7 +20,7 @@
       <p>{{ context.onlineFormErrorMessage }}</p>
     </section>
 
-    <section v-else-if="marketResearchOutput?.formAvailable" class="state-panel state-panel--inline">
+    <section v-else-if="output?.formAvailable" class="state-panel state-panel--inline">
       <p>{{ context.onlineFormLoading === true ? '在线表单加载中...' : '正在打开在线表单...' }}</p>
     </section>
 
@@ -31,8 +31,8 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue';
 import NodeOnlineFormEditor from '../../components/node/NodeOnlineFormEditor.vue';
+import { useNodeOnlineForm } from '../../composables/node/useNodeOnlineForm.js';
 
 const emit = defineEmits(['business-state-changed']);
 
@@ -75,99 +75,18 @@ const props = defineProps({
   }
 });
 
-const MARKET_RESEARCH_DOCUMENT_CODE = '1.1';
-const emptyObject = Object.freeze({});
-const requestedDocumentId = ref(null);
-
-const context = computed(() => props.nodePageContext || emptyObject);
-const marketResearchOutput = computed(() =>
-  (props.node?.outputs || []).find(
-    (item) => String(item.documentCode || item.legacyDocumentCode || '') === MARKET_RESEARCH_DOCUMENT_CODE
-  ) || null
-);
-const isActiveOutputForm = computed(
-  () =>
-    marketResearchOutput.value?.documentId &&
-    String(context.value.activeOnlineFormDocumentId || '') === String(marketResearchOutput.value.documentId)
-);
-const activeForm = computed(() =>
-  isActiveOutputForm.value ? context.value.activeOnlineForm || null : null
-);
-const unavailableMessage = computed(() => {
-  if (!marketResearchOutput.value) {
-    return `当前节点尚未返回 ${MARKET_RESEARCH_DOCUMENT_CODE} 在线表单。`;
-  }
-
-  return '关联资料未初始化，暂不能打开在线表单。';
+const {
+  emptyObject,
+  context,
+  output,
+  activeForm,
+  unavailableMessage,
+  invoke,
+  saveOnlineForm,
+  submitOnlineForm
+} = useNodeOnlineForm({
+  props,
+  emit,
+  documentCode: '1.1'
 });
-
-watch(
-  () => marketResearchOutput.value?.documentId || null,
-  (documentId) => {
-    requestedDocumentId.value = null;
-    if (documentId) {
-      openMarketResearchForm();
-    }
-  },
-  { immediate: true }
-);
-
-watch(
-  () => [
-    marketResearchOutput.value?.documentId || null,
-    context.value.activeOnlineFormDocumentId || null,
-    context.value.onlineFormLoading === true
-  ],
-  () => {
-    openMarketResearchForm();
-  }
-);
-
-function invoke(name, payload) {
-  const handler = context.value?.[name];
-  if (typeof handler === 'function') {
-    return handler(payload);
-  }
-  return undefined;
-}
-
-function openMarketResearchForm() {
-  const output = marketResearchOutput.value;
-  if (!output?.documentId || output.formAvailable !== true) {
-    return;
-  }
-
-  if (isActiveOutputForm.value && activeForm.value) {
-    return;
-  }
-
-  if (context.value.onlineFormLoading === true) {
-    return;
-  }
-
-  if (String(requestedDocumentId.value || '') === String(output.documentId)) {
-    return;
-  }
-
-  requestedDocumentId.value = output.documentId;
-  invoke('openOnlineForm', output);
-}
-
-function notifyFormChanged() {
-  emit('business-state-changed', {
-    changedDocumentIds: marketResearchOutput.value?.documentId ? [marketResearchOutput.value.documentId] : [],
-    affectedNodeCodes: props.node?.nodeKey ? [props.node.nodeKey] : [],
-    refreshCurrentDetail: true
-  });
-}
-
-function saveOnlineForm() {
-  invoke('saveOnlineForm');
-  notifyFormChanged();
-}
-
-function submitOnlineForm() {
-  invoke('submitOnlineForm');
-  notifyFormChanged();
-}
 </script>

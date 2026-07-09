@@ -32,7 +32,7 @@ function normalizeNodeStatus(status, { isCurrentStage = false } = {}) {
   }
 
   if (['process_node'].includes(status)) {
-    return isCurrentStage ? NAVIGATION_STATUS.PROCESSING : NAVIGATION_STATUS.PENDING;
+    return NAVIGATION_STATUS.COMPLETED;
   }
 
   return NAVIGATION_STATUS.PENDING;

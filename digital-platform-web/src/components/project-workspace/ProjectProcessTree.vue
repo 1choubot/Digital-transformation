@@ -11,15 +11,16 @@
     </div>
 
     <el-menu
+      ref="menuRef"
       class="project-process-menu"
       :default-active="selectedNodeKey || selectedStageKey"
       :default-openeds="openStageKeys"
+      :unique-opened="true"
     >
       <el-sub-menu
         v-for="stage in navigation?.children || []"
         :key="stage.stageKey"
         :index="stage.stageKey"
-        @click="$emit('select-stage', stage)"
       >
         <template #title>
           <span class="project-process-menu__stage-title">{{ stage.name }}</span>
@@ -52,9 +53,9 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 
-defineEmits(['select-stage', 'select-node']);
+defineEmits(['select-node']);
 
 const props = defineProps({
   navigation: {
@@ -77,7 +78,17 @@ const projectTitle = computed(() => {
   return code ? `${code} / ${name}` : name;
 });
 
-const openStageKeys = computed(() => (props.navigation?.children || []).map((stage) => stage.stageKey));
+const openStageKeys = computed(() => {
+  const key = props.selectedStageKey;
+  return key ? [key] : [];
+});
+
+const menuRef = ref(null);
+watch(() => props.selectedStageKey, (newKey) => {
+  if (newKey && menuRef.value) {
+    menuRef.value.open(newKey);
+  }
+});
 
 function formatProjectMode(projectMode) {
   return {

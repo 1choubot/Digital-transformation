@@ -170,7 +170,7 @@ import DailyReportPage from './pages/DailyReportPage.vue';
 import LoginPage from './pages/LoginPage.vue';
 import MyStageDocumentTasksPage from './pages/MyStageDocumentTasksPage.vue';
 import ProjectCreatePage from './pages/ProjectCreatePage.vue';
-import ProjectDetailPage from './pages/ProjectDetailPage.vue';
+import ProjectDetailPage from './pages/project-detail/ProjectDetailPage.vue';
 import ProjectOverviewDashboardPage from './pages/ProjectOverviewDashboardPage.vue';
 import UserManagementPage from './pages/UserManagementPage.vue';
 import WeeklyReportListPage from './pages/WeeklyReportListPage.vue';

@@ -19,6 +19,7 @@ import {
   isInitiationOnlineFormDocument,
   isInitiationReviewDocument
 } from '../../domain/initiationReview.js';
+import { isSolutionDesignDedicatedDocument } from '../../domain/solutionDesignWorkflow.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
 import {
   DESIGN_CHANGE_SOURCE_DOCUMENT_CODE,
@@ -83,6 +84,22 @@ function assertOnlineFormDocumentRevisionCompletionSource(currentDocument) {
   throw new StageDocumentStatusError(
     'ONLINE_FORM_REVISION_COMPLETION_REQUIRED',
     'This stage document revision must be completed by resubmitting the online form',
+    409,
+    {
+      documentId: currentDocument.id,
+      documentCode: currentDocument.document_code ?? currentDocument.documentCode ?? null
+    }
+  );
+}
+
+function assertSolutionDesignDedicatedDocumentStatusSource(currentDocument) {
+  if (!isSolutionDesignDedicatedDocument(currentDocument)) {
+    return;
+  }
+
+  throw new StageDocumentStatusError(
+    'SOLUTION_DESIGN_DEDICATED_FLOW_REQUIRED',
+    'This solution design stage document must be handled through the solution design workflow endpoints',
     409,
     {
       documentId: currentDocument.id,
@@ -735,6 +752,7 @@ export async function updateProjectStageDocumentStatus({
     }
     const currentDocument = await selectProjectStageDocumentForUpdate(connection, projectId, documentId);
     const project = await selectProjectPermissionContext(connection, projectId, user);
+    assertSolutionDesignDedicatedDocumentStatusSource(currentDocument);
     assertDocumentCompletionModeAllowsAction(action, currentDocument);
     assertOnlineFormDocumentSubmitSource({ action, currentDocument, allowOnlineFormDocumentSubmit });
     assertUserCanUpdateDocumentStatus({ user, action, currentDocument, project, allowOnlineFormDocumentSubmit });
@@ -838,6 +856,7 @@ export async function completeProjectStageDocumentRevision({ projectId, document
     const project = await selectProjectPermissionContext(connection, projectId, user);
     const completionMode = getDocumentCompletionMode(currentDocument);
 
+    assertSolutionDesignDedicatedDocumentStatusSource(currentDocument);
     assertOnlineFormDocumentRevisionCompletionSource(currentDocument);
     assertUserCanUpdateDocumentStatus({
       user,

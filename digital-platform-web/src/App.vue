@@ -131,7 +131,7 @@
         :task-mode="route.query?.taskMode || ''"
         :focus-document-id="route.query?.documentId || ''"
         :focus-stage-id="route.query?.stageId || ''"
-        :focus-node-key="route.query?.nodeKey || ''"
+        :focus-node-key="route.query?.focusNodeKey || route.query?.nodeKey || ''"
         :navigate="navigate"
       />
       <MyStageDocumentTasksPage

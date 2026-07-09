@@ -6,21 +6,40 @@ import {
   assertProjectAuditViewable,
   assertProjectViewable,
   advanceProjectStage,
+  assignSolutionDesignRoles,
+  approveSolutionDesignWorkflowNode,
   approveStageApproval,
   createProject,
   getProjectDetail,
   getProjectOverviewDashboard,
   getProjectWorkspace,
+  getSolutionDesignAnalysisGeneratedFileDownload,
+  getSolutionDesignAnalysisForm,
+  getSolutionDesignReviewGeneratedFileDownload,
+  getSolutionDesignReviewForm,
+  getSolutionDesignUploadDownload,
+  getSolutionDesignWorkflow,
+  listSolutionDesignUploads,
   listStageApprovalHistory,
   listProjects,
   normalizeProjectOverviewDashboardFilters,
+  processSolutionDesignQuotationResult,
   ProjectAuthorizationError,
   ProjectNotFoundError,
   projectExists,
   resubmitStageApproval,
+  returnSolutionDesignWorkflowNode,
   returnStageApproval,
+  saveSolutionDesignAnalysisForm,
+  saveSolutionDesignReviewForm,
+  selectSolutionDesignQuotationTenderBranch,
+  submitSolutionDesignAnalysisForm,
+  submitSolutionDesignQuotation,
+  submitSolutionDesignReviewForm,
+  submitSolutionDesignWorkflowNode,
   submitStageApproval,
-  updateProjectCode
+  updateProjectCode,
+  uploadSolutionDesignWorkflowFile
 } from '../repositories/projectRepository.js';
 import {
   listProjectOperationLogs,
@@ -54,6 +73,7 @@ import {
   uploadStageDocumentAttachment
 } from '../repositories/stageDocumentAttachmentRepository.js';
 import { readMultipartFile } from '../middleware/multipartFile.js';
+import { SOLUTION_DESIGN_UPLOAD_MAX_FILE_SIZE } from '../storage/solutionDesignUploadStorage.js';
 import { STAGE_DOCUMENT_ONLINE_FORM_IMAGE_MAX_FILE_SIZE } from '../storage/stageDocumentOnlineFormImageStorage.js';
 import { searchActiveProjectsForDailyReports } from '../repositories/dailyReportRepository.js';
 
@@ -271,6 +291,306 @@ export async function getProjectWorkspaceHandler(req, res) {
 
   res.json({
     data: workspace
+  });
+}
+
+export async function getSolutionDesignWorkflowHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await getSolutionDesignWorkflow({
+    projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function assignSolutionDesignRolesHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await assignSolutionDesignRoles({
+    projectId,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function selectSolutionDesignQuotationTenderBranchHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await selectSolutionDesignQuotationTenderBranch({
+    projectId,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function submitSolutionDesignQuotationHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await submitSolutionDesignQuotation({
+    projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function processSolutionDesignQuotationResultHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await processSolutionDesignQuotationResult({
+    projectId,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function getSolutionDesignAnalysisFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const analysisForm = await getSolutionDesignAnalysisForm({
+    projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: analysisForm
+  });
+}
+
+export async function saveSolutionDesignAnalysisFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const analysisForm = await saveSolutionDesignAnalysisForm({
+    projectId,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: analysisForm
+  });
+}
+
+export async function submitSolutionDesignAnalysisFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const analysisForm = await submitSolutionDesignAnalysisForm({
+    projectId,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: analysisForm
+  });
+}
+
+export async function downloadSolutionDesignAnalysisGeneratedFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const download = await getSolutionDesignAnalysisGeneratedFileDownload({
+    projectId,
+    user: req.auth.user
+  });
+
+  await new Promise((resolve, reject) => {
+    res.download(
+      download.filePath,
+      download.fileName,
+      {
+        headers: {
+          'Content-Type': download.mimeType,
+          'Content-Length': String(download.fileSize)
+        }
+      },
+      (error) => {
+        if (error && !res.headersSent) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      }
+    );
+  });
+}
+
+export async function getSolutionDesignReviewFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const reviewForm = await getSolutionDesignReviewForm({
+    projectId,
+    nodeKey: req.params.nodeKey,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: reviewForm
+  });
+}
+
+export async function downloadSolutionDesignReviewGeneratedFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const download = await getSolutionDesignReviewGeneratedFileDownload({
+    projectId,
+    nodeKey: req.params.nodeKey,
+    user: req.auth.user
+  });
+
+  await new Promise((resolve, reject) => {
+    res.download(
+      download.filePath,
+      download.fileName,
+      {
+        headers: {
+          'Content-Type': download.mimeType,
+          'Content-Length': String(download.fileSize)
+        }
+      },
+      (error) => {
+        if (error && !res.headersSent) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      }
+    );
+  });
+}
+
+export async function saveSolutionDesignReviewFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const reviewForm = await saveSolutionDesignReviewForm({
+    projectId,
+    nodeKey: req.params.nodeKey,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: reviewForm
+  });
+}
+
+export async function submitSolutionDesignReviewFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const reviewForm = await submitSolutionDesignReviewForm({
+    projectId,
+    nodeKey: req.params.nodeKey,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: reviewForm
+  });
+}
+
+export async function listSolutionDesignUploadsHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const uploads = await listSolutionDesignUploads({
+    projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: uploads
+  });
+}
+
+export async function uploadSolutionDesignWorkflowFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const file = await readMultipartFile(req, {
+    maxFileSize: SOLUTION_DESIGN_UPLOAD_MAX_FILE_SIZE
+  });
+  const result = await uploadSolutionDesignWorkflowFile({
+    projectId,
+    slotKey: req.params.slotKey,
+    file,
+    user: req.auth.user
+  });
+
+  res.status(201).json({
+    data: result
+  });
+}
+
+export async function downloadSolutionDesignWorkflowFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const download = await getSolutionDesignUploadDownload({
+    projectId,
+    slotKey: req.params.slotKey,
+    user: req.auth.user
+  });
+
+  await new Promise((resolve, reject) => {
+    res.download(
+      download.filePath,
+      download.originalFileName,
+      {
+        headers: {
+          'Content-Type': download.mimeType,
+          'Content-Length': String(download.fileSize)
+        }
+      },
+      (error) => {
+        if (error && !res.headersSent) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      }
+    );
+  });
+}
+
+export async function submitSolutionDesignWorkflowNodeHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await submitSolutionDesignWorkflowNode({
+    projectId,
+    nodeKey: req.params.nodeKey,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function approveSolutionDesignWorkflowNodeHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await approveSolutionDesignWorkflowNode({
+    projectId,
+    nodeKey: req.params.nodeKey,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function returnSolutionDesignWorkflowNodeHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await returnSolutionDesignWorkflowNode({
+    projectId,
+    nodeKey: req.params.nodeKey,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
   });
 }
 

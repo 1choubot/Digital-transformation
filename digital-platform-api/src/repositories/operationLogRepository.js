@@ -42,6 +42,66 @@ export const OPERATION_ACTION_TYPE = {
   INITIATION_EVALUATION_SUBMITTED: 'initiation.evaluation.submitted',
   INITIATION_APPROVAL_APPROVED: 'initiation.approval.approved',
   INITIATION_APPROVAL_RETURNED: 'initiation.approval.returned',
+  SOLUTION_DESIGN_ROLES_ASSIGNED: 'solution_design.roles_assigned',
+  SOLUTION_DESIGN_WORK_PLAN_UPLOADED: 'solution_design.work_plan_uploaded',
+  SOLUTION_DESIGN_WORK_PLAN_SUBMITTED: 'solution_design.work_plan_submitted',
+  SOLUTION_DESIGN_ANALYSIS_FORM_SAVED: 'solution_design.analysis_form_saved',
+  SOLUTION_DESIGN_ANALYSIS_FORM_SUBMITTED: 'solution_design.analysis_form_submitted',
+  SOLUTION_DESIGN_ANALYSIS_FORM_GENERATED: 'solution_design.analysis_form_generated',
+  SOLUTION_DESIGN_ANALYSIS_FORM_GENERATION_FAILED: 'solution_design.analysis_form_generation_failed',
+  SOLUTION_DESIGN_PRODUCT_FUNCTION_DIAGRAM_UPLOADED: 'solution_design.product_function_diagram_uploaded',
+  SOLUTION_DESIGN_ANALYSIS_SUBMITTED: 'solution_design.analysis_submitted',
+  SOLUTION_DESIGN_ANALYSIS_APPROVED: 'solution_design.analysis_approved',
+  SOLUTION_DESIGN_ANALYSIS_RETURNED: 'solution_design.analysis_returned',
+  SOLUTION_DESIGN_DESIGN_OUTPUT_UPLOADED: 'solution_design.design_output_uploaded',
+  SOLUTION_DESIGN_DESIGN_OUTPUTS_SUBMITTED: 'solution_design.design_outputs_submitted',
+  SOLUTION_DESIGN_INTERNAL_REVIEW_FORM_SAVED: 'solution_design.internal_review_form_saved',
+  SOLUTION_DESIGN_INTERNAL_REVIEW_FORM_SUBMITTED: 'solution_design.internal_review_form_submitted',
+  SOLUTION_DESIGN_INTERNAL_REVIEW_FORM_GENERATED:
+    'solution_design.internal_review_form_generated',
+  SOLUTION_DESIGN_INTERNAL_REVIEW_FORM_GENERATION_FAILED:
+    'solution_design.internal_review_form_generation_failed',
+  SOLUTION_DESIGN_INTERNAL_REVIEW_SUBMITTED: 'solution_design.internal_review_submitted',
+  SOLUTION_DESIGN_INTERNAL_REVIEW_APPROVED: 'solution_design.internal_review_approved',
+  SOLUTION_DESIGN_INTERNAL_REVIEW_RETURNED: 'solution_design.internal_review_returned',
+  SOLUTION_DESIGN_CUSTOMER_REVIEW_FORM_SAVED: 'solution_design.customer_review_form_saved',
+  SOLUTION_DESIGN_CUSTOMER_REVIEW_FORM_SUBMITTED: 'solution_design.customer_review_form_submitted',
+  SOLUTION_DESIGN_CUSTOMER_REVIEW_FORM_GENERATED:
+    'solution_design.customer_review_form_generated',
+  SOLUTION_DESIGN_CUSTOMER_REVIEW_FORM_GENERATION_FAILED:
+    'solution_design.customer_review_form_generation_failed',
+  SOLUTION_DESIGN_CUSTOMER_REVIEW_SUBMITTED: 'solution_design.customer_review_submitted',
+  SOLUTION_DESIGN_CUSTOMER_REVIEW_APPROVED: 'solution_design.customer_review_approved',
+  SOLUTION_DESIGN_CUSTOMER_REVIEW_RETURNED: 'solution_design.customer_review_returned',
+  SOLUTION_DESIGN_RD_COST_FILE_UPLOADED: 'solution_design.rd_cost_file_uploaded',
+  SOLUTION_DESIGN_RD_COST_SUBMITTED: 'solution_design.rd_cost_submitted',
+  SOLUTION_DESIGN_RD_COST_APPROVED: 'solution_design.rd_cost_approved',
+  SOLUTION_DESIGN_RD_COST_RETURNED: 'solution_design.rd_cost_returned',
+  SOLUTION_DESIGN_MANUFACTURING_COST_FILE_UPLOADED: 'solution_design.manufacturing_cost_file_uploaded',
+  SOLUTION_DESIGN_MANUFACTURING_COST_SUBMITTED: 'solution_design.manufacturing_cost_submitted',
+  SOLUTION_DESIGN_MANUFACTURING_COST_APPROVED: 'solution_design.manufacturing_cost_approved',
+  SOLUTION_DESIGN_MANUFACTURING_COST_RETURNED: 'solution_design.manufacturing_cost_returned',
+  SOLUTION_DESIGN_FINANCE_COST_FILE_UPLOADED: 'solution_design.finance_cost_file_uploaded',
+  SOLUTION_DESIGN_FINANCE_COST_SUBMITTED: 'solution_design.finance_cost_submitted',
+  SOLUTION_DESIGN_FINANCE_COST_FINANCE_APPROVED: 'solution_design.finance_cost_finance_approved',
+  SOLUTION_DESIGN_FINANCE_COST_FINANCE_RETURNED: 'solution_design.finance_cost_finance_returned',
+  SOLUTION_DESIGN_FINANCE_COST_GENERAL_APPROVED: 'solution_design.finance_cost_general_approved',
+  SOLUTION_DESIGN_FINANCE_COST_GENERAL_RETURNED: 'solution_design.finance_cost_general_returned',
+  SOLUTION_DESIGN_QUOTATION_BRANCH_SELECTED: 'solution_design.quotation_branch_selected',
+  SOLUTION_DESIGN_TENDER_BRANCH_SELECTED: 'solution_design.tender_branch_selected',
+  SOLUTION_DESIGN_QUOTATION_FILE_UPLOADED: 'solution_design.quotation_file_uploaded',
+  SOLUTION_DESIGN_QUOTATION_SUBMITTED: 'solution_design.quotation_submitted',
+  SOLUTION_DESIGN_QUOTATION_ACCEPTED: 'solution_design.quotation_accepted',
+  SOLUTION_DESIGN_QUOTATION_REJECTED_RETURN_RD_COST:
+    'solution_design.quotation_rejected_return_rd_cost',
+  SOLUTION_DESIGN_QUOTATION_REJECTED_PROJECT_ENDED:
+    'solution_design.quotation_rejected_project_ended',
+  SOLUTION_DESIGN_TENDER_BUSINESS_FILE_UPLOADED: 'solution_design.tender_business_file_uploaded',
+  SOLUTION_DESIGN_TENDER_TECHNICAL_FILE_UPLOADED: 'solution_design.tender_technical_file_uploaded',
+  SOLUTION_DESIGN_TENDER_SUBMITTED: 'solution_design.tender_submitted',
+  SOLUTION_DESIGN_TENDER_APPROVED: 'solution_design.tender_approved',
+  SOLUTION_DESIGN_TENDER_RETURNED: 'solution_design.tender_returned',
+  SOLUTION_DESIGN_READY_FOR_CONTRACT: 'solution_design.ready_for_contract',
   STAGE_ADVANCED: 'stage.advanced',
   PROJECT_COMPLETED: 'project.completed'
 };
@@ -52,7 +112,8 @@ export const OPERATION_TARGET_TYPE = {
   APPROVAL: 'approval',
   STAGE_DOCUMENT: 'stage_document',
   INITIATION_REVIEW: 'initiation_review',
-  ONLINE_FORM: 'online_form'
+  ONLINE_FORM: 'online_form',
+  SOLUTION_DESIGN_WORKFLOW: 'solution_design_workflow'
 };
 
 export class OperationLogLimitError extends Error {

@@ -12,6 +12,7 @@ import {
   INITIATION_REVIEW_DOCUMENT_CODE,
   isInitiationOnlineFormDocument
 } from '../../domain/initiationReview.js';
+import { SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES } from '../../domain/solutionDesignWorkflow.js';
 import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import { attachStageDocumentPermissions } from './accessControl.js';
 import {
@@ -27,13 +28,22 @@ import {
   INITIATION_REVIEW_TODO_TYPE,
   selectInitiationReviewWorkbenchTodos
 } from './initiationReviewRepository.js';
+import {
+  SOLUTION_DESIGN_WORKBENCH_TODO_TYPE,
+  selectSolutionDesignWorkbenchTodos
+} from '../projects/solutionDesignWorkflowRepository.js';
 
 const WORKBENCH_TODO_TYPES = [
   'document_responsibility',
   'document_review',
   INITIATION_REVIEW_TODO_TYPE,
+  SOLUTION_DESIGN_WORKBENCH_TODO_TYPE,
   'stage_advance'
 ];
+
+const SOLUTION_DESIGN_DEDICATED_DOCUMENT_PLACEHOLDERS = SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES
+  .map(() => '?')
+  .join(', ');
 
 const INITIATION_COLLABORATION_METADATA_KEY = '_collaboration';
 const INITIATION_COLLABORATION_PART = {
@@ -287,6 +297,7 @@ async function selectDocumentResponsibilityTodos(user) {
       AND d.is_applicable = 1
       AND d.document_code <> ?
       AND d.document_code <> ?
+      AND d.document_code NOT IN (${SOLUTION_DESIGN_DEDICATED_DOCUMENT_PLACEHOLDERS})
       AND (
         d.status IN (?, ?)
         OR (
@@ -311,6 +322,7 @@ async function selectDocumentResponsibilityTodos(user) {
       PROJECT_STATUS.ENDED,
       INITIATION_REVIEW_DOCUMENT_CODE,
       INITIATION_NOTICE_DOCUMENT_CODE,
+      ...SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES,
       DOCUMENT_STATUS.NOT_SUBMITTED,
       DOCUMENT_STATUS.RETURNED,
       COMPLETION_MODE.APPROVAL_REQUIRED,
@@ -550,6 +562,7 @@ async function selectDocumentReviewTodos(user) {
     WHERE d.is_applicable = 1
       AND p.status <> ?
       AND d.document_code <> '1.2'
+      AND d.document_code NOT IN (${SOLUTION_DESIGN_DEDICATED_DOCUMENT_PLACEHOLDERS})
       AND d.status = ?
       AND d.completion_mode = ?
       AND (
@@ -572,7 +585,14 @@ async function selectDocumentReviewTodos(user) {
       d.stage_order ASC,
       d.document_order ASC,
       d.id ASC`,
-    [PROJECT_STATUS.ENDED, DOCUMENT_STATUS.SUBMITTED, COMPLETION_MODE.APPROVAL_REQUIRED, user.department, user.department]
+    [
+      PROJECT_STATUS.ENDED,
+      ...SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES,
+      DOCUMENT_STATUS.SUBMITTED,
+      COMPLETION_MODE.APPROVAL_REQUIRED,
+      user.department,
+      user.department
+    ]
   );
 
   return rows.map((row) =>
@@ -771,6 +791,7 @@ export async function getMyWorkbench(user) {
     selectInitiationNoticeSyntheticTodos(user),
     selectDocumentReviewTodos(user),
     selectInitiationReviewWorkbenchTodos(pool, user),
+    selectSolutionDesignWorkbenchTodos(user),
     selectStageAdvanceTodos(user)
   ]);
   const items = sortWorkbenchItems(groups.flat());

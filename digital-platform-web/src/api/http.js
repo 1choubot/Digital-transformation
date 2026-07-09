@@ -498,6 +498,30 @@ export function toReadableApiError(error) {
     return '当前账号无权填写个人日报。';
   }
 
+  if (error.code === 'DAILY_REPORT_REQUIRED_FIELDS') {
+    return '请补全日报必填项：任务来源、执行状态、工作内容、完成进度、完成时间；未完成时还需要填写偏差与纠偏措施。';
+  }
+
+  if (error.code === 'DAILY_REPORT_PROJECT_NOT_AVAILABLE') {
+    return '当前项目不可用于日报填写，可能已完结或当前账号不可见。';
+  }
+
+  if (error.code === 'DAILY_REPORT_INVALID_TASK_SOURCE') {
+    return '日报关联的周计划已不在当前项目或当前周的可选范围内，请重新选择周计划，或把任务来源改为新增。';
+  }
+
+  if (error.code === 'DAILY_REPORT_DUPLICATE') {
+    return '当天该项目已存在日报，请从我的日报列表打开已有日报后继续修改。';
+  }
+
+  if (error.code === 'INVALID_REPORT_DATE') {
+    return '日报日期格式不正确，请重新选择日期。';
+  }
+
+  if (error.code === 'INVALID_PROJECT_ID') {
+    return '请选择有效项目后再提交日报。';
+  }
+
   if (error.code === 'WEEKLY_REPORT_WRITER_REQUIRED') {
     return '当前账号无权填写个人周报。';
   }

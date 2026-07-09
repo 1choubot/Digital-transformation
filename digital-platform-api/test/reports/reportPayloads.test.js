@@ -110,12 +110,9 @@ test('daily report draft permits blank completed time for attachment autosave', 
   assert.equal(normalized.items[0].sourceType, DailyTaskSourceType.LEGACY_UNKNOWN);
 });
 
-test('submitted daily reports are not editable after submission', () => {
+test('submitted daily reports remain editable because daily reports have no approval flow', () => {
   assert.doesNotThrow(() => assertDailyReportEditable(ReportStatus.DRAFT));
-  assert.throws(
-    () => assertDailyReportEditable(ReportStatus.SUBMITTED),
-    (error) => error.code === DAILY_REPORT_ERROR.UPDATE_SUBMITTED
-  );
+  assert.doesNotThrow(() => assertDailyReportEditable(ReportStatus.SUBMITTED));
 });
 
 test('daily report submit requires structured task source and execution status', () => {

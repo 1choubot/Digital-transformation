@@ -326,9 +326,9 @@
               <polyline points="17 21 17 13 7 13 7 21" />
               <polyline points="7 3 7 8 15 8" />
             </svg>
-            暂存草稿
+            {{ isSavedSubmitted ? '保存修改' : '暂存草稿' }}
           </button>
-          <button type="button" class="primary-button" :disabled="saving" @click="submitReport">
+          <button v-if="!isSavedSubmitted" type="button" class="primary-button" :disabled="saving" @click="submitReport">
             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
               <polyline points="22 4 12 14.01 9 11.01" />
@@ -444,6 +444,7 @@ const form = reactive({
 
 const canUseDailyReport = computed(() => props.currentUser.organizationRole === OrganizationRole.EMPLOYEE);
 const isBackfill = computed(() => form.reportDate && form.reportDate !== today);
+const isSavedSubmitted = computed(() => savedReport.value?.status === ReportStatus.SUBMITTED);
 
 // 判断今日完成行是否为空
 function isBlankCompletedItem(item) {
@@ -922,6 +923,7 @@ async function saveReport(status) {
   itemErrors.value = {};
 
   try {
+    const wasSubmitted = isSavedSubmitted.value;
     if (status === ReportStatus.SUBMITTED && !prepareSubmittedItems()) {
       saving.value = false;
       return;
@@ -931,12 +933,12 @@ async function saveReport(status) {
       ? await updateDailyReport(savedReport.value.id, payload, props.authToken)
       : await createDailyReport(payload, props.authToken);
     
-    if (status === ReportStatus.SUBMITTED) {
+    if (status === ReportStatus.SUBMITTED && !wasSubmitted) {
       resetForm();
       message.value = '日报已正式提交，表单已清空，可继续填写新的日报。';
     } else {
       hydrateForm(result.report);
-      message.value = '草稿已保存。';
+      message.value = wasSubmitted ? '日报修改已保存。' : '草稿已保存。';
     }
 
     if (!props.reportId && result.report?.id && status === ReportStatus.DRAFT) {

@@ -1,15 +1,5 @@
 <template>
-  <section class="page-stack">
-    <PageHeader
-      eyebrow="项目工作区"
-      :title="detail?.project.projectName || '项目基础状态'"
-      :current-user="currentUser"
-      subtitle="单项目主操作区：先选阶段，再选蓝色节点，最后处理节点产出、在线表单或评价审批。"
-    >
-      <template #actions>
-        <button type="button" class="ghost-button" @click="navigate('/projects')">返回项目总览</button>
-      </template>
-    </PageHeader>
+  <section class="project-workspace-screen">
 
     <section v-if="loading" class="state-panel">
       <p>正在加载项目详情...</p>
@@ -21,46 +11,67 @@
       <button type="button" class="primary-button" @click="navigate('/projects')">返回项目总览</button>
     </section>
 
-    <template v-else-if="detail">
-      <ProjectDetailHeader :detail="detail" :current-stage-title="currentStageTitle" />
+    <el-container v-else-if="detail" class="project-workspace-shell">
+      <ProjectProcessTree
+        v-if="workspace && projectNavigation && !workspaceLoading && !projectNavigationLoading"
+        :navigation="projectNavigation"
+        :selected-stage-key="selectedWorkspaceStageKey"
+        :selected-node-key="selectedWorkspaceNodeKey"
+        @select-stage="selectWorkspaceStageFromNavigation"
+        @select-node="selectWorkspaceNodeFromNavigation"
+      />
 
-      <section v-if="isTaskMode" class="state-panel state-panel--inline">
-        <p>当前为工作台任务视图，仅展示后端返回的有权项目资料和操作入口。</p>
-      </section>
-
-      <ProjectStageTimeline :stages="detail.stages" />
-
-      <section class="panel project-workspace project-workspace--primary">
-        <div class="panel-heading">
-          <div>
-            <span class="section-eyebrow">项目工作区</span>
-            <h3>阶段节点与产出工作区</h3>
-            <p class="manual-status-note">
-              固定层级为阶段说明、蓝色节点、节点产出、在线表单或评价审批动作；点击蓝色节点不会自动打开在线表单。
-            </p>
-          </div>
-        </div>
-
+      <el-main class="project-workspace-main">
+        <section v-if="isTaskMode" class="state-panel state-panel--inline">
+          <p>当前为工作台任务视图，仅展示后端返回的有权项目资料和操作入口。</p>
+        </section>
         <section v-if="workspaceLoading" class="state-panel state-panel--inline">
           <p>正在加载项目工作区...</p>
         </section>
         <section v-else-if="workspaceErrorMessage" class="state-panel state-panel--inline state-panel--error">
           <p>{{ workspaceErrorMessage }}</p>
         </section>
-        <div v-else-if="workspace" class="project-workspace__layout">
-          <ProjectWorkspaceStageNav
-            :stages="workspace.stages"
-            :selected-stage-key="selectedWorkspaceStageKey"
-            @select-stage="selectWorkspaceStage"
-          />
+        <section v-else-if="projectNavigationErrorMessage" class="state-panel state-panel--inline state-panel--error">
+          <p>{{ projectNavigationErrorMessage }}</p>
+        </section>
+        <section v-else-if="projectNavigationLoading" class="state-panel state-panel--inline">
+          <p>正在加载项目流程导航...</p>
+        </section>
+        <template v-else-if="workspace">
+          <el-card class="project-node-card" shadow="never">
+            <template #header>
+              <div class="project-node-card__header">
+                <h2>{{ activeWorkspaceNode?.nodeName || activeWorkspaceStage?.stageName || '项目工作区' }}</h2>
+                <el-tag :type="currentNavigationStatusTagType" effect="dark">
+                  {{ currentNavigationStatusLabel }}
+                </el-tag>
+              </div>
+            </template>
 
-          <div class="project-workspace__main">
-            <ProjectWorkspaceNodeList
-              :stage="activeWorkspaceStage"
-              :active-node-key="selectedWorkspaceNodeKey"
-              @select-node="selectWorkspaceNode(activeWorkspaceStage, $event)"
-              @open-legacy-checklist="scrollToStageDocumentChecklist"
-            />
+            <el-descriptions class="project-node-meta" :column="3">
+              <el-descriptions-item label="项目编号">
+                {{ detail.project.projectCode || detail.project.id }}
+              </el-descriptions-item>
+              <el-descriptions-item label="当前阶段">
+                {{ activeWorkspaceStage?.stageName || currentStageTitle }}
+              </el-descriptions-item>
+              <el-descriptions-item label="当前节点">
+                {{ activeWorkspaceNode?.nodeName || '-' }}
+              </el-descriptions-item>
+            </el-descriptions>
+
+            <el-divider />
+
+            <section class="project-node-card__section">
+              <h3>业务内容</h3>
+              <ProjectWorkspaceNodeList
+                :stage="activeWorkspaceStage"
+                :active-node-key="selectedWorkspaceNodeKey"
+                @select-node="selectWorkspaceNode(activeWorkspaceStage, $event)"
+                @open-legacy-checklist="scrollToStageDocumentChecklist"
+              />
+            </section>
+
             <ProjectWorkspaceOutputPanel
               :stage="activeWorkspaceStage"
               :node="activeWorkspaceNode"
@@ -108,110 +119,110 @@
               @delete-online-form-image="deleteOnlineFormImage"
               @download-generated-file="downloadGeneratedFile"
             />
-          </div>
-        </div>
-      </section>
+          </el-card>
 
-      <section
-        v-if="actionMessage"
-        class="state-panel state-panel--inline state-panel--success"
-        role="status"
-        aria-live="polite"
-      >
-        <p>{{ actionMessage }}</p>
-      </section>
-
-      <section
-        v-if="actionErrorMessage"
-        class="state-panel state-panel--inline state-panel--error"
-        role="alert"
-      >
-        <p>{{ actionErrorMessage }}</p>
-      </section>
-
-      <ProjectOperationLogPanel
-        v-if="canViewProjectAudit"
-        :loading="operationLogsLoading"
-        :error-message="operationLogsErrorMessage"
-        :logs="operationLogs"
-      />
-
-      <ProjectStageAdvancePanel
-        :current-stage="detail.currentStage"
-        :is-project-completed="isProjectCompleted"
-        :is-project-ended="isProjectEnded"
-        :ended-reason="detail.project.endedReason"
-        :current-stage-completeness="currentStageCompleteness"
-        :missing-documents="currentStageAdvanceMissingDocuments"
-        :can-advance-current-stage="canAdvanceCurrentStage"
-        :show-advance-action="canCurrentUserAdvanceProject"
-        :pending="stageAdvancePending"
-        :message="stageAdvanceMessage"
-        :error-message="stageAdvanceErrorMessage"
-        @advance="advanceCurrentStage"
-      />
-
-      <section
-        id="stage-document-checklist"
-        class="legacy-compatibility-section"
-        :class="{ 'legacy-compatibility-section--expanded': isLegacyChecklistExpanded }"
-      >
-        <div class="legacy-compatibility-section__summary">
-          <div>
-            <span class="section-eyebrow">兼容查看</span>
-            <h3>兼容资料区</h3>
-            <p class="manual-status-note">
-              资料主操作已迁移到上方项目工作区产出卡片处理，本区域仅用于兼容查看和历史状态核对。
-            </p>
-          </div>
-          <button
-            type="button"
-            class="ghost-button legacy-compatibility-section__toggle"
-            :aria-expanded="isLegacyChecklistExpanded"
-            aria-controls="stage-document-checklist-content"
-            @click="isLegacyChecklistExpanded = !isLegacyChecklistExpanded"
+          <section
+            v-if="actionMessage"
+            class="state-panel state-panel--inline state-panel--success"
+            role="status"
+            aria-live="polite"
           >
-            {{ isLegacyChecklistExpanded ? '收起兼容资料区' : '展开兼容资料区' }}
-          </button>
-        </div>
+            <p>{{ actionMessage }}</p>
+          </section>
 
-        <ProjectStageDocumentChecklist
-          v-if="isLegacyChecklistExpanded"
-          id="stage-document-checklist-content"
-          :checklist="checklist"
-          :loading="checklistLoading"
-          :error-message="checklistErrorMessage"
-          :is-checklist-empty="isChecklistEmpty"
-          :responsibility-candidates-error-message="responsibilityCandidatesErrorMessage"
-          :responsibility-candidates-loading="responsibilityCandidatesLoading"
-          :responsibility-candidates="visibleResponsibilityCandidates"
-          :responsibility-selections="responsibilitySelections"
-          :can-submit-document="canSubmitDocument"
-          :can-confirm-return-document="canConfirmReturnDocument"
-          :can-manage-responsibility="canManageResponsibility"
-          :can-change-applicability="canChangeApplicability"
-          :return-reasons="returnReasons"
-          :not-applicable-reasons="notApplicableReasons"
-          :is-action-pending="isActionPending"
-          :get-attachment-state="getAttachmentState"
-          :migrated-workspace-document-keys="migratedWorkspaceDocumentKeys"
-          @submit-document="submitDocument"
-          @confirm-document="confirmDocument"
-          @return-document="returnDocument"
-          @approve-initiation-review-node="approveInitiationNode"
-          @return-initiation-review-node="returnInitiationNode"
-          @complete-revision-document="completeRevisionDocument"
-          @mark-not-applicable="markNotApplicable"
-          @restore-applicable="restoreApplicable"
-          @save-responsible-user="saveResponsibleUser"
-          @clear-responsible-user="clearResponsibleUser"
-          @upload-attachment="uploadAttachment"
-          @download-attachment="downloadAttachment"
-          @delete-attachment="deleteAttachment"
-          @locate-output-card="locateWorkspaceOutputCard"
-        />
-      </section>
-    </template>
+          <section
+            v-if="actionErrorMessage"
+            class="state-panel state-panel--inline state-panel--error"
+            role="alert"
+          >
+            <p>{{ actionErrorMessage }}</p>
+          </section>
+
+          <ProjectOperationLogPanel
+            v-if="canViewProjectAudit"
+            :loading="operationLogsLoading"
+            :error-message="operationLogsErrorMessage"
+            :logs="operationLogs"
+          />
+
+          <ProjectStageAdvancePanel
+            :current-stage="detail.currentStage"
+            :is-project-completed="isProjectCompleted"
+            :is-project-ended="isProjectEnded"
+            :ended-reason="detail.project.endedReason"
+            :current-stage-completeness="currentStageCompleteness"
+            :missing-documents="currentStageAdvanceMissingDocuments"
+            :can-advance-current-stage="canAdvanceCurrentStage"
+            :show-advance-action="canCurrentUserAdvanceProject"
+            :pending="stageAdvancePending"
+            :message="stageAdvanceMessage"
+            :error-message="stageAdvanceErrorMessage"
+            @advance="advanceCurrentStage"
+          />
+
+          <section
+            id="stage-document-checklist"
+            class="legacy-compatibility-section"
+            :class="{ 'legacy-compatibility-section--expanded': isLegacyChecklistExpanded }"
+          >
+            <div class="legacy-compatibility-section__summary">
+              <div>
+                <span class="section-eyebrow">兼容查看</span>
+                <h3>兼容资料区</h3>
+                <p class="manual-status-note">
+                  资料主操作已迁移到上方项目工作区产出卡片处理，本区域仅用于兼容查看和历史状态核对。
+                </p>
+              </div>
+              <button
+                type="button"
+                class="ghost-button legacy-compatibility-section__toggle"
+                :aria-expanded="isLegacyChecklistExpanded"
+                aria-controls="stage-document-checklist-content"
+                @click="isLegacyChecklistExpanded = !isLegacyChecklistExpanded"
+              >
+                {{ isLegacyChecklistExpanded ? '收起兼容资料区' : '展开兼容资料区' }}
+              </button>
+            </div>
+
+            <ProjectStageDocumentChecklist
+              v-if="isLegacyChecklistExpanded"
+              id="stage-document-checklist-content"
+              :checklist="checklist"
+              :loading="checklistLoading"
+              :error-message="checklistErrorMessage"
+              :is-checklist-empty="isChecklistEmpty"
+              :responsibility-candidates-error-message="responsibilityCandidatesErrorMessage"
+              :responsibility-candidates-loading="responsibilityCandidatesLoading"
+              :responsibility-candidates="visibleResponsibilityCandidates"
+              :responsibility-selections="responsibilitySelections"
+              :can-submit-document="canSubmitDocument"
+              :can-confirm-return-document="canConfirmReturnDocument"
+              :can-manage-responsibility="canManageResponsibility"
+              :can-change-applicability="canChangeApplicability"
+              :return-reasons="returnReasons"
+              :not-applicable-reasons="notApplicableReasons"
+              :is-action-pending="isActionPending"
+              :get-attachment-state="getAttachmentState"
+              :migrated-workspace-document-keys="migratedWorkspaceDocumentKeys"
+              @submit-document="submitDocument"
+              @confirm-document="confirmDocument"
+              @return-document="returnDocument"
+              @approve-initiation-review-node="approveInitiationNode"
+              @return-initiation-review-node="returnInitiationNode"
+              @complete-revision-document="completeRevisionDocument"
+              @mark-not-applicable="markNotApplicable"
+              @restore-applicable="restoreApplicable"
+              @save-responsible-user="saveResponsibleUser"
+              @clear-responsible-user="clearResponsibleUser"
+              @upload-attachment="uploadAttachment"
+              @download-attachment="downloadAttachment"
+              @delete-attachment="deleteAttachment"
+              @locate-output-card="locateWorkspaceOutputCard"
+            />
+          </section>
+        </template>
+      </el-main>
+    </el-container>
   </section>
 </template>
 
@@ -245,16 +256,14 @@ import {
   uploadStageDocumentAttachment,
   uploadStageDocumentOnlineFormImage
 } from '../api/projects.js';
+import { getProjectNavigation } from '../api/navigation.js';
 import { listResponsibilityCandidates } from '../api/users.js';
-import ProjectDetailHeader from '../components/project-detail/ProjectDetailHeader.vue';
 import ProjectOperationLogPanel from '../components/project-detail/ProjectOperationLogPanel.vue';
 import ProjectStageAdvancePanel from '../components/project-detail/ProjectStageAdvancePanel.vue';
 import ProjectStageDocumentChecklist from '../components/project-detail/ProjectStageDocumentChecklist.vue';
-import ProjectStageTimeline from '../components/project-detail/ProjectStageTimeline.vue';
 import ProjectWorkspaceNodeList from '../components/project-workspace/ProjectWorkspaceNodeList.vue';
 import ProjectWorkspaceOutputPanel from '../components/project-workspace/ProjectWorkspaceOutputPanel.vue';
-import ProjectWorkspaceStageNav from '../components/project-workspace/ProjectWorkspaceStageNav.vue';
-import PageHeader from '../components/PageHeader.vue';
+import ProjectProcessTree from '../components/project-workspace/ProjectProcessTree.vue';
 import {
   actionKey,
   getCompletionMode,
@@ -312,6 +321,9 @@ const operationLogs = ref([]);
 const workspaceLoading = ref(false);
 const workspaceErrorMessage = ref('');
 const workspace = ref(null);
+const projectNavigationLoading = ref(false);
+const projectNavigationErrorMessage = ref('');
+const projectNavigation = ref(null);
 const selectedWorkspaceStageKey = ref('');
 const selectedWorkspaceNodeKey = ref('');
 const lastAppliedWorkspaceRouteKey = ref('');
@@ -403,6 +415,19 @@ const activeWorkspaceStage = computed(
 const activeWorkspaceNode = computed(
   () => (activeWorkspaceStage.value?.nodes || []).find((node) => node.nodeKey === selectedWorkspaceNodeKey.value) || null
 );
+const activeNavigationStage = computed(
+  () =>
+    (projectNavigation.value?.children || []).find((stage) => stage.stageKey === selectedWorkspaceStageKey.value) ||
+    null
+);
+const activeNavigationNode = computed(
+  () => (activeNavigationStage.value?.children || []).find((node) => node.nodeCode === selectedWorkspaceNodeKey.value) || null
+);
+const currentNavigationStatus = computed(
+  () => activeNavigationNode.value?.status || activeNavigationStage.value?.status || projectNavigation.value?.projectStatus || ''
+);
+const currentNavigationStatusLabel = computed(() => formatNavigationStatus(currentNavigationStatus.value));
+const currentNavigationStatusTagType = computed(() => navigationStatusTagType(currentNavigationStatus.value));
 const migratedWorkspaceDocumentKeys = computed(() => {
   const keys = new Set();
   for (const stage of workspace.value?.stages || []) {
@@ -481,6 +506,28 @@ const isTaskMode = computed(() =>
   Boolean(props.taskMode || props.focusDocumentId || props.focusStageId || props.focusNodeKey)
 );
 
+function formatNavigationStatus(status) {
+  return {
+    PENDING: '未开始',
+    PROCESSING: '进行中',
+    COMPLETED: '已完成',
+    WAIT_APPROVAL: '待审核',
+    RETURNED: '退回整改',
+    FAILED: '异常'
+  }[status] || status || '-';
+}
+
+function navigationStatusTagType(status) {
+  return {
+    PROCESSING: 'success',
+    COMPLETED: 'success',
+    WAIT_APPROVAL: 'warning',
+    RETURNED: 'danger',
+    FAILED: 'danger',
+    PENDING: 'info'
+  }[status] || 'info';
+}
+
 function isActionPending(documentId, action) {
   return pendingAction.value === actionKey(documentId, action);
 }
@@ -505,6 +552,29 @@ function selectWorkspaceNode(stage, node) {
   selectedWorkspaceStageKey.value = stage.stageKey;
   selectedWorkspaceNodeKey.value = node.nodeKey;
   clearOnlineFormState();
+  props.navigate(`/projects/${props.projectId}/node/${node.nodeKey}`);
+}
+
+function selectWorkspaceStageFromNavigation(stage) {
+  const workspaceStage = (workspace.value?.stages || []).find((item) => item.stageKey === stage.stageKey);
+  if (workspaceStage) {
+    selectWorkspaceStage(workspaceStage);
+  }
+}
+
+function selectWorkspaceNodeFromNavigation({ stage, node }) {
+  const workspaceStage = (workspace.value?.stages || []).find((item) => item.stageKey === stage.stageKey);
+  const workspaceNode = (workspaceStage?.nodes || []).find((item) => item.nodeKey === node.nodeCode);
+  if (!workspaceStage) {
+    return;
+  }
+
+  if (workspaceNode) {
+    selectWorkspaceNode(workspaceStage, workspaceNode);
+  } else {
+    selectWorkspaceStage(workspaceStage);
+    props.navigate(`/projects/${props.projectId}/node/${node.nodeCode}`);
+  }
 }
 
 function findStageDocumentChecklistCard(target = null) {
@@ -752,6 +822,13 @@ function selectWorkspaceTargetFromRoute(options = {}) {
     return true;
   }
 
+  const nodeKey = String(props.focusNodeKey || '').trim();
+  if (nodeKey && restoreWorkspaceSelectionByNodeKey(nodeKey)) {
+    clearWorkspaceOnlineForm(options);
+    markWorkspaceRouteApplied(routeKey);
+    return true;
+  }
+
   if (props.focusDocumentId) {
     selectDefaultWorkspaceNode();
     clearWorkspaceOnlineForm(options);
@@ -899,10 +976,23 @@ function restoreWorkspaceSelection(stageKey, nodeKey) {
   return true;
 }
 
+function restoreWorkspaceSelectionByNodeKey(nodeKey) {
+  for (const stage of workspace.value?.stages || []) {
+    if ((stage.nodes || []).some((node) => node.nodeKey === nodeKey)) {
+      selectedWorkspaceStageKey.value = stage.stageKey;
+      selectedWorkspaceNodeKey.value = nodeKey;
+      return true;
+    }
+  }
+
+  return false;
+}
+
 async function refreshProjectWorkspaceState(options = {}) {
   await Promise.all([
     loadChecklist(options),
     loadWorkspace({ preserveSelection: true, ...options }),
+    loadProjectNavigation(),
     loadOperationLogs()
   ]);
 }
@@ -1509,6 +1599,20 @@ async function loadWorkspace(options = {}) {
   }
 }
 
+async function loadProjectNavigation() {
+  projectNavigationLoading.value = true;
+  projectNavigationErrorMessage.value = '';
+  projectNavigation.value = null;
+
+  try {
+    projectNavigation.value = await getProjectNavigation(props.projectId, props.authToken);
+  } catch (error) {
+    projectNavigationErrorMessage.value = toReadableApiError(error);
+  } finally {
+    projectNavigationLoading.value = false;
+  }
+}
+
 async function openOnlineForm(output) {
   if (!output?.documentId) {
     onlineFormErrorMessage.value = '关联资料未初始化，无法打开在线表单。';
@@ -1624,8 +1728,10 @@ async function loadDetail(options = {}) {
   detail.value = null;
   checklist.value = null;
   workspace.value = null;
+  projectNavigation.value = null;
   checklistErrorMessage.value = '';
   workspaceErrorMessage.value = '';
+  projectNavigationErrorMessage.value = '';
   operationLogs.value = [];
   operationLogsErrorMessage.value = '';
   responsibilityCandidates.value = [];
@@ -1651,6 +1757,7 @@ async function loadDetail(options = {}) {
     await Promise.all([
       loadChecklist(),
       loadWorkspace(),
+      loadProjectNavigation(),
       loadOperationLogs(),
       loadResponsibilityCandidates()
     ]);

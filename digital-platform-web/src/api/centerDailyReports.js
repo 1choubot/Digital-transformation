@@ -40,6 +40,7 @@ export async function saveCenterDailyReportSchedule(payload, authToken = '') {
   });
 }
 
+// Download the official center daily report workbook.
 export async function exportCenterDailyReport(payload, authToken = '') {
   return requestBlob(`/api/center-daily-reports/export${buildQuery({ department: payload.department })}`, {
     method: 'POST',
@@ -50,4 +51,3 @@ export async function exportCenterDailyReport(payload, authToken = '') {
     body: JSON.stringify({ date: payload.date, department: payload.department })
   });
 }
-

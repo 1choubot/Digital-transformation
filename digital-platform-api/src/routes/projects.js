@@ -14,6 +14,7 @@ import {
   downloadStageDocumentGeneratedFileHandler,
   downloadStageDocumentOnlineFormImageHandler,
   getProjectDetailHandler,
+  getProjectNavigationHandler,
   getProjectOverviewDashboardHandler,
   getProjectWorkspaceHandler,
   getStageDocumentOnlineFormHandler,
@@ -80,6 +81,12 @@ projectsRouter.get(
   '/:projectId/workspace',
   requireAuth,
   asyncHandler(getProjectWorkspaceHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/navigation',
+  requireAuth,
+  asyncHandler(getProjectNavigationHandler)
 );
 
 projectsRouter.post(

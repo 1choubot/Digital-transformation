@@ -36,10 +36,7 @@ export async function getWeeklyReportPrefillSuggestion({ weekStart, force = fals
   return request(`/api/weekly-reports/prefill-suggestion${buildQuery({ weekStart, force: force ? 'true' : '' })}`, { authToken });
 }
 
-export async function getWeeklyReportAiCapability(authToken = '') {
-  return request('/api/weekly-reports/ai-capability', { authToken });
-}
-
+// Ask the backend to compose wording with AI while preserving rule-derived facts.
 export async function composeWeeklyReportPrefillWithAi({ weekStart, basisHash }, authToken = '') {
   return request('/api/weekly-reports/prefill-suggestion/ai-compose', {
     method: 'POST',
@@ -74,6 +71,7 @@ export async function deleteWeeklyReport(reportId, authToken = '') {
   });
 }
 
+// Trigger AI scoring or deterministic fallback scoring for one submitted report.
 export async function evaluateWeeklyReport(reportId, { force = false } = {}, authToken = '') {
   return request(`/api/weekly-reports/${reportId}/evaluate${buildQuery({ force: force ? 'true' : '' })}`, {
     method: 'POST',
@@ -82,6 +80,7 @@ export async function evaluateWeeklyReport(reportId, { force = false } = {}, aut
   });
 }
 
+// Save the evaluator's final manual weekly review score.
 export async function saveWeeklyReportFinalReview(reportId, payload, authToken = '') {
   return request(`/api/weekly-reports/${reportId}/final-review`, {
     method: 'PUT',
@@ -99,6 +98,7 @@ export async function reviewWeeklyReportApproval(reportId, payload, authToken = 
   });
 }
 
+// Download the official personal weekly report workbook.
 export async function exportWeeklyReport(reportId, authToken = '') {
   return requestBlob(`/api/weekly-reports/${reportId}/export`, {
     method: 'POST',

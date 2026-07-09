@@ -1,12 +1,25 @@
 import { ref } from 'vue';
 
 function parseHash() {
-  const rawPath = window.location.hash.replace(/^#/, '') || '/projects';
-  const [path, queryString = ''] = rawPath.split('?');
-  const query = Object.fromEntries(new URLSearchParams(queryString));
+  let hash = window.location.hash.replace(/^#/, '') || '/projects';
+  // 分离路径和查询字符串
+  let path = hash;
+  let query = {};
+  const queryIndex = hash.indexOf('?');
+  if (queryIndex !== -1) {
+    path = hash.substring(0, queryIndex);
+    const queryString = hash.substring(queryIndex + 1);
+    const params = new URLSearchParams(queryString);
+    for (const [key, value] of params) {
+      query[key] = value;
+    }
+  }
 
+  if (!path) path = '/projects';
+
+  // 路由匹配
   if (path === '/' || path === '/projects') {
-    return { name: 'project-overview-dashboard', path: '/projects', query };
+    return { name: 'projects', path: '/projects', query };
   }
 
   if (path === '/projects/new') {
@@ -14,15 +27,15 @@ function parseHash() {
   }
 
   if (path === '/projects/overview-dashboard') {
-    return { name: 'project-overview-dashboard', path: '/projects', query };
+    return { name: 'project-overview-dashboard', path, query };
   }
 
   if (path === '/users') {
     return { name: 'users', path, query };
   }
 
-  if (path === '/my-workbench' || path === '/my-stage-document-tasks') {
-    return { name: 'my-workbench', path, query };
+  if (path === '/my-stage-document-tasks') {
+    return { name: 'my-stage-document-tasks', path, query };
   }
 
   if (path === '/daily-report') {
@@ -31,11 +44,6 @@ function parseHash() {
 
   if (path === '/daily-reports') {
     return { name: 'daily-reports', path, query };
-  }
-
-  const dailyReportMatch = path.match(/^\/daily-report\/(\d+)$/);
-  if (dailyReportMatch) {
-    return { name: 'daily-report', path, params: { reportId: dailyReportMatch[1] }, query };
   }
 
   if (path === '/weekly-report') {
@@ -47,7 +55,16 @@ function parseHash() {
   }
 
   if (path === '/weekly-overview') {
-    return { name: 'weekly-overview', path, query };
+    return { name: 'weekly-report-overview', path, query };
+  }
+
+  if (path === '/center-daily-report') {
+    return { name: 'center-daily-report', path, query };
+  }
+
+  const dailyReportMatch = path.match(/^\/daily-report\/(\d+)$/);
+  if (dailyReportMatch) {
+    return { name: 'daily-report', path, params: { reportId: dailyReportMatch[1] }, query };
   }
 
   const weeklyReportMatch = path.match(/^\/weekly-report\/(\d+)$/);
@@ -60,8 +77,17 @@ function parseHash() {
     return { name: 'weekly-report-review', path, params: { reportId: weeklyReportReviewMatch[1] }, query };
   }
 
-  if (path === '/center-daily-report') {
-    return { name: 'center-daily-report', path, query };
+  const nodeMatch = path.match(/^\/projects\/(\d+)\/node\/([^/]+)$/);
+  if (nodeMatch) {
+    return {
+      name: 'project-detail',
+      path,
+      params: {
+        projectId: nodeMatch[1],
+        nodeCode: decodeURIComponent(nodeMatch[2])
+      },
+      query
+    };
   }
 
   const detailMatch = path.match(/^\/projects\/(\d+)$/);

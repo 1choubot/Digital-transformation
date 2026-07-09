@@ -12,7 +12,7 @@
     </section>
 
     <template v-else>
-      <!-- 筛选面板 -->
+      <!-- 筛选面板（含导出按钮） -->
       <section class="panel filter-panel">
         <div class="panel-body">
           <div class="filter-grid">
@@ -40,10 +40,11 @@
                 查询
               </button>
             </div>
+            <!-- 导出按钮（靠右） -->
             <div class="filter-export">
               <button
                 type="button"
-                class="ghost-button"
+                class="primary-button"
                 :disabled="loading || exporting"
                 @click="handleExport"
               >
@@ -52,34 +53,11 @@
                   <polyline points="7 10 12 15 17 10" />
                   <line x1="12" y1="15" x2="12" y2="3" />
                 </svg>
-                {{ exporting ? '导出中...' : '导出中心日报' }}
+                {{ exporting ? '正在导出...' : '导出中心日报' }}
               </button>
             </div>
           </div>
         </div>
-      </section>
-
-      <section v-if="canManageSchedule" class="panel schedule-panel">
-        <div class="panel-body schedule-panel__body">
-          <div class="schedule-summary">
-            <span class="filter-label">中心日报计划</span>
-            <p>用于启用或关闭当前中心的后端受控计划检查。</p>
-          </div>
-          <label class="schedule-toggle">
-            <input v-model="schedule.isEnabled" type="checkbox" />
-            <span>启用计划检查</span>
-          </label>
-          <div class="filter-group schedule-time">
-            <span class="filter-label">检查时间</span>
-            <div class="input-wrapper">
-              <input v-model="schedule.generateTime" type="time" />
-            </div>
-          </div>
-          <button type="button" class="primary-button" :disabled="savingSchedule" @click="handleSaveSchedule">
-            {{ savingSchedule ? '保存中...' : '保存计划' }}
-          </button>
-        </div>
-        <p v-if="scheduleMessage" class="schedule-message">{{ scheduleMessage }}</p>
       </section>
 
       <!-- 错误信息 -->
@@ -262,10 +240,9 @@ const emit = defineEmits(['auth-expired']);
 const departments = ref([]);
 const report = ref(null);
 const loading = ref(false);
-const savingSchedule = ref(false);
 const exporting = ref(false);
+const savingSchedule = ref(false);
 const errorMessage = ref('');
-const scheduleMessage = ref('');
 const filters = reactive({
   date: todayIsoDate(),
   department: props.currentUser.department || ''
@@ -341,6 +318,17 @@ function formatProgress(value) {
   return num >= 1 ? '100%' : `${Math.round(num * 100)}%`;
 }
 
+function saveBlobDownload({ blob, fileName }) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName || `center-daily-report-${filters.date}.xlsx`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 function handleApiError(error) {
   if (error?.code === 'UNAUTHENTICATED') {
     emit('auth-expired');
@@ -358,7 +346,7 @@ async function loadDepartments() {
 }
 
 async function loadSchedule() {
-  if (!canManageSchedule.value || !filters.department) return;
+  if (!filters.department) return;
   const result = await getCenterDailyReportSchedule(filters.department, props.authToken);
   schedule.isEnabled = result.schedule.isEnabled;
   schedule.generateTime = result.schedule.generateTime || '18:00';
@@ -379,10 +367,8 @@ async function loadReport() {
 }
 
 async function handleSaveSchedule() {
-  if (!canManageSchedule.value) return;
   savingSchedule.value = true;
   errorMessage.value = '';
-  scheduleMessage.value = '';
   try {
     const result = await saveCenterDailyReportSchedule(
       { department: filters.department, isEnabled: schedule.isEnabled, generateTime: schedule.generateTime },
@@ -390,7 +376,6 @@ async function handleSaveSchedule() {
     );
     schedule.isEnabled = result.schedule.isEnabled;
     schedule.generateTime = result.schedule.generateTime || '18:00';
-    scheduleMessage.value = '计划已保存。';
   } catch (error) {
     handleApiError(error);
   } finally {
@@ -398,28 +383,15 @@ async function handleSaveSchedule() {
   }
 }
 
-function saveBlob(download, fallbackName) {
-  const url = URL.createObjectURL(download.blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = download.fileName || fallbackName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
 async function handleExport() {
-  if (!canUseCenterDailyReport.value || !filters.department) return;
   exporting.value = true;
   errorMessage.value = '';
-
   try {
     const download = await exportCenterDailyReport(
       { date: filters.date, department: filters.department },
       props.authToken
     );
-    saveBlob(download, `中心日报-${filters.department}-${filters.date}.xlsx`);
+    saveBlobDownload(download);
   } catch (error) {
     handleApiError(error);
   } finally {
@@ -430,15 +402,7 @@ async function handleExport() {
 watch(
   () => filters.department,
   () => {
-    if (!canUseCenterDailyReport.value) return;
-    void (async () => {
-      await loadReport();
-      try {
-        await loadSchedule();
-      } catch (error) {
-        handleApiError(error);
-      }
-    })();
+    if (canUseCenterDailyReport.value) void loadReport();
   }
 );
 
@@ -447,7 +411,6 @@ onMounted(async () => {
   try {
     await loadDepartments();
     await loadReport();
-    await loadSchedule();
   } catch (error) {
     handleApiError(error);
   }
@@ -514,32 +477,6 @@ onMounted(async () => {
 .primary-button:disabled {
   opacity: 0.6;
   background: #a0cfff;
-  cursor: not-allowed;
-}
-.ghost-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  height: 48px;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  background: #ffffff;
-  color: #606266;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-}
-.ghost-button:hover:not(:disabled) {
-  border-color: #c6e2ff;
-  background: #ecf5ff;
-  color: #3e63dd;
-}
-.ghost-button:disabled {
-  opacity: 0.6;
   cursor: not-allowed;
 }
 .btn-icon {
@@ -665,54 +602,12 @@ onMounted(async () => {
   padding-bottom: 0;   /* 与输入框底部对齐 */
 }
 
+/* 导出按钮（靠右） */
 .filter-export {
   display: flex;
   align-items: flex-end;
-}
-
-.schedule-panel__body {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 1rem;
-}
-
-.schedule-summary {
-  flex: 1 1 260px;
-  min-width: 220px;
-}
-
-.schedule-summary p,
-.schedule-message {
-  margin: 0.35rem 0 0;
-  color: #606266;
-  font-size: 0.85rem;
-  line-height: 1.5;
-}
-
-.schedule-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: 48px;
-  color: #303133;
-  font-size: 0.9rem;
-  white-space: nowrap;
-}
-
-.schedule-toggle input {
-  width: 18px;
-  height: 18px;
-  margin: 0;
-}
-
-.schedule-time {
-  min-width: 160px;
-}
-
-.schedule-message {
-  padding: 0 1.5rem 1rem;
-  color: #2f7d32;
+  margin-left: auto;   /* 推到最右 */
+  padding-bottom: 0;
 }
 
 /* ===== 报告内容面板 ===== */
@@ -874,11 +769,8 @@ onMounted(async () => {
     flex-direction: column;
     align-items: stretch;
   }
-  .schedule-panel__body {
-    align-items: stretch;
-  }
-  .schedule-toggle {
-    white-space: normal;
+  .filter-export {
+    margin-left: 0;
   }
   .report-header-info {
     flex-direction: column;

@@ -56,6 +56,7 @@ import {
 import { readMultipartFile } from '../middleware/multipartFile.js';
 import { STAGE_DOCUMENT_ONLINE_FORM_IMAGE_MAX_FILE_SIZE } from '../storage/stageDocumentOnlineFormImageStorage.js';
 import { searchActiveProjectsForDailyReports } from '../repositories/dailyReportRepository.js';
+import { getProjectNavigation } from '../services/navigationService.js';
 
 function parsePositiveId(rawValue, fieldName) {
   const id = Number.parseInt(rawValue, 10);
@@ -271,6 +272,15 @@ export async function getProjectWorkspaceHandler(req, res) {
 
   res.json({
     data: workspace
+  });
+}
+
+export async function getProjectNavigationHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const navigation = await getProjectNavigation(projectId, req.auth.user);
+
+  res.json({
+    data: navigation
   });
 }
 

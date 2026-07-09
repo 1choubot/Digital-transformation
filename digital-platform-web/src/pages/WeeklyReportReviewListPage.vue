@@ -56,6 +56,8 @@
             <span>员工</span>
             <span>中心</span>
             <span>状态</span>
+            <span>最终评分</span>
+            <span>参考评分</span>
             <span>审批人</span>
             <span class="text-right">操作</span>
           </div>
@@ -63,6 +65,8 @@
             <strong>{{ row.userName }}</strong>
             <span>{{ formatBusinessDepartment(row.department) }}</span>
             <span class="status-badge" :class="approvalStatusClass(row.approvalStatus)">{{ approvalStatusLabel(row.approvalStatus) }}</span>
+            <span>{{ overviewFinalScoreText(row) }}</span>
+            <span>{{ overviewReferenceScoreText(row) }}</span>
             <span>{{ row.approvalReviewedByName || '-' }}</span>
             <button type="button" class="row-btn action-btn" @click="navigate(`/weekly-report-review/${row.reportId}?from=overview`)">
               审核
@@ -76,7 +80,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
-import { OrganizationRole, WeeklyApprovalStatus } from '../constants/reports.js';
+import { OrganizationRole, ReportStatus, WeeklyApprovalStatus } from '../constants/reports.js';
 import {
   listWeeklyComparisonOverview,
   toReadableApiError
@@ -128,6 +132,14 @@ function previousWeekStart() {
   return `${year}-${month}-${date}`;
 }
 
+function statusLabel(status) {
+  return status === ReportStatus.SUBMITTED ? '已提交' : '草稿';
+}
+
+function statusClass(status) {
+  return status === ReportStatus.SUBMITTED ? 'status-badge--done' : 'status-badge--draft';
+}
+
 // Weekly overview rows surface approval progress for center-manager review.
 function approvalStatusLabel(status) {
   const labels = {
@@ -148,6 +160,26 @@ function approvalStatusClass(status) {
     [WeeklyApprovalStatus.RETURNED]: 'status-badge--returned'
   };
   return classes[status] || classes[WeeklyApprovalStatus.NOT_SUBMITTED];
+}
+
+function sourceLabel(source) {
+  if (source === 'ai') return 'AI';
+  if (source === 'fallback_rule') return '规则降级';
+  return '未评估';
+}
+
+function overviewFinalScoreText(row) {
+  if (row.finalScore === null || row.finalScore === undefined) {
+    return '待最终评分';
+  }
+  return `${row.finalScore}${row.finalGrade ? ` / ${row.finalGrade}` : ''}`;
+}
+
+function overviewReferenceScoreText(row) {
+  if (row.totalScore === null || row.totalScore === undefined) {
+    return sourceLabel(row.evaluationSource);
+  }
+  return `${row.totalScore}${row.grade ? ` / ${row.grade}` : ''}`;
 }
 
 async function loadOverview() {
@@ -438,7 +470,7 @@ onMounted(() => {
   font-weight: 600;
   color: #909399;
   gap: 0.75rem;
-  grid-template-columns: 1fr 1fr 0.7fr 1fr 0.7fr;
+  grid-template-columns: 1fr 1fr 0.7fr 0.9fr 0.9fr 1fr 0.7fr;
 }
 .text-right {
   text-align: right;
@@ -451,7 +483,7 @@ onMounted(() => {
   border-bottom: 1px solid #f0f0f2;
   gap: 0.75rem;
   transition: background 0.2s ease;
-  grid-template-columns: 1fr 1fr 0.7fr 1fr 0.7fr;
+  grid-template-columns: 1fr 1fr 0.7fr 0.9fr 0.9fr 1fr 0.7fr;
 }
 .weekly-overview-table__row:hover {
   background: #fdfdfe;

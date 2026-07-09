@@ -323,3 +323,14 @@ async function loadWorkbench() {
 
 onMounted(loadWorkbench);
 </script>
+
+<style>
+.page-stack {
+  max-width: 1500px;
+  /* 最大宽度限制 */
+  margin: 0 auto;
+  /* 水平居中 */
+  padding: 1.5rem;
+  /* 内边距 */
+}
+</style>

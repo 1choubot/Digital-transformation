@@ -62,13 +62,8 @@ export class DailyReportError extends Error {
 }
 
 export function assertDailyReportEditable(status) {
-  if (status === ReportStatus.SUBMITTED) {
-    throw new DailyReportError(
-      DAILY_REPORT_ERROR.UPDATE_SUBMITTED,
-      'Submitted daily reports cannot be edited',
-      409,
-      ['status']
-    );
+  if (![ReportStatus.DRAFT, ReportStatus.SUBMITTED].includes(status)) {
+    throw new DailyReportError(DAILY_REPORT_ERROR.INVALID_STATUS, 'Invalid daily report status', 400, ['status']);
   }
 }
 

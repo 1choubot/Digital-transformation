@@ -19,25 +19,9 @@
             <strong class="toolbar-title">周报周期</strong>
             <span class="toolbar-subtitle">{{ form.weekStart }} 至 {{ form.weekEnd }}</span>
           </div>
-          <div class="toolbar-actions">
-            <span v-if="savedReport" class="status-badge" :class="approvalStatusClass(savedReport.approvalStatus)">
-              {{ approvalStatusLabel(savedReport.approvalStatus) }}
-            </span>
-            <button
-              v-if="savedReport"
-              type="button"
-              class="ghost-button"
-              :disabled="exporting"
-              @click="downloadReportExcel"
-            >
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              {{ exporting ? '正在导出' : '导出 Excel' }}
-            </button>
-          </div>
+          <span v-if="savedReport" class="status-badge" :class="approvalStatusClass(savedReport.approvalStatus)">
+            {{ approvalStatusLabel(savedReport.approvalStatus) }}
+          </span>
         </div>
 
         <form class="weekly-form" @submit.prevent="saveDraft">
@@ -61,7 +45,6 @@
                 <input
                   v-model="form.weekStart"
                   type="date"
-                  :disabled="!canEditReport"
                   :class="{ invalid: fieldErrors.weekStart }"
                 />
               </div>
@@ -73,7 +56,6 @@
                 <input
                   v-model="form.weekEnd"
                   type="date"
-                  :disabled="!canEditReport"
                   :class="{ invalid: fieldErrors.weekEnd }"
                 />
               </div>
@@ -89,12 +71,7 @@
                 <button type="button" class="ghost-button" :disabled="saving || !canEditReport" @click="refreshPrefillSuggestion">
                   刷新日报数据
                 </button>
-                <button
-                  type="button"
-                  class="ghost-button"
-                  :disabled="saving || aiComposing || !prefillState.basisHash || !canEditReport || !aiCapability.prefillAiAvailable"
-                  @click="composePrefillWithAi"
-                >
+                <button type="button" class="ghost-button" :disabled="saving || aiComposing || !prefillState.basisHash || !canEditReport" @click="composePrefillWithAi">
                   {{ aiComposing ? 'AI 整理中' : 'AI 整理草稿' }}
                 </button>
                 <button type="button" class="ghost-button" :disabled="!canEditReport" @click="addSummary">
@@ -108,9 +85,6 @@
             </div>
             <div v-if="prefillState.message" class="weekly-prefill-banner">
               {{ prefillState.message }}
-            </div>
-            <div v-if="aiCapability.message && !aiCapability.prefillAiAvailable" class="weekly-prefill-banner weekly-prefill-banner--muted">
-              {{ aiCapability.message }}
             </div>
             <div class="table-container">
               <div class="weekly-edit-table weekly-edit-table--summaries">
@@ -143,7 +117,6 @@
                     <select
                       v-model="summary.projectId"
                       class="form-control"
-                      :disabled="!canEditReport"
                       :class="{ invalid: fieldErrors[`summaries.${index}.workTask`] }"
                       @focus="refreshProjectOptionsForPicker"
                       @change="onProjectTaskSelect(summary)"
@@ -163,7 +136,6 @@
                     <textarea
                       v-model="summary.workTarget"
                       class="form-control form-textarea"
-                      :disabled="!canEditReport"
                       :class="{ invalid: fieldErrors[`summaries.${index}.workTarget`] }"
                       placeholder="描述工作目标"
                     />
@@ -178,7 +150,6 @@
                       v-model="summary.plannedDate"
                       type="date"
                       class="form-control"
-                      :disabled="!canEditReport"
                       :class="{ invalid: fieldErrors[`summaries.${index}.plannedDate`] }"
                     />
                     <small v-if="fieldErrors[`summaries.${index}.plannedDate`]" class="field-error">
@@ -191,7 +162,6 @@
                     <select
                       v-model="summary.completionStatus"
                       class="form-control"
-                      :disabled="!canEditReport"
                       :class="{ invalid: fieldErrors[`summaries.${index}.completionStatus`] }"
                     >
                       <option value="completed">已完成</option>
@@ -208,7 +178,6 @@
                     <textarea
                       v-model="summary.completionDescription"
                       class="form-control form-textarea"
-                      :disabled="!canEditReport"
                       :class="{ invalid: fieldErrors[`summaries.${index}.completionDescription`] }"
                       placeholder="完成情况说明"
                     />
@@ -224,10 +193,10 @@
                       type="date"
                       class="form-control"
                       :class="[
-                        !canEditReport || summary.completionStatus !== 'completed' ? 'form-control--disabled' : '',
+                        summary.completionStatus !== 'completed' ? 'form-control--disabled' : '',
                         { invalid: fieldErrors[`summaries.${index}.completedDate`] }
                       ]"
-                      :disabled="!canEditReport || summary.completionStatus !== 'completed'"
+                      :disabled="summary.completionStatus !== 'completed'"
                     />
                     <small v-if="summary.completionStatus !== 'completed'" class="field-hint">
                       无需填写
@@ -251,7 +220,6 @@
                       v-if="summary.missingDailyEvidence"
                       type="button"
                       class="row-btn action-btn action-btn--link"
-                      :disabled="!canEditReport"
                       @click="openDailyBackfill(summary)"
                     >
                       补日报
@@ -292,7 +260,6 @@
                     <select
                       v-model="plan.projectId"
                       class="form-control"
-                      :disabled="!canEditReport"
                       :class="{ invalid: fieldErrors[`plans.${index}.workTask`] }"
                       @focus="refreshProjectOptionsForPicker"
                       @change="onProjectTaskSelect(plan)"
@@ -310,7 +277,6 @@
                     <textarea
                       v-model="plan.workTarget"
                       class="form-control form-textarea"
-                      :disabled="!canEditReport"
                       :class="{ invalid: fieldErrors[`plans.${index}.workTarget`] }"
                       placeholder="描述工作目标"
                     />
@@ -323,7 +289,6 @@
                       v-model="plan.plannedDate"
                       type="date"
                       class="form-control"
-                      :disabled="!canEditReport"
                       :class="{ invalid: fieldErrors[`plans.${index}.plannedDate`] }"
                     />
                     <small v-if="fieldErrors[`plans.${index}.plannedDate`]" class="field-error">
@@ -334,7 +299,6 @@
                     <input
                       v-model="plan.responsiblePerson"
                       class="form-control"
-                      :disabled="!canEditReport"
                       placeholder="责任人"
                     />
                   </div>
@@ -387,11 +351,10 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { OrganizationRole, ReportStatus, WeeklyApprovalStatus } from '../constants/reports.js';
 import {
-  composeWeeklyReportPrefillWithAi,
   createWeeklyReport,
+  composeWeeklyReportPrefillWithAi,
   exportWeeklyReport,
   getWeeklyReport,
-  getWeeklyReportAiCapability,
   getWeeklyReportPrefillSuggestion,
   listWeeklyReports,
   toReadableApiError,
@@ -431,12 +394,6 @@ const fieldErrors = reactive({});
 const projectOptions = ref([]);
 const prefillState = reactive({
   basisHash: '',
-  message: ''
-});
-const aiCapability = reactive({
-  loaded: false,
-  prefillAiAvailable: false,
-  evaluationAiAvailable: false,
   message: ''
 });
 const prefillDirty = ref(false);
@@ -608,7 +565,7 @@ function initializeEmptyForm() {
   form.plans = [blankPlan()];
 }
 
-// Apply backend-generated deterministic suggestions without writing them to the database.
+// Apply backend-generated rule/AI suggestions without writing them to the database.
 function applyPrefillSuggestion(suggestion, { force = false } = {}) {
   if (!suggestion?.shouldPrefill) {
     prefillState.basisHash = '';
@@ -761,17 +718,6 @@ function sourceChipClass(summary) {
   return 'source-chip--legacy';
 }
 
-function saveBlob(download, fallbackName) {
-  const url = URL.createObjectURL(download.blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = download.fileName || fallbackName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
 async function refreshPrefillSuggestion({ force = false } = {}) {
   let shouldForcePrefill = force;
   if (savedReport.value && !force) {
@@ -798,39 +744,10 @@ async function refreshPrefillSuggestion({ force = false } = {}) {
   }
 }
 
-async function loadAiCapability() {
-  try {
-    const result = await getWeeklyReportAiCapability(props.authToken);
-    const capability = result.capability || {};
-    aiCapability.loaded = true;
-    aiCapability.prefillAiAvailable = Boolean(capability.prefillAiAvailable);
-    aiCapability.evaluationAiAvailable = Boolean(capability.evaluationAiAvailable);
-    aiCapability.message = capability.message || '';
-  } catch (error) {
-    if (error.code === 'UNAUTHENTICATED') {
-      emit('auth-expired');
-      return;
-    }
-    aiCapability.loaded = true;
-    aiCapability.prefillAiAvailable = false;
-    aiCapability.evaluationAiAvailable = false;
-    aiCapability.message = 'AI 能力状态暂不可用，当前使用规则草稿。';
-  }
-}
-
 async function composePrefillWithAi() {
-  if (!aiCapability.prefillAiAvailable) {
-    prefillState.message = aiCapability.message || 'AI 未配置，当前使用规则草稿。';
-    return;
-  }
-
-  if (!prefillState.basisHash) {
-    prefillState.message = '请先刷新日报数据后再使用 AI 整理。';
-    return;
-  }
-
   aiComposing.value = true;
   errorMessage.value = '';
+
   try {
     const result = await composeWeeklyReportPrefillWithAi(
       { weekStart: form.weekStart, basisHash: prefillState.basisHash },
@@ -913,6 +830,18 @@ function approvalStatusClass(status) {
   return classes[status] || classes[WeeklyApprovalStatus.NOT_SUBMITTED];
 }
 
+// Trigger browser download for generated Excel files.
+function saveBlob(download, fallbackName) {
+  const url = URL.createObjectURL(download.blob);
+  const link = globalThis.document.createElement('a');
+  link.href = url;
+  link.download = download.fileName || fallbackName;
+  globalThis.document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 // Persist either a draft or submitted weekly report.
 async function saveReport(status) {
   if (!canEditReport.value) {
@@ -956,20 +885,6 @@ function submitReport() {
   return saveReport(ReportStatus.SUBMITTED);
 }
 
-async function downloadReportExcel() {
-  if (!savedReport.value) return;
-  exporting.value = true;
-  errorMessage.value = '';
-  try {
-    const download = await exportWeeklyReport(savedReport.value.id, props.authToken);
-    saveBlob(download, `周绩效考核表-${savedReport.value.weekEnd}.xlsx`);
-  } catch (error) {
-    errorMessage.value = toReadableApiError(error);
-  } finally {
-    exporting.value = false;
-  }
-}
-
 // Load a route-specific report or the default previous-week record.
 async function loadInitialReport() {
   if (!canUseWeeklyReport.value) {
@@ -1004,7 +919,6 @@ async function loadInitialReport() {
 }
 
 onMounted(() => {
-  void loadAiCapability();
   void loadProjectOptions();
   void loadInitialReport();
 });
@@ -1335,12 +1249,6 @@ watch(
   background: #f5faff;
   color: #303133;
   font-size: 0.9rem;
-}
-
-.weekly-prefill-banner--muted {
-  border-color: #faecd8;
-  background: #fdf6ec;
-  color: #b88230;
 }
 
 .source-chip-row {

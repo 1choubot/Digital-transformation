@@ -111,10 +111,12 @@
       </div>
 
       <div v-else class="table-container">
-        <div class="weekly-report-table">
+        <div class="weekly-report-table" :class="{ 'weekly-report-table--employee': isEmployeeUser }">
           <div class="weekly-report-table__head">
             <span>周期</span>
             <span>状态</span>
+            <span v-if="!isEmployeeUser">最终评分</span>
+            <span v-if="!isEmployeeUser">参考评分</span>
             <span>更新时间</span>
             <span class="text-right">操作</span>
           </div>
@@ -123,9 +125,12 @@
               <strong>{{ report.weekStart }} 至 {{ report.weekEnd }}</strong>
             </div>
             <span class="status-badge" :class="approvalStatusClass(report.approvalStatus)">{{ approvalStatusLabel(report.approvalStatus) }}</span>
+            <span v-if="!isEmployeeUser">{{ finalScoreText(report) }}</span>
+            <span v-if="!isEmployeeUser">{{ sourceLabel(report.aiEvaluationSource) }}</span>
             <time>{{ formatDateTime(report.updatedAt) }}</time>
             <div class="weekly-report-table__actions">
               <button type="button" class="row-btn action-btn" @click="navigate(`/weekly-report/${report.id}`)">详情</button>
+              <button type="button" class="row-btn action-btn" @click="downloadReportExcel(report)">导出</button>
               <button
                 v-if="report.status === ReportStatus.DRAFT"
                 type="button"
@@ -147,6 +152,7 @@ import { computed, onMounted, ref } from 'vue';
 import { OrganizationRole, ReportStatus, WeeklyApprovalStatus, WeeklyRestMode } from '../constants/reports.js';
 import {
   deleteWeeklyReport,
+  exportWeeklyReport,
   getWeeklyRestMode,
   listWeeklyReports,
   setWeeklyRestMode,
@@ -184,6 +190,7 @@ const selectedAnchorMode = ref(WeeklyRestMode.DOUBLE_REST);
 const canUseWeeklyReport = computed(() =>
   [OrganizationRole.EMPLOYEE, OrganizationRole.CENTER_MANAGER].includes(props.currentUser.organizationRole)
 );
+const isEmployeeUser = computed(() => props.currentUser.organizationRole === OrganizationRole.EMPLOYEE);
 
 // 单双休设置权限
 const canManageRestMode = computed(() =>
@@ -216,6 +223,14 @@ function formatDateTime(value) {
   return String(value).replace('T', ' ').slice(0, 16);
 }
 
+function statusLabel(status) {
+  return status === ReportStatus.SUBMITTED ? '已提交' : '草稿';
+}
+
+function statusClass(status) {
+  return status === ReportStatus.SUBMITTED ? 'status-badge--done' : 'status-badge--draft';
+}
+
 // Employees track review progress through the independent approval status.
 function approvalStatusLabel(status) {
   const labels = {
@@ -236,6 +251,30 @@ function approvalStatusClass(status) {
     [WeeklyApprovalStatus.RETURNED]: 'status-badge--returned'
   };
   return classes[status] || classes[WeeklyApprovalStatus.NOT_SUBMITTED];
+}
+
+function sourceLabel(source) {
+  if (source === 'ai') return 'AI';
+  if (source === 'fallback_rule') return '规则降级';
+  return '未评估';
+}
+
+function finalScoreText(report) {
+  if (report.finalScore === null || report.finalScore === undefined) {
+    return '待最终评分';
+  }
+  return `${report.finalScore}${report.finalGrade ? ` / ${report.finalGrade}` : ''}`;
+}
+
+function saveBlob(download, fallbackName) {
+  const url = URL.createObjectURL(download.blob);
+  const link = globalThis.document.createElement('a');
+  link.href = url;
+  link.download = download.fileName || fallbackName;
+  globalThis.document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 // ── Rest-mode ──
@@ -307,6 +346,17 @@ async function removeDraft(report) {
   try {
     await deleteWeeklyReport(report.id, props.authToken);
     await loadReports();
+  } catch (error) {
+    errorMessage.value = toReadableApiError(error);
+  }
+}
+
+async function downloadReportExcel(report) {
+  errorMessage.value = '';
+
+  try {
+    const download = await exportWeeklyReport(report.id, props.authToken);
+    saveBlob(download, `周绩效考核表-${report.weekEnd}.xlsx`);
   } catch (error) {
     errorMessage.value = toReadableApiError(error);
   }
@@ -641,6 +691,9 @@ onMounted(() => {
   font-weight: 600;
   color: #909399;
   gap: 0.75rem;
+  grid-template-columns: 1.8fr 0.7fr 0.9fr 0.9fr 1.2fr 0.8fr;
+}
+.weekly-report-table--employee .weekly-report-table__head {
   grid-template-columns: 1.8fr 0.7fr 1.2fr 0.8fr;
 }
 .text-right {
@@ -654,6 +707,9 @@ onMounted(() => {
   border-bottom: 1px solid #f0f0f2;
   gap: 0.75rem;
   transition: background 0.2s ease;
+  grid-template-columns: 1.8fr 0.7fr 0.9fr 0.9fr 1.2fr 0.8fr;
+}
+.weekly-report-table--employee .weekly-report-table__row {
   grid-template-columns: 1.8fr 0.7fr 1.2fr 0.8fr;
 }
 .weekly-report-table__row:hover {
@@ -726,6 +782,10 @@ onMounted(() => {
   .weekly-report-table__row {
     grid-template-columns: 1fr !important;
     gap: 0.4rem;
+  }
+  .weekly-report-table--employee .weekly-report-table__head,
+  .weekly-report-table--employee .weekly-report-table__row {
+    grid-template-columns: 1fr !important;
   }
   .weekly-report-table__head {
     display: none;

@@ -200,6 +200,20 @@ async function selectDailyReportHeader(executor, { reportId, userId, forUpdate =
   return rows[0];
 }
 
+async function selectDailyReportIdByUniqueKey(executor, { userId, reportDate, projectId }) {
+  const [rows] = await executor.execute(
+    `SELECT id
+    FROM daily_reports
+    WHERE user_id = ?
+      AND report_date = ?
+      AND project_id = ?
+    LIMIT 1`,
+    [userId, reportDate, projectId]
+  );
+
+  return rows[0]?.id || null;
+}
+
 // Replace child rows in a stable sort order.
 async function replaceDailyReportRows(executor, reportId, { projectId, items, plans }) {
   await executor.execute('DELETE FROM daily_report_items WHERE daily_report_id = ?', [reportId]);
@@ -507,6 +521,16 @@ export async function createDailyReport({ user, report }) {
   } catch (error) {
     await connection.rollback();
     if (error?.code === 'ER_DUP_ENTRY') {
+      const existingReportId = await selectDailyReportIdByUniqueKey(pool, {
+        userId,
+        reportDate: report.reportDate,
+        projectId: report.projectId
+      });
+
+      if (existingReportId) {
+        return updateDailyReport({ reportId: existingReportId, user, report });
+      }
+
       throw new DailyReportError(
         DAILY_REPORT_ERROR.DUPLICATE_REPORT,
         '当日已存在该项目的日报记录。',
@@ -529,8 +553,10 @@ export async function updateDailyReport({ reportId, user, report }) {
     await connection.beginTransaction();
     const currentReport = await selectDailyReportHeader(connection, { reportId, userId, forUpdate: true });
     assertDailyReportEditable(currentReport.status);
-    await assertProjectAvailable(connection, { projectId: report.projectId, user });
-    await assertDailyReportItemTaskSources(connection, { user, report });
+    const nextReport =
+      currentReport.status === ReportStatus.SUBMITTED ? { ...report, status: ReportStatus.SUBMITTED } : report;
+    await assertProjectAvailable(connection, { projectId: nextReport.projectId, user });
+    await assertDailyReportItemTaskSources(connection, { user, report: nextReport });
 
     await connection.execute(
       `UPDATE daily_reports
@@ -541,10 +567,19 @@ export async function updateDailyReport({ reportId, user, report }) {
         submitted_at = CASE WHEN ? = 'submitted' THEN COALESCE(submitted_at, NOW()) ELSE NULL END
       WHERE id = ?
         AND user_id = ?`,
-      [report.reportDate, report.projectId, report.status, report.status, userId, report.status, reportId, userId]
+      [
+        nextReport.reportDate,
+        nextReport.projectId,
+        nextReport.status,
+        nextReport.status,
+        userId,
+        nextReport.status,
+        reportId,
+        userId
+      ]
     );
 
-    await replaceDailyReportRows(connection, reportId, report);
+    await replaceDailyReportRows(connection, reportId, nextReport);
     await connection.commit();
 
     return getDailyReportById({ reportId, userId });

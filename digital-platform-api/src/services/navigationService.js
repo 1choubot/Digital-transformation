@@ -1,0 +1,144 @@
+import { getProjectWorkspace } from '../repositories/projects/workspaceRepository.js';
+import { getEffectiveProjectMode } from '../domain/projectProcessTemplates.js';
+
+export const NAVIGATION_STATUS = Object.freeze({
+  PENDING: 'PENDING',
+  PROCESSING: 'PROCESSING',
+  COMPLETED: 'COMPLETED',
+  WAIT_APPROVAL: 'WAIT_APPROVAL',
+  RETURNED: 'RETURNED',
+  FAILED: 'FAILED'
+});
+
+function normalizeNodeStatus(status, { isCurrentStage = false } = {}) {
+  if (['completed', 'not_applicable'].includes(status)) {
+    return NAVIGATION_STATUS.COMPLETED;
+  }
+
+  if (['pending_review'].includes(status)) {
+    return NAVIGATION_STATUS.WAIT_APPROVAL;
+  }
+
+  if (['returned_for_rework', 'blocked_by_rework'].includes(status)) {
+    return NAVIGATION_STATUS.RETURNED;
+  }
+
+  if (['failed'].includes(status)) {
+    return NAVIGATION_STATUS.FAILED;
+  }
+
+  if (['in_progress'].includes(status)) {
+    return NAVIGATION_STATUS.PROCESSING;
+  }
+
+  if (['process_node'].includes(status)) {
+    return NAVIGATION_STATUS.COMPLETED;
+  }
+
+  return NAVIGATION_STATUS.PENDING;
+}
+
+function deriveStageStatus(stage, children) {
+  if (children.length === 0) {
+    if (stage.stageStatus === 'completed') {
+      return NAVIGATION_STATUS.COMPLETED;
+    }
+
+    return stage.isCurrent ? NAVIGATION_STATUS.PROCESSING : NAVIGATION_STATUS.PENDING;
+  }
+
+  const childStatuses = children.map((child) => child.status);
+  if (childStatuses.every((status) => status === NAVIGATION_STATUS.COMPLETED)) {
+    return NAVIGATION_STATUS.COMPLETED;
+  }
+
+  if (childStatuses.some((status) => status === NAVIGATION_STATUS.FAILED)) {
+    return NAVIGATION_STATUS.FAILED;
+  }
+
+  if (childStatuses.some((status) => status === NAVIGATION_STATUS.RETURNED)) {
+    return NAVIGATION_STATUS.RETURNED;
+  }
+
+  if (childStatuses.some((status) => status === NAVIGATION_STATUS.WAIT_APPROVAL)) {
+    return NAVIGATION_STATUS.WAIT_APPROVAL;
+  }
+
+  if (stage.isCurrent || childStatuses.some((status) => status === NAVIGATION_STATUS.PROCESSING)) {
+    return NAVIGATION_STATUS.PROCESSING;
+  }
+
+  return NAVIGATION_STATUS.PENDING;
+}
+
+function calculateProgress(stages) {
+  const nodes = stages.flatMap((stage) => stage.children || []);
+  if (nodes.length === 0) {
+    const completedStages = stages.filter((stage) => stage.status === NAVIGATION_STATUS.COMPLETED).length;
+    return stages.length > 0 ? Math.round((completedStages / stages.length) * 100) : 0;
+  }
+
+  const completedNodes = nodes.filter((node) => node.status === NAVIGATION_STATUS.COMPLETED).length;
+  return Math.round((completedNodes / nodes.length) * 100);
+}
+
+function normalizeProjectStatus(status) {
+  if (status === 'completed' || status === 'ended') {
+    return NAVIGATION_STATUS.COMPLETED;
+  }
+
+  if (status === 'paused' || status === 'delayed' || status === 'risk' || status === 'normal') {
+    return NAVIGATION_STATUS.PROCESSING;
+  }
+
+  return NAVIGATION_STATUS.PENDING;
+}
+
+function buildNode(projectId, stage, node) {
+  const status = normalizeNodeStatus(node.nodeStatus, { isCurrentStage: stage.isCurrent });
+
+  return {
+    name: node.nodeName,
+    nodeCode: node.nodeKey,
+    nodeKey: node.nodeKey,
+    status,
+    route: `/projects/${projectId}/node/${node.nodeKey}`,
+    outputCount: Array.isArray(node.outputs) ? node.outputs.length : 0,
+    actionHints: node.actionHints || [],
+    blockingReasons: node.blockingReasons || [],
+    notes: node.notes || ''
+  };
+}
+
+function buildStage(projectId, stage) {
+  const children = (stage.nodes || []).map((node) => buildNode(projectId, stage, node));
+  return {
+    stageId: stage.stageId,
+    stageOrder: stage.stageOrder,
+    stageKey: stage.stageKey,
+    name: `${String(stage.stageOrder).padStart(2, '0')}-${stage.stageName}`,
+    stageName: stage.stageName,
+    status: deriveStageStatus(stage, children),
+    isCurrent: Boolean(stage.isCurrent),
+    configured: stage.configured !== false,
+    legacyChecklistAvailable: Boolean(stage.legacyChecklistAvailable),
+    children
+  };
+}
+
+export async function getProjectNavigation(projectId, user) {
+  const workspace = await getProjectWorkspace(projectId, user);
+  const projectMode = getEffectiveProjectMode(workspace.project?.projectMode);
+  const children = (workspace.stages || []).map((stage) => buildStage(projectId, stage));
+
+  return {
+    projectId: String(projectId),
+    projectMode,
+    projectName: workspace.project?.projectName || '',
+    projectCode: workspace.project?.projectCode || null,
+    projectStatus: normalizeProjectStatus(workspace.project?.status),
+    currentStageKey: workspace.currentStage?.stageKey || null,
+    progress: calculateProgress(children),
+    children
+  };
+}

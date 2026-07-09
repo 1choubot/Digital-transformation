@@ -69,14 +69,22 @@ export async function request(path, options = {}) {
       ...options,
       headers
     });
-  } catch {
+  } catch (networkError) {
     throw new ApiError({
       code: 'NETWORK_ERROR',
       message: '无法连接到后端服务，请检查 API 地址或网络连接。'
     });
   }
 
-  const body = await parseResponse(response);
+  let body;
+  try {
+    body = await parseResponse(response);
+  } catch (parseError) {
+    throw new ApiError({
+      code: 'PARSE_ERROR',
+      message: '服务器响应解析失败，请稍后重试。'
+    });
+  }
 
   if (!response.ok) {
     throw toApiError(body, response.status);
@@ -151,7 +159,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'INVALID_PROJECT_MODE') {
-    return '项目模式无效，请选择自研模式或供应链/外包模式。';
+    return '项目模式无效，请选择自研模式、供货商模式或外协模式。';
   }
 
   if (error.code === 'INVALID_PARTICIPATING_DEPARTMENT') {
@@ -179,11 +187,11 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'INVALID_APPROVAL_COMMENT') {
-    return '阶段关口审批意见或退回原因不能为空。';
+    return '审批意见或退回原因不能为空。';
   }
 
   if (error.code === 'PROJECT_APPROVAL_NOT_SUBMITTABLE') {
-    return '当前项目或阶段暂不能提交阶段关口审批。';
+    return '当前项目或阶段暂不能提交审批。';
   }
 
   if (error.code === 'PROJECT_APPROVAL_NOT_PENDING') {
@@ -191,7 +199,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'PROJECT_APPROVAL_NOT_APPROVED') {
-    return '当前阶段暂不能推进。若这是旧流程兼容错误，请刷新后按当前资料完成规则重试。';
+    return '当前阶段审批未通过，暂不能推进阶段。';
   }
 
   if (error.code === 'PROJECT_APPROVAL_FORBIDDEN') {
@@ -199,7 +207,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE') {
-    return '当前阶段存在未按完成规则完成的适用资料，暂不能推进阶段。';
+    return '当前阶段存在未完成的适用必填资料，不能提交或通过审批。';
   }
 
   if (error.code === 'PROJECT_CODE_EXISTS') {
@@ -231,11 +239,11 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'RETURN_REASON_REQUIRED') {
-    return '请填写资料审核退回原因。';
+    return '请填写退回原因。';
   }
 
   if (error.code === 'RETURN_REASON_TOO_LONG') {
-    return '资料审核退回原因过长，请控制在 1000 字以内。';
+    return '退回原因过长，请控制在 1000 字以内。';
   }
 
   if (error.code === 'NOT_APPLICABLE_REASON_REQUIRED') {
@@ -419,7 +427,7 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'STAGE_ADVANCE_INCOMPLETE_REQUIRED_DOCUMENTS') {
-    return '当前阶段仍有缺失的适用资料，不能推进阶段。';
+    return '当前阶段仍有缺失的适用必填资料，不能推进阶段。';
   }
 
   if (error.code === 'STAGE_ADVANCE_CHECKLIST_NOT_INITIALIZED') {
@@ -484,6 +492,85 @@ export function toReadableApiError(error) {
 
   if (error.code === 'LAST_ENABLED_SYSTEM_ADMIN_REQUIRED') {
     return '系统必须至少保留一个启用的系统管理员且具备平台管理员权限，不能执行该操作。';
+  }
+
+  if (error.code === 'DAILY_REPORT_WRITER_REQUIRED') {
+    return '当前账号无权填写个人日报。';
+  }
+
+  if (error.code === 'DAILY_REPORT_REQUIRED_FIELDS') {
+    return '请补全日报必填项：任务来源、执行状态、工作内容、完成进度、完成时间；未完成时还需要填写偏差与纠偏措施。';
+  }
+
+  if (error.code === 'DAILY_REPORT_PROJECT_NOT_AVAILABLE') {
+    return '当前项目不可用于日报填写，可能已完结或当前账号不可见。';
+  }
+
+  if (error.code === 'DAILY_REPORT_INVALID_TASK_SOURCE') {
+    return '日报关联的周计划已不在当前项目或当前周的可选范围内，请重新选择周计划，或把任务来源改为新增。';
+  }
+
+  if (error.code === 'DAILY_REPORT_DUPLICATE') {
+    return '当天该项目已存在日报，请从我的日报列表打开已有日报后继续修改。';
+  }
+
+  if (error.code === 'INVALID_REPORT_DATE') {
+    return '日报日期格式不正确，请重新选择日期。';
+  }
+
+  if (error.code === 'INVALID_PROJECT_ID') {
+    return '请选择有效项目后再提交日报。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_WRITER_REQUIRED') {
+    return '当前账号无权填写个人周报。';
+  }
+
+  if (error.code === 'INVALID_WEEKLY_REPORT_WEEK') {
+    return '周报周期必须是自然周，开始日期为周一，结束日期为周日。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_REQUIRED_FIELDS') {
+    return '请补齐周报工作总结和工作计划的必填字段。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_DUPLICATE') {
+    return '该周期已经存在周报，请打开已有周报继续编辑。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_NOT_FOUND') {
+    return '周报不存在、已删除或不属于当前账号。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_DELETE_SUBMITTED') {
+    return '已提交周报不能删除。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_EVALUATE_SUBMITTED_ONLY') {
+    return '只有已提交周报可以发起评分。';
+  }
+
+  // Weekly approval actions are allowed only while a report is waiting for review.
+  if (error.code === 'WEEKLY_REPORT_INVALID_APPROVAL_ACTION') {
+    return '当前周报审批状态不允许执行该操作，请刷新后重试。';
+  }
+
+  // Returned weekly reports must always tell the employee what to revise.
+  if (error.code === 'WEEKLY_REPORT_APPROVAL_COMMENT_REQUIRED') {
+    return '打回周报时必须填写原因。';
+  }
+
+  if (error.code === 'CENTER_SCOPE_FORBIDDEN') {
+    return '当前账号不能查看其他中心的中心周报。';
+  }
+
+  if (error.code === 'WEEKLY_REST_MODE_MANAGER_REQUIRED') {
+    return '当前账号无权管理单双休设置，仅总经理和系统管理员可操作。';
+  }
+
+  if (error.code === 'WEEKLY_REPORT_FORBIDDEN') {
+    const field = (error.details || []).join('、');
+    return field ? `参数无效（${field}），请检查后重试。` : '周报操作被拒绝，请刷新页面后重试。';
   }
 
   if (error.code === 'UNAUTHENTICATED') {

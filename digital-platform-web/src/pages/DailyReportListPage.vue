@@ -130,6 +130,7 @@
                 <!-- 操作按钮组 -->
                 <div class="daily-table__cell daily-table__actions">
                   <button type="button" class="row-btn action-btn" @click="navigate(`/daily-report/${report.id}`)">打开</button>
+                  <button type="button" class="row-btn action-btn" @click="downloadReportExcel(report)">导出</button>
                   <button
                     v-if="report.status === ReportStatus.DRAFT"
                     type="button"
@@ -177,6 +178,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { OrganizationRole, ReportStatus } from '../constants/reports.js';
 import {
   deleteDailyReport,
+  exportDailyReport,
   listDailyReports,
   toReadableApiError
 } from '../api/dailyReports.js';
@@ -241,6 +243,17 @@ function statusClass(status) {
   return status === ReportStatus.SUBMITTED ? 'status-badge--done' : 'status-badge--draft';
 }
 
+function saveBlob(download, fallbackName) {
+  const url = URL.createObjectURL(download.blob);
+  const link = globalThis.document.createElement('a');
+  link.href = url;
+  link.download = download.fileName || fallbackName;
+  globalThis.document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 async function loadReports() {
   if (!canUseDailyReport.value) return;
   loading.value = true;
@@ -257,6 +270,16 @@ async function loadReports() {
     errorMessage.value = toReadableApiError(error);
   } finally {
     loading.value = false;
+  }
+}
+
+async function downloadReportExcel(report) {
+  errorMessage.value = '';
+  try {
+    const download = await exportDailyReport(report.id, props.authToken);
+    saveBlob(download, `项目工作日报-${report.reportDate}.xlsx`);
+  } catch (error) {
+    errorMessage.value = toReadableApiError(error);
   }
 }
 

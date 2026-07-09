@@ -24,14 +24,6 @@
             v-if="savedReport"
             type="button"
             class="ghost-button"
-            @click="props.navigate('/daily-reports')"
-          >
-            返回列表
-          </button>
-          <button
-            v-if="savedReport"
-            type="button"
-            class="ghost-button"
             :disabled="exporting"
             @click="downloadReportExcel"
           >
@@ -42,6 +34,14 @@
             </svg>
             {{ exporting ? '正在导出' : '导出 Excel' }}
           </button>
+          <button
+            v-if="savedReport"
+            type="button"
+            class="ghost-button"
+            @click="props.navigate('/daily-reports')"
+          >
+            返回列表
+          </button>
         </div>
       </div>
 
@@ -51,7 +51,7 @@
           <div class="filter-group">
             <span class="filter-label">报告日期</span>
             <div class="input-wrapper">
-              <input v-model="form.reportDate" type="date" required :disabled="isReportReadOnly" />
+              <input v-model="form.reportDate" type="date" required />
             </div>
           </div>
 
@@ -72,12 +72,11 @@
                   v-model="projectKeyword"
                   type="search"
                   placeholder="搜索并选择项目"
-                  :disabled="isReportReadOnly"
                   @input="onInputSearch"
                   @focus="openDropdown"
                 />
                 <button
-                  v-if="projectKeyword && !isReportReadOnly"
+                  v-if="projectKeyword"
                   type="button"
                   class="clear-search-btn"
                   @mousedown.prevent="clearProjectSelection"
@@ -90,7 +89,7 @@
                 </button>
               </div>
 
-              <div v-show="showDropdown && !isReportReadOnly" class="project-dropdown">
+              <div v-show="showDropdown" class="project-dropdown">
                 <div
                   v-for="project in projectOptions"
                   :key="project.id"
@@ -112,7 +111,7 @@
         <section class="daily-section">
           <div class="daily-section__heading">
             <h3>今日完成情况</h3>
-            <button v-if="!isReportReadOnly" type="button" class="ghost-button" @click="addItem">
+            <button type="button" class="ghost-button" @click="addItem">
               <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
@@ -152,7 +151,6 @@
                 <select
                   v-model="item.sourceType"
                   class="form-control"
-                  :disabled="isReportReadOnly"
                   :class="{ invalid: itemErrors[item.localId]?.sourceType }"
                   @change="onItemSourceTypeChange(item)"
                 >
@@ -164,7 +162,7 @@
                 <select
                   v-model="item.sourcePlanTaskKey"
                   class="form-control"
-                  :disabled="isReportReadOnly || item.sourceType !== 'weekly_plan'"
+                  :disabled="item.sourceType !== 'weekly_plan'"
                   :class="{ invalid: itemErrors[item.localId]?.sourcePlanTaskKey }"
                   @change="applySelectedPlanToItem(item)"
                 >
@@ -178,14 +176,12 @@
                   v-model="item.workContent"
                   required
                   class="form-control form-textarea"
-                  :disabled="isReportReadOnly"
                   :class="{ invalid: itemErrors[item.localId]?.workContent }"
                 />
                 <!-- 执行状态 -->
                 <select
                   v-model="item.executionStatus"
                   class="form-control"
-                  :disabled="isReportReadOnly"
                   :class="{ invalid: itemErrors[item.localId]?.executionStatus }"
                   @change="onExecutionStatusChange(item)"
                 >
@@ -200,7 +196,6 @@
                   required
                   placeholder="如 100%"
                   class="form-control"
-                  :disabled="isReportReadOnly"
                   :class="{ invalid: itemErrors[item.localId]?.completionProgress }"
                 />
                 <!-- 完成时间 -->
@@ -208,25 +203,14 @@
                   v-model="item.completedAt"
                   type="time"
                   class="form-control"
-                  :disabled="isReportReadOnly"
                   :class="{ invalid: itemErrors[item.localId]?.completedAt }"
                 />
                 <!-- 负责人 -->
-                <input v-model="item.responsiblePerson" class="form-control" :disabled="isReportReadOnly" />
+                <input v-model="item.responsiblePerson" class="form-control" />
                 <!-- 偏差与纠偏 -->
-                <textarea
-                  v-model="item.deviationAndCorrectiveAction"
-                  class="form-control form-textarea"
-                  :disabled="isReportReadOnly"
-                />
+                <textarea v-model="item.deviationAndCorrectiveAction" class="form-control form-textarea" />
                 <!-- 操作 -->
-                <button
-                  v-if="!isReportReadOnly"
-                  type="button"
-                  class="row-btn action-btn"
-                  :disabled="form.items.length === 1"
-                  @click="removeItem(index)"
-                >
+                <button type="button" class="row-btn action-btn" :disabled="form.items.length === 1" @click="removeItem(index)">
                   删除
                 </button>
               </div>
@@ -240,8 +224,8 @@
             <h3>进展照片</h3>
             <label
               class="ghost-button daily-upload-button"
-              :class="{ disabled: uploading || saving || isReportReadOnly }"
-              :title="isReportReadOnly ? '已提交日报不能继续上传照片' : ((uploading || saving) ? '上传中，请稍候' : '点击上传照片')"
+              :class="{ disabled: uploading || saving }"
+              :title="(uploading || saving) ? '上传中，请稍候' : '点击上传照片'"
             >
               <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
@@ -252,7 +236,7 @@
               <input
                 type="file"
                 accept="image/*"
-                :disabled="uploading || saving || isReportReadOnly"
+                :disabled="uploading || saving"
                 @change="uploadAttachment"
               />
             </label>
@@ -280,27 +264,20 @@
                 </div>
                 <div class="attachment-actions">
                   <button type="button" class="row-btn action-btn" @click="downloadAttachment(attachment)">下载</button>
-                  <button
-                    v-if="!isReportReadOnly"
-                    type="button"
-                    class="row-btn action-btn action-btn--danger"
-                    @click="removeAttachment(attachment)"
-                  >
-                    删除
-                  </button>
+                  <button type="button" class="row-btn action-btn action-btn--danger" @click="removeAttachment(attachment)">删除</button>
                 </div>
               </li>
             </ul>
             <p v-else class="inline-muted">暂无照片。</p>
           </div>
-          <p v-else-if="!isReportReadOnly" class="inline-muted inline-hint">选择项目后可直接上传照片，系统将自动保存草稿。</p>
+          <p v-else class="inline-muted inline-hint">💡 选择项目后可直接上传照片，系统将自动保存草稿。</p>
         </section>
 
         <!-- 明日工作计划 -->
         <section class="daily-section">
           <div class="daily-section__heading">
             <h3>明日工作计划</h3>
-            <button v-if="!isReportReadOnly" type="button" class="ghost-button" @click="addPlan">
+            <button type="button" class="ghost-button" @click="addPlan">
               <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
@@ -320,18 +297,12 @@
                 <span class="text-right">操作</span>
               </div>
               <div v-for="(plan, index) in form.plans" :key="plan.localId" class="daily-edit-table__row">
-                <textarea v-model="plan.plannedWorkContent" class="form-control form-textarea" :disabled="isReportReadOnly" />
-                <input v-model="plan.responsiblePerson" class="form-control" :disabled="isReportReadOnly" />
-                <input v-model="plan.plannedCompleteAt" type="time" class="form-control" :disabled="isReportReadOnly" />
-                <input v-model="plan.collaboratingCenter" class="form-control" :disabled="isReportReadOnly" />
-                <textarea v-model="plan.collaborationItem" class="form-control form-textarea" :disabled="isReportReadOnly" />
-                <button
-                  v-if="!isReportReadOnly"
-                  type="button"
-                  class="row-btn action-btn"
-                  :disabled="form.plans.length === 1"
-                  @click="removePlan(index)"
-                >
+                <textarea v-model="plan.plannedWorkContent" class="form-control form-textarea" />
+                <input v-model="plan.responsiblePerson" class="form-control" />
+                <input v-model="plan.plannedCompleteAt" type="time" class="form-control" />
+                <input v-model="plan.collaboratingCenter" class="form-control" />
+                <textarea v-model="plan.collaborationItem" class="form-control form-textarea" />
+                <button type="button" class="row-btn action-btn" :disabled="form.plans.length === 1" @click="removePlan(index)">
                   删除
                 </button>
               </div>
@@ -346,21 +317,18 @@
         <section v-if="errorMessage" class="state-panel state-panel--error state-panel--compact">
           <p>{{ errorMessage }}</p>
         </section>
-        <section v-if="isReportReadOnly" class="state-panel state-panel--compact">
-          <p>已提交日报仅可查看和下载附件，不能再修改、删除或重新保存为草稿。</p>
-        </section>
 
         <!-- 底部操作按钮 -->
-        <div v-if="!isReportReadOnly" class="form-actions">
+        <div class="form-actions">
           <button type="button" class="ghost-button" :disabled="saving" @click="saveDraft">
             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
               <polyline points="17 21 17 13 7 13 7 21" />
               <polyline points="7 3 7 8 15 8" />
             </svg>
-            暂存草稿
+            {{ isSavedSubmitted ? '保存修改' : '暂存草稿' }}
           </button>
-          <button type="button" class="primary-button" :disabled="saving" @click="submitReport">
+          <button v-if="!isSavedSubmitted" type="button" class="primary-button" :disabled="saving" @click="submitReport">
             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
               <polyline points="22 4 12 14.01 9 11.01" />
@@ -476,7 +444,7 @@ const form = reactive({
 
 const canUseDailyReport = computed(() => props.currentUser.organizationRole === OrganizationRole.EMPLOYEE);
 const isBackfill = computed(() => form.reportDate && form.reportDate !== today);
-const isReportReadOnly = computed(() => savedReport.value?.status === ReportStatus.SUBMITTED);
+const isSavedSubmitted = computed(() => savedReport.value?.status === ReportStatus.SUBMITTED);
 
 // 判断今日完成行是否为空
 function isBlankCompletedItem(item) {
@@ -672,14 +640,12 @@ function clearAllPlanTaskKeysForScopeChange() {
 }
 
 function onItemSourceTypeChange(item) {
-  if (isReportReadOnly.value) return;
   if (item.sourceType !== 'weekly_plan') {
     item.sourcePlanTaskKey = '';
   }
 }
 
 function applySelectedPlanToItem(item) {
-  if (isReportReadOnly.value) return;
   const plan = planSuggestion.items.find((candidate) => candidate.taskKey === item.sourcePlanTaskKey);
   if (!plan) {
     return;
@@ -691,7 +657,6 @@ function applySelectedPlanToItem(item) {
 
 // ===== 执行状态变更时自动填充/清空完成进度 =====
 function onExecutionStatusChange(item) {
-  if (isReportReadOnly.value) return;
   if (item.executionStatus === 'completed') {
     item.completionProgress = '100%';
   } else if (item.executionStatus === 'not_completed') {
@@ -735,10 +700,6 @@ function onThumbnailError(attachment) {
 async function uploadFile(file) {
   // 防重检查
   if (uploading.value || saving.value) return;
-  if (isReportReadOnly.value) {
-    errorMessage.value = '已提交日报不能继续上传照片。';
-    return;
-  }
 
   // 自动保存草稿（如果未保存）
   if (!savedReport.value) {
@@ -785,7 +746,6 @@ async function uploadFile(file) {
 
 // ===== 粘贴处理 =====
 async function handlePaste(event) {
-  if (isReportReadOnly.value) return;
   const items = event.clipboardData?.items;
   if (!items) return;
 
@@ -867,7 +827,9 @@ function resetForm() {
     }
     delete thumbnails[key];
   });
-  props.navigate('/daily-report');
+  try {
+    window.history.replaceState(null, '', '/daily-report');
+  } catch (e) {}
 }
 
 // 加载已有报告
@@ -900,12 +862,10 @@ async function searchProjects(shouldOpen = false) {
 }
 
 function onInputSearch() {
-  if (isReportReadOnly.value) return;
   searchProjects(true);
 }
 
 function selectProject(project) {
-  if (isReportReadOnly.value) return;
   if (String(form.projectId || '') !== String(project.id || '')) {
     clearAllPlanTaskKeysForScopeChange();
   }
@@ -917,7 +877,6 @@ function selectProject(project) {
 }
 
 function clearProjectSelection() {
-  if (isReportReadOnly.value) return;
   clearAllPlanTaskKeysForScopeChange();
   projectKeyword.value = '';
   form.projectId = '';
@@ -928,7 +887,6 @@ function clearProjectSelection() {
 }
 
 function openDropdown() {
-  if (isReportReadOnly.value) return;
   if (projectOptions.value.length || projectSearchMessage.value) {
     showDropdown.value = true;
   } else {
@@ -945,34 +903,27 @@ function closeDropdownDelayed() {
 }
 
 function addItem() {
-  if (isReportReadOnly.value) return;
   form.items.push(createEmptyItem());
 }
 function removeItem(index) {
-  if (isReportReadOnly.value) return;
   if (form.items.length > 1) form.items.splice(index, 1);
 }
 function addPlan() {
-  if (isReportReadOnly.value) return;
   form.plans.push(createEmptyPlan());
 }
 function removePlan(index) {
-  if (isReportReadOnly.value) return;
   if (form.plans.length > 1) form.plans.splice(index, 1);
 }
 
 // 保存报告（草稿或提交）
 async function saveReport(status) {
-  if (isReportReadOnly.value) {
-    errorMessage.value = '已提交日报不能再修改或保存为草稿。';
-    return;
-  }
   saving.value = true;
   message.value = '';
   errorMessage.value = '';
   itemErrors.value = {};
 
   try {
+    const wasSubmitted = isSavedSubmitted.value;
     if (status === ReportStatus.SUBMITTED && !prepareSubmittedItems()) {
       saving.value = false;
       return;
@@ -982,16 +933,19 @@ async function saveReport(status) {
       ? await updateDailyReport(savedReport.value.id, payload, props.authToken)
       : await createDailyReport(payload, props.authToken);
     
-    if (status === ReportStatus.SUBMITTED) {
+    if (status === ReportStatus.SUBMITTED && !wasSubmitted) {
       resetForm();
       message.value = '日报已正式提交，表单已清空，可继续填写新的日报。';
     } else {
       hydrateForm(result.report);
-      message.value = '草稿已保存。';
+      message.value = wasSubmitted ? '日报修改已保存。' : '草稿已保存。';
     }
 
     if (!props.reportId && result.report?.id && status === ReportStatus.DRAFT) {
-      props.navigate(`/daily-report/${result.report.id}`);
+      try {
+        const newUrl = `/daily-report/${result.report.id}`;
+        window.history.replaceState(null, '', newUrl);
+      } catch (e) {}
     }
   } catch (error) {
     if (error.code === 'UNAUTHENTICATED') {
@@ -1013,11 +967,6 @@ async function submitReport() {
 
 // 文件上传（来自 input）
 async function uploadAttachment(event) {
-  if (isReportReadOnly.value) {
-    event.target.value = '';
-    errorMessage.value = '已提交日报不能继续上传照片。';
-    return;
-  }
   const file = event.target.files?.[0];
   event.target.value = '';
   if (!file) return;
@@ -1035,26 +984,8 @@ async function downloadAttachment(attachment) {
   }
 }
 
-async function downloadReportExcel() {
-  if (!savedReport.value) return;
-  exporting.value = true;
-  errorMessage.value = '';
-  try {
-    const download = await exportDailyReport(savedReport.value.id, props.authToken);
-    saveBlob(download, `项目工作日报-${savedReport.value.reportDate}.xlsx`);
-  } catch (error) {
-    errorMessage.value = toReadableApiError(error);
-  } finally {
-    exporting.value = false;
-  }
-}
-
 // 删除附件
 async function removeAttachment(attachment) {
-  if (isReportReadOnly.value) {
-    errorMessage.value = '已提交日报不能删除照片。';
-    return;
-  }
   if (!savedReport.value) return;
   try {
     await deleteDailyReportAttachment(savedReport.value.id, attachment.id, props.authToken);
@@ -1063,6 +994,21 @@ async function removeAttachment(attachment) {
     message.value = '照片已删除。';
   } catch (error) {
     errorMessage.value = toReadableApiError(error);
+  }
+}
+
+// 导出 Excel
+async function downloadReportExcel() {
+  if (!savedReport.value) return;
+  exporting.value = true;
+  errorMessage.value = '';
+  try {
+    const download = await exportDailyReport(savedReport.value.id, props.authToken);
+    saveBlob(download, `项目工作日报-${form.reportDate}.xlsx`);
+  } catch (error) {
+    errorMessage.value = toReadableApiError(error);
+  } finally {
+    exporting.value = false;
   }
 }
 

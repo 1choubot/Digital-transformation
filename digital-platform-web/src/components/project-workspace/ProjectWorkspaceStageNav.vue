@@ -36,10 +36,6 @@ function formatStageSummary(stage) {
     return `${stage.nodes?.length || 0} 个蓝色节点`;
   }
 
-  if (stage.legacyChecklistAvailable) {
-    return '旧资料清单入口';
-  }
-
   return '后续配置';
 }
 </script>

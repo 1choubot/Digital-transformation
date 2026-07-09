@@ -1,15 +1,5 @@
 <template>
-  <section class="page-stack">
-    <PageHeader
-      eyebrow="项目工作区"
-      :title="detail?.project.projectName || '项目基础状态'"
-      :current-user="currentUser"
-      subtitle="单项目主操作区：先选阶段，再选蓝色节点，最后处理节点产出、在线表单或评价审批。"
-    >
-      <template #actions>
-        <button type="button" class="ghost-button" @click="navigate('/projects')">返回项目总览</button>
-      </template>
-    </PageHeader>
+  <section class="project-workspace-screen">
 
     <section v-if="loading" class="state-panel">
       <p>正在加载项目详情...</p>
@@ -21,224 +11,92 @@
       <button type="button" class="primary-button" @click="navigate('/projects')">返回项目总览</button>
     </section>
 
-    <template v-else-if="detail">
-      <ProjectDetailHeader :detail="detail" :current-stage-title="currentStageTitle" />
+    <el-container v-else-if="detail" class="project-workspace-shell">
+      <ProjectProcessTree
+        v-if="workspace && projectNavigationDisplay && !workspaceLoading && !projectNavigationLoading"
+        :navigation="projectNavigationDisplay"
+        :selected-stage-key="selectedWorkspaceStageKey"
+        :selected-node-key="selectedWorkspaceNodeKey"
+        @select-node="selectWorkspaceNodeFromNavigation"
+      />
 
-      <section v-if="isTaskMode" class="state-panel state-panel--inline">
-        <p>当前为工作台任务视图，仅展示后端返回的有权项目资料和操作入口。</p>
-      </section>
-
-      <ProjectStageTimeline :stages="detail.stages" />
-
-      <section class="panel project-workspace project-workspace--primary">
-        <div class="panel-heading">
-          <div>
-            <span class="section-eyebrow">项目工作区</span>
-            <h3>阶段节点与产出工作区</h3>
-            <p class="manual-status-note">
-              固定层级为阶段说明、蓝色节点、节点产出、在线表单或评价审批动作；点击蓝色节点不会自动打开在线表单。
-            </p>
-          </div>
-        </div>
-
+      <el-main class="project-workspace-main">
         <section v-if="workspaceLoading" class="state-panel state-panel--inline">
           <p>正在加载项目工作区...</p>
         </section>
         <section v-else-if="workspaceErrorMessage" class="state-panel state-panel--inline state-panel--error">
           <p>{{ workspaceErrorMessage }}</p>
         </section>
-        <div v-else-if="workspace" class="project-workspace__layout">
-          <ProjectWorkspaceStageNav
-            :stages="workspaceDisplayStages"
-            :selected-stage-key="selectedWorkspaceStageKey"
-            @select-stage="selectWorkspaceStage"
-          />
+        <section v-else-if="projectNavigationErrorMessage" class="state-panel state-panel--inline state-panel--error">
+          <p>{{ projectNavigationErrorMessage }}</p>
+        </section>
+        <section v-else-if="projectNavigationLoading" class="state-panel state-panel--inline">
+          <p>正在加载项目流程导航...</p>
+        </section>
+        <template v-else-if="workspace">
+          <el-card class="project-node-card" shadow="never">
 
-          <div class="project-workspace__main">
-            <ProjectWorkspaceNodeList
-              :stage="activeWorkspaceDisplayStage"
-              :active-node-key="selectedWorkspaceNodeKey"
-              @select-node="selectWorkspaceNode(activeWorkspaceDisplayStage, $event)"
-              @open-legacy-checklist="scrollToStageDocumentChecklist"
-            />
-            <ProjectWorkspaceOutputPanel
-              v-if="!isActiveSolutionWorkspaceStage"
-              :stage="activeWorkspaceDisplayStage"
-              :node="activeWorkspaceNode"
-              :active-online-form="activeOnlineForm"
-              :active-online-form-document-id="activeOnlineFormDocumentId"
-              :online-form-data="onlineFormData"
-              :online-form-loading="onlineFormLoading"
-              :online-form-saving="onlineFormSaving"
-              :online-form-submitting="onlineFormSubmitting"
-              :online-form-error-message="onlineFormErrorMessage"
-              :online-form-image-state="onlineFormImageState"
-              :is-action-pending="isActionPending"
-              :get-output-document="getOutputDocument"
-              :responsibility-candidates="visibleResponsibilityCandidates"
-              :responsibility-candidates-loading="responsibilityCandidatesLoading"
-              :responsibility-candidates-error-message="responsibilityCandidatesErrorMessage"
-              :responsibility-selections="responsibilitySelections"
-              :can-submit-document="canSubmitDocument"
-              :can-confirm-return-document="canConfirmReturnDocument"
-              :can-manage-responsibility="canManageResponsibility"
-              :can-change-applicability="canChangeApplicability"
-              :return-reasons="returnReasons"
-              :not-applicable-reasons="notApplicableReasons"
-              :get-attachment-state="getAttachmentState"
-              @open-online-form="openOnlineForm"
-              @open-legacy-checklist="scrollToStageDocumentChecklist"
-              @save-online-form="saveOnlineForm"
-              @submit-online-form="submitOnlineForm"
-              @update-online-form-field="updateOnlineFormField"
-              @approve-node="approveInitiationNode"
-              @return-node="returnInitiationNode"
-              @submit-document="submitDocument"
-              @confirm-document="confirmDocument"
-              @return-document="returnDocument"
-              @complete-revision-document="completeRevisionDocument"
-              @mark-not-applicable="markNotApplicable"
-              @restore-applicable="restoreApplicable"
-              @save-responsible-user="saveResponsibleUser"
-              @clear-responsible-user="clearResponsibleUser"
-              @upload-attachment="uploadAttachment"
-              @download-attachment="downloadAttachment"
-              @delete-attachment="deleteAttachment"
-              @upload-online-form-image="uploadOnlineFormImage"
-              @download-online-form-image="downloadOnlineFormImage"
-              @delete-online-form-image="deleteOnlineFormImage"
-              @download-generated-file="downloadGeneratedFile"
-            />
             <ProjectSolutionDesignWorkflowPanel
               v-if="isActiveSolutionWorkspaceStage"
               ref="solutionDesignPanelRef"
               :project-id="projectId"
               :auth-token="authToken"
               :current-user="currentUser"
-              :project="detail?.project || null"
+              :project="detail.project"
               :workflow="solutionDesignWorkflow"
               :uploads="solutionDesignUploads"
-              :focus-node-key="focusNodeKey"
-              :selected-node-key="selectedWorkspaceNodeKey"
-              hide-node-nav
               :loading="solutionDesignWorkflowLoading || solutionDesignUploadsLoading"
               :error-message="solutionDesignWorkflowErrorMessage || solutionDesignUploadsErrorMessage"
               :responsibility-candidates="responsibilityCandidates"
               :responsibility-candidates-loading="responsibilityCandidatesLoading"
               :responsibility-candidates-error-message="responsibilityCandidatesErrorMessage"
+              :selected-node-key="selectedWorkspaceNodeKey"
+              :focus-node-key="focusNodeKey"
+              hide-node-nav
               @changed="refreshSolutionDesignState"
             />
-          </div>
-        </div>
-      </section>
 
-      <section
-        v-if="actionMessage"
-        class="state-panel state-panel--inline state-panel--success"
-        role="status"
-        aria-live="polite"
-      >
-        <p>{{ actionMessage }}</p>
-      </section>
+            <NodePageRouter
+              v-else
+              :project-id="projectId"
+              :auth-token="authToken"
+              :current-user="currentUser"
+              :project="detail.project"
+              :workspace="workspace"
+              :stage="activeWorkspaceStage"
+              :node="activeWorkspaceNode"
+              :node-code="selectedWorkspaceNodeKey"
+              :node-page-context="nodePageContext"
+              @business-state-changed="handleBusinessStateChanged"
+            />
+          </el-card>
 
-      <section
-        v-if="actionErrorMessage"
-        class="state-panel state-panel--inline state-panel--error"
-        role="alert"
-      >
-        <p>{{ actionErrorMessage }}</p>
-      </section>
-
-      <ProjectOperationLogPanel
-        v-if="canViewProjectAudit"
-        :loading="operationLogsLoading"
-        :error-message="operationLogsErrorMessage"
-        :logs="operationLogs"
-      />
-
-      <ProjectStageAdvancePanel
-        :current-stage="detail.currentStage"
-        :is-project-completed="isProjectCompleted"
-        :is-project-ended="isProjectEnded"
-        :ended-reason="detail.project.endedReason"
-        :current-stage-completeness="currentStageCompleteness"
-        :missing-documents="currentStageAdvanceMissingDocuments"
-        :can-advance-current-stage="canAdvanceCurrentStage"
-        :show-advance-action="canCurrentUserAdvanceProject"
-        :pending="stageAdvancePending"
-        :message="stageAdvanceMessage"
-        :error-message="stageAdvanceErrorMessage"
-        @advance="advanceCurrentStage"
-      />
-
-      <section
-        id="stage-document-checklist"
-        class="legacy-compatibility-section"
-        :class="{ 'legacy-compatibility-section--expanded': isLegacyChecklistExpanded }"
-      >
-        <div class="legacy-compatibility-section__summary">
-          <div>
-            <span class="section-eyebrow">兼容查看</span>
-            <h3>兼容资料区</h3>
-            <p class="manual-status-note">
-              资料主操作已迁移到上方项目工作区产出卡片处理，本区域仅用于兼容查看和历史状态核对。
-            </p>
-          </div>
-          <button
-            type="button"
-            class="ghost-button legacy-compatibility-section__toggle"
-            :aria-expanded="isLegacyChecklistExpanded"
-            aria-controls="stage-document-checklist-content"
-            @click="isLegacyChecklistExpanded = !isLegacyChecklistExpanded"
+          <section
+            v-if="actionMessage"
+            class="state-panel state-panel--inline state-panel--success"
+            role="status"
+            aria-live="polite"
           >
-            {{ isLegacyChecklistExpanded ? '收起兼容资料区' : '展开兼容资料区' }}
-          </button>
-        </div>
+            <p>{{ actionMessage }}</p>
+          </section>
 
-        <ProjectStageDocumentChecklist
-          v-if="isLegacyChecklistExpanded"
-          id="stage-document-checklist-content"
-          :checklist="checklist"
-          :loading="checklistLoading"
-          :error-message="checklistErrorMessage"
-          :is-checklist-empty="isChecklistEmpty"
-          :responsibility-candidates-error-message="responsibilityCandidatesErrorMessage"
-          :responsibility-candidates-loading="responsibilityCandidatesLoading"
-          :responsibility-candidates="visibleResponsibilityCandidates"
-          :responsibility-selections="responsibilitySelections"
-          :can-submit-document="canSubmitDocument"
-          :can-confirm-return-document="canConfirmReturnDocument"
-          :can-manage-responsibility="canManageResponsibility"
-          :can-change-applicability="canChangeApplicability"
-          :return-reasons="returnReasons"
-          :not-applicable-reasons="notApplicableReasons"
-          :is-action-pending="isActionPending"
-          :get-attachment-state="getAttachmentState"
-          :migrated-workspace-document-keys="migratedWorkspaceDocumentKeys"
-          @submit-document="submitDocument"
-          @confirm-document="confirmDocument"
-          @return-document="returnDocument"
-          @approve-initiation-review-node="approveInitiationNode"
-          @return-initiation-review-node="returnInitiationNode"
-          @complete-revision-document="completeRevisionDocument"
-          @mark-not-applicable="markNotApplicable"
-          @restore-applicable="restoreApplicable"
-          @save-responsible-user="saveResponsibleUser"
-          @clear-responsible-user="clearResponsibleUser"
-          @upload-attachment="uploadAttachment"
-          @download-attachment="downloadAttachment"
-          @delete-attachment="deleteAttachment"
-          @locate-output-card="locateWorkspaceOutputCard"
-        />
-      </section>
-    </template>
+          <section
+            v-if="actionErrorMessage"
+            class="state-panel state-panel--inline state-panel--error"
+            role="alert"
+          >
+            <p>{{ actionErrorMessage }}</p>
+          </section>
+
+        </template>
+      </el-main>
+    </el-container>
   </section>
 </template>
 
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import {
-  advanceProjectStage,
   approveInitiationReviewNode,
   confirmStageDocument,
   completeStageDocumentRevision,
@@ -248,7 +106,10 @@ import {
   downloadStageDocumentGeneratedFile,
   downloadStageDocumentOnlineFormImage,
   getProjectDetail,
-  getProjectOperationLogs,
+  // getProjectStageDocumentChecklist 保留为工作区文档数据源：
+  // 节点专属页面通过 getOutputDocument 查找文档详情
+  // （permissions、completionStatus 等），这些数据仅由 checklist API 提供，
+  // workspace API 不包含完整文档详情。删除其 UI 渲染，保留数据调用。
   getProjectStageDocumentChecklist,
   getProjectWorkspace,
   getSolutionDesignWorkflow,
@@ -266,26 +127,18 @@ import {
   updateStageDocumentResponsibleUser,
   uploadStageDocumentAttachment,
   uploadStageDocumentOnlineFormImage
-} from '../api/projects.js';
-import { listResponsibilityCandidates } from '../api/users.js';
-import ProjectDetailHeader from '../components/project-detail/ProjectDetailHeader.vue';
-import ProjectOperationLogPanel from '../components/project-detail/ProjectOperationLogPanel.vue';
-import ProjectStageAdvancePanel from '../components/project-detail/ProjectStageAdvancePanel.vue';
-import ProjectStageDocumentChecklist from '../components/project-detail/ProjectStageDocumentChecklist.vue';
-import ProjectStageTimeline from '../components/project-detail/ProjectStageTimeline.vue';
-import ProjectSolutionDesignWorkflowPanel from '../components/project-workspace/ProjectSolutionDesignWorkflowPanel.vue';
-import ProjectWorkspaceNodeList from '../components/project-workspace/ProjectWorkspaceNodeList.vue';
-import ProjectWorkspaceOutputPanel from '../components/project-workspace/ProjectWorkspaceOutputPanel.vue';
-import ProjectWorkspaceStageNav from '../components/project-workspace/ProjectWorkspaceStageNav.vue';
-import PageHeader from '../components/PageHeader.vue';
+} from '../../api/projects.js';
+import { getProjectNavigation } from '../../api/navigation.js';
+import { listResponsibilityCandidates } from '../../api/users.js';
+import NodePageRouter from '../project-node/NodePageRouter.vue';
+import ProjectProcessTree from '../../components/project-workspace/ProjectProcessTree.vue';
+import ProjectSolutionDesignWorkflowPanel from '../../components/project-workspace/ProjectSolutionDesignWorkflowPanel.vue';
 import {
   actionKey,
   getCompletionMode,
   getSelectedResponsibleUserId,
-  isDocumentRelatedToDepartmentByOwnership,
-  isInitiationOnlineFormDocument,
-  stageCompleteness
-} from '../components/project-detail/stageDocumentViewHelpers.js';
+  isInitiationOnlineFormDocument
+} from '../../components/project-detail/stageDocumentViewHelpers.js';
 
 const props = defineProps({
   authToken: {
@@ -322,19 +175,22 @@ const props = defineProps({
   }
 });
 
+/* ── 页面加载状态 ── */
 const loading = ref(false);
 const errorMessage = ref('');
 const detail = ref(null);
 const errorCode = ref('');
-const checklistLoading = ref(false);
-const checklistErrorMessage = ref('');
+
+/* ── 文档数据源（原 checklist，现仅供工作区内部查找文档详情） ── */
 const checklist = ref(null);
-const operationLogsLoading = ref(false);
-const operationLogsErrorMessage = ref('');
-const operationLogs = ref([]);
+
+/* ── 工作区状态 ── */
 const workspaceLoading = ref(false);
 const workspaceErrorMessage = ref('');
 const workspace = ref(null);
+const projectNavigationLoading = ref(false);
+const projectNavigationErrorMessage = ref('');
+const projectNavigation = ref(null);
 const solutionDesignWorkflowLoading = ref(false);
 const solutionDesignWorkflowErrorMessage = ref('');
 const solutionDesignWorkflow = ref(null);
@@ -346,7 +202,8 @@ const selectedWorkspaceStageKey = ref('');
 const selectedWorkspaceNodeKey = ref('');
 const lastAppliedWorkspaceRouteKey = ref('');
 const manualWorkspaceSelectionRouteKey = ref('');
-const isLegacyChecklistExpanded = ref(false);
+
+/* ── 在线表单状态 ── */
 const activeOnlineFormDocumentId = ref(null);
 const activeOnlineForm = ref(null);
 const onlineFormData = reactive({});
@@ -354,16 +211,18 @@ const onlineFormLoading = ref(false);
 const onlineFormSaving = ref(false);
 const onlineFormSubmitting = ref(false);
 const onlineFormErrorMessage = ref('');
+
+/* ── 责任人候选人状态 ── */
 const responsibilityCandidatesLoading = ref(false);
 const responsibilityCandidatesErrorMessage = ref('');
 const responsibilityCandidates = ref([]);
+
+/* ── 工作区操作消息状态 ── */
 const actionMessage = ref('');
 const actionErrorMessage = ref('');
 const pendingAction = ref('');
-const stageAdvancePending = ref(false);
-const stageAdvanceMessage = ref('');
-const stageAdvanceErrorMessage = ref('');
-const stageAdvanceMissingDocuments = ref([]);
+
+/* ── 文档操作临时状态 ── */
 const returnReasons = reactive({});
 const notApplicableReasons = reactive({});
 
@@ -395,10 +254,9 @@ const onlineFormImageState = reactive({
 
 const MAX_ATTACHMENT_FILE_SIZE = 50 * 1024 * 1024;
 const MAX_ONLINE_FORM_IMAGE_FILE_SIZE = 10 * 1024 * 1024;
+
+/* ── 计算属性 ── */
 const notFound = computed(() => errorCode.value === 'PROJECT_NOT_FOUND');
-const isChecklistEmpty = computed(
-  () => checklist.value && checklist.value.stages.every((stage) => stage.documents.length === 0)
-);
 const isProjectCompleted = computed(() => detail.value?.project.status === 'completed');
 const isProjectEnded = computed(() => detail.value?.project.status === 'ended');
 const currentDetailStage = computed(() => {
@@ -420,40 +278,21 @@ const currentStageTitle = computed(() => {
   return isProjectCompleted.value ? '项目已完成' : '-';
 });
 const isSolutionDesignStage = computed(() => currentDetailStage.value?.stageKey === 'solution');
-const currentChecklistStage = computed(() => {
-  const currentStage = currentDetailStage.value;
-  if (!currentStage || !checklist.value) {
-    return null;
-  }
 
-  return checklist.value.stages.find((stage) => stage.stageKey === currentStage.stageKey) || null;
-});
-const currentStageCompleteness = computed(() => {
-  if (!currentChecklistStage.value) {
-    return null;
-  }
-
-  return stageCompleteness(currentChecklistStage.value);
-});
 const currentUserOrganizationRole = computed(() => props.currentUser?.organizationRole || '');
 const isCurrentUserProjectManager = computed(() => {
   const projectManagerUserId = detail.value?.project?.projectManagerUserId;
   return Boolean(projectManagerUserId) && String(projectManagerUserId) === String(props.currentUser?.id);
 });
-const isCurrentUserProjectCreator = computed(() => {
-  const creatorUserId = detail.value?.project?.createdByUserId;
-  return Boolean(creatorUserId) && String(creatorUserId) === String(props.currentUser?.id);
-});
 const isCurrentUserGeneralManager = computed(() => currentUserOrganizationRole.value === 'general_manager');
 const isCurrentUserCenterManager = computed(() => currentUserOrganizationRole.value === 'center_manager');
-const isCurrentUserGeneralManagerAssistant = computed(
-  () => currentUserOrganizationRole.value === 'general_manager_assistant'
-);
-const isCurrentUserSystemAdmin = computed(() => currentUserOrganizationRole.value === 'system_admin');
 const currentUserDepartment = computed(() => props.currentUser?.department || '');
+
+// 保留：工作区产出面板通过 getOutputDocument 查找文档详情
 const allStageDocuments = computed(() =>
   (checklist.value?.stages || []).flatMap((stage) => stage.documents || [])
 );
+
 const activeWorkspaceStage = computed(
   () => (workspace.value?.stages || []).find((stage) => stage.stageKey === selectedWorkspaceStageKey.value) || null
 );
@@ -504,6 +343,45 @@ const workspaceDisplayStages = computed(() => {
 
   return stages.map((stage) => (stage.stageKey === 'solution' ? solutionDesignWorkspaceStage.value : stage));
 });
+const projectNavigationDisplay = computed(() => {
+  const navigation = projectNavigation.value;
+  if (!navigation || !isSolutionDesignStage.value || !solutionDesignWorkspaceStage.value) {
+    return navigation;
+  }
+
+  const children = (navigation.children || []).map((stage) => {
+    if (stage.stageKey !== 'solution') {
+      return stage;
+    }
+
+    const solutionChildren = (solutionDesignWorkspaceStage.value.nodes || []).map((node) => ({
+      name: node.nodeName,
+      nodeCode: node.nodeKey,
+      nodeKey: node.nodeKey,
+      status: mapSolutionDesignNavigationStatus(node.solutionDesignNode?.status),
+      route: `/projects/${props.projectId}/node/${node.nodeKey}`,
+      outputCount: Array.isArray(node.outputs) ? node.outputs.length : 0,
+      actionHints: node.solutionDesignNode?.actionHints || [],
+      blockingReasons: node.solutionDesignNode?.blockingReasons || [],
+      notes: node.solutionDesignNode?.notes || ''
+    }));
+
+    return {
+      ...stage,
+      stageName: solutionDesignWorkspaceStage.value.stageName || stage.stageName,
+      name: stage.name || solutionDesignWorkspaceStage.value.stageName || '方案设计阶段',
+      configured: true,
+      children: solutionChildren,
+      status: deriveNavigationStageStatus(stage, solutionChildren)
+    };
+  });
+
+  return {
+    ...navigation,
+    children,
+    progress: calculateNavigationProgress(children)
+  };
+});
 const activeWorkspaceDisplayStage = computed(() => {
   if (
     isSolutionDesignStage.value &&
@@ -524,35 +402,20 @@ const isActiveSolutionWorkspaceStage = computed(
 const activeWorkspaceNode = computed(
   () => (activeWorkspaceDisplayStage.value?.nodes || []).find((node) => node.nodeKey === selectedWorkspaceNodeKey.value) || null
 );
-const migratedWorkspaceDocumentKeys = computed(() => {
-  const keys = new Set();
-  for (const stage of workspace.value?.stages || []) {
-    for (const node of stage.nodes || []) {
-      for (const output of node.outputs || []) {
-        const document = getOutputDocument(output);
-        if (!document || isInitiationOnlineFormDocument(document)) {
-          continue;
-        }
-        if (document.id) {
-          keys.add(`id:${document.id}`);
-        }
-        if (document.documentCode) {
-          keys.add(`code:${document.documentCode}`);
-        }
-      }
-    }
-  }
-  return [...keys];
-});
-const isProjectRelatedToCurrentCenter = computed(() => {
-  if (!isCurrentUserCenterManager.value || !currentUserDepartment.value) {
-    return false;
-  }
+const activeNavigationStage = computed(
+  () =>
+    (projectNavigationDisplay.value?.children || []).find((stage) => stage.stageKey === selectedWorkspaceStageKey.value) ||
+    null
+);
+const activeNavigationNode = computed(
+  () => (activeNavigationStage.value?.children || []).find((node) => node.nodeCode === selectedWorkspaceNodeKey.value) || null
+);
+const currentNavigationStatus = computed(
+  () => activeNavigationNode.value?.status || activeNavigationStage.value?.status || projectNavigation.value?.projectStatus || ''
+);
+const currentNavigationStatusLabel = computed(() => formatNavigationStatus(currentNavigationStatus.value));
+const currentNavigationStatusTagType = computed(() => navigationStatusTagType(currentNavigationStatus.value));
 
-  return allStageDocuments.value.some((document) =>
-    isDocumentRelatedToDepartmentByOwnership(document, currentUserDepartment.value)
-  );
-});
 const visibleResponsibilityCandidates = computed(() => {
   if (!isCurrentUserCenterManager.value || isCurrentUserProjectManager.value || isCurrentUserGeneralManager.value) {
     return responsibilityCandidates.value;
@@ -560,48 +423,141 @@ const visibleResponsibilityCandidates = computed(() => {
 
   return responsibilityCandidates.value.filter((candidate) => candidate.department === currentUserDepartment.value);
 });
-const canCurrentUserAdvanceProject = computed(() => {
-  if (isProjectEnded.value) {
-    return false;
+
+const nodePageContext = computed(() => ({
+  activeOnlineForm: activeOnlineForm.value,
+  activeOnlineFormDocumentId: activeOnlineFormDocumentId.value,
+  onlineFormData,
+  onlineFormLoading: onlineFormLoading.value,
+  onlineFormSaving: onlineFormSaving.value,
+  onlineFormSubmitting: onlineFormSubmitting.value,
+  onlineFormErrorMessage: onlineFormErrorMessage.value,
+  onlineFormImageState,
+  responsibilityCandidates: visibleResponsibilityCandidates.value,
+  responsibilityCandidatesLoading: responsibilityCandidatesLoading.value,
+  responsibilityCandidatesErrorMessage: responsibilityCandidatesErrorMessage.value,
+  responsibilitySelections,
+  returnReasons,
+  notApplicableReasons,
+  getOutputDocument,
+  getAttachmentState,
+  isActionPending,
+  canSubmitDocument,
+  canConfirmReturnDocument,
+  canManageResponsibility,
+  canChangeApplicability,
+  openOnlineForm,
+  saveOnlineForm,
+  submitOnlineForm,
+  updateOnlineFormField,
+  approveInitiationNode,
+  returnInitiationNode,
+  submitDocument,
+  confirmDocument,
+  returnDocument,
+  completeRevisionDocument,
+  markNotApplicable,
+  restoreApplicable,
+  saveResponsibleUser,
+  clearResponsibleUser,
+  uploadAttachment,
+  downloadAttachment,
+  deleteAttachment,
+  uploadOnlineFormImage,
+  downloadOnlineFormImage,
+  deleteOnlineFormImage,
+  downloadGeneratedFile,
+  handleBusinessStateChanged
+}));
+/* ── 导航状态格式化 ── */
+function formatNavigationStatus(status) {
+  return {
+    PENDING: '未开始',
+    PROCESSING: '进行中',
+    COMPLETED: '已完成',
+    WAIT_APPROVAL: '待审核',
+    RETURNED: '退回整改',
+    FAILED: '异常'
+  }[status] || status || '-';
+}
+
+function navigationStatusTagType(status) {
+  return {
+    PROCESSING: 'success',
+    COMPLETED: 'success',
+    WAIT_APPROVAL: 'warning',
+    RETURNED: 'danger',
+    FAILED: 'danger',
+    PENDING: 'info'
+  }[status] || 'info';
+}
+
+function mapSolutionDesignWorkspaceStatus(status) {
+  return {
+    not_started: 'process_node',
+    pending: 'in_progress',
+    pending_review: 'pending_review',
+    pending_general_review: 'pending_review',
+    returned: 'returned_for_rework',
+    approved: 'completed',
+    skipped: 'not_applicable',
+    ended: 'completed'
+  }[status] || 'process_node';
+}
+
+function mapSolutionDesignNavigationStatus(status) {
+  return {
+    not_started: 'PENDING',
+    pending: 'PROCESSING',
+    pending_review: 'WAIT_APPROVAL',
+    pending_general_review: 'WAIT_APPROVAL',
+    returned: 'RETURNED',
+    approved: 'COMPLETED',
+    skipped: 'COMPLETED',
+    ended: 'COMPLETED'
+  }[status] || 'PENDING';
+}
+
+function deriveNavigationStageStatus(stage, children) {
+  const statuses = children.map((child) => child.status);
+  if (statuses.length === 0) {
+    return stage.status || 'PENDING';
   }
 
-  if (isCurrentUserGeneralManagerAssistant.value || isCurrentUserSystemAdmin.value) {
-    return false;
+  if (statuses.every((status) => status === 'COMPLETED')) {
+    return 'COMPLETED';
   }
 
-  return isCurrentUserGeneralManager.value || isCurrentUserProjectManager.value || isProjectRelatedToCurrentCenter.value;
-});
-const canViewProjectAudit = computed(
-  () =>
-    !isCurrentUserSystemAdmin.value &&
-    (
-      isCurrentUserGeneralManager.value ||
-      isCurrentUserGeneralManagerAssistant.value ||
-      isCurrentUserCenterManager.value ||
-      isCurrentUserProjectCreator.value ||
-      isCurrentUserProjectManager.value
-    )
-);
-const currentStageAdvanceMissingDocuments = computed(() => {
-  if (stageAdvanceErrorMessage.value && stageAdvanceMissingDocuments.value.length > 0) {
-    return stageAdvanceMissingDocuments.value;
+  if (statuses.some((status) => status === 'FAILED')) {
+    return 'FAILED';
   }
 
-  return currentStageCompleteness.value?.incompleteRequiredDocuments || [];
-});
-const canAdvanceCurrentStage = computed(
-  () =>
-    Boolean(detail.value?.currentStage) &&
-    !isProjectCompleted.value &&
-    !isProjectEnded.value &&
-    canCurrentUserAdvanceProject.value &&
-    Boolean(currentStageCompleteness.value) &&
-    currentStageCompleteness.value.incompleteRequiredCount === 0
-);
-const isTaskMode = computed(() =>
-  Boolean(props.taskMode || props.focusDocumentId || props.focusStageId || props.focusNodeKey)
-);
+  if (statuses.some((status) => status === 'RETURNED')) {
+    return 'RETURNED';
+  }
 
+  if (statuses.some((status) => status === 'WAIT_APPROVAL')) {
+    return 'WAIT_APPROVAL';
+  }
+
+  if (stage.isCurrent || statuses.some((status) => status === 'PROCESSING')) {
+    return 'PROCESSING';
+  }
+
+  return 'PENDING';
+}
+
+function calculateNavigationProgress(stages) {
+  const nodes = stages.flatMap((stage) => stage.children || []);
+  if (nodes.length === 0) {
+    return projectNavigation.value?.progress ?? 0;
+  }
+
+  const completedNodes = nodes.filter((node) => node.status === 'COMPLETED').length;
+  return Math.round((completedNodes / nodes.length) * 100);
+}
+
+/* ── 文档权限判断 ── */
 function isActionPending(documentId, action) {
   return pendingAction.value === actionKey(documentId, action);
 }
@@ -614,19 +570,6 @@ function getOutputDocument(output) {
   );
 }
 
-function mapSolutionDesignWorkspaceStatus(status) {
-  return {
-    not_started: 'process_node',
-    pending: 'waiting_submission',
-    pending_review: 'pending_review',
-    pending_general_review: 'pending_review',
-    returned: 'returned_for_rework',
-    approved: 'completed',
-    skipped: 'not_applicable',
-    ended: 'completed'
-  }[status] || 'process_node';
-}
-
 function findSolutionDesignWorkflowNodeKey(nodeKey) {
   const normalized = String(nodeKey || '').trim();
   if (!normalized) {
@@ -636,13 +579,69 @@ function findSolutionDesignWorkflowNodeKey(nodeKey) {
   return (solutionDesignWorkflow.value?.nodes || []).some((node) => node.nodeKey === normalized) ? normalized : '';
 }
 
-function selectWorkspaceStage(stage) {
-  manualWorkspaceSelectionRouteKey.value = getWorkspaceRouteKey();
-  selectedWorkspaceStageKey.value = stage.stageKey;
-  selectedWorkspaceNodeKey.value = '';
-  clearOnlineFormState();
+function isSolutionDesignDedicatedStageDocument(document) {
+  const documentCode = String(document?.documentCode || document?.code || '').trim();
+  return isSolutionDesignStage.value && solutionDesignDedicatedDocumentCodes.has(documentCode);
 }
 
+function getDocumentPermissions(document) {
+  return document?.permissions || {};
+}
+
+function documentPermission(document, key, fallback) {
+  const value = getDocumentPermissions(document)[key] ?? document?.[key];
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function canConfirmReturnDocument(document) {
+  return !isProjectEnded.value && documentPermission(document, 'canReviewDocument', false);
+}
+
+function canManageResponsibility(document) {
+  return !isProjectEnded.value && documentPermission(document, 'canManageResponsibility', false);
+}
+
+function canSubmitDocument(document) {
+  return !isProjectEnded.value && documentPermission(document, 'canSubmitDocument', false);
+}
+
+function canChangeApplicability(document) {
+  return !isProjectEnded.value && documentPermission(document, 'canChangeApplicability', false);
+}
+
+function canViewDocumentAttachments(document) {
+  return documentPermission(document, 'canViewAttachments', false);
+}
+
+function canUploadDocumentAttachment(document) {
+  return !isProjectEnded.value && documentPermission(document, 'canUploadAttachment', false);
+}
+
+function canDownloadDocumentAttachment(document, attachment) {
+  const value = attachment?.permissions?.canDownload ?? attachment?.canDownload;
+  return typeof value === 'boolean' ? value : documentPermission(document, 'canDownloadAttachment', false);
+}
+
+function canDeleteDocumentAttachment(document, attachment) {
+  if (isProjectEnded.value) {
+    return false;
+  }
+
+  const value = attachment?.permissions?.canDelete ?? attachment?.canDelete;
+  return typeof value === 'boolean' ? value : documentPermission(document, 'canDeleteAttachment', false);
+}
+
+/* ── 在阶段内查找活跃节点（阶段是导航目录，不需要独立页面） ── */
+function findActiveNodeInStage(stage) {
+  const nodes = stage.nodes || [];
+  // 优先级：退回 > 待审核 > 进行中 > 待开始 > 已完成(末尾)
+  const priorityStatuses = ['returned_for_rework', 'blocked_by_rework', 'pending_review', 'in_progress', 'process_node'];
+  const activeNode = nodes.find((node) => priorityStatuses.includes(node.nodeStatus));
+  const pendingNode = nodes.find((node) => !['completed', 'not_applicable'].includes(node.nodeStatus));
+  return activeNode || pendingNode || nodes[nodes.length - 1] || null;
+}
+
+/* ── 工作区节点选择（阶段是导航目录，只有节点才驱动内容更新） ── */
 function selectWorkspaceNode(stage, node) {
   if (!stage || !node) {
     return;
@@ -652,121 +651,88 @@ function selectWorkspaceNode(stage, node) {
   selectedWorkspaceStageKey.value = stage.stageKey;
   selectedWorkspaceNodeKey.value = node.nodeKey;
   clearOnlineFormState();
+  props.navigate(`/projects/${props.projectId}/node/${node.nodeKey}`);
 }
 
-function findStageDocumentChecklistCard(target = null) {
-  const documentId = target?.legacyChecklistTarget?.documentId ?? target?.documentId ?? null;
-  const documentCode = target?.legacyChecklistTarget?.documentCode ?? target?.documentCode ?? target?.legacyDocumentCode ?? null;
-  const cards = Array.from(globalThis.document?.querySelectorAll?.('[data-stage-document-id], [data-stage-document-code]') || []);
-
-  return (
-    cards.find((card) => documentId && card.dataset.stageDocumentId === String(documentId)) ||
-    cards.find((card) => documentCode && card.dataset.stageDocumentCode === String(documentCode)) ||
-    null
-  );
-}
-
-function focusStageDocumentChecklistCard(card) {
-  if (!card) {
+function selectWorkspaceNodeFromNavigation({ stage, node }) {
+  if (isSolutionDesignStage.value && stage?.stageKey === 'solution' && solutionDesignWorkspaceStage.value) {
+    const solutionNode = (solutionDesignWorkspaceStage.value.nodes || []).find((item) => item.nodeKey === node.nodeCode);
+    if (solutionNode) {
+      selectWorkspaceNode(solutionDesignWorkspaceStage.value, solutionNode);
+    }
     return;
   }
 
-  card.classList.add('stage-document-card--focused');
-  globalThis.setTimeout?.(() => {
-    card.classList.remove('stage-document-card--focused');
-  }, 1800);
-}
-
-function findWorkspaceOutputCard(target = null) {
-  const documentId = target?.id ?? target?.documentId ?? target?.output?.documentId ?? null;
-  const documentCode = target?.documentCode ?? target?.output?.documentCode ?? target?.output?.legacyDocumentCode ?? null;
-  const cards = Array.from(globalThis.document?.querySelectorAll?.('[data-workspace-output-document-id], [data-workspace-output-document-code]') || []);
-
-  return (
-    cards.find((card) => documentId && card.dataset.workspaceOutputDocumentId === String(documentId)) ||
-    cards.find((card) => documentCode && card.dataset.workspaceOutputDocumentCode === String(documentCode)) ||
-    null
-  );
-}
-
-function focusWorkspaceOutputCard(card) {
-  if (!card) {
+  const workspaceStage = (workspace.value?.stages || []).find((item) => item.stageKey === stage.stageKey);
+  const workspaceNode = (workspaceStage?.nodes || []).find((item) => item.nodeKey === node.nodeCode);
+  if (!workspaceStage) {
     return;
   }
 
-  card.classList.add('project-workspace__output--focused');
-  globalThis.setTimeout?.(() => {
-    card.classList.remove('project-workspace__output--focused');
-  }, 1800);
+  if (workspaceNode) {
+    selectWorkspaceNode(workspaceStage, workspaceNode);
+  } else {
+    /* 导航有节点但工作区数据缺失——回退到该阶段第一个活跃节点 */
+    const fallbackNode = findActiveNodeInStage(workspaceStage);
+    if (fallbackNode) {
+      selectWorkspaceNode(workspaceStage, fallbackNode);
+    }
+  }
 }
 
-function findWorkspaceTargetByDocument(document) {
-  if (!document) {
-    return null;
+function selectCurrentWorkspaceNode() {
+  /* 打开项目详情时自动跳转到当前阶段和当前节点：
+   * 1. 用项目的 currentStage（而非硬编码 initiation）作为默认阶段
+   * 2. 在该阶段内找第一个「非完成」节点作为活跃节点（阶段只是目录，不停留）
+   * 3. 更新 URL hash 以便刷新后仍定位到同一节点 */
+  const currentStageKey = currentDetailStage.value?.stageKey;
+  const stages = workspaceDisplayStages.value || [];
+
+  const targetStage = currentStageKey
+    ? stages.find((stage) => stage.stageKey === currentStageKey)
+    : stages[0] || null;
+
+  if (!targetStage) {
+    selectedWorkspaceStageKey.value = '';
+    selectedWorkspaceNodeKey.value = '';
+    return;
   }
 
-  for (const stage of workspace.value?.stages || []) {
-    for (const node of stage.nodes || []) {
-      for (const output of node.outputs || []) {
-        const boundDocument = getOutputDocument(output);
-        if (
-          (document.id && String(boundDocument?.id) === String(document.id)) ||
-          (document.documentCode && boundDocument?.documentCode === document.documentCode)
-        ) {
-          return { stage, node, output };
-        }
-      }
+  selectedWorkspaceStageKey.value = targetStage.stageKey;
+
+  const targetNode = findActiveNodeInStage(targetStage);
+  if (targetNode) {
+    selectedWorkspaceNodeKey.value = targetNode.nodeKey;
+    props.navigate(`/projects/${props.projectId}/node/${targetNode.nodeKey}`);
+  } else {
+    selectedWorkspaceNodeKey.value = '';
+  }
+}
+
+function restoreWorkspaceSelection(stageKey, nodeKey) {
+  const stage = (workspaceDisplayStages.value || []).find((item) => item.stageKey === stageKey);
+  if (!stage) {
+    return false;
+  }
+
+  selectedWorkspaceStageKey.value = stage.stageKey;
+  selectedWorkspaceNodeKey.value = (stage.nodes || []).some((node) => node.nodeKey === nodeKey) ? nodeKey : '';
+  return true;
+}
+
+function restoreWorkspaceSelectionByNodeKey(nodeKey) {
+  for (const stage of workspaceDisplayStages.value || []) {
+    if ((stage.nodes || []).some((node) => node.nodeKey === nodeKey)) {
+      selectedWorkspaceStageKey.value = stage.stageKey;
+      selectedWorkspaceNodeKey.value = nodeKey;
+      return true;
     }
   }
 
-  return null;
+  return false;
 }
 
-async function locateWorkspaceOutputCard(document) {
-  const target = findWorkspaceTargetByDocument(document);
-  if (target) {
-    manualWorkspaceSelectionRouteKey.value = getWorkspaceRouteKey();
-    selectedWorkspaceStageKey.value = target.stage.stageKey;
-    selectedWorkspaceNodeKey.value = target.node.nodeKey;
-    clearOnlineFormState();
-    await nextTick();
-  }
-
-  const card = findWorkspaceOutputCard(target?.output || document);
-  if (card) {
-    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    focusWorkspaceOutputCard(card);
-    return;
-  }
-
-  const workspaceElement = globalThis.document?.querySelector?.('.project-workspace--primary');
-  workspaceElement?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-async function scrollToStageDocumentChecklist(target = null) {
-  if (!isLegacyChecklistExpanded.value) {
-    isLegacyChecklistExpanded.value = true;
-    await nextTick();
-  }
-
-  const documentCard = findStageDocumentChecklistCard(target);
-  if (documentCard) {
-    documentCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    focusStageDocumentChecklistCard(documentCard);
-    return;
-  }
-
-  const checklistElement = globalThis.document?.getElementById?.('stage-document-checklist');
-  checklistElement?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function selectDefaultWorkspaceNode() {
-  const initiationStage = (workspace.value?.stages || []).find((stage) => stage.stageKey === 'initiation');
-  const firstStage = initiationStage || workspace.value?.stages?.[0] || null;
-  selectedWorkspaceStageKey.value = firstStage?.stageKey || '';
-  selectedWorkspaceNodeKey.value = '';
-}
-
+/* ── 工作区路由定位 ── */
 function findWorkspaceTargetByDocumentId(documentId) {
   if (!documentId) {
     return null;
@@ -899,29 +865,26 @@ function selectWorkspaceTargetFromRoute(options = {}) {
     return true;
   }
 
+  const nodeKey = String(props.focusNodeKey || '').trim();
+  if (nodeKey && restoreWorkspaceSelectionByNodeKey(nodeKey)) {
+    clearWorkspaceOnlineForm(options);
+    markWorkspaceRouteApplied(routeKey);
+    return true;
+  }
+
   if (props.focusDocumentId) {
-    selectDefaultWorkspaceNode();
+    selectCurrentWorkspaceNode();
     clearWorkspaceOnlineForm(options);
     return false;
   }
 
-  if (isSolutionDesignStage.value && String(props.focusNodeKey || '').trim()) {
-    const solutionStage = (workspace.value?.stages || []).find((stage) => stage.stageKey === 'solution');
-    if (solutionStage) {
-      selectedWorkspaceStageKey.value = solutionStage.stageKey;
-      selectedWorkspaceNodeKey.value = findSolutionDesignWorkflowNodeKey(props.focusNodeKey);
-      clearWorkspaceOnlineForm(options);
-      markWorkspaceRouteApplied(routeKey);
-      return true;
-    }
-  }
-
-  selectDefaultWorkspaceNode();
+  selectCurrentWorkspaceNode();
   clearWorkspaceOnlineForm(options);
   markWorkspaceRouteApplied(routeKey);
   return true;
 }
 
+/* ── 在线表单 ── */
 function clearOnlineFormState() {
   activeOnlineFormDocumentId.value = null;
   activeOnlineForm.value = null;
@@ -952,6 +915,19 @@ function updateOnlineFormField({ key, value }) {
   onlineFormData[key] = value;
 }
 
+async function reloadActiveOnlineForm() {
+  const documentId = activeOnlineForm.value?.stageDocumentId || activeOnlineFormDocumentId.value;
+  if (!documentId) {
+    return;
+  }
+
+  const response = await getStageDocumentOnlineForm(props.projectId, documentId, props.authToken);
+  activeOnlineFormDocumentId.value = documentId;
+  activeOnlineForm.value = response.form || response;
+  syncOnlineFormData(activeOnlineForm.value);
+}
+
+/* ── 附件状态 ── */
 function getAttachmentState(documentId) {
   if (!attachmentStates[documentId]) {
     attachmentStates[documentId] = {
@@ -967,92 +943,19 @@ function getAttachmentState(documentId) {
   return attachmentStates[documentId];
 }
 
-function getDocumentPermissions(document) {
-  return document?.permissions || {};
-}
-
-function documentPermission(document, key, fallback) {
-  const value = getDocumentPermissions(document)[key] ?? document?.[key];
-  return typeof value === 'boolean' ? value : fallback;
-}
-
-function isSolutionDesignDedicatedStageDocument(document) {
-  const documentCode = String(document?.documentCode ?? document?.document_code ?? '').trim();
-  return isSolutionDesignStage.value && solutionDesignDedicatedDocumentCodes.has(documentCode);
-}
-
-function canConfirmReturnDocument(document) {
-  if (isSolutionDesignDedicatedStageDocument(document)) {
-    return false;
-  }
-
-  return !isProjectEnded.value && documentPermission(document, 'canReviewDocument', false);
-}
-
-function canManageResponsibility(document) {
-  return !isProjectEnded.value && documentPermission(document, 'canManageResponsibility', false);
-}
-
-function canSubmitDocument(document) {
-  if (isSolutionDesignDedicatedStageDocument(document)) {
-    return false;
-  }
-
-  return !isProjectEnded.value && documentPermission(document, 'canSubmitDocument', false);
-}
-
-function canChangeApplicability(document) {
-  return !isProjectEnded.value && documentPermission(document, 'canChangeApplicability', false);
-}
-
-function canViewDocumentAttachments(document) {
-  return documentPermission(document, 'canViewAttachments', false);
-}
-
-function canUploadDocumentAttachment(document) {
-  return !isProjectEnded.value && documentPermission(document, 'canUploadAttachment', false);
-}
-
-function canDownloadDocumentAttachment(document, attachment) {
-  const value = attachment?.permissions?.canDownload ?? attachment?.canDownload;
-  return typeof value === 'boolean' ? value : documentPermission(document, 'canDownloadAttachment', false);
-}
-
-function canDeleteDocumentAttachment(document, attachment) {
-  if (isProjectEnded.value) {
-    return false;
-  }
-
-  const value = attachment?.permissions?.canDelete ?? attachment?.canDelete;
-  return typeof value === 'boolean' ? value : documentPermission(document, 'canDeleteAttachment', false);
-}
-
 function clearAttachmentStates() {
   Object.keys(attachmentStates).forEach((key) => {
     delete attachmentStates[key];
   });
 }
 
+/* ── 操作消息清理 ── */
 function clearActionState() {
   actionMessage.value = '';
   actionErrorMessage.value = '';
 }
 
-function clearStageAdvanceState() {
-  stageAdvanceMessage.value = '';
-  stageAdvanceErrorMessage.value = '';
-  stageAdvanceMissingDocuments.value = [];
-}
-
-function clearSolutionDesignState() {
-  solutionDesignWorkflowLoading.value = false;
-  solutionDesignWorkflowErrorMessage.value = '';
-  solutionDesignWorkflow.value = null;
-  solutionDesignUploadsLoading.value = false;
-  solutionDesignUploadsErrorMessage.value = '';
-  solutionDesignUploads.value = null;
-}
-
+/* ── 责任人选择同步 ── */
 function syncResponsibilitySelectionsFromChecklist() {
   Object.keys(responsibilitySelections).forEach((key) => {
     delete responsibilitySelections[key];
@@ -1068,28 +971,34 @@ function syncResponsibilitySelectionsFromChecklist() {
   }
 }
 
-function restoreWorkspaceSelection(stageKey, nodeKey) {
-  const stage =
-    stageKey === 'solution'
-      ? solutionDesignWorkspaceStage.value || (workspace.value?.stages || []).find((item) => item.stageKey === stageKey)
-      : (workspace.value?.stages || []).find((item) => item.stageKey === stageKey);
-  if (!stage) {
-    return false;
-  }
-
-  selectedWorkspaceStageKey.value = stage.stageKey;
-  selectedWorkspaceNodeKey.value = (stage.nodes || []).some((node) => node.nodeKey === nodeKey) ? nodeKey : '';
-  return true;
-}
-
+/* ── 通用文档操作 ── */
 async function refreshProjectWorkspaceState(options = {}) {
   await Promise.all([
     loadChecklist(options),
     loadWorkspace({ preserveSelection: true, ...options }),
+    loadProjectNavigation(),
     loadSolutionDesignWorkflow(),
-    loadSolutionDesignUploads(),
-    loadOperationLogs()
+    loadSolutionDesignUploads()
   ]);
+
+  ensureSolutionDesignWorkspaceSelection(options);
+
+  if (options.preserveOnlineFormState && activeOnlineFormDocumentId.value) {
+    await reloadActiveOnlineForm();
+  }
+}
+
+async function handleBusinessStateChanged(payload = {}) {
+  const shouldClearCurrentDetail = payload.clearCurrentDetail === true;
+  const shouldRefreshCurrentDetail = payload.refreshCurrentDetail === true && !shouldClearCurrentDetail;
+
+  if (shouldClearCurrentDetail) {
+    clearOnlineFormState();
+  }
+
+  await refreshProjectWorkspaceState({
+    preserveOnlineFormState: shouldRefreshCurrentDetail
+  });
 }
 
 async function refreshProjectDetailOnly() {
@@ -1137,6 +1046,30 @@ function syncSolutionWorkspaceFocusNodeFromRoute() {
   return true;
 }
 
+function ensureSolutionDesignWorkspaceSelection(options = {}) {
+  if (!isSolutionDesignStage.value || !workspace.value || !solutionDesignWorkflow.value) {
+    return;
+  }
+
+  if (
+    options.preserveSelection &&
+    selectedWorkspaceStageKey.value === 'solution' &&
+    findSolutionDesignWorkflowNodeKey(selectedWorkspaceNodeKey.value)
+  ) {
+    return;
+  }
+
+  const focusedNodeKey = findSolutionDesignWorkflowNodeKey(props.focusNodeKey);
+  if (focusedNodeKey) {
+    selectedWorkspaceStageKey.value = 'solution';
+    selectedWorkspaceNodeKey.value = focusedNodeKey;
+    clearWorkspaceOnlineForm(options);
+    return;
+  }
+
+  selectWorkspaceTargetFromRoute(options);
+}
+
 async function runDocumentAction(document, action, runner, successText, onSuccess = null) {
   clearActionState();
   pendingAction.value = actionKey(document.id, action);
@@ -1146,7 +1079,6 @@ async function runDocumentAction(document, action, runner, successText, onSucces
     if (onSuccess) {
       onSuccess();
     }
-    clearStageAdvanceState();
     actionMessage.value = successText;
     await refreshProjectWorkspaceState();
   } catch (error) {
@@ -1156,6 +1088,7 @@ async function runDocumentAction(document, action, runner, successText, onSucces
   }
 }
 
+/* ── 文档提交 / 确认 / 退回 / 返工完成 ── */
 async function submitDocument(document) {
   if (isInitiationOnlineFormDocument(document)) {
     actionErrorMessage.value = '请通过在线表单提交或重提该资料。';
@@ -1270,6 +1203,7 @@ async function returnDocument(payload) {
   );
 }
 
+/* ── 立项审批 ── */
 async function approveInitiationNode({ document, node, comment }) {
   const successText =
     node.nodeKey === 'general_review'
@@ -1327,6 +1261,7 @@ async function returnInitiationNode({ document, node, returnReason, returnAction
   );
 }
 
+/* ── 不适用标记 ── */
 async function markNotApplicable(document) {
   clearActionState();
   const reason = String(notApplicableReasons[document.id] || '').trim();
@@ -1359,6 +1294,7 @@ async function restoreApplicable(document) {
   );
 }
 
+/* ── 责任人 ── */
 async function saveResponsibleUser(document) {
   clearActionState();
 
@@ -1394,6 +1330,7 @@ async function clearResponsibleUser(document) {
   );
 }
 
+/* ── 附件 ── */
 async function loadDocumentAttachments(document) {
   const state = getAttachmentState(document.id);
   state.loading = true;
@@ -1414,7 +1351,7 @@ async function loadDocumentAttachments(document) {
   }
 }
 
-async function loadAttachmentsForChecklist() {
+async function loadAttachmentsForAllDocuments() {
   const documents = (checklist.value?.stages || []).flatMap((stage) => stage.documents || []);
   await Promise.all(documents.map((document) => loadDocumentAttachments(document)));
 }
@@ -1543,6 +1480,7 @@ async function deleteAttachment({ document, attachment }) {
   }
 }
 
+/* ── 在线表单图片 ── */
 function canUseOnlineFormImageField(field) {
   return Boolean(activeOnlineForm.value?.permissions?.canEdit) && field?.type === 'image';
 }
@@ -1689,47 +1627,19 @@ async function deleteOnlineFormImage({ image }) {
   }
 }
 
-async function advanceCurrentStage() {
-  clearActionState();
-  clearStageAdvanceState();
-
-  if (!canAdvanceCurrentStage.value) {
-    stageAdvanceErrorMessage.value = '当前阶段未齐套，不能推进。';
-    stageAdvanceMissingDocuments.value = currentStageAdvanceMissingDocuments.value;
-    return;
-  }
-
-  stageAdvancePending.value = true;
-
-  try {
-    await advanceProjectStage(props.projectId, props.authToken);
-    stageAdvanceMessage.value = '项目阶段已手工推进。';
-    await loadDetail({ preserveStageAdvanceState: true });
-  } catch (error) {
-    stageAdvanceErrorMessage.value = toReadableApiError(error);
-    const documents = error.details?.incompleteRequiredDocuments;
-    stageAdvanceMissingDocuments.value = Array.isArray(documents) ? documents : [];
-  } finally {
-    stageAdvancePending.value = false;
-  }
-}
-
+/* ── 数据加载 ── */
 async function loadChecklist(options = {}) {
-  checklistLoading.value = true;
-  checklistErrorMessage.value = '';
   checklist.value = null;
 
   try {
     checklist.value = await getProjectStageDocumentChecklist(props.projectId, props.authToken);
     syncResponsibilitySelectionsFromChecklist();
-    await loadAttachmentsForChecklist();
+    await loadAttachmentsForAllDocuments();
     if (workspace.value && props.focusDocumentId) {
       selectWorkspaceTargetFromRoute(options);
     }
-  } catch (error) {
-    checklistErrorMessage.value = toReadableApiError(error);
-  } finally {
-    checklistLoading.value = false;
+  } catch {
+    checklist.value = null;
   }
 }
 
@@ -1756,6 +1666,62 @@ async function loadWorkspace(options = {}) {
     workspaceErrorMessage.value = toReadableApiError(error);
   } finally {
     workspaceLoading.value = false;
+  }
+}
+
+async function loadProjectNavigation() {
+  projectNavigationLoading.value = true;
+  projectNavigationErrorMessage.value = '';
+  projectNavigation.value = null;
+
+  try {
+    projectNavigation.value = await getProjectNavigation(props.projectId, props.authToken);
+  } catch (error) {
+    projectNavigationErrorMessage.value = toReadableApiError(error);
+  } finally {
+    projectNavigationLoading.value = false;
+  }
+}
+
+async function loadSolutionDesignWorkflow() {
+  if (!isSolutionDesignStage.value) {
+    solutionDesignWorkflowLoading.value = false;
+    solutionDesignWorkflowErrorMessage.value = '';
+    solutionDesignWorkflow.value = null;
+    return;
+  }
+
+  solutionDesignWorkflowLoading.value = true;
+  solutionDesignWorkflowErrorMessage.value = '';
+
+  try {
+    solutionDesignWorkflow.value = await getSolutionDesignWorkflow(props.projectId, props.authToken);
+  } catch (error) {
+    solutionDesignWorkflowErrorMessage.value = toReadableApiError(error);
+    solutionDesignWorkflow.value = null;
+  } finally {
+    solutionDesignWorkflowLoading.value = false;
+  }
+}
+
+async function loadSolutionDesignUploads() {
+  if (!isSolutionDesignStage.value) {
+    solutionDesignUploadsLoading.value = false;
+    solutionDesignUploadsErrorMessage.value = '';
+    solutionDesignUploads.value = null;
+    return;
+  }
+
+  solutionDesignUploadsLoading.value = true;
+  solutionDesignUploadsErrorMessage.value = '';
+
+  try {
+    solutionDesignUploads.value = await listSolutionDesignUploads(props.projectId, props.authToken);
+  } catch (error) {
+    solutionDesignUploadsErrorMessage.value = toReadableApiError(error);
+    solutionDesignUploads.value = null;
+  } finally {
+    solutionDesignUploadsLoading.value = false;
   }
 }
 
@@ -1821,7 +1787,7 @@ async function submitOnlineForm() {
       { ...onlineFormData },
       props.authToken
     );
-    activeOnlineForm.value = response.form;
+    activeOnlineForm.value = response.form || response;
     syncOnlineFormData(activeOnlineForm.value);
     actionMessage.value = '在线表单已提交。';
     await refreshProjectWorkspaceState({ preserveOnlineFormState: true });
@@ -1846,90 +1812,27 @@ async function loadResponsibilityCandidates() {
   }
 }
 
-async function loadOperationLogs() {
-  if (!canViewProjectAudit.value) {
-    operationLogsLoading.value = false;
-    operationLogsErrorMessage.value = '';
-    operationLogs.value = [];
-    return;
-  }
-
-  operationLogsLoading.value = true;
-  operationLogsErrorMessage.value = '';
-  operationLogs.value = [];
-
-  try {
-    operationLogs.value = await getProjectOperationLogs(props.projectId, props.authToken);
-  } catch (error) {
-    operationLogsErrorMessage.value = toReadableApiError(error);
-  } finally {
-    operationLogsLoading.value = false;
-  }
-}
-
-async function loadSolutionDesignWorkflow() {
-  if (!isSolutionDesignStage.value) {
-    solutionDesignWorkflowLoading.value = false;
-    solutionDesignWorkflowErrorMessage.value = '';
-    solutionDesignWorkflow.value = null;
-    return;
-  }
-
-  solutionDesignWorkflowLoading.value = true;
-  solutionDesignWorkflowErrorMessage.value = '';
-
-  try {
-    solutionDesignWorkflow.value = await getSolutionDesignWorkflow(props.projectId, props.authToken);
-  } catch (error) {
-    solutionDesignWorkflowErrorMessage.value = toReadableApiError(error);
-    solutionDesignWorkflow.value = null;
-  } finally {
-    solutionDesignWorkflowLoading.value = false;
-  }
-}
-
-async function loadSolutionDesignUploads() {
-  if (!isSolutionDesignStage.value) {
-    solutionDesignUploadsLoading.value = false;
-    solutionDesignUploadsErrorMessage.value = '';
-    solutionDesignUploads.value = null;
-    return;
-  }
-
-  solutionDesignUploadsLoading.value = true;
-  solutionDesignUploadsErrorMessage.value = '';
-
-  try {
-    solutionDesignUploads.value = await listSolutionDesignUploads(props.projectId, props.authToken);
-  } catch (error) {
-    solutionDesignUploadsErrorMessage.value = toReadableApiError(error);
-    solutionDesignUploads.value = null;
-  } finally {
-    solutionDesignUploadsLoading.value = false;
-  }
-}
-
-async function loadDetail(options = {}) {
+/* ── 页面初始化 ── */
+async function loadDetail() {
   loading.value = true;
   errorMessage.value = '';
   errorCode.value = '';
   detail.value = null;
   checklist.value = null;
   workspace.value = null;
-  clearSolutionDesignState();
-  checklistErrorMessage.value = '';
+  projectNavigation.value = null;
+  solutionDesignWorkflow.value = null;
+  solutionDesignUploads.value = null;
   workspaceErrorMessage.value = '';
-  operationLogs.value = [];
-  operationLogsErrorMessage.value = '';
+  projectNavigationErrorMessage.value = '';
+  solutionDesignWorkflowErrorMessage.value = '';
+  solutionDesignUploadsErrorMessage.value = '';
   responsibilityCandidates.value = [];
   responsibilityCandidatesErrorMessage.value = '';
   clearAttachmentStates();
   clearActionState();
   lastAppliedWorkspaceRouteKey.value = '';
   manualWorkspaceSelectionRouteKey.value = '';
-  if (!options.preserveStageAdvanceState) {
-    clearStageAdvanceState();
-  }
 
   try {
     detail.value = await getProjectDetail(props.projectId, props.authToken);
@@ -1944,11 +1847,12 @@ async function loadDetail(options = {}) {
     await Promise.all([
       loadChecklist(),
       loadWorkspace(),
+      loadProjectNavigation(),
       loadSolutionDesignWorkflow(),
       loadSolutionDesignUploads(),
-      loadOperationLogs(),
       loadResponsibilityCandidates()
     ]);
+    ensureSolutionDesignWorkspaceSelection();
   }
 }
 

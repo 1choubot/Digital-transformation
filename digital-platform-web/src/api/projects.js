@@ -6,6 +6,22 @@ export async function listProjects(authToken = '') {
   return request('/api/projects', { authToken });
 }
 
+// Load projects the current user can select when filling daily or weekly reports.
+export async function searchMyActiveProjects({ keyword = '', limit = 50 } = {}, authToken = '') {
+  const params = new URLSearchParams();
+
+  if (keyword && keyword.trim()) {
+    params.set('q', keyword.trim());
+  }
+
+  if (limit) {
+    params.set('limit', String(limit));
+  }
+
+  const queryString = params.toString();
+  return request(`/api/projects/my-active${queryString ? `?${queryString}` : ''}`, { authToken });
+}
+
 export async function getProjectOverviewDashboard(
   { status = '', currentStageOrder = '', keyword = '' } = {},
   authToken = ''
@@ -176,21 +192,6 @@ export async function processSolutionDesignQuotationResult(projectId, payload, a
     authToken,
     body: JSON.stringify(payload)
   });
-}
-
-export async function searchMyActiveProjects({ keyword = '', limit = 50 } = {}, authToken = '') {
-  const params = new URLSearchParams();
-
-  if (keyword && keyword.trim()) {
-    params.set('q', keyword.trim());
-  }
-
-  if (limit) {
-    params.set('limit', String(limit));
-  }
-
-  const queryString = params.toString();
-  return request(`/api/projects/my-active${queryString ? `?${queryString}` : ''}`, { authToken });
 }
 
 export async function updateProjectCode(projectId, projectCode, authToken) {

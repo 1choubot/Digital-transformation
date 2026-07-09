@@ -1,6 +1,6 @@
 <template>
   <ProjectNodeWorkspacePanel
-    :page-title="node?.nodeName || '项目节点'"
+    page-title="方案设计准备"
     :stage="stage"
     :node="node"
     :node-page-context="nodePageContext"

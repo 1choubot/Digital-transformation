@@ -1,19 +1,26 @@
 <template>
-  <ProjectNodeWorkspacePanel
-    :page-title="node?.nodeName || '项目节点'"
+  <component
+    :is="NodePage"
+    :project-id="projectId"
+    :auth-token="authToken"
+    :current-user="currentUser"
+    :project="project"
+    :workspace="workspace"
     :stage="stage"
     :node="node"
+    :node-code="normalizedNodeCode"
     :node-page-context="nodePageContext"
-    @business-state-changed="$emit('business-state-changed', $event)"
+    @business-state-changed="emit('business-state-changed', $event)"
   />
 </template>
 
 <script setup>
-import ProjectNodeWorkspacePanel from './ProjectNodeWorkspacePanel.vue';
+import { computed } from 'vue';
+import { resolveNodePage } from '../../config/nodePages.js';
 
-defineEmits(['business-state-changed']);
+const emit = defineEmits(['business-state-changed']);
 
-defineProps({
+const props = defineProps({
   projectId: {
     type: String,
     required: true
@@ -51,4 +58,7 @@ defineProps({
     default: () => ({})
   }
 });
+
+const normalizedNodeCode = computed(() => props.nodeCode || props.node?.nodeKey || '');
+const NodePage = computed(() => resolveNodePage(normalizedNodeCode.value));
 </script>

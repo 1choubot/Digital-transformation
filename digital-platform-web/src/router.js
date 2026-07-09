@@ -1,127 +1,107 @@
-import { ref } from 'vue';
+import { createRouter, createWebHashHistory } from 'vue-router';
+import CenterDailyReportPage from './pages/CenterDailyReportPage.vue';
+import DailyReportListPage from './pages/DailyReportListPage.vue';
+import DailyReportPage from './pages/DailyReportPage.vue';
+import MyStageDocumentTasksPage from './pages/MyStageDocumentTasksPage.vue';
+import ProjectCreatePage from './pages/ProjectCreatePage.vue';
+import ProjectDetailPage from './pages/project-detail/ProjectDetailPage.vue';
+import ProjectOverviewDashboardPage from './pages/ProjectOverviewDashboardPage.vue';
+import UserManagementPage from './pages/UserManagementPage.vue';
+import WeeklyReportListPage from './pages/WeeklyReportListPage.vue';
+import WeeklyReportPage from './pages/WeeklyReportPage.vue';
+import WeeklyReportReviewListPage from './pages/WeeklyReportReviewListPage.vue';
+import WeeklyReportReviewPage from './pages/WeeklyReportReviewPage.vue';
 
-function parseHash() {
-  let hash = window.location.hash.replace(/^#/, '') || '/projects';
-  // 分离路径和查询字符串
-  let path = hash;
-  let query = {};
-  const queryIndex = hash.indexOf('?');
-  if (queryIndex !== -1) {
-    path = hash.substring(0, queryIndex);
-    const queryString = hash.substring(queryIndex + 1);
-    const params = new URLSearchParams(queryString);
-    for (const [key, value] of params) {
-      query[key] = value;
-    }
+const NotFoundPage = {
+  template: `
+    <section class="state-panel">
+      <h2>页面不存在</h2>
+      <p>当前页面无法在数字化平台路由映射表中找到，可能已经被删除或搬迁。</p>
+      <button type="button" class="primary-button" @click="$router.push('/projects')">返回主控制台</button>
+    </section>
+  `
+};
+
+const routes = [
+  {
+    path: '/',
+    redirect: '/projects'
+  },
+  {
+    path: '/projects',
+    name: 'projects',
+    component: ProjectOverviewDashboardPage
+  },
+  {
+    path: '/projects/overview-dashboard',
+    name: 'project-overview-dashboard',
+    component: ProjectOverviewDashboardPage
+  },
+  {
+    path: '/projects/new',
+    name: 'project-create',
+    component: ProjectCreatePage
+  },
+  {
+    path: '/projects/:projectId/:nodePrefix(node)?/:nodeCode?',
+    name: 'project-detail',
+    component: ProjectDetailPage
+  },
+  {
+    path: '/my-stage-document-tasks',
+    name: 'my-stage-document-tasks',
+    component: MyStageDocumentTasksPage
+  },
+  {
+    path: '/daily-report/:reportId?',
+    name: 'daily-report',
+    component: DailyReportPage
+  },
+  {
+    path: '/daily-reports',
+    name: 'daily-reports',
+    component: DailyReportListPage
+  },
+  {
+    path: '/weekly-report/:reportId?',
+    name: 'weekly-report',
+    component: WeeklyReportPage
+  },
+  {
+    path: '/weekly-reports',
+    name: 'weekly-reports',
+    component: WeeklyReportListPage
+  },
+  {
+    path: '/weekly-report-review/:reportId',
+    name: 'weekly-report-review',
+    component: WeeklyReportReviewPage
+  },
+  {
+    path: '/weekly-overview',
+    name: 'weekly-report-overview',
+    component: WeeklyReportReviewListPage
+  },
+  {
+    path: '/center-daily-report',
+    name: 'center-daily-report',
+    component: CenterDailyReportPage
+  },
+  {
+    path: '/users',
+    name: 'users',
+    component: UserManagementPage
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'not-found',
+    component: NotFoundPage
   }
+];
 
-  if (!path) path = '/projects';
+const router = createRouter({
+  history: createWebHashHistory(),
+  routes
+});
 
-  // 路由匹配
-  if (path === '/' || path === '/projects') {
-    return { name: 'projects', path: '/projects', query };
-  }
-
-  if (path === '/projects/new') {
-    return { name: 'project-create', path, query };
-  }
-
-  if (path === '/projects/overview-dashboard') {
-    return { name: 'project-overview-dashboard', path, query };
-  }
-
-  if (path === '/users') {
-    return { name: 'users', path, query };
-  }
-
-  if (path === '/my-stage-document-tasks') {
-    return { name: 'my-stage-document-tasks', path, query };
-  }
-
-  if (path === '/daily-report') {
-    return { name: 'daily-report', path, query };
-  }
-
-  if (path === '/daily-reports') {
-    return { name: 'daily-reports', path, query };
-  }
-
-  if (path === '/weekly-report') {
-    return { name: 'weekly-report', path, query };
-  }
-
-  if (path === '/weekly-reports') {
-    return { name: 'weekly-reports', path, query };
-  }
-
-  if (path === '/weekly-overview') {
-    return { name: 'weekly-report-overview', path, query };
-  }
-
-  if (path === '/center-daily-report') {
-    return { name: 'center-daily-report', path, query };
-  }
-
-  const dailyReportMatch = path.match(/^\/daily-report\/(\d+)$/);
-  if (dailyReportMatch) {
-    return { name: 'daily-report', path, params: { reportId: dailyReportMatch[1] }, query };
-  }
-
-  const weeklyReportMatch = path.match(/^\/weekly-report\/(\d+)$/);
-  if (weeklyReportMatch) {
-    return { name: 'weekly-report', path, params: { reportId: weeklyReportMatch[1] }, query };
-  }
-
-  const weeklyReportReviewMatch = path.match(/^\/weekly-report-review\/(\d+)$/);
-  if (weeklyReportReviewMatch) {
-    return { name: 'weekly-report-review', path, params: { reportId: weeklyReportReviewMatch[1] }, query };
-  }
-
-  const nodeMatch = path.match(/^\/projects\/(\d+)\/node\/([^/]+)$/);
-  if (nodeMatch) {
-    return {
-      name: 'project-detail',
-      path,
-      params: {
-        projectId: nodeMatch[1],
-        nodeCode: decodeURIComponent(nodeMatch[2])
-      },
-      query
-    };
-  }
-
-  const detailMatch = path.match(/^\/projects\/(\d+)$/);
-  if (detailMatch) {
-    return { name: 'project-detail', path, params: { projectId: detailMatch[1] }, query };
-  }
-
-  return { name: 'not-found', path, query };
-}
-
-export function useHashRouter() {
-  const route = ref(parseHash());
-
-  function syncRoute() {
-    route.value = parseHash();
-  }
-
-  window.addEventListener('hashchange', syncRoute);
-
-  function navigate(path) {
-    const hash = `#${path}`;
-    if (window.location.hash === hash) {
-      syncRoute();
-      return;
-    }
-    window.location.hash = hash;
-  }
-
-  if (!window.location.hash) {
-    navigate('/projects');
-  }
-
-  return {
-    route,
-    navigate
-  };
-}
+export default router;

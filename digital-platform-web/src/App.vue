@@ -26,103 +26,13 @@
     @logout="handleLogout"
     @auth-expired="handleAuthExpired"
   >
-    <ProjectCreatePage
-      v-if="route.name === 'project-create'"
-      :auth-token="authToken"
-      :current-user="currentUser"
-      :navigate="navigate"
-      @auth-expired="handleAuthExpired"
-    />
-    <ProjectOverviewDashboardPage
-      v-else-if="['projects', 'project-overview-dashboard'].includes(route.name)"
-      :auth-token="authToken"
-      :current-user="currentUser"
-      :navigate="navigate"
-      @auth-expired="handleAuthExpired"
-    />
-    <ProjectDetailPage
-      v-else-if="route.name === 'project-detail'"
-      :auth-token="authToken"
-      :current-user="currentUser"
-      :project-id="route.params.projectId"
-      :task-mode="route.query?.taskMode || ''"
-      :focus-document-id="route.query?.documentId || ''"
-      :focus-stage-id="route.query?.stageId || ''"
-      :focus-node-key="route.params?.nodeCode || route.query?.nodeKey || ''"
-      :navigate="navigate"
-    />
-    <MyStageDocumentTasksPage
-      v-else-if="route.name === 'my-stage-document-tasks'"
-      :auth-token="authToken"
-      :current-user="currentUser"
-      :navigate="navigate"
-      @auth-expired="handleAuthExpired"
-    />
-    <DailyReportPage
-      v-else-if="route.name === 'daily-report'"
-      :auth-token="authToken"
-      :current-user="currentUser"
-      :report-id="route.params?.reportId || ''"
-      :navigate="navigate"
-      @auth-expired="handleAuthExpired"
-    />
-    <DailyReportListPage
-      v-else-if="route.name === 'daily-reports'"
-      :auth-token="authToken"
-      :current-user="currentUser"
-      :navigate="navigate"
-      @auth-expired="handleAuthExpired"
-    />
-    <WeeklyReportPage
-      v-else-if="route.name === 'weekly-report'"
-      :auth-token="authToken"
-      :current-user="currentUser"
-      :report-id="route.params?.reportId || ''"
-      :navigate="navigate"
-      @auth-expired="handleAuthExpired"
-    />
-    <WeeklyReportListPage
-      v-else-if="route.name === 'weekly-reports'"
-      :auth-token="authToken"
-      :current-user="currentUser"
-      :navigate="navigate"
-      @auth-expired="handleAuthExpired"
-    />
-    <WeeklyReportReviewPage
-      v-else-if="route.name === 'weekly-report-review'"
-      :auth-token="authToken"
-      :current-user="currentUser"
-      :report-id="route.params?.reportId || ''"
-      :navigate="navigate"
-      :route="route"
-      @auth-expired="handleAuthExpired"
-    />
-    <WeeklyReportReviewListPage
-      v-else-if="route.name === 'weekly-report-overview'"
-      :auth-token="authToken"
-      :current-user="currentUser"
-      :navigate="navigate"
-      @auth-expired="handleAuthExpired"
-    />
-    <CenterDailyReportPage
-      v-else-if="route.name === 'center-daily-report'"
-      :auth-token="authToken"
-      :current-user="currentUser"
-      :navigate="navigate"
-      @auth-expired="handleAuthExpired"
-    />
-    <UserManagementPage
-      v-else-if="route.name === 'users'"
-      :auth-token="authToken"
-      :current-user="currentUser"
-      :navigate="navigate"
-      @auth-expired="handleAuthExpired"
-    />
-    <section v-else class="state-panel">
-      <h2>页面不存在</h2>
-      <p>当前页面无法在数字化平台路由映射表中寻得，可能已被删除或搬迁。</p>
-      <button type="button" class="primary-button" @click="navigate('/projects')">返回主控制台</button>
-    </section>
+    <RouterView v-slot="{ Component, route: matchedRoute }">
+      <component
+        :is="Component"
+        v-bind="pageProps(matchedRoute)"
+        @auth-expired="handleAuthExpired"
+      />
+    </RouterView>
   </MainLayout>
 
   <Transition name="toast">
@@ -155,6 +65,7 @@
 
 <script setup>
 import { onMounted, onUnmounted, ref } from 'vue';
+import { RouterView, useRoute, useRouter } from 'vue-router';
 import { getCurrentUser, logout as logoutRequest } from './api/auth.js';
 import {
   clearAuthSession,
@@ -164,22 +75,10 @@ import {
   updateStoredUser
 } from './auth/session.js';
 import MainLayout from './layouts/MainLayout.vue';
-import CenterDailyReportPage from './pages/CenterDailyReportPage.vue';
-import DailyReportListPage from './pages/DailyReportListPage.vue';
-import DailyReportPage from './pages/DailyReportPage.vue';
 import LoginPage from './pages/LoginPage.vue';
-import MyStageDocumentTasksPage from './pages/MyStageDocumentTasksPage.vue';
-import ProjectCreatePage from './pages/ProjectCreatePage.vue';
-import ProjectDetailPage from './pages/project-detail/ProjectDetailPage.vue';
-import ProjectOverviewDashboardPage from './pages/ProjectOverviewDashboardPage.vue';
-import UserManagementPage from './pages/UserManagementPage.vue';
-import WeeklyReportListPage from './pages/WeeklyReportListPage.vue';
-import WeeklyReportPage from './pages/WeeklyReportPage.vue';
-import WeeklyReportReviewListPage from './pages/WeeklyReportReviewListPage.vue';
-import WeeklyReportReviewPage from './pages/WeeklyReportReviewPage.vue';
-import { useHashRouter } from './router.js';
 
-const { route, navigate: baseNavigate } = useHashRouter();
+const route = useRoute();
+const router = useRouter();
 
 const authLoading = ref(true);
 const loggingOut = ref(false);
@@ -192,7 +91,51 @@ const toastType = ref('error');
 let toastTimer = null;
 
 function navigate(path) {
-  baseNavigate(path);
+  router.push(path);
+}
+
+function routeParam(value) {
+  return Array.isArray(value) ? value[0] || '' : value || '';
+}
+
+function routeQuery(value) {
+  return Array.isArray(value) ? value[0] || '' : value || '';
+}
+
+function pageProps(targetRoute) {
+  const commonProps = {
+    authToken: authToken.value,
+    currentUser: currentUser.value,
+    navigate
+  };
+
+  switch (targetRoute.name) {
+    case 'project-detail':
+      return {
+        ...commonProps,
+        projectId: routeParam(targetRoute.params.projectId),
+        taskMode: routeQuery(targetRoute.query?.taskMode),
+        focusDocumentId: routeQuery(targetRoute.query?.documentId),
+        focusStageId: routeQuery(targetRoute.query?.stageId),
+        focusNodeKey: routeParam(targetRoute.params?.nodeCode) || routeQuery(targetRoute.query?.nodeKey)
+      };
+    case 'daily-report':
+    case 'weekly-report':
+      return {
+        ...commonProps,
+        reportId: routeParam(targetRoute.params?.reportId)
+      };
+    case 'weekly-report-review':
+      return {
+        ...commonProps,
+        reportId: routeParam(targetRoute.params?.reportId),
+        route: targetRoute
+      };
+    case 'not-found':
+      return {};
+    default:
+      return commonProps;
+  }
 }
 
 function showToast(message, type = 'error') {

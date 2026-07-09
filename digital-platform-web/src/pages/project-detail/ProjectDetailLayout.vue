@@ -35,74 +35,18 @@
         </section>
         <template v-else-if="workspace">
           <el-card class="project-node-card" shadow="never">
-            <template #header>
-              <div class="project-node-card__header">
-                <h2>{{ activeWorkspaceNode?.nodeName || activeWorkspaceStage?.stageName || '项目工作区' }}</h2>
-                <el-tag :type="currentNavigationStatusTagType" effect="dark">
-                  {{ currentNavigationStatusLabel }}
-                </el-tag>
-              </div>
-            </template>
 
-            <el-descriptions class="project-node-meta" :column="3">
-              <el-descriptions-item label="项目编号">
-                {{ detail.project.projectCode || detail.project.id }}
-              </el-descriptions-item>
-              <el-descriptions-item label="当前阶段">
-                {{ activeWorkspaceStage?.stageName || currentStageTitle }}
-              </el-descriptions-item>
-              <el-descriptions-item label="当前节点">
-                {{ activeWorkspaceNode?.nodeName || '-' }}
-              </el-descriptions-item>
-            </el-descriptions>
-
-            <el-divider />
-
-            <ProjectWorkspaceOutputPanel
+            <NodePageRouter
+              :project-id="projectId"
+              :auth-token="authToken"
+              :current-user="currentUser"
+              :project="detail.project"
+              :workspace="workspace"
               :stage="activeWorkspaceStage"
               :node="activeWorkspaceNode"
-              :active-online-form="activeOnlineForm"
-              :active-online-form-document-id="activeOnlineFormDocumentId"
-              :online-form-data="onlineFormData"
-              :online-form-loading="onlineFormLoading"
-              :online-form-saving="onlineFormSaving"
-              :online-form-submitting="onlineFormSubmitting"
-              :online-form-error-message="onlineFormErrorMessage"
-              :online-form-image-state="onlineFormImageState"
-              :is-action-pending="isActionPending"
-              :get-output-document="getOutputDocument"
-              :responsibility-candidates="visibleResponsibilityCandidates"
-              :responsibility-candidates-loading="responsibilityCandidatesLoading"
-              :responsibility-candidates-error-message="responsibilityCandidatesErrorMessage"
-              :responsibility-selections="responsibilitySelections"
-              :can-submit-document="canSubmitDocument"
-              :can-confirm-return-document="canConfirmReturnDocument"
-              :can-manage-responsibility="canManageResponsibility"
-              :can-change-applicability="canChangeApplicability"
-              :return-reasons="returnReasons"
-              :not-applicable-reasons="notApplicableReasons"
-              :get-attachment-state="getAttachmentState"
-              @open-online-form="openOnlineForm"
-              @save-online-form="saveOnlineForm"
-              @submit-online-form="submitOnlineForm"
-              @update-online-form-field="updateOnlineFormField"
-              @approve-node="approveInitiationNode"
-              @return-node="returnInitiationNode"
-              @submit-document="submitDocument"
-              @confirm-document="confirmDocument"
-              @return-document="returnDocument"
-              @complete-revision-document="completeRevisionDocument"
-              @mark-not-applicable="markNotApplicable"
-              @restore-applicable="restoreApplicable"
-              @save-responsible-user="saveResponsibleUser"
-              @clear-responsible-user="clearResponsibleUser"
-              @upload-attachment="uploadAttachment"
-              @download-attachment="downloadAttachment"
-              @delete-attachment="deleteAttachment"
-              @upload-online-form-image="uploadOnlineFormImage"
-              @download-online-form-image="downloadOnlineFormImage"
-              @delete-online-form-image="deleteOnlineFormImage"
-              @download-generated-file="downloadGeneratedFile"
+              :node-code="selectedWorkspaceNodeKey"
+              :node-page-context="nodePageContext"
+              @business-state-changed="handleBusinessStateChanged"
             />
           </el-card>
 
@@ -163,7 +107,7 @@ import {
 } from '../../api/projects.js';
 import { getProjectNavigation } from '../../api/navigation.js';
 import { listResponsibilityCandidates } from '../../api/users.js';
-import ProjectWorkspaceOutputPanel from '../../components/project-workspace/ProjectWorkspaceOutputPanel.vue';
+import NodePageRouter from '../project-node/NodePageRouter.vue';
 import ProjectProcessTree from '../../components/project-workspace/ProjectProcessTree.vue';
 import {
   actionKey,
@@ -318,6 +262,52 @@ const visibleResponsibilityCandidates = computed(() => {
 
   return responsibilityCandidates.value.filter((candidate) => candidate.department === currentUserDepartment.value);
 });
+
+const nodePageContext = computed(() => ({
+  activeOnlineForm: activeOnlineForm.value,
+  activeOnlineFormDocumentId: activeOnlineFormDocumentId.value,
+  onlineFormData,
+  onlineFormLoading: onlineFormLoading.value,
+  onlineFormSaving: onlineFormSaving.value,
+  onlineFormSubmitting: onlineFormSubmitting.value,
+  onlineFormErrorMessage: onlineFormErrorMessage.value,
+  onlineFormImageState,
+  responsibilityCandidates: visibleResponsibilityCandidates.value,
+  responsibilityCandidatesLoading: responsibilityCandidatesLoading.value,
+  responsibilityCandidatesErrorMessage: responsibilityCandidatesErrorMessage.value,
+  responsibilitySelections,
+  returnReasons,
+  notApplicableReasons,
+  getOutputDocument,
+  getAttachmentState,
+  isActionPending,
+  canSubmitDocument,
+  canConfirmReturnDocument,
+  canManageResponsibility,
+  canChangeApplicability,
+  openOnlineForm,
+  saveOnlineForm,
+  submitOnlineForm,
+  updateOnlineFormField,
+  approveInitiationNode,
+  returnInitiationNode,
+  submitDocument,
+  confirmDocument,
+  returnDocument,
+  completeRevisionDocument,
+  markNotApplicable,
+  restoreApplicable,
+  saveResponsibleUser,
+  clearResponsibleUser,
+  uploadAttachment,
+  downloadAttachment,
+  deleteAttachment,
+  uploadOnlineFormImage,
+  downloadOnlineFormImage,
+  deleteOnlineFormImage,
+  downloadGeneratedFile,
+  handleBusinessStateChanged
+}));
 /* ── 导航状态格式化 ── */
 function formatNavigationStatus(status) {
   return {
@@ -673,6 +663,18 @@ function updateOnlineFormField({ key, value }) {
   onlineFormData[key] = value;
 }
 
+async function reloadActiveOnlineForm() {
+  const documentId = activeOnlineForm.value?.stageDocumentId || activeOnlineFormDocumentId.value;
+  if (!documentId) {
+    return;
+  }
+
+  const response = await getStageDocumentOnlineForm(props.projectId, documentId, props.authToken);
+  activeOnlineFormDocumentId.value = documentId;
+  activeOnlineForm.value = response.form || response;
+  syncOnlineFormData(activeOnlineForm.value);
+}
+
 /* ── 附件状态 ── */
 function getAttachmentState(documentId) {
   if (!attachmentStates[documentId]) {
@@ -724,6 +726,23 @@ async function refreshProjectWorkspaceState(options = {}) {
     loadWorkspace({ preserveSelection: true, ...options }),
     loadProjectNavigation()
   ]);
+
+  if (options.preserveOnlineFormState && activeOnlineFormDocumentId.value) {
+    await reloadActiveOnlineForm();
+  }
+}
+
+async function handleBusinessStateChanged(payload = {}) {
+  const shouldClearCurrentDetail = payload.clearCurrentDetail === true;
+  const shouldRefreshCurrentDetail = payload.refreshCurrentDetail === true && !shouldClearCurrentDetail;
+
+  if (shouldClearCurrentDetail) {
+    clearOnlineFormState();
+  }
+
+  await refreshProjectWorkspaceState({
+    preserveOnlineFormState: shouldRefreshCurrentDetail
+  });
 }
 
 async function runDocumentAction(document, action, runner, successText, onSuccess = null) {
@@ -1381,7 +1400,7 @@ async function submitOnlineForm() {
       { ...onlineFormData },
       props.authToken
     );
-    activeOnlineForm.value = response.form;
+    activeOnlineForm.value = response.form || response;
     syncOnlineFormData(activeOnlineForm.value);
     actionMessage.value = '在线表单已提交。';
     await refreshProjectWorkspaceState({ preserveOnlineFormState: true });

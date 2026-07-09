@@ -123,20 +123,6 @@
             <p>{{ actionErrorMessage }}</p>
           </section>
 
-          <ProjectStageAdvancePanel
-            :current-stage="detail.currentStage"
-            :is-project-completed="isProjectCompleted"
-            :is-project-ended="isProjectEnded"
-            :ended-reason="detail.project.endedReason"
-            :current-stage-completeness="currentStageCompleteness"
-            :missing-documents="currentStageAdvanceMissingDocuments"
-            :can-advance-current-stage="canAdvanceCurrentStage"
-            :show-advance-action="canCurrentUserAdvanceProject"
-            :pending="stageAdvancePending"
-            :message="stageAdvanceMessage"
-            :error-message="stageAdvanceErrorMessage"
-            @advance="advanceCurrentStage"
-          />
         </template>
       </el-main>
     </el-container>
@@ -146,7 +132,6 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
-  advanceProjectStage,
   approveInitiationReviewNode,
   confirmStageDocument,
   completeStageDocumentRevision,
@@ -178,16 +163,13 @@ import {
 } from '../../api/projects.js';
 import { getProjectNavigation } from '../../api/navigation.js';
 import { listResponsibilityCandidates } from '../../api/users.js';
-import ProjectStageAdvancePanel from '../../components/project-detail/ProjectStageAdvancePanel.vue';
 import ProjectWorkspaceOutputPanel from '../../components/project-workspace/ProjectWorkspaceOutputPanel.vue';
 import ProjectProcessTree from '../../components/project-workspace/ProjectProcessTree.vue';
 import {
   actionKey,
   getCompletionMode,
   getSelectedResponsibleUserId,
-  isDocumentRelatedToDepartmentByOwnership,
-  isInitiationOnlineFormDocument,
-  stageCompleteness
+  isInitiationOnlineFormDocument
 } from '../../components/project-detail/stageDocumentViewHelpers.js';
 
 const props = defineProps({
@@ -232,8 +214,6 @@ const detail = ref(null);
 const errorCode = ref('');
 
 /* ── 文档数据源（原 checklist，现仅供工作区内部查找文档详情） ── */
-const checklistLoading = ref(false);
-const checklistErrorMessage = ref('');
 const checklist = ref(null);
 
 /* ── 工作区状态 ── */
@@ -267,12 +247,6 @@ const actionMessage = ref('');
 const actionErrorMessage = ref('');
 const pendingAction = ref('');
 
-/* ── 阶段推进状态 ── */
-const stageAdvancePending = ref(false);
-const stageAdvanceMessage = ref('');
-const stageAdvanceErrorMessage = ref('');
-const stageAdvanceMissingDocuments = ref([]);
-
 /* ── 文档操作临时状态 ── */
 const returnReasons = reactive({});
 const notApplicableReasons = reactive({});
@@ -303,38 +277,13 @@ const currentStageTitle = computed(() => {
   return isProjectCompleted.value ? '项目已完成' : '-';
 });
 
-// 保留：阶段推进面板依赖 currentStageCompleteness → currentChecklistStage → checklist 数据源
-const currentChecklistStage = computed(() => {
-  const currentStage = detail.value?.currentStage;
-  if (!currentStage || !checklist.value) {
-    return null;
-  }
-
-  return checklist.value.stages.find((stage) => stage.stageKey === currentStage.stageKey) || null;
-});
-const currentStageCompleteness = computed(() => {
-  if (!currentChecklistStage.value) {
-    return null;
-  }
-
-  return stageCompleteness(currentChecklistStage.value);
-});
-
 const currentUserOrganizationRole = computed(() => props.currentUser?.organizationRole || '');
 const isCurrentUserProjectManager = computed(() => {
   const projectManagerUserId = detail.value?.project?.projectManagerUserId;
   return Boolean(projectManagerUserId) && String(projectManagerUserId) === String(props.currentUser?.id);
 });
-const isCurrentUserProjectCreator = computed(() => {
-  const creatorUserId = detail.value?.project?.createdByUserId;
-  return Boolean(creatorUserId) && String(creatorUserId) === String(props.currentUser?.id);
-});
 const isCurrentUserGeneralManager = computed(() => currentUserOrganizationRole.value === 'general_manager');
 const isCurrentUserCenterManager = computed(() => currentUserOrganizationRole.value === 'center_manager');
-const isCurrentUserGeneralManagerAssistant = computed(
-  () => currentUserOrganizationRole.value === 'general_manager_assistant'
-);
-const isCurrentUserSystemAdmin = computed(() => currentUserOrganizationRole.value === 'system_admin');
 const currentUserDepartment = computed(() => props.currentUser?.department || '');
 
 // 保留：工作区产出面板通过 getOutputDocument 查找文档详情
@@ -362,15 +311,6 @@ const currentNavigationStatus = computed(
 const currentNavigationStatusLabel = computed(() => formatNavigationStatus(currentNavigationStatus.value));
 const currentNavigationStatusTagType = computed(() => navigationStatusTagType(currentNavigationStatus.value));
 
-const isProjectRelatedToCurrentCenter = computed(() => {
-  if (!isCurrentUserCenterManager.value || !currentUserDepartment.value) {
-    return false;
-  }
-
-  return allStageDocuments.value.some((document) =>
-    isDocumentRelatedToDepartmentByOwnership(document, currentUserDepartment.value)
-  );
-});
 const visibleResponsibilityCandidates = computed(() => {
   if (!isCurrentUserCenterManager.value || isCurrentUserProjectManager.value || isCurrentUserGeneralManager.value) {
     return responsibilityCandidates.value;
@@ -378,37 +318,6 @@ const visibleResponsibilityCandidates = computed(() => {
 
   return responsibilityCandidates.value.filter((candidate) => candidate.department === currentUserDepartment.value);
 });
-const canCurrentUserAdvanceProject = computed(() => {
-  if (isProjectEnded.value) {
-    return false;
-  }
-
-  if (isCurrentUserGeneralManagerAssistant.value || isCurrentUserSystemAdmin.value) {
-    return false;
-  }
-
-  return isCurrentUserGeneralManager.value || isCurrentUserProjectManager.value || isProjectRelatedToCurrentCenter.value;
-});
-const currentStageAdvanceMissingDocuments = computed(() => {
-  if (stageAdvanceErrorMessage.value && stageAdvanceMissingDocuments.value.length > 0) {
-    return stageAdvanceMissingDocuments.value;
-  }
-
-  return currentStageCompleteness.value?.incompleteRequiredDocuments || [];
-});
-const canAdvanceCurrentStage = computed(
-  () =>
-    Boolean(detail.value?.currentStage) &&
-    !isProjectCompleted.value &&
-    !isProjectEnded.value &&
-    canCurrentUserAdvanceProject.value &&
-    Boolean(currentStageCompleteness.value) &&
-    currentStageCompleteness.value.incompleteRequiredCount === 0
-);
-const isTaskMode = computed(() =>
-  Boolean(props.taskMode || props.focusDocumentId || props.focusStageId || props.focusNodeKey)
-);
-
 /* ── 导航状态格式化 ── */
 function formatNavigationStatus(status) {
   return {
@@ -792,12 +701,6 @@ function clearActionState() {
   actionErrorMessage.value = '';
 }
 
-function clearStageAdvanceState() {
-  stageAdvanceMessage.value = '';
-  stageAdvanceErrorMessage.value = '';
-  stageAdvanceMissingDocuments.value = [];
-}
-
 /* ── 责任人选择同步 ── */
 function syncResponsibilitySelectionsFromChecklist() {
   Object.keys(responsibilitySelections).forEach((key) => {
@@ -832,7 +735,6 @@ async function runDocumentAction(document, action, runner, successText, onSucces
     if (onSuccess) {
       onSuccess();
     }
-    clearStageAdvanceState();
     actionMessage.value = successText;
     await refreshProjectWorkspaceState();
   } catch (error) {
@@ -1361,36 +1263,8 @@ async function deleteOnlineFormImage({ image }) {
   }
 }
 
-/* ── 阶段推进 ── */
-async function advanceCurrentStage() {
-  clearActionState();
-  clearStageAdvanceState();
-
-  if (!canAdvanceCurrentStage.value) {
-    stageAdvanceErrorMessage.value = '当前阶段未齐套，不能推进。';
-    stageAdvanceMissingDocuments.value = currentStageAdvanceMissingDocuments.value;
-    return;
-  }
-
-  stageAdvancePending.value = true;
-
-  try {
-    await advanceProjectStage(props.projectId, props.authToken);
-    stageAdvanceMessage.value = '项目阶段已手工推进。';
-    await loadDetail({ preserveStageAdvanceState: true });
-  } catch (error) {
-    stageAdvanceErrorMessage.value = toReadableApiError(error);
-    const documents = error.details?.incompleteRequiredDocuments;
-    stageAdvanceMissingDocuments.value = Array.isArray(documents) ? documents : [];
-  } finally {
-    stageAdvancePending.value = false;
-  }
-}
-
 /* ── 数据加载 ── */
 async function loadChecklist(options = {}) {
-  checklistLoading.value = true;
-  checklistErrorMessage.value = '';
   checklist.value = null;
 
   try {
@@ -1400,10 +1274,8 @@ async function loadChecklist(options = {}) {
     if (workspace.value && props.focusDocumentId) {
       selectWorkspaceTargetFromRoute(options);
     }
-  } catch (error) {
-    checklistErrorMessage.value = toReadableApiError(error);
-  } finally {
-    checklistLoading.value = false;
+  } catch {
+    checklist.value = null;
   }
 }
 
@@ -1535,7 +1407,7 @@ async function loadResponsibilityCandidates() {
 }
 
 /* ── 页面初始化 ── */
-async function loadDetail(options = {}) {
+async function loadDetail() {
   loading.value = true;
   errorMessage.value = '';
   errorCode.value = '';
@@ -1543,7 +1415,6 @@ async function loadDetail(options = {}) {
   checklist.value = null;
   workspace.value = null;
   projectNavigation.value = null;
-  checklistErrorMessage.value = '';
   workspaceErrorMessage.value = '';
   projectNavigationErrorMessage.value = '';
   responsibilityCandidates.value = [];
@@ -1552,9 +1423,6 @@ async function loadDetail(options = {}) {
   clearActionState();
   lastAppliedWorkspaceRouteKey.value = '';
   manualWorkspaceSelectionRouteKey.value = '';
-  if (!options.preserveStageAdvanceState) {
-    clearStageAdvanceState();
-  }
 
   try {
     detail.value = await getProjectDetail(props.projectId, props.authToken);

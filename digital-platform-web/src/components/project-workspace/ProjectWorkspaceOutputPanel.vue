@@ -214,14 +214,6 @@
               {{ activeOnlineFormDocumentId === output.documentId ? '正在查看在线表单' : '填写资料/查看在线表单' }}
             </button>
             <span v-else-if="isGenericMigratedOutput(output)" class="inline-muted">通用资料操作已迁移到本产出卡片。</span>
-            <button
-              v-else-if="canLocateLegacyChecklist(output)"
-              type="button"
-              class="ghost-button"
-              @click="$emit('open-legacy-checklist', output)"
-            >
-              定位旧资料清单
-            </button>
             <span v-else class="inline-muted">{{ formatUnavailableActionText(output) }}</span>
           </div>
 
@@ -507,14 +499,6 @@
     <section v-else class="project-workspace__placeholder">
       <strong>{{ emptyStateTitle() }}</strong>
       <p>{{ emptyStateText() }}</p>
-      <button
-        v-if="stage?.legacyChecklistAvailable"
-        type="button"
-        class="ghost-button project-workspace__legacy-link"
-        @click="$emit('open-legacy-checklist')"
-      >
-        查看旧资料清单入口
-      </button>
     </section>
   </section>
 </template>
@@ -529,7 +513,6 @@ import { isInitiationOnlineFormDocument } from '../project-detail/stageDocumentV
 
 const emit = defineEmits([
   'open-online-form',
-  'open-legacy-checklist',
   'save-online-form',
   'submit-online-form',
   'update-online-form-field',
@@ -888,7 +871,7 @@ function emptyStateText() {
     return '请先在当前阶段选择蓝色节点，再查看节点关联产出和在线表单入口。';
   }
 
-  return '本阶段暂未配置蓝色节点，可使用旧资料清单入口查看阶段资料。';
+  return '本阶段暂未配置蓝色节点和产出映射。';
 }
 
 function formatWorkspaceStatus(status) {
@@ -902,8 +885,8 @@ function formatWorkspaceStatus(status) {
     not_configured: '未配置',
     not_applicable: '不适用',
     shell_placeholder: 'Shell 占位',
-    legacy_document_unavailable: '旧资料不可见',
-    legacy_checklist_available: '旧清单入口',
+    legacy_document_unavailable: '资料不可见',
+    legacy_checklist_available: '未配置',
     process_node: '过程节点'
   }[status] || status || '-';
 }

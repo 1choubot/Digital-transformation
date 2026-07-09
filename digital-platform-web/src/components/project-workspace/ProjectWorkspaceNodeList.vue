@@ -28,14 +28,6 @@
     <section v-else class="project-workspace__placeholder">
       <strong>{{ stage?.placeholderStatus ? formatWorkspaceStatus(stage.placeholderStatus) : '后续配置' }}</strong>
       <p>{{ stage?.placeholderText || '本阶段蓝色节点和产出映射后续配置。' }}</p>
-      <button
-        v-if="stage?.legacyChecklistAvailable"
-        type="button"
-        class="ghost-button project-workspace__legacy-link"
-        @click="$emit('open-legacy-checklist')"
-      >
-        查看旧资料清单入口
-      </button>
     </section>
 
     <p v-if="stage?.nodes?.length && !activeNodeKey" class="project-workspace__hint">
@@ -45,7 +37,7 @@
 </template>
 
 <script setup>
-defineEmits(['select-node', 'open-legacy-checklist']);
+defineEmits(['select-node']);
 
 defineProps({
   stage: {
@@ -68,9 +60,8 @@ function formatWorkspaceStatus(status) {
     returned_for_rework: '需重填',
     not_applicable: '不适用',
     shell_placeholder: 'Shell 占位',
-    legacy_document_unavailable: '旧资料不可见',
     not_configured: '未配置',
-    legacy_checklist_available: '旧清单入口',
+    legacy_checklist_available: '未配置',
     process_node: '过程节点'
   }[status] || status || '-';
 }
@@ -84,7 +75,7 @@ function formatStageStatus(stage) {
     return '已配置节点';
   }
 
-  return stage.legacyChecklistAvailable ? '旧清单入口' : '后续配置';
+  return '后续配置';
 }
 
 function formatStageDescription(stage) {
@@ -94,10 +85,6 @@ function formatStageDescription(stage) {
 
   if (stage.configured) {
     return '本阶段按蓝色节点组织业务语境，选择节点后在下方查看关联产出。';
-  }
-
-  if (stage.legacyChecklistAvailable) {
-    return '本阶段暂未配置完整蓝色节点，可使用下方旧资料清单辅助处理。';
   }
 
   return '本阶段节点和产出映射后续配置。';

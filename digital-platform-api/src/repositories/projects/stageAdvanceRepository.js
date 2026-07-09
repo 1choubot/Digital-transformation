@@ -7,7 +7,11 @@ import {
 import { PROJECT_STATUS } from '../../domain/projects.js';
 import { PROJECT_APPROVAL_ERROR } from '../../domain/projectApproval.js';
 import { STANDARD_PROJECT_STAGES, STAGE_STATUS } from '../../domain/stages.js';
-import { buildStageCompletenessSummary, mapGateDocument } from '../stageDocuments/shared.js';
+import {
+  attachSolutionDesignDerivedCompletionToStageDocumentRows,
+  buildStageCompletenessSummary,
+  mapGateDocument
+} from '../stageDocuments/shared.js';
 import { attachInitiationReviewToStageDocumentRows } from '../stageDocuments/initiationReviewRepository.js';
 import {
   insertOperationLog,
@@ -158,6 +162,9 @@ async function buildCurrentStageGateSummary(connection, projectId, stageOrder) {
   const [rows] = await connection.execute(
     `SELECT
       d.id,
+      d.project_id,
+      d.stage_order,
+      d.document_order,
       d.document_code,
       d.document_name,
       d.is_required,
@@ -191,11 +198,15 @@ async function buildCurrentStageGateSummary(connection, projectId, stageOrder) {
   }
 
   const rowsWithInitiationReview = await attachInitiationReviewToStageDocumentRows(connection, rows);
-  return buildStageCompletenessSummary(rowsWithInitiationReview.map(mapGateDocument));
+  const rowsWithDerivedCompletion = await attachSolutionDesignDerivedCompletionToStageDocumentRows(
+    connection,
+    rowsWithInitiationReview
+  );
+  return buildStageCompletenessSummary(rowsWithDerivedCompletion.map(mapGateDocument));
 }
 
-export async function advanceProjectStage(projectId, user) {
-  const connection = await pool.getConnection();
+export async function advanceProjectStage(projectId, user, db = pool) {
+  const connection = await db.getConnection();
 
   try {
     await connection.beginTransaction();

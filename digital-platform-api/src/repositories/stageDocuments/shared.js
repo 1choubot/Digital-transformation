@@ -5,6 +5,19 @@ import {
   getDesignChangeTargetDocumentCodes,
   getReworkClass
 } from '../../domain/stageDocumentPreciseRework.js';
+import {
+  SOLUTION_DESIGN_ANALYSIS_FORM_STATUS,
+  SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES,
+  SOLUTION_DESIGN_GENERATED_FILE_STATUS,
+  SOLUTION_DESIGN_NODE_KEY,
+  SOLUTION_DESIGN_NODE_STATUS,
+  SOLUTION_DESIGN_QUOTATION_RESULT,
+  SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS,
+  SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE,
+  SOLUTION_DESIGN_REVIEW_FORM_STATUS,
+  SOLUTION_DESIGN_UPLOAD_SLOT_KEY,
+  SOLUTION_DESIGN_UPLOAD_SLOT_STATUS
+} from '../../domain/solutionDesignWorkflow.js';
 
 export class StageDocumentNotFoundError extends Error {
   constructor(projectId, documentId) {
@@ -54,6 +67,39 @@ export const COMPLETION_STATUS = {
   NOT_APPLICABLE: 'not_applicable'
 };
 
+const SOLUTION_DESIGN_DERIVED_SOURCE = 'solution_design_workflow';
+const SOLUTION_DESIGN_DOCUMENT_CODES = new Set(SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES);
+const SOLUTION_DESIGN_WORKFLOW_ANCHOR_DOCUMENT_CODES = new Set(
+  SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES.filter((documentCode) => documentCode !== 'C18' && documentCode !== 'C19')
+);
+const SOLUTION_DESIGN_DESIGN_OUTPUT_DOCUMENT_SLOT_MAP = Object.freeze({
+  C07: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.THREE_D_MODEL,
+  C08: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.LAYOUT_DIAGRAM,
+  C09: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PROCESS_TIMING_DIAGRAM,
+  C10: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.CYCLE_TIME_TABLE,
+  C11: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.DEMO_ANIMATION,
+  C12: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.ELECTRICAL_FUNCTION_DIAGRAM,
+  C13: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.SOFTWARE_FUNCTION_DIAGRAM,
+  C14: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.SOLUTION_PPT
+});
+const SOLUTION_DESIGN_NODE_BY_DOCUMENT_CODE = Object.freeze({
+  C04: SOLUTION_DESIGN_NODE_KEY.PREPARATION,
+  C05: SOLUTION_DESIGN_NODE_KEY.ANALYSIS,
+  C06: SOLUTION_DESIGN_NODE_KEY.ANALYSIS,
+  C07: SOLUTION_DESIGN_NODE_KEY.DESIGN,
+  C08: SOLUTION_DESIGN_NODE_KEY.DESIGN,
+  C09: SOLUTION_DESIGN_NODE_KEY.DESIGN,
+  C10: SOLUTION_DESIGN_NODE_KEY.DESIGN,
+  C11: SOLUTION_DESIGN_NODE_KEY.DESIGN,
+  C12: SOLUTION_DESIGN_NODE_KEY.DESIGN,
+  C13: SOLUTION_DESIGN_NODE_KEY.DESIGN,
+  C14: SOLUTION_DESIGN_NODE_KEY.DESIGN,
+  C15: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
+  C16: SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
+  C18: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+  C19: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER
+});
+
 const REVIEW_COMPLETION_MODES = new Set([
   COMPLETION_MODE.APPROVAL_REQUIRED,
   COMPLETION_MODE.CONDITIONAL_APPROVAL
@@ -97,10 +143,35 @@ export function isRevisionResubmitted(document) {
   return Boolean(document?.revisionResubmittedAt ?? document?.revision_resubmitted_at);
 }
 
+function getDocumentCode(document) {
+  return String(document?.documentCode ?? document?.document_code ?? '').trim();
+}
+
+function getSolutionDesignDerivedCompletion(document) {
+  const direct = document?.solutionDesignDerivedCompletion ?? document?.solution_design_derived_completion ?? null;
+  if (direct) {
+    return direct;
+  }
+
+  const source = document?.derivedCompletionSource ?? document?.derived_completion_source ?? null;
+  if (source !== SOLUTION_DESIGN_DERIVED_SOURCE) {
+    return null;
+  }
+
+  return {
+    source,
+    isComplete: document?.isComplete === true || document?.is_complete === true,
+    completionStatus: document?.completionStatus ?? document?.completion_status ?? null,
+    derivedCompletionStatus: document?.derivedCompletionStatus ?? document?.derived_completion_status ?? null,
+    derivedBlockingReasons: document?.derivedBlockingReasons ?? document?.derived_blocking_reasons ?? [],
+    derivedNotApplicable: document?.derivedNotApplicable === true || document?.derived_not_applicable === true
+  };
+}
+
 export function deriveStageDocumentCompletion(document) {
   const completionMode = getDocumentCompletionMode(document);
   const status = document?.status ?? DOCUMENT_STATUS.NOT_SUBMITTED;
-  const documentCode = document?.documentCode ?? document?.document_code ?? null;
+  const documentCode = getDocumentCode(document);
   const isApplicableValue = document?.isApplicable ?? document?.is_applicable;
   const isApplicable = isApplicableValue === undefined ? true : Boolean(isApplicableValue);
 
@@ -110,6 +181,29 @@ export function deriveStageDocumentCompletion(document) {
       isApplicable,
       isComplete: true,
       completionStatus: COMPLETION_STATUS.NOT_APPLICABLE
+    };
+  }
+
+  const solutionDesignDerivedCompletion = getSolutionDesignDerivedCompletion(document);
+  if (solutionDesignDerivedCompletion) {
+    const derivedNotApplicable =
+      solutionDesignDerivedCompletion.derivedNotApplicable === true ||
+      solutionDesignDerivedCompletion.derived_not_applicable === true;
+    const completionStatus = derivedNotApplicable
+      ? COMPLETION_STATUS.NOT_APPLICABLE
+      : solutionDesignDerivedCompletion.completionStatus ??
+        solutionDesignDerivedCompletion.completion_status ??
+        solutionDesignDerivedCompletion.derivedCompletionStatus ??
+        solutionDesignDerivedCompletion.derived_completion_status ??
+        (solutionDesignDerivedCompletion.isComplete === true
+          ? COMPLETION_STATUS.COMPLETED
+          : COMPLETION_STATUS.INCOMPLETE);
+
+    return {
+      completionMode,
+      isApplicable,
+      isComplete: solutionDesignDerivedCompletion.isComplete === true || derivedNotApplicable,
+      completionStatus
     };
   }
 
@@ -229,6 +323,7 @@ function mapRevisionSourceDocument(row) {
 }
 
 export function mapReworkCandidate(document) {
+  const solutionDesignDerivedCompletion = getSolutionDesignDerivedCompletion(document);
   return {
     id: document.id,
     documentCode: document.documentCode ?? document.document_code,
@@ -239,7 +334,11 @@ export function mapReworkCandidate(document) {
     completionMode: getDocumentCompletionMode(document),
     completionStatus: deriveStageDocumentCompletion(document).completionStatus,
     isComplete: deriveStageDocumentCompletion(document).isComplete,
-    isApplicable: document.isApplicable ?? (document.is_applicable === undefined ? true : Boolean(document.is_applicable))
+    isApplicable: document.isApplicable ?? (document.is_applicable === undefined ? true : Boolean(document.is_applicable)),
+    solutionDesignDerivedCompletion,
+    derivedCompletionStatus: solutionDesignDerivedCompletion?.derivedCompletionStatus ?? null,
+    derivedBlockingReasons: solutionDesignDerivedCompletion?.derivedBlockingReasons ?? [],
+    derivedNotApplicable: solutionDesignDerivedCompletion?.derivedNotApplicable === true
   };
 }
 
@@ -269,6 +368,7 @@ export function attachReworkCandidatesToDocuments(documents) {
 export function mapDocument(row) {
   const completion = deriveStageDocumentCompletion(row);
   const revisionRequired = isRevisionRequired(row);
+  const solutionDesignDerivedCompletion = getSolutionDesignDerivedCompletion(row);
 
   return {
     id: row.id,
@@ -294,6 +394,11 @@ export function mapDocument(row) {
     initiationReview: row.initiationReview ?? row.initiation_review ?? null,
     isComplete: completion.isComplete,
     completionStatus: completion.completionStatus,
+    solutionDesignDerivedCompletion,
+    derivedCompletionSource: solutionDesignDerivedCompletion?.source ?? null,
+    derivedCompletionStatus: solutionDesignDerivedCompletion?.derivedCompletionStatus ?? null,
+    derivedBlockingReasons: solutionDesignDerivedCompletion?.derivedBlockingReasons ?? [],
+    derivedNotApplicable: solutionDesignDerivedCompletion?.derivedNotApplicable === true,
     revisionRequired,
     revisionReason: row.revision_reason ?? null,
     revisionSourceDocumentId: row.revision_source_document_id ?? null,
@@ -328,6 +433,7 @@ export function mapDocument(row) {
 export function mapStageDocumentTask(row) {
   const completion = deriveStageDocumentCompletion(row);
   const revisionRequired = isRevisionRequired(row);
+  const solutionDesignDerivedCompletion = getSolutionDesignDerivedCompletion(row);
 
   return {
     documentId: row.document_id,
@@ -347,6 +453,11 @@ export function mapStageDocumentTask(row) {
     completionMode: completion.completionMode,
     isComplete: completion.isComplete,
     completionStatus: completion.completionStatus,
+    solutionDesignDerivedCompletion,
+    derivedCompletionSource: solutionDesignDerivedCompletion?.source ?? null,
+    derivedCompletionStatus: solutionDesignDerivedCompletion?.derivedCompletionStatus ?? null,
+    derivedBlockingReasons: solutionDesignDerivedCompletion?.derivedBlockingReasons ?? [],
+    derivedNotApplicable: solutionDesignDerivedCompletion?.derivedNotApplicable === true,
     revisionRequired,
     revisionReason: row.revision_reason ?? null,
     revisionSourceDocumentId: row.revision_source_document_id ?? null,
@@ -368,6 +479,7 @@ export function mapStageDocumentTask(row) {
 export function mapGateDocument(row) {
   const completion = deriveStageDocumentCompletion(row);
   const revisionRequired = isRevisionRequired(row);
+  const solutionDesignDerivedCompletion = getSolutionDesignDerivedCompletion(row);
 
   return {
     id: row.id,
@@ -380,6 +492,11 @@ export function mapGateDocument(row) {
     completionMode: completion.completionMode,
     isComplete: completion.isComplete,
     completionStatus: completion.completionStatus,
+    solutionDesignDerivedCompletion,
+    derivedCompletionSource: solutionDesignDerivedCompletion?.source ?? null,
+    derivedCompletionStatus: solutionDesignDerivedCompletion?.derivedCompletionStatus ?? null,
+    derivedBlockingReasons: solutionDesignDerivedCompletion?.derivedBlockingReasons ?? [],
+    derivedNotApplicable: solutionDesignDerivedCompletion?.derivedNotApplicable === true,
     revisionRequired,
     revisionReason: row.revision_reason ?? null,
     revisionSourceDocumentId: row.revision_source_document_id ?? null,
@@ -404,6 +521,25 @@ export function buildStageCompletenessSummary(documents) {
       completionMode: getDocumentCompletionMode(document),
       isComplete: false,
       completionStatus: deriveStageDocumentCompletion(document).completionStatus,
+      derivedCompletionSource:
+        document.derivedCompletionSource ??
+        document.derived_completion_source ??
+        getSolutionDesignDerivedCompletion(document)?.source ??
+        null,
+      derivedCompletionStatus:
+        document.derivedCompletionStatus ??
+        document.derived_completion_status ??
+        getSolutionDesignDerivedCompletion(document)?.derivedCompletionStatus ??
+        null,
+      derivedBlockingReasons:
+        document.derivedBlockingReasons ??
+        document.derived_blocking_reasons ??
+        getSolutionDesignDerivedCompletion(document)?.derivedBlockingReasons ??
+        [],
+      derivedNotApplicable:
+        document.derivedNotApplicable === true ||
+        document.derived_not_applicable === true ||
+        getSolutionDesignDerivedCompletion(document)?.derivedNotApplicable === true,
       revisionRequired: isRevisionRequired(document),
       revisionReason: document.revisionReason ?? document.revision_reason ?? null,
       revisionSourceDocumentId: document.revisionSourceDocumentId ?? document.revision_source_document_id ?? null,
@@ -427,6 +563,493 @@ export function buildStageCompletenessSummary(documents) {
     completionPercent,
     incompleteRequiredDocuments
   };
+}
+
+function buildPlaceholders(values) {
+  return values.map(() => '?').join(', ');
+}
+
+function groupByProjectId(rows) {
+  const grouped = new Map();
+  for (const row of rows) {
+    const projectId = Number(row.project_id ?? row.projectId);
+    if (!Number.isSafeInteger(projectId)) {
+      continue;
+    }
+    if (!grouped.has(projectId)) {
+      grouped.set(projectId, []);
+    }
+    grouped.get(projectId).push(row);
+  }
+  return grouped;
+}
+
+function mapSolutionDesignDocumentCodesByProject(rows) {
+  const grouped = new Map();
+  for (const row of rows) {
+    const projectId = Number(row.project_id ?? row.projectId);
+    const documentCode = getDocumentCode(row);
+    if (!Number.isSafeInteger(projectId) || !SOLUTION_DESIGN_DOCUMENT_CODES.has(documentCode)) {
+      continue;
+    }
+    if (!grouped.has(projectId)) {
+      grouped.set(projectId, new Set());
+    }
+    grouped.get(projectId).add(documentCode);
+  }
+  return grouped;
+}
+
+function hasSolutionDesignWorkflowAnchors(documentCodes) {
+  for (const documentCode of documentCodes ?? []) {
+    if (SOLUTION_DESIGN_WORKFLOW_ANCHOR_DOCUMENT_CODES.has(documentCode)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function shouldApplySolutionDesignDerivedCompletion(documentCodes) {
+  return hasSolutionDesignWorkflowAnchors(documentCodes);
+}
+
+function mapRowsByProjectAndKey(rows, keyName) {
+  const mapped = new Map();
+  for (const row of rows) {
+    const projectId = Number(row.project_id);
+    const key = row[keyName];
+    if (!Number.isSafeInteger(projectId) || !key) {
+      continue;
+    }
+    if (!mapped.has(projectId)) {
+      mapped.set(projectId, new Map());
+    }
+    mapped.get(projectId).set(key, row);
+  }
+  return mapped;
+}
+
+function mapQuotationTenderFlows(rows) {
+  const mapped = new Map();
+  for (const row of rows) {
+    const projectId = Number(row.project_id);
+    if (Number.isSafeInteger(projectId)) {
+      mapped.set(projectId, row);
+    }
+  }
+  return mapped;
+}
+
+function getContextNode(context, nodeKey) {
+  return context.nodesByKey.get(nodeKey) || null;
+}
+
+function getContextSlot(context, slotKey) {
+  return context.slotsByKey.get(slotKey) || null;
+}
+
+function getNodeRevision(node) {
+  const revision = Number(node?.current_revision ?? 1);
+  return Number.isSafeInteger(revision) && revision > 0 ? revision : 1;
+}
+
+function isApprovedNode(context, nodeKey) {
+  return getContextNode(context, nodeKey)?.status === SOLUTION_DESIGN_NODE_STATUS.APPROVED;
+}
+
+function hasCurrentRevisionUpload(context, slotKey, expectedRevision) {
+  const slot = getContextSlot(context, slotKey);
+  if (!slot?.current_file_id) {
+    return false;
+  }
+
+  return (
+    Number(slot.revision ?? 0) === expectedRevision &&
+    Number(slot.current_file_revision ?? 0) === expectedRevision &&
+    [SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.UPLOADED, SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.SUBMITTED].includes(slot.status)
+  );
+}
+
+function isCurrentSubmittedGeneratedForm(form, expectedRevision) {
+  return (
+    Number(form?.revision ?? 0) === expectedRevision &&
+    form?.form_status === SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.SUBMITTED &&
+    form?.generated_file_status === SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED
+  );
+}
+
+function isCurrentSubmittedGeneratedReviewForm(form, expectedRevision) {
+  return (
+    Number(form?.revision ?? 0) === expectedRevision &&
+    form?.form_status === SOLUTION_DESIGN_REVIEW_FORM_STATUS.SUBMITTED &&
+    form?.generated_file_status === SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED
+  );
+}
+
+function buildDerivedCompletion({
+  documentCode,
+  nodeKey = null,
+  revision = null,
+  isComplete,
+  blockingReasons = [],
+  notApplicable = false
+}) {
+  const completionStatus = notApplicable
+    ? COMPLETION_STATUS.NOT_APPLICABLE
+    : isComplete
+      ? COMPLETION_STATUS.COMPLETED
+      : COMPLETION_STATUS.INCOMPLETE;
+
+  return {
+    source: SOLUTION_DESIGN_DERIVED_SOURCE,
+    documentCode,
+    nodeKey,
+    revision,
+    isComplete: isComplete === true || notApplicable,
+    completionStatus,
+    derivedCompletionStatus: completionStatus,
+    derivedBlockingReasons: notApplicable ? [] : blockingReasons,
+    derivedNotApplicable: notApplicable
+  };
+}
+
+function deriveNodeApprovedDocument(context, documentCode, nodeKey, blockingReason) {
+  const node = getContextNode(context, nodeKey);
+  const revision = getNodeRevision(node);
+  return buildDerivedCompletion({
+    documentCode,
+    nodeKey,
+    revision,
+    isComplete: node?.status === SOLUTION_DESIGN_NODE_STATUS.APPROVED,
+    blockingReasons: node ? [blockingReason] : [`${blockingReason}：节点尚未初始化`]
+  });
+}
+
+function deriveUploadDocument(context, documentCode, nodeKey, slotKey, blockingReason) {
+  const node = getContextNode(context, nodeKey);
+  const revision = getNodeRevision(node);
+  const complete =
+    node?.status === SOLUTION_DESIGN_NODE_STATUS.APPROVED &&
+    hasCurrentRevisionUpload(context, slotKey, revision);
+
+  return buildDerivedCompletion({
+    documentCode,
+    nodeKey,
+    revision,
+    isComplete: complete,
+    blockingReasons: complete ? [] : [blockingReason]
+  });
+}
+
+function deriveAnalysisFormDocument(context) {
+  const node = getContextNode(context, SOLUTION_DESIGN_NODE_KEY.ANALYSIS);
+  const revision = getNodeRevision(node);
+  const complete =
+    node?.status === SOLUTION_DESIGN_NODE_STATUS.APPROVED &&
+    isCurrentSubmittedGeneratedForm(context.analysisForm, revision);
+
+  return buildDerivedCompletion({
+    documentCode: 'C05',
+    nodeKey: SOLUTION_DESIGN_NODE_KEY.ANALYSIS,
+    revision,
+    isComplete: complete,
+    blockingReasons: complete ? [] : ['项目方案分析节点未审批通过，或当前 revision 项目方案分析表未提交/生成成功']
+  });
+}
+
+function deriveReviewFormDocument(context, { documentCode, nodeKey, form }) {
+  const node = getContextNode(context, nodeKey);
+  const revision = getNodeRevision(node);
+  const complete =
+    node?.status === SOLUTION_DESIGN_NODE_STATUS.APPROVED &&
+    isCurrentSubmittedGeneratedReviewForm(form, revision);
+
+  return buildDerivedCompletion({
+    documentCode,
+    nodeKey,
+    revision,
+    isComplete: complete,
+    blockingReasons: complete ? [] : [`${documentCode} 评审节点未审批通过，或当前 revision 评审记录表未提交/生成成功`]
+  });
+}
+
+function deriveCostDocument(context) {
+  const nodeKeys = [
+    SOLUTION_DESIGN_NODE_KEY.RD_COST,
+    SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST,
+    SOLUTION_DESIGN_NODE_KEY.FINANCE_COST
+  ];
+  const complete = nodeKeys.every((nodeKey) => isApprovedNode(context, nodeKey));
+
+  return buildDerivedCompletion({
+    documentCode: 'C17',
+    nodeKey: SOLUTION_DESIGN_NODE_KEY.FINANCE_COST,
+    revision: getNodeRevision(getContextNode(context, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST)),
+    isComplete: complete,
+    blockingReasons: complete ? [] : ['研发、制造、财务三段成本估算尚未全部审批通过']
+  });
+}
+
+function isCurrentQuotationTenderFlow(context) {
+  const node = getContextNode(context, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER);
+  return Boolean(context.quotationTenderFlow) &&
+    Number(context.quotationTenderFlow.revision ?? 0) === getNodeRevision(node);
+}
+
+function isQuotationPathComplete(context) {
+  const node = getContextNode(context, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER);
+  const revision = getNodeRevision(node);
+  const flow = context.quotationTenderFlow;
+  return (
+    node?.status === SOLUTION_DESIGN_NODE_STATUS.APPROVED &&
+    isCurrentQuotationTenderFlow(context) &&
+    flow?.branch_type === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION &&
+    flow?.branch_status === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.ACCEPTED &&
+    flow?.quotation_result === SOLUTION_DESIGN_QUOTATION_RESULT.ACCEPTED &&
+    hasCurrentRevisionUpload(context, SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE, revision)
+  );
+}
+
+function isTenderPathComplete(context) {
+  const node = getContextNode(context, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER);
+  const revision = getNodeRevision(node);
+  const flow = context.quotationTenderFlow;
+  return (
+    node?.status === SOLUTION_DESIGN_NODE_STATUS.APPROVED &&
+    isCurrentQuotationTenderFlow(context) &&
+    flow?.branch_type === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.TENDER &&
+    flow?.branch_status === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.APPROVED &&
+    hasCurrentRevisionUpload(context, SOLUTION_DESIGN_UPLOAD_SLOT_KEY.TENDER_BUSINESS_FILE, revision) &&
+    hasCurrentRevisionUpload(context, SOLUTION_DESIGN_UPLOAD_SLOT_KEY.TENDER_TECHNICAL_FILE, revision)
+  );
+}
+
+function deriveQuotationTenderDocument(context, documentCode) {
+  const node = getContextNode(context, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER);
+  const revision = getNodeRevision(node);
+  const flow = context.quotationTenderFlow;
+
+  if (!flow || !isCurrentQuotationTenderFlow(context)) {
+    return buildDerivedCompletion({
+      documentCode,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+      revision,
+      isComplete: false,
+      blockingReasons: ['报价/投标分支尚未按当前 revision 选择或完成']
+    });
+  }
+
+  if (flow.branch_type === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION) {
+    if (documentCode === 'C19') {
+      return buildDerivedCompletion({
+        documentCode,
+        nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+        revision,
+        isComplete: true,
+        notApplicable: true
+      });
+    }
+
+    return buildDerivedCompletion({
+      documentCode,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+      revision,
+      isComplete: isQuotationPathComplete(context),
+      blockingReasons: ['报价分支尚未完成，或当前 revision 报价单未被客户接受']
+    });
+  }
+
+  if (flow.branch_type === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.TENDER) {
+    if (documentCode === 'C18') {
+      return buildDerivedCompletion({
+        documentCode,
+        nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+        revision,
+        isComplete: true,
+        notApplicable: true
+      });
+    }
+
+    return buildDerivedCompletion({
+      documentCode,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+      revision,
+      isComplete: isTenderPathComplete(context),
+      blockingReasons: ['投标分支尚未完成，或当前 revision 商务标/技术标未审批通过']
+    });
+  }
+
+  return buildDerivedCompletion({
+    documentCode,
+    nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+    revision,
+    isComplete: false,
+    blockingReasons: ['报价/投标分支类型无效']
+  });
+}
+
+function deriveSolutionDesignDocumentCompletion(context, documentCode) {
+  if (documentCode === 'C04') {
+    return deriveNodeApprovedDocument(
+      context,
+      documentCode,
+      SOLUTION_DESIGN_NODE_KEY.PREPARATION,
+      '方案设计准备节点尚未通过'
+    );
+  }
+  if (documentCode === 'C05') {
+    return deriveAnalysisFormDocument(context);
+  }
+  if (documentCode === 'C06') {
+    return deriveUploadDocument(
+      context,
+      documentCode,
+      SOLUTION_DESIGN_NODE_KEY.ANALYSIS,
+      SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PRODUCT_FUNCTION_DIAGRAM,
+      '项目方案分析节点未审批通过，或当前 revision 产品功能框图未上传'
+    );
+  }
+  if (SOLUTION_DESIGN_DESIGN_OUTPUT_DOCUMENT_SLOT_MAP[documentCode]) {
+    return deriveUploadDocument(
+      context,
+      documentCode,
+      SOLUTION_DESIGN_NODE_KEY.DESIGN,
+      SOLUTION_DESIGN_DESIGN_OUTPUT_DOCUMENT_SLOT_MAP[documentCode],
+      `${documentCode} 方案设计产出未审批通过，或当前 revision 上传槽未齐套`
+    );
+  }
+  if (documentCode === 'C15') {
+    return deriveReviewFormDocument(context, {
+      documentCode,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
+      form: context.reviewFormsByNodeKey.get(SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW)
+    });
+  }
+  if (documentCode === 'C16') {
+    return deriveReviewFormDocument(context, {
+      documentCode,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
+      form: context.reviewFormsByNodeKey.get(SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW)
+    });
+  }
+  if (documentCode === 'C17') {
+    return deriveCostDocument(context);
+  }
+  if (documentCode === 'C18' || documentCode === 'C19') {
+    return deriveQuotationTenderDocument(context, documentCode);
+  }
+
+  return null;
+}
+
+async function selectSolutionDesignDerivedContexts(executor, projectIds) {
+  if (projectIds.length === 0) {
+    return new Map();
+  }
+
+  const placeholders = buildPlaceholders(projectIds);
+  const [nodeRows] = await executor.execute(
+    `SELECT *
+    FROM project_solution_design_nodes
+    WHERE project_id IN (${placeholders})
+    ORDER BY project_id ASC, node_order ASC`,
+    projectIds
+  );
+  const [slotRows] = await executor.execute(
+    `SELECT
+      s.*,
+      f.id AS current_file_id,
+      f.revision AS current_file_revision,
+      f.original_file_name AS current_file_original_file_name,
+      f.mime_type AS current_file_mime_type,
+      f.file_size AS current_file_size,
+      f.uploaded_by_user_id AS current_file_uploaded_by_user_id,
+      f.uploaded_at AS current_file_uploaded_at
+    FROM project_solution_design_upload_slots s
+    LEFT JOIN project_solution_design_upload_files f
+      ON f.slot_id = s.id AND f.is_current = 1
+    WHERE s.project_id IN (${placeholders})
+    ORDER BY s.project_id ASC, s.slot_order ASC`,
+    projectIds
+  );
+  const [analysisFormRows] = await executor.execute(
+    `SELECT *
+    FROM project_solution_design_analysis_forms
+    WHERE project_id IN (${placeholders})
+      AND is_current = 1`,
+    projectIds
+  );
+  const [reviewFormRows] = await executor.execute(
+    `SELECT *
+    FROM project_solution_design_review_forms
+    WHERE project_id IN (${placeholders})
+      AND is_current = 1
+    ORDER BY project_id ASC, node_key ASC`,
+    projectIds
+  );
+  const [quotationTenderFlowRows] = await executor.execute(
+    `SELECT *
+    FROM project_solution_design_quotation_tender_flows
+    WHERE project_id IN (${placeholders})`,
+    projectIds
+  );
+
+  const nodesByProject = mapRowsByProjectAndKey(nodeRows, 'node_key');
+  const slotsByProject = mapRowsByProjectAndKey(slotRows, 'slot_key');
+  const analysisFormsByProject = new Map(
+    analysisFormRows.map((row) => [Number(row.project_id), row])
+  );
+  const reviewFormsByProject = mapRowsByProjectAndKey(reviewFormRows, 'node_key');
+  const quotationTenderFlowsByProject = mapQuotationTenderFlows(quotationTenderFlowRows);
+
+  return new Map(projectIds.map((projectId) => [
+    projectId,
+    {
+      nodesByKey: nodesByProject.get(projectId) || new Map(),
+      slotsByKey: slotsByProject.get(projectId) || new Map(),
+      analysisForm: analysisFormsByProject.get(projectId) || null,
+      reviewFormsByNodeKey: reviewFormsByProject.get(projectId) || new Map(),
+      quotationTenderFlow: quotationTenderFlowsByProject.get(projectId) || null
+    }
+  ]));
+}
+
+export async function attachSolutionDesignDerivedCompletionToStageDocumentRows(executor, rows) {
+  const solutionDesignRows = rows.filter((row) => SOLUTION_DESIGN_DOCUMENT_CODES.has(getDocumentCode(row)));
+  if (solutionDesignRows.length === 0) {
+    return rows;
+  }
+
+  const projectIds = [...groupByProjectId(solutionDesignRows).keys()];
+  const solutionDesignDocumentCodesByProject = mapSolutionDesignDocumentCodesByProject(solutionDesignRows);
+  const contextsByProjectId = await selectSolutionDesignDerivedContexts(executor, projectIds);
+
+  return rows.map((row) => {
+    const documentCode = getDocumentCode(row);
+    if (!SOLUTION_DESIGN_DOCUMENT_CODES.has(documentCode)) {
+      return row;
+    }
+
+    const projectId = Number(row.project_id ?? row.projectId);
+    const context = contextsByProjectId.get(projectId);
+    if (!shouldApplySolutionDesignDerivedCompletion(solutionDesignDocumentCodesByProject.get(projectId))) {
+      return row;
+    }
+
+    const solutionDesignDerivedCompletion = context
+      ? deriveSolutionDesignDocumentCompletion(context, documentCode)
+      : buildDerivedCompletion({
+          documentCode,
+          nodeKey: SOLUTION_DESIGN_NODE_BY_DOCUMENT_CODE[documentCode] ?? null,
+          isComplete: false,
+          blockingReasons: ['方案设计派生上下文缺失']
+        });
+
+    return {
+      ...row,
+      solutionDesignDerivedCompletion
+    };
+  });
 }
 
 export async function selectProjectStageDocumentForUpdate(connection, projectId, documentId) {

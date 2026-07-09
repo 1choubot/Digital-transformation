@@ -7,6 +7,7 @@ import {
 } from '../../domain/stageDocumentTemplates.js';
 import { STANDARD_PROJECT_STAGES } from '../../domain/stages.js';
 import {
+  attachSolutionDesignDerivedCompletionToStageDocumentRows,
   attachReworkCandidatesToDocuments,
   buildStageCompletenessSummary,
   mapDocument
@@ -296,8 +297,12 @@ export async function getProjectStageDocumentChecklist(projectId, user = null) {
   ]);
 
   const rowsWithInitiationReview = await attachInitiationReviewToStageDocumentRows(pool, rows, user);
+  const rowsWithDerivedCompletion = await attachSolutionDesignDerivedCompletionToStageDocumentRows(
+    pool,
+    rowsWithInitiationReview
+  );
   const documentsByStage = new Map(STANDARD_PROJECT_STAGES.map((stage) => [stage.stageKey, []]));
-  const mappedDocuments = rowsWithInitiationReview.map(mapDocument);
+  const mappedDocuments = rowsWithDerivedCompletion.map(mapDocument);
   const documentsById = new Map(mappedDocuments.map((document) => [document.id, document]));
   const documentsWithRevisionSource = mappedDocuments.map((document) => {
     const sourceDocument = documentsById.get(document.revisionSourceDocumentId);

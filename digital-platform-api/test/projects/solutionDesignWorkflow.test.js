@@ -49,11 +49,18 @@ import {
   submitSolutionDesignWorkflowNode,
   uploadSolutionDesignWorkflowFile
 } from '../../src/repositories/projects/solutionDesignWorkflowRepository.js';
+import { advanceProjectStage } from '../../src/repositories/projects/stageAdvanceRepository.js';
+import { getProjectOverviewDashboard } from '../../src/repositories/projects/overviewDashboardRepository.js';
 import {
   OPERATION_ACTION_TYPE,
   OPERATION_TARGET_TYPE
 } from '../../src/repositories/operationLogRepository.js';
 import { updateProjectStageDocumentStatus } from '../../src/repositories/stageDocuments/statusRepository.js';
+import {
+  attachSolutionDesignDerivedCompletionToStageDocumentRows,
+  COMPLETION_STATUS,
+  mapDocument
+} from '../../src/repositories/stageDocuments/shared.js';
 import { readZipEntries } from '../../src/utils/ooxmlZip.js';
 
 function dbUser({
@@ -460,6 +467,91 @@ function reviewFormPayload(overrides = {}) {
   };
 }
 
+const SOLUTION_DESIGN_STAGE_DOCUMENTS = Object.freeze([
+  ['C04', '方案设计工作计划'],
+  ['C05', '项目方案分析表'],
+  ['C06', '产品功能框图'],
+  ['C07', '3D模型'],
+  ['C08', '布局图'],
+  ['C09', '工艺时序图'],
+  ['C10', '节拍表'],
+  ['C11', '演示动画'],
+  ['C12', '电气功能框图'],
+  ['C13', '软件功能框图'],
+  ['C14', '项目方案PPT'],
+  ['C15', '内部方案评审记录表'],
+  ['C16', '客户方案评审记录表'],
+  ['C17', '成本估算表'],
+  ['C18', '报价单'],
+  ['C19', '投标书']
+]);
+
+function buildProjectStages(projectId = 100, currentStageOrder = 2) {
+  return [
+    ['initiation', '立项阶段', 'completed', 0],
+    ['solution', '方案设计阶段', 'current', 1],
+    ['contract', '合同签订阶段', 'not_started', 0],
+    ['detailedDesign', '详细设计阶段', 'not_started', 0],
+    ['manufacturing', '生产制作阶段', 'not_started', 0],
+    ['preAcceptance', '预验收阶段', 'not_started', 0],
+    ['finalAcceptance', '终验收阶段', 'not_started', 0],
+    ['closeout', '结题阶段', 'not_started', 0]
+  ].map(([stageKey, stageName], index) => {
+    const stageOrder = index + 1;
+    const isCurrent = stageOrder === currentStageOrder ? 1 : 0;
+    const stageStatus = stageOrder < currentStageOrder
+      ? 'completed'
+      : stageOrder === currentStageOrder
+        ? 'current'
+        : 'not_started';
+    return {
+    id: 200 + index + 1,
+    project_id: projectId,
+    stage_order: stageOrder,
+    stage_key: stageKey,
+    stage_name: stageName,
+    stage_status: stageStatus,
+    is_current: isCurrent,
+    started_at: isCurrent ? '2026-07-08 09:00:00' : null,
+    completed_at: stageOrder < currentStageOrder ? '2026-07-08 08:00:00' : null,
+    created_at: '2026-07-08 08:00:00',
+    updated_at: '2026-07-08 08:00:00'
+  };
+  });
+}
+
+function buildSolutionDesignStageDocuments(projectId = 100) {
+  return SOLUTION_DESIGN_STAGE_DOCUMENTS.map(([documentCode, documentName], index) => ({
+    id: 400 + index + 1,
+    project_id: projectId,
+    template_id: 1000 + index,
+    template_version: 'v20260629',
+    stage_order: 2,
+    stage_key: 'solution',
+    stage_name: '方案设计阶段',
+    document_code: documentCode,
+    document_order: index + 1,
+    document_name: documentName,
+    is_required: 1,
+    default_responsibility_role: null,
+    confirm_role: null,
+    owner_department: BUSINESS_DEPARTMENT.RD_CENTER,
+    review_department: BUSINESS_DEPARTMENT.RD_CENTER,
+    completion_mode: COMPLETION_MODE.APPROVAL_REQUIRED,
+    submit_mode: 'upload',
+    target_folder_path: null,
+    target_folder_id: null,
+    status: DOCUMENT_STATUS.NOT_SUBMITTED,
+    is_applicable: 1,
+    revision_required: 0,
+    revision_reason: null,
+    revision_source_document_id: null,
+    revision_requested_at: null,
+    revision_resubmitted_by_user_id: null,
+    revision_resubmitted_at: null
+  }));
+}
+
 async function activateAnalysisNode(db, storage = fakeUploadStorage()) {
   const projectManager = authUser(db.connection.users.get(11));
 
@@ -833,6 +925,21 @@ async function submitTenderForReview(db, storage = fakeUploadStorage()) {
   );
 }
 
+async function assertStageAdvanceBlocked(db, user, expectedDocumentCodes) {
+  await assert.rejects(
+    () => advanceProjectStage(100, user, db),
+    (error) => {
+      assert.equal(error.code, 'PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE');
+      const documents = error.details?.incompleteRequiredDocuments || [];
+      const codes = documents.map((document) => document.documentCode);
+      for (const expectedCode of expectedDocumentCodes) {
+        assert.ok(codes.includes(expectedCode), `Expected ${expectedCode} to block stage advance`);
+      }
+      return true;
+    }
+  );
+}
+
 function normalizeSql(sql) {
   return sql.replace(/\s+/g, ' ').trim();
 }
@@ -912,6 +1019,8 @@ class SolutionDesignWorkflowFakeConnection {
     this.analysisForms = [];
     this.reviewForms = [];
     this.quotationTenderFlow = null;
+    this.stages = buildProjectStages(this.project.id, Number(this.project.current_stage_order ?? 2));
+    this.stageDocuments = buildSolutionDesignStageDocuments(this.project.id);
     this.roleHistory = [];
     this.operationLogs = [];
     this.nodeInsertCount = 0;
@@ -941,8 +1050,14 @@ class SolutionDesignWorkflowFakeConnection {
 
   projectContextRow() {
     const manager = this.projectManagerRow();
+    const currentStage = this.stages.find((stage) => stage.is_current === 1);
     return {
       ...this.project,
+      current_stage_id: currentStage?.id ?? this.project.current_stage_id,
+      current_stage_order: currentStage?.stage_order ?? this.project.current_stage_order,
+      current_stage_key: currentStage?.stage_key ?? this.project.current_stage_key,
+      current_stage_name: currentStage?.stage_name ?? this.project.current_stage_name,
+      current_stage_status: currentStage?.stage_status ?? this.project.current_stage_status,
       project_manager_account: manager?.account ?? null,
       project_manager_display_name: manager?.display_name ?? null,
       project_manager_department: manager?.department ?? null,
@@ -1035,6 +1150,14 @@ class SolutionDesignWorkflowFakeConnection {
   async execute(sql, params = []) {
     const text = normalizeSql(sql);
 
+    if (text.startsWith('SELECT *, 0 AS has_department_responsible FROM projects')) {
+      return [[{ ...this.project, has_department_responsible: 0 }]];
+    }
+
+    if (text.startsWith('SELECT p.*, u.id AS created_by_user_id')) {
+      return [[this.projectContextRow()]];
+    }
+
     if (text.startsWith('SELECT p.id,') && text.includes('LEFT JOIN users pm')) {
       return [[this.projectContextRow()]];
     }
@@ -1049,6 +1172,26 @@ class SolutionDesignWorkflowFakeConnection {
 
     if (text.startsWith('SELECT * FROM project_solution_design_quotation_tender_flows')) {
       return [this.quotationTenderFlow ? [{ ...this.quotationTenderFlow }] : []];
+    }
+
+    if (text.startsWith('SELECT * FROM project_stages WHERE project_id = ? ORDER BY stage_order ASC')) {
+      const [projectId] = params;
+      return [
+        this.stages
+          .filter((stage) => stage.project_id === projectId)
+          .sort((left, right) => left.stage_order - right.stage_order)
+          .map((stage) => ({ ...stage }))
+      ];
+    }
+
+    if (text.startsWith('SELECT id, project_id') && text.includes('FROM project_stages')) {
+      const projectIds = new Set(params.map(Number));
+      return [
+        this.stages
+          .filter((stage) => projectIds.has(Number(stage.project_id)))
+          .sort((left, right) => left.project_id - right.project_id || left.stage_order - right.stage_order)
+          .map((stage) => ({ ...stage }))
+      ];
     }
 
     if (text.startsWith('SELECT * FROM project_solution_design_nodes') && text.includes('AND node_key = ?')) {
@@ -1092,6 +1235,19 @@ class SolutionDesignWorkflowFakeConnection {
 
     if (text.startsWith('SELECT s.*, f.id AS current_file_id')) {
       return [this.uploadSlotRowsWithCurrentFiles()];
+    }
+
+    if (text.startsWith('SELECT * FROM project_solution_design_analysis_forms')) {
+      return [this.analysisForms.filter((form) => form.is_current === 1).map((form) => ({ ...form }))];
+    }
+
+    if (text.startsWith('SELECT * FROM project_solution_design_review_forms')) {
+      return [
+        this.reviewForms
+          .filter((form) => form.is_current === 1)
+          .sort((left, right) => left.node_key.localeCompare(right.node_key))
+          .map((form) => ({ ...form }))
+      ];
     }
 
     if (
@@ -1162,6 +1318,50 @@ class SolutionDesignWorkflowFakeConnection {
         this.uploadSlots
           .filter((slot) => slot.project_id === projectId && slot.slot_key === slotKey)
           .map((slot) => ({ ...slot }))
+      ];
+    }
+
+    if (
+      text.startsWith('SELECT d.id, d.project_id') &&
+      text.includes('FROM project_stage_documents d') &&
+      text.includes('INNER JOIN projects p') &&
+      text.includes('d.responsible_user_id = ?')
+    ) {
+      const [userId, excludedProjectStatus, ...excludedDocumentCodes] = params;
+      return [
+        this.stageDocuments
+          .filter(
+            (document) =>
+              Number(document.responsible_user_id) === Number(userId) &&
+              this.project.status !== excludedProjectStatus &&
+              !excludedDocumentCodes.includes(document.document_code)
+          )
+          .sort((left, right) => left.project_id - right.project_id || left.stage_order - right.stage_order || left.document_order - right.document_order)
+          .map((document) => ({ ...document }))
+      ];
+    }
+
+    if (
+      text.startsWith('SELECT d.id, d.project_id') &&
+      text.includes('FROM project_stage_documents d') &&
+      text.includes('WHERE d.project_id IN')
+    ) {
+      const projectIds = new Set(params.map(Number));
+      return [
+        this.stageDocuments
+          .filter((document) => projectIds.has(Number(document.project_id)))
+          .sort((left, right) => left.project_id - right.project_id || left.stage_order - right.stage_order || left.document_order - right.document_order)
+          .map((document) => ({ ...document }))
+      ];
+    }
+
+    if (text.startsWith('SELECT d.id, d.project_id') && text.includes('FROM project_stage_documents d')) {
+      const [projectId, stageOrder] = params;
+      return [
+        this.stageDocuments
+          .filter((document) => document.project_id === projectId && document.stage_order === stageOrder)
+          .sort((left, right) => left.document_order - right.document_order)
+          .map((document) => ({ ...document }))
       ];
     }
 
@@ -1948,6 +2148,37 @@ class SolutionDesignWorkflowFakeConnection {
       assert.equal(projectId, this.project.id);
       this.project.status = status;
       return [{ affectedRows: 1 }];
+    }
+
+    if (text.startsWith('UPDATE project_stages SET stage_status = ?, is_current = 0')) {
+      const [stageStatus, stageId] = params;
+      const stage = this.stages.find((candidate) => candidate.id === stageId);
+      if (stage) {
+        stage.stage_status = stageStatus;
+        stage.is_current = 0;
+        stage.completed_at = '2026-07-08 11:00:00';
+        stage.updated_at = '2026-07-08 11:00:00';
+      }
+      return [{ affectedRows: stage ? 1 : 0 }];
+    }
+
+    if (text.startsWith('UPDATE project_stages SET stage_status = ?, is_current = 1')) {
+      const [stageStatus, stageId] = params;
+      const stage = this.stages.find((candidate) => candidate.id === stageId);
+      if (stage) {
+        stage.stage_status = stageStatus;
+        stage.is_current = 1;
+        stage.started_at = '2026-07-08 11:00:00';
+        stage.updated_at = '2026-07-08 11:00:00';
+        Object.assign(this.project, {
+          current_stage_id: stage.id,
+          current_stage_order: stage.stage_order,
+          current_stage_key: stage.stage_key,
+          current_stage_name: stage.stage_name,
+          current_stage_status: stage.stage_status
+        });
+      }
+      return [{ affectedRows: stage ? 1 : 0 }];
     }
 
     if (text.startsWith('INSERT INTO business_operation_logs')) {
@@ -5179,6 +5410,194 @@ test('solution design end-to-end smoke covers quotation and tender happy paths',
     tenderDb.connection.operationLogs.at(-1).action_type,
     OPERATION_ACTION_TYPE.SOLUTION_DESIGN_READY_FOR_CONTRACT
   );
+});
+
+test('quotation path derives stage gate complete and allows manual advance to contract stage', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+  const generalManager = authUser(db.connection.users.get(30));
+
+  await submitQuotation(db, storage);
+  const accepted = await processSolutionDesignQuotationResult(
+    {
+      projectId: 100,
+      payload: { result: SOLUTION_DESIGN_QUOTATION_RESULT.ACCEPTED },
+      user: businessOwner
+    },
+    db
+  );
+
+  assert.equal(accepted.permissions.canAdvanceToContract, true);
+  assert.equal(accepted.currentStage.stageKey, 'solution');
+  assert.equal(
+    db.connection.stageDocuments.every((document) => document.status === DOCUMENT_STATUS.NOT_SUBMITTED),
+    true
+  );
+
+  const advanced = await advanceProjectStage(100, generalManager, db);
+  assert.equal(advanced.advancedStage.stageKey, 'solution');
+  assert.equal(advanced.nextStage.stageKey, 'contract');
+  assert.equal(advanced.currentStage.stageKey, 'contract');
+  const stageAdvanceLog = db.connection.operationLogs.find(
+    (log) => log.action_type === OPERATION_ACTION_TYPE.STAGE_ADVANCED
+  );
+  assert.ok(stageAdvanceLog);
+  const details = JSON.parse(stageAdvanceLog.details_json);
+  assert.equal(details.completenessSummary.completionPercent, 100);
+  assert.equal(details.completenessSummary.incompleteRequiredCount, 0);
+});
+
+test('completed solution design workflow does not inflate overview pending stage document tasks', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const projectManager = authUser(db.connection.users.get(11));
+  const businessOwner = authUser(db.connection.users.get(13));
+
+  for (const document of db.connection.stageDocuments) {
+    document.responsible_user_id = projectManager.id;
+  }
+
+  await submitQuotation(db, storage);
+  await processSolutionDesignQuotationResult(
+    {
+      projectId: 100,
+      payload: { result: SOLUTION_DESIGN_QUOTATION_RESULT.ACCEPTED },
+      user: businessOwner
+    },
+    db
+  );
+
+  const overview = await getProjectOverviewDashboard(
+    projectManager,
+    { status: null, currentStageOrder: null, keyword: '' },
+    db.connection
+  );
+
+  assert.equal(overview.summary.myPendingStageDocumentTasks, 0);
+  assert.equal(overview.projects[0].currentStageCompletenessSummary.completionPercent, 100);
+  assert.equal(overview.projects[0].currentStageCompletenessSummary.incompleteRequiredCount, 0);
+});
+
+test('incomplete solution design workflow overview pending count follows derived document status', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const technicalOwner = authUser(db.connection.users.get(12));
+  const workPlanDocument = db.connection.stageDocuments.find((document) => document.document_code === 'C04');
+  workPlanDocument.responsible_user_id = technicalOwner.id;
+
+  const overview = await getProjectOverviewDashboard(
+    technicalOwner,
+    { status: null, currentStageOrder: null, keyword: '' },
+    db.connection
+  );
+
+  assert.equal(overview.summary.myPendingStageDocumentTasks, 1);
+});
+
+test('non-applicable solution design output stays not_applicable and does not block stage advance', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+  const generalManager = authUser(db.connection.users.get(30));
+
+  await submitQuotation(db, storage);
+  await processSolutionDesignQuotationResult(
+    {
+      projectId: 100,
+      payload: { result: SOLUTION_DESIGN_QUOTATION_RESULT.ACCEPTED },
+      user: businessOwner
+    },
+    db
+  );
+
+  const cycleTimeDocument = db.connection.stageDocuments.find((document) => document.document_code === 'C10');
+  cycleTimeDocument.is_applicable = 0;
+  const rowsWithDerivedCompletion = await attachSolutionDesignDerivedCompletionToStageDocumentRows(
+    db.connection,
+    db.connection.stageDocuments.map((document) => ({ ...document }))
+  );
+  const cycleTimeDto = mapDocument(
+    rowsWithDerivedCompletion.find((document) => document.document_code === 'C10')
+  );
+
+  assert.equal(cycleTimeDto.isApplicable, false);
+  assert.equal(cycleTimeDto.isComplete, true);
+  assert.equal(cycleTimeDto.completionStatus, COMPLETION_STATUS.NOT_APPLICABLE);
+
+  const advanced = await advanceProjectStage(100, generalManager, db);
+  assert.equal(advanced.currentStage.stageKey, 'contract');
+});
+
+test('tender path derives stage gate complete and allows manual advance to contract stage', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const generalManager = authUser(db.connection.users.get(30));
+
+  await submitTenderForReview(db, storage);
+  const approved = await approveSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+      user: generalManager
+    },
+    db
+  );
+
+  assert.equal(approved.permissions.canAdvanceToContract, true);
+  assert.equal(approved.currentStage.stageKey, 'solution');
+
+  const advanced = await advanceProjectStage(100, generalManager, db);
+  assert.equal(advanced.advancedStage.stageKey, 'solution');
+  assert.equal(advanced.nextStage.stageKey, 'contract');
+  assert.equal(advanced.currentStage.stageKey, 'contract');
+  const stageAdvanceLog = db.connection.operationLogs.find(
+    (log) => log.action_type === OPERATION_ACTION_TYPE.STAGE_ADVANCED
+  );
+  const details = JSON.parse(stageAdvanceLog.details_json);
+  assert.equal(details.completenessSummary.completionPercent, 100);
+  assert.equal(details.completenessSummary.incompleteRequiredCount, 0);
+});
+
+test('solution design derived gate blocks incomplete workflow, missing branch, unfinished branch, and old tender revision', async () => {
+  const generalManager = authUser(baseUsers().get(30));
+
+  const initialDb = fakeDb();
+  seedAssignedRoles(initialDb.connection);
+  await assertStageAdvanceBlocked(initialDb, generalManager, ['C04', 'C18', 'C19']);
+
+  const missingBranchDb = fakeDb();
+  seedAssignedRoles(missingBranchDb.connection);
+  await activateQuotationOrTenderNode(missingBranchDb, fakeUploadStorage());
+  await assertStageAdvanceBlocked(missingBranchDb, generalManager, ['C18', 'C19']);
+
+  const quotationSubmittedDb = fakeDb();
+  seedAssignedRoles(quotationSubmittedDb.connection);
+  await submitQuotation(quotationSubmittedDb, fakeUploadStorage());
+  await assertStageAdvanceBlocked(quotationSubmittedDb, generalManager, ['C18']);
+
+  const tenderSubmittedDb = fakeDb();
+  seedAssignedRoles(tenderSubmittedDb.connection);
+  await submitTenderForReview(tenderSubmittedDb, fakeUploadStorage());
+  await assertStageAdvanceBlocked(tenderSubmittedDb, generalManager, ['C19']);
+
+  const tenderReturnedDb = fakeDb();
+  seedAssignedRoles(tenderReturnedDb.connection);
+  await submitTenderForReview(tenderReturnedDb, fakeUploadStorage());
+  await returnSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+      payload: { returnReason: '投标文件需要重新确认' },
+      user: generalManager
+    },
+    tenderReturnedDb
+  );
+  await assertStageAdvanceBlocked(tenderReturnedDb, generalManager, ['C19']);
 });
 
 test('tender return increments revision and old tender files cannot bypass resubmission', async () => {

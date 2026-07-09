@@ -63,6 +63,27 @@
           <span v-else-if="moduleErrors[activeMenuCode]" class="secondary-nav__state secondary-nav__state--error">
             {{ moduleErrors[activeMenuCode] }}
           </span>
+
+          <!-- 右侧占位容器：镜像上方 header-right 结构（visibility:hidden），确保上下两层菜单中心对齐 -->
+          <div class="header-right-spacer">
+            <div class="current-user">
+              <div class="user-avatar">{{ String(currentUser.name || 'U').charAt(0) }}</div>
+              <div class="user-info">
+                <strong class="user-name">{{ currentUser.name }}</strong>
+                <span class="user-role-desc">
+                  {{ formatOrganizationRole(currentUser.organizationRole) }}
+                  <span class="divider">/</span>
+                  {{ currentUser.department ? formatBusinessDepartment(currentUser.department) : '全局级' }}
+                </span>
+              </div>
+              <button type="button" class="logout-button" tabindex="-1">
+                <svg class="logout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </el-header>
@@ -336,7 +357,7 @@ onMounted(() => {
 }
 
 .app-header {
-  min-height: 88px;
+  min-height: 112px;
   display: flex;
   align-items: stretch;
   justify-content: flex-start;
@@ -352,10 +373,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   height: 100%;
-}
-
-.header-right {
   gap: 1rem;
+  flex-shrink: 0;
 }
 
 .brand-logo-area {
@@ -399,22 +418,19 @@ onMounted(() => {
   min-width: 0;
   flex: 1;
   display: grid;
-  grid-template-rows: minmax(56px, 1fr) 32px;
+  grid-template-rows: minmax(56px, 1fr) minmax(56px, 1fr);
 }
 
+/* 两段式布局：[导航菜单(flex:1,居中)] [右侧用户区/占位(flex-shrink:0)] */
 .header-main__top,
 .header-main__bottom {
   min-width: 0;
   display: flex;
-  align-items: stretch;
-}
-
-.header-main__top {
+  align-items: center;
   justify-content: space-between;
 }
 
 .header-main__bottom {
-  align-items: center;
   background: #f7faff;
   border-top: 1px solid #edf2f7;
 }
@@ -423,12 +439,11 @@ onMounted(() => {
 .secondary-nav {
   border-bottom: 0;
   background: transparent;
-}
-
-.primary-nav {
-  min-height: 56px;
   flex: 1;
   min-width: 0;
+  /* el-menu 渲染为 <ul>，直接在根元素上设置居中，让内部菜单项水平居中排列 */
+  display: flex !important;
+  justify-content: center !important;
 }
 
 .primary-nav :deep(.el-menu-item) {
@@ -449,18 +464,18 @@ onMounted(() => {
 }
 
 .secondary-nav {
-  height: 32px;
-  min-width: 0;
+  height: 56px;
   margin-left: 0;
 }
 
 .secondary-nav :deep(.el-menu-item) {
-  height: 32px;
+  height: 56px;
   min-width: 112px;
   justify-content: center;
   border-bottom: 0;
-  color: #4b5563;
-  font-size: 14px;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .secondary-nav :deep(.el-menu-item:hover),
@@ -473,14 +488,24 @@ onMounted(() => {
 .secondary-nav__state {
   display: inline-flex;
   align-items: center;
-  height: 32px;
+  height: 56px;
   margin-left: 28px;
   color: #909399;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .secondary-nav__state--error {
   color: #f56c6c;
+}
+
+/* 右侧占位容器：镜像上方 header-right 的结构（visibility:hidden），确保上下两层菜单中心对齐 */
+.header-right-spacer {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  gap: 1rem;
+  flex-shrink: 0;
+  visibility: hidden;
 }
 
 .current-user {

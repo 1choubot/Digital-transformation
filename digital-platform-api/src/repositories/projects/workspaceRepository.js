@@ -215,6 +215,28 @@ function buildWorkspaceNode(moduleConfig, documentsByCode, generatedFilesByDocum
   };
 }
 
+function resolveAutomaticProcessNodeStatuses(nodes) {
+  return nodes.map((node, index) => {
+    if (node.nodeStatus !== 'process_node') {
+      return node;
+    }
+
+    // 过程节点没有人工提交动作，数据由系统派生。正常情况下视为已完成；
+    // 如果流程退回到了它之前的节点，则跟随前置返工状态，等待前置节点重新通过。
+    const blockedByPreviousRework = nodes
+      .slice(0, index)
+      .some((previousNode) => ['returned_for_rework', 'blocked_by_rework'].includes(previousNode.nodeStatus));
+
+    return {
+      ...node,
+      nodeStatus: blockedByPreviousRework ? 'returned_for_rework' : 'completed',
+      blockingReasons: blockedByPreviousRework
+        ? [...new Set([...(node.blockingReasons || []), '前置节点被退回，系统生成数据等待重新生成'])]
+        : node.blockingReasons
+    };
+  });
+}
+
 function isCompatibilityOnlyModule(moduleConfig) {
   if (!moduleConfig.outputCodes.length) {
     return false;
@@ -234,8 +256,10 @@ function buildWorkspaceStage(stage, documents, generatedFilesByDocumentId, proje
       ? !isCompatibilityOnlyModule(module)
       : true;
   });
-  const nodes = moduleConfigs.map((moduleConfig) =>
-    buildWorkspaceNode(moduleConfig, documentsByCode, generatedFilesByDocumentId, project)
+  const nodes = resolveAutomaticProcessNodeStatuses(
+    moduleConfigs.map((moduleConfig) =>
+      buildWorkspaceNode(moduleConfig, documentsByCode, generatedFilesByDocumentId, project)
+    )
   );
 
   return {

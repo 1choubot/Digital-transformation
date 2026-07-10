@@ -16,7 +16,7 @@
 
 <script setup>
 import { computed } from 'vue';
-import { resolveNodePage } from '../../config/nodePages.js';
+import { resolveNodePage } from '../../../config/nodePages.js';
 
 const emit = defineEmits(['business-state-changed']);
 

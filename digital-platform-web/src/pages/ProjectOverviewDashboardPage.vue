@@ -138,6 +138,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { getProjectOverviewDashboard } from '../api/projects.js';
+import { getProjectNavigation } from '../api/navigation.js';
 import { toReadableApiError } from '../api/http.js';
 import PageHeader from '../components/PageHeader.vue';
 import StatusBadge from '../components/StatusBadge.vue';
@@ -194,6 +195,7 @@ const stageOrderFilter = ref('');
 const keywordFilter = ref('');
 const loading = ref(false);
 const errorMessage = ref('');
+const navigatingProjectId = ref(null);
 const dashboard = ref({
   summary: { ...emptySummary },
   projects: []
@@ -224,8 +226,61 @@ function formatStageIssue(issue) {
   return stageIssueText[issue] || '';
 }
 
-function navigateToProject(project) {
-  props.navigate(`/projects/${project.projectId}`);
+function findCurrentNavigationStage(project, navigation) {
+  const stages = Array.isArray(navigation?.children) ? navigation.children : [];
+  return stages.find((stage) => String(stage.stageId) === String(project.currentStageId))
+    || stages.find((stage) => Number(stage.stageOrder) === Number(project.currentStageOrder))
+    || stages.find((stage) => stage.isCurrent)
+    || null;
+}
+
+function findActiveNavigationNode(stage) {
+  const nodes = Array.isArray(stage?.children) ? stage.children : [];
+  const statusPriority = ['RETURNED', 'WAIT_APPROVAL', 'PROCESSING', 'FAILED', 'PENDING', 'COMPLETED'];
+
+  for (const status of statusPriority) {
+    const node = nodes.find((item) => item.status === status && (item.route || item.nodeKey || item.nodeCode));
+    if (node) {
+      return node;
+    }
+  }
+
+  return null;
+}
+
+function buildNodeRoute(projectId, node) {
+  if (node?.route) {
+    return node.route;
+  }
+
+  const nodeKey = node?.nodeKey || node?.nodeCode;
+  return nodeKey ? `/projects/${projectId}/node/${encodeURIComponent(nodeKey)}` : '';
+}
+
+async function navigateToProject(project) {
+  const fallbackRoute = `/projects/${project.projectId}`;
+  if (!project.currentStageId || ['completed', 'ended'].includes(project.status)) {
+    props.navigate(fallbackRoute);
+    return;
+  }
+
+  if (String(navigatingProjectId.value) === String(project.projectId)) {
+    return;
+  }
+
+  navigatingProjectId.value = project.projectId;
+
+  try {
+    const navigation = await getProjectNavigation(project.projectId, props.authToken);
+    const currentStage = findCurrentNavigationStage(project, navigation);
+    const activeNode = findActiveNavigationNode(currentStage);
+    props.navigate(buildNodeRoute(project.projectId, activeNode) || fallbackRoute);
+  } catch (error) {
+    // 导航定位失败不应阻止用户进入项目，退回工作区默认定位逻辑。
+    props.navigate(fallbackRoute);
+  } finally {
+    navigatingProjectId.value = null;
+  }
 }
 
 function isInteractiveElement(element) {
@@ -236,12 +291,12 @@ function isInteractiveElement(element) {
   );
 }
 
-function handleProjectCardClick(event, project) {
+async function handleProjectCardClick(event, project) {
   if (isInteractiveElement(event.target)) {
     return;
   }
 
-  navigateToProject(project);
+  await navigateToProject(project);
 }
 
 async function loadDashboard() {

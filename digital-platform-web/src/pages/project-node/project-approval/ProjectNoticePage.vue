@@ -34,8 +34,8 @@
 </template>
 
 <script setup>
-import NodeOnlineFormEditor from '../../components/node/NodeOnlineFormEditor.vue';
-import { useNodeOnlineForm } from '../../composables/node/useNodeOnlineForm.js';
+import NodeOnlineFormEditor from '../../../components/node/NodeOnlineFormEditor.vue';
+import { useNodeOnlineForm } from '../../../composables/node/useNodeOnlineForm.js';
 
 const emit = defineEmits(['business-state-changed']);
 

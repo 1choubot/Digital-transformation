@@ -188,14 +188,14 @@
 
 <script setup>
 import { computed, reactive } from 'vue';
-import NodeOnlineFormEditor from '../../components/node/NodeOnlineFormEditor.vue';
-import { useNodeOnlineForm } from '../../composables/node/useNodeOnlineForm.js';
+import NodeOnlineFormEditor from '../../../components/node/NodeOnlineFormEditor.vue';
+import { useNodeOnlineForm } from '../../../composables/node/useNodeOnlineForm.js';
 import {
   formatBusinessDepartment,
   formatDateTime,
   formatOrganizationRole,
   formatUser
-} from '../../utils/format.js';
+} from '../../../utils/format.js';
 
 const emit = defineEmits(['business-state-changed']);
 

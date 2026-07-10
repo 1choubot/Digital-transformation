@@ -1,6 +1,6 @@
 # Digital-transformation-v4 前端统一样式规范与重构方案
 
-> 适用基线：Digital-transformation-v4。当前版本只制定规范和迁移计划，不修改源码。
+> 适用基线：Digital-transformation。当前版本只制定规范和迁移计划，不修改源码。
 
 ## 1. 最终决策
 

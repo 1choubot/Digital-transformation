@@ -176,17 +176,18 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 
 ### Requirement: 项目阶段手工推进
 
-系统 MUST 提供项目阶段手工推进能力，已登录用户只能推进项目当前阶段，目标阶段必须由服务端根据标准 8 阶段顺序自动确定；推进成功后 MUST 记录项目业务操作日志。
+系统 MUST 保留项目阶段手工推进接口作为 API / 运维兜底能力，已登录用户只能推进项目当前阶段，目标阶段必须由服务端根据标准 8 阶段顺序自动确定；推进成功后 MUST 记录项目业务操作日志。
 
 #### Scenario: 阶段推进要求登录
 
 - **WHEN** 用户未携带登录态、登录态无效或登录态已过期时请求 `POST /api/projects/:projectId/stages/advance`
 - **THEN** 系统必须拒绝推进，并提示需要登录
 
-#### Scenario: 阶段推进不做角色权限
+#### Scenario: 阶段推进权限仅适用于 manual fallback API
 
-- **WHEN** 已登录用户请求推进项目阶段
-- **THEN** 系统必须只校验登录态、项目阶段状态和齐套门禁，不得在本能力中校验项目经理角色、复杂权限、角色权限或轻角色规则
+- **WHEN** 已登录用户通过 manual fallback API 请求推进项目阶段
+- **THEN** 系统必须校验登录态、项目阶段状态、齐套门禁和既有阶段推进权限
+- **AND** 阶段推进权限不得用于生成普通 `stage_advance` 工作台待办
 
 #### Scenario: 项目必须存在
 
@@ -621,9 +622,10 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **WHEN** 项目经理查看其负责项目
 - **THEN** 系统必须允许其查看该项目阶段、资料、齐套摘要、责任人、返工标记和附件等全量进度信息
 
-#### Scenario: 项目经理完成后推进阶段
+#### Scenario: 项目经理通过 manual fallback API 兜底推进阶段
 - **WHEN** 当前阶段适用资料均已按各自 `completionMode` 派生为完成且没有 `revision_required`
-- **THEN** 项目经理可推进其负责项目当前阶段，且阶段推进仍必须基于完成门禁、返工门禁和既有推进权限
+- **THEN** 项目经理可通过 manual fallback API 推进其负责项目当前阶段，且阶段推进仍必须基于完成门禁、返工门禁和既有推进权限
+- **AND** 该权限不得用于生成普通 `stage_advance` 工作台待办
 
 #### Scenario: 项目经理可分配未指定责任人的返工资料
 - **WHEN** 项目存在 `revision_required = true` 且未分配责任人的资料
@@ -655,7 +657,7 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 
 ### Requirement: 我的工作台查询接口
 
-系统 MUST 提供当前登录用户的工作台查询接口，用于返回资料责任、资料审核、`1.2` 专用评价/审批和阶段推进相关待办，并 MUST 只基于当前登录态确定用户身份；当前内部资料闭环 MUST NOT 返回泛化阶段关口审批待办，且 MUST 将有责任人的精准返工资料纳入资料责任待办。
+系统 MUST 提供当前登录用户的工作台查询接口，用于返回资料责任、资料审核和 `1.2` 专用评价/审批待办，并 MUST 只基于当前登录态确定用户身份；当前内部资料闭环 MUST NOT 返回泛化阶段关口审批待办或普通 `stage_advance` 阶段推进待办，且 MUST 将有责任人的精准返工资料纳入资料责任待办。
 
 #### Scenario: 1.2 营销评价待办只给营销中心负责人
 
@@ -755,21 +757,24 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 
 ### Requirement: 工作台阶段关口审批和阶段推进待办
 
-系统 MUST 在当前 20260625 在线平台内部资料闭环中只按 `completionMode` 完成情况和既有推进权限生成阶段推进待办，并 MUST NOT 因泛化阶段关口审批生成推进前置。
+系统 MUST 在当前主流程中不生成普通 `stage_advance` 工作台待办；阶段齐套后 MUST 由配置的写操作触发自动推进，手动推进接口仅作为 API / 运维兜底能力，且既有阶段推进权限只适用于 manual fallback API，不得用于工作台待办生成。
 
 #### Scenario: 阶段关口审批待办暂停
 - **WHEN** 系统生成当前阶段工作台待办
 - **THEN** 工作台 MUST NOT 因泛化阶段关口审批状态生成 `stage_gate_approval` 待办
 
-#### Scenario: 项目经理阶段推进待办
+#### Scenario: 主流程不生成项目经理阶段推进待办
 - **WHEN** 当前用户是项目经理、当前阶段适用资料已经按 `completionMode` 完成、且当前阶段不是第 8 阶段
-- **THEN** 工作台可以返回 `stage_advance` 待办
+- **THEN** 工作台 MUST NOT 返回普通 `stage_advance` 待办
+- **AND** 系统应由配置的写操作触发自动推进
+- **AND** 若项目错过写触发，项目经理阶段推进权限只适用于 manual fallback API
 
-#### Scenario: 阶段推进待办不要求 approval_status
+#### Scenario: 自动推进和 manual fallback 不要求 approval_status
 - **WHEN** 当前阶段适用资料已经按 `completionMode` 完成
-- **THEN** 工作台 MUST NOT 因当前阶段关口审批状态不是 `approved` 而隐藏阶段推进待办
+- **THEN** 系统 MUST NOT 因当前阶段关口审批状态不是 `approved` 而阻止配置写操作触发的自动推进或 manual fallback API 兜底推进
+- **AND** 工作台仍 MUST NOT 返回普通 `stage_advance` 待办
 
-#### Scenario: 阶段推进待办仍要求资料完成
+#### Scenario: 未齐套时不生成阶段推进待办
 - **WHEN** 当前阶段存在适用资料未按 `completionMode` 完成，或项目已完成
 - **THEN** 工作台 MUST NOT 返回该阶段的 `stage_advance` 待办
 
@@ -841,31 +846,33 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 
 ### Requirement: 阶段推进按结构化归属中心识别本中心项目
 
-系统 MUST 使用结构化归属中心判断中心负责人是否可推进本中心相关项目阶段，并 MUST 保持当前阶段 `completionMode` 完成门禁不变。
+系统 MUST 使用结构化归属中心判断中心负责人是否可通过 manual fallback API 推进本中心相关项目阶段，并 MUST 保持当前阶段 `completionMode` 完成门禁不变；该权限不得用于生成普通 `stage_advance` 工作台待办。
 
-#### Scenario: 中心负责人推进本中心相关项目
+#### Scenario: 中心负责人通过 manual fallback API 推进本中心相关项目
 - **WHEN** 当前用户是中心负责人且项目属于其本中心相关项目
 - **AND** 当前阶段适用资料已经按 `completionMode` 完成
-- **THEN** 系统 MAY 允许其推进当前阶段
+- **THEN** 系统 MAY 允许其通过 manual fallback API 推进当前阶段
+- **AND** 工作台 MUST NOT 因该权限返回普通 `stage_advance` 待办
 
 #### Scenario: 中心负责人不得跨中心推进
 - **WHEN** 当前用户是中心负责人但项目不属于其本中心相关项目
-- **THEN** 系统 MUST 拒绝其推进阶段，除非该用户同时具备项目经理或总经理等其他允许身份
+- **THEN** 系统 MUST 拒绝其通过 manual fallback API 推进阶段，除非该用户同时具备项目经理或总经理等其他允许身份
 
 #### Scenario: 阶段推进归属判断优先级
-- **WHEN** 系统判断中心负责人是否可推进某项目阶段
+- **WHEN** 系统判断中心负责人是否可通过 manual fallback API 推进某项目阶段
 - **THEN** 系统 MUST 优先使用项目 `participatingDepartments`、阶段资料 `ownerDepartment` 和 `reviewDepartment`
 - **AND** 仅在阶段资料 `ownerDepartment` 和 `reviewDepartment` 均为空时，才 MAY 兼容使用责任人部门
 
-### Requirement: 工作台阶段推进待办按结构化归属中心识别
+### Requirement: 工作台不按结构化归属中心生成阶段推进待办
 
-系统 MUST 使用结构化归属中心生成中心负责人 `stage_advance` 工作台待办，并 MUST 以当前阶段适用资料按 `completionMode` 完成为前置条件。
+系统 MUST NOT 使用结构化归属中心生成中心负责人普通 `stage_advance` 工作台待办；结构化归属中心只用于 manual fallback API 的阶段推进权限判断，正常主流程 MUST 依赖配置写操作触发自动推进。
 
-#### Scenario: 中心负责人因归属中心获得阶段推进待办
+#### Scenario: 中心负责人不会因归属中心获得阶段推进待办
 - **WHEN** 当前用户是中心负责人且项目中存在 `ownerDepartment = 本人部门` 或 `reviewDepartment = 本人部门` 的阶段资料
 - **AND** 当前阶段适用资料已经按 `completionMode` 完成
 - **AND** 当前阶段不是第 8 阶段
-- **THEN** 工作台 MAY 返回该项目当前阶段的 `stage_advance` 待办
+- **THEN** 工作台 MUST NOT 返回该项目当前阶段的普通 `stage_advance` 待办
+- **AND** 如项目错过配置写操作触发，中心负责人是否可兜底推进 MUST 由 manual fallback API 权限判断决定
 
 #### Scenario: 第 8 阶段仍不生成普通推进待办
 - **WHEN** 当前阶段是第 8 阶段 `closeout`
@@ -893,7 +900,7 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 
 ### Requirement: 简单阶段推进边界
 
-系统 MUST 使用当前阶段资料 `completionMode` 完成门禁推进项目阶段，并 MUST 不因 20260625 内部资料闭环引入跳阶段、回退、自动阶段流转、泛化阶段关口审批或复杂工作流引擎。
+系统 MUST 使用当前阶段资料 `completionMode` 完成门禁推进项目阶段，并 MUST 不因 20260625 内部资料闭环引入跳阶段、回退、泛化阶段关口审批或复杂工作流引擎；配置的写操作自动推进 MUST 复用同一门禁并且一次最多推进一个阶段。
 
 #### Scenario: 阶段推进继续基于当前阶段资料门禁
 - **WHEN** 已登录且有推进权限的用户请求推进项目当前阶段
@@ -2556,14 +2563,15 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **THEN** 系统 MUST 将报价/投标相关资料视为未满足阶段推进门禁
 - **AND** 系统 MUST 阻止第 2 阶段推进
 
-### Requirement: 方案设计阶段手工推进门禁
-系统 MUST 在报价/投标通过后开放第 2 阶段手工推进门禁，但 MUST NOT 自动进入合同签订阶段。
+### Requirement: 方案设计阶段自动推进门禁
+系统 MUST 在报价/投标通过后将第 2 阶段齐套视为满足，并 MUST 由配置的写操作触发自动推进到第 3 阶段；manual fallback API 仅作为 API / 运维兜底能力。
 
-#### Scenario: 报价投标通过后允许手工推进
+#### Scenario: 报价投标通过后自动推进
 - **WHEN** 方案设计 workflow 已满足 C04-C19 派生完成规则，且报价/投标节点已 `approved`
 - **THEN** 系统 MUST 将第 2 阶段齐套视为满足
-- **AND** 系统 MUST 允许有权限用户手工推进到第 3 阶段
-- **AND** 系统 MUST 保持项目当前阶段不自动变化，直到用户执行阶段推进动作
+- **AND** 配置的报价接受或投标通过写操作 MUST 调用统一阶段门禁并在满足时自动推进到第 3 阶段
+- **AND** 系统 MUST NOT 要求用户再执行手工阶段推进动作
+- **AND** 系统 MUST NOT 跳阶段或回退阶段
 
 #### Scenario: 不实现合同签订阶段业务
 - **WHEN** 第 2 阶段齐套满足或 `canAdvanceToContract=true`
@@ -2579,3 +2587,75 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **AND** 系统 MUST NOT 改写专用 workflow 节点状态
 - **AND** 系统 MUST NOT 通过普通资料状态让第 2 阶段齐套
 
+### Requirement: 阶段齐套后自动推进
+系统 SHALL automatically advance a project to the next stage only when a configured write-operation trigger or the manual fallback advance endpoint invokes the shared stage gate check and the current stage gate is satisfied.
+
+#### Scenario: 配置的写操作触发后进入下一阶段
+- **WHEN** 配置的写操作触发点完成业务写入
+- **AND** 该触发点调用自动推进判断
+- **AND** 当前阶段的阶段资料齐套门禁满足
+- **AND** 项目状态不是 `ended` 或 `completed`
+- **THEN** 系统 SHALL 自动将当前阶段标记为完成
+- **AND** 系统 SHALL 自动将下一阶段标记为当前阶段
+- **AND** 系统 SHALL NOT 要求用户再点击手动阶段推进按钮
+
+#### Scenario: 读接口不得触发阶段变更
+- **WHEN** 用户调用项目详情、工作台、阶段导航、资料清单或其它 GET/read-only 接口
+- **THEN** 系统 SHALL NOT 自动推进项目阶段
+- **AND** 系统 SHALL NOT 因读接口刷新而写入阶段推进日志
+
+#### Scenario: 自动推进不得无控制连跳多阶段
+- **WHEN** 一个写操作触发自动推进判断
+- **THEN** 系统 SHALL 最多推进触发时的当前阶段一次
+- **AND** 系统 SHALL NOT 在同一触发动作中连续跨越多个阶段
+
+#### Scenario: 未齐套时不推进
+- **WHEN** 当前阶段仍存在未完成或阻塞的阶段资料
+- **THEN** 系统 SHALL NOT 自动推进项目阶段
+- **AND** 系统 SHALL 保留现有阻塞原因和未完成资料列表
+
+#### Scenario: 齐套未满足不是业务动作错误
+- **WHEN** 配置的写操作触发点完成业务写入
+- **AND** 当前阶段齐套门禁仍未满足
+- **THEN** 系统 SHALL 保留业务动作成功结果
+- **AND** 系统 SHALL NOT 将未齐套视为自动推进错误
+
+#### Scenario: ended 或 completed 项目不推进
+- **WHEN** 项目状态为 `ended` 或 `completed`
+- **THEN** 系统 SHALL NOT 自动推进项目阶段
+- **AND** 系统 SHALL NOT 创建新的阶段推进日志
+
+#### Scenario: 第 8 阶段齐套后完成项目
+- **WHEN** 第 8 阶段齐套门禁满足
+- **THEN** 系统 SHALL 自动将项目标记为完成
+- **AND** 系统 SHALL NOT 创建第 9 阶段
+- **AND** 系统 SHALL 保持 8 大阶段数量不变
+
+### Requirement: 手动推进接口作为兜底
+系统 MAY keep the manual stage advance endpoint as a fallback, but SHALL NOT require it as the primary user workflow.
+
+#### Scenario: 手动推进接口保留兜底能力
+- **WHEN** 用户或运维场景调用 `POST /api/projects/:projectId/stages/advance`
+- **THEN** 系统 SHALL 使用与自动推进相同的阶段齐套门禁计算
+- **AND** 系统 SHALL NOT 使用单独的手动推进判断逻辑
+- **AND** 系统 SHALL NOT 依赖 legacy stage gate approval 作为推进前置
+
+#### Scenario: 已自动推进后重复调用手动推进
+- **WHEN** 阶段已由自动推进完成
+- **AND** 用户再次调用手动推进接口
+- **THEN** 系统 SHALL NOT 重复推进同一阶段
+- **AND** 系统 SHALL 返回幂等结果或受控错误
+
+### Requirement: 旧阶段关口审批不作为推进前置
+系统 SHALL NOT require legacy stage gate approval for stage advance.
+
+#### Scenario: legacy stage gate approval 不阻塞推进
+- **WHEN** 当前阶段齐套门禁满足
+- **AND** 旧阶段关口审批记录不存在、未提交或未审批
+- **THEN** 系统 SHALL 仍可按自动推进规则推进阶段
+- **AND** 系统 SHALL NOT 要求用户完成 legacy stage gate approval
+
+#### Scenario: legacy stage gate approval 保持非主流程
+- **WHEN** 系统处理阶段推进
+- **THEN** 系统 SHALL treat the submit / approve / return / resubmit / history stage gate approval mechanism as legacy
+- **AND** 系统 SHALL NOT 将该机制作为主流程阶段推进前置条件

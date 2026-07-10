@@ -3856,7 +3856,9 @@ async function runInitiationReviewSmoke({
     targetType: OPERATION_TARGET_TYPE.ONLINE_FORM,
     targetId: submittedNotice.id
   }), noticeFormSubmittedLogCount);
-  await advanceProjectStage(projectId, managerUser);
+  const detailAfterInitiationAutoAdvance = await getProjectDetail(projectId, managerUser);
+  assert.equal(detailAfterInitiationAutoAdvance.currentStage.stageOrder, 2);
+  assert.equal(detailAfterInitiationAutoAdvance.currentStage.stageKey, 'solution');
 
   const returnProjectId = await createInitiationSmokeProject({
     uniqueSuffix,
@@ -5465,14 +5467,14 @@ async function runProjectLifecycleSmoke() {
       workbenchBeforeAdvance.items.some((item) => /approval/i.test(item.targetRoute)),
       false
     );
-    assert.ok(
-      workbenchBeforeAdvance.items.some(
-        (item) => item.type === 'stage_advance' && item.projectId === projectBId
-      )
+    assert.equal(
+      workbenchBeforeAdvance.items.some((item) => item.type === 'stage_advance'),
+      false
     );
 
-    const advanced = await advanceProjectStage(projectAId, managerUser);
-    assert.equal(advanced.nextStage.stageOrder, 2);
+    const detailAfterStageOneAutoAdvance = await getProjectDetail(projectAId, managerUser);
+    assert.equal(detailAfterStageOneAutoAdvance.currentStage.stageOrder, 2);
+    assert.equal(detailAfterStageOneAutoAdvance.currentStage.stageKey, 'solution');
 
     await resetSmokeDocumentsForReview(projectAId, ['2.2', '2.3', '2.4', '2.12'], managerUser);
     await pool.execute(
@@ -5579,10 +5581,9 @@ async function runProjectLifecycleSmoke() {
       ]
     );
     const workbenchAfterRevisionCleared = await getMyWorkbench(managerUser);
-    assert.ok(
-      workbenchAfterRevisionCleared.items.some(
-        (item) => item.type === 'stage_advance' && item.projectId === projectAId
-      )
+    assert.equal(
+      workbenchAfterRevisionCleared.items.some((item) => item.type === 'stage_advance'),
+      false
     );
 
     await completeStageExcept(projectAId, 2, '2.6');
@@ -5622,13 +5623,12 @@ async function runProjectLifecycleSmoke() {
     assert.equal(submittedConditionalDocument.isComplete, true);
 
     const workbenchAfterConditionalSubmit = await getMyWorkbench(managerUser);
-    assert.ok(
-      workbenchAfterConditionalSubmit.items.some(
-        (item) => item.type === 'stage_advance' && item.projectId === projectAId
-      )
+    assert.equal(
+      workbenchAfterConditionalSubmit.items.some((item) => item.type === 'stage_advance'),
+      false
     );
-    const advancedAfterConditionalSubmit = await advanceProjectStage(projectAId, managerUser);
-    assert.equal(advancedAfterConditionalSubmit.nextStage.stageOrder, 3);
+    const detailAfterConditionalSubmit = await getProjectDetail(projectAId, managerUser);
+    assert.equal(detailAfterConditionalSubmit.currentStage.stageOrder, 3);
 
     const overview = await getProjectOverviewDashboard(managerUser, {
       status: null,

@@ -11,6 +11,7 @@ import {
   OPERATION_ACTION_TYPE,
   OPERATION_TARGET_TYPE
 } from '../operationLogRepository.js';
+import { tryAutoAdvanceProjectStage } from '../projects/stageAdvanceRepository.js';
 import {
   mapDocument,
   selectProjectStageDocument,
@@ -136,6 +137,23 @@ export async function updateProjectStageDocumentApplicability({
     await insertOperationLog(
       connection,
       buildApplicabilityOperationLogPayload({ projectId, documentId, action, userId: user.id, currentDocument, transition })
+    );
+    await tryAutoAdvanceProjectStage(
+      {
+        projectId,
+        user,
+        triggerAction: action === DOCUMENT_APPLICABILITY_ACTION.MARK_NOT_APPLICABLE
+          ? 'document.marked_not_applicable'
+          : 'document.restored_applicable',
+        expectedStageOrder: currentDocument.stage_order,
+        triggerMetadata: {
+          documentId,
+          documentCode: currentDocument.document_code,
+          stageOrder: currentDocument.stage_order,
+          actionType: action
+        }
+      },
+      connection
     );
     await connection.commit();
 

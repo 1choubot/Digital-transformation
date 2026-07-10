@@ -63,6 +63,7 @@ import {
   ProjectAuthorizationError,
   ProjectNotFoundError
 } from './shared.js';
+import { tryAutoAdvanceProjectStage } from './stageAdvanceRepository.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
 
 const DEFAULT_UPLOAD_MIME_TYPE = 'application/octet-stream';
@@ -5718,6 +5719,21 @@ export async function processSolutionDesignQuotationResult({ projectId, payload,
         actorUserId: user.id,
         sourceAction: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_QUOTATION_ACCEPTED
       });
+      await tryAutoAdvanceProjectStage(
+        {
+          projectId,
+          user,
+          triggerAction: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_QUOTATION_ACCEPTED,
+          expectedStageOrder: projectRow.current_stage_order,
+          triggerMetadata: {
+            nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+            branchType: SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION,
+            stageOrder: projectRow.current_stage_order,
+            actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_QUOTATION_ACCEPTED
+          }
+        },
+        connection
+      );
     } else if (normalized.action === SOLUTION_DESIGN_QUOTATION_REJECTED_ACTION.RETURN_TO_RD_COST) {
       await rejectQuotationToRdCost(connection, {
         projectId,
@@ -6529,6 +6545,21 @@ export async function approveSolutionDesignWorkflowNode({ projectId, nodeKey, us
         actorUserId: user.id,
         sourceAction: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_TENDER_APPROVED
       });
+      await tryAutoAdvanceProjectStage(
+        {
+          projectId,
+          user,
+          triggerAction: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_TENDER_APPROVED,
+          expectedStageOrder: projectRow.current_stage_order,
+          triggerMetadata: {
+            nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+            branchType: SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.TENDER,
+            stageOrder: projectRow.current_stage_order,
+            actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_TENDER_APPROVED
+          }
+        },
+        connection
+      );
     }
 
     const refreshedProjectRow = await selectProjectContext(connection, projectId);

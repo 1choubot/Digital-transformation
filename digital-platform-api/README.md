@@ -430,9 +430,9 @@ Content-Type: application/json
 - `incompleteRequiredCount = 0` 时允许推进
 - `incompleteRequiredCount > 0` 时拒绝推进，并返回缺失适用资料列表，每项至少包含 `id`、`documentCode`、`documentName`、`status`、`completionMode` 和派生完成状态
 
-推进成功后在事务中更新阶段状态。非第 8 阶段时，当前阶段更新为 `completed`、`isCurrent = false` 并记录 `completedAt`，下一阶段必须存在、顺序为当前阶段加一、`stageStatus = not_started`、`isCurrent = false`，然后更新为 `current`、`isCurrent = true` 并记录 `startedAt`。第 8 阶段 `closeout` 推进成功后，项目 `status` 更新为 `completed`，且不再有当前阶段。
+主流程中，配置的写操作触发点会在业务动作成功后复用同一齐套门禁自动推进阶段；GET、详情、工作台、导航和清单等只读接口不得触发阶段变更。`POST /api/projects/{projectId}/stages/advance` 保留为 manual fallback / legacy fallback，供异常兜底或运维场景使用，不再作为正常工作台待办。推进成功后在事务中更新阶段状态。非第 8 阶段时，当前阶段更新为 `completed`、`isCurrent = false` 并记录 `completedAt`，下一阶段必须存在、顺序为当前阶段加一、`stageStatus = not_started`、`isCurrent = false`，然后更新为 `current`、`isCurrent = true` 并记录 `startedAt`。第 8 阶段 `closeout` 推进成功后，项目 `status` 更新为 `completed`，且不再有当前阶段。
 
-推进成功后会在同一事务中写入 `stage.advanced` 项目业务操作日志。第 8 阶段推进完成项目时，会额外写入 `project.completed`。两类日志都使用当前登录用户作为 `actorUserId`；如果业务日志写入失败，阶段推进会回滚。
+推进成功后会在同一事务中写入 `stage.advanced` 项目业务操作日志。自动推进日志 summary 使用“系统自动推进阶段：A -> B”口径，`detailsJson` 包含 `advanceMode: automatic`、`triggerAction`、推进前后阶段和齐套摘要；由用户业务动作触发的自动推进使用触发动作用户作为 `actorUserId`。第 8 阶段推进完成项目时，会额外写入 `project.completed`。两类日志都使用当前登录用户作为 `actorUserId`；如果业务日志写入失败，阶段推进会回滚。
 
 只要项目 `status = completed`，接口必须拒绝继续推进；即使异常数据中仍存在当前阶段，也不得修改项目状态或任何阶段状态。阶段推进失败时事务回滚，不改变项目状态或任何阶段状态。
 
@@ -517,9 +517,9 @@ GET /api/me/workbench
 Authorization: Bearer <token>
 ```
 
-查询当前登录用户的我的工作台。接口只使用当前登录态用户，不接收也不信任前端传入的用户 ID、责任人 ID、审核人 ID 或审批人 ID。响应包含 `summary` 和 `items`；`summary.byType` 只按 `document_responsibility`、`document_review`、`stage_advance` 统计数量，`summary.total` 为总待办数；当前阶段不返回 `stage_gate_approval`。
+查询当前登录用户的我的工作台。接口只使用当前登录态用户，不接收也不信任前端传入的用户 ID、责任人 ID、审核人 ID 或审批人 ID。响应包含 `summary` 和 `items`；`summary.byType` 只按 `document_responsibility`、`document_review`、`initiation_review` 和 `solution_design_workflow` 等实际待办类型统计数量，`summary.total` 为总待办数；正常流程不返回 `stage_advance`，当前阶段也不返回 `stage_gate_approval`。
 
-`document_responsibility` 只包含当前用户负责、适用且未按 `completionMode` 派生完成的资料项；`submit_only + submitted` 不计入责任人待办。`document_review` 只包含 `completionMode = approval_required` 且 `status = submitted` 并且当前用户具备资料级审核权限的资料项；项目经理不因项目经理身份获得资料级审核待办，总经理不默认接收全部资料审核待办。`stage_advance` 只包含当前阶段适用资料已按 `completionMode` 完成、项目未完成、非第 8 阶段且当前用户有推进权限的阶段；不因 `approval_status` 生成或隐藏。
+`document_responsibility` 只包含当前用户负责、适用且未按 `completionMode` 派生完成的资料项；`submit_only + submitted` 不计入责任人待办。`document_review` 只包含 `completionMode = approval_required` 且 `status = submitted` 并且当前用户具备资料级审核权限的资料项；项目经理不因项目经理身份获得资料级审核待办，总经理不默认接收全部资料审核待办。阶段齐套后的正常推进由自动推进触发点完成，不再生成普通 `stage_advance` 待办。
 
 每条待办至少包含 `type`、项目、阶段、可空资料项、`status`、`actionText`、`createdAt` 或 `updatedAt`、`targetRoute`。资料类待办同时返回后端计算的资料项权限字段，前端不得用 `organizationRole` 硬猜按钮权限。普通员工资料待办的 `targetRoute` 会进入携带 `taskMode` 和 `documentId` 的受限项目详情。
 

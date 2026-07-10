@@ -20,6 +20,7 @@ import {
   OPERATION_ACTION_TYPE,
   OPERATION_TARGET_TYPE
 } from '../operationLogRepository.js';
+import { tryAutoAdvanceProjectStage } from '../projects/stageAdvanceRepository.js';
 import { assertProjectViewable, DuplicateProjectCodeError } from '../projectRepository.js';
 import { canViewStageDocumentItem } from './accessControl.js';
 import {
@@ -1805,6 +1806,24 @@ export async function submitStageDocumentOnlineForm({ projectId, documentId, use
       project,
       document: updatedFormDocument
     });
+    if (!collaborationResult || collaborationResult.status === FORM_STATUS.SUBMITTED) {
+      await tryAutoAdvanceProjectStage(
+        {
+          projectId,
+          user,
+          triggerAction: 'online_form.submitted',
+          expectedStageOrder: updatedFormDocument.stage_order,
+          triggerMetadata: {
+            documentId,
+            documentCode: updatedFormDocument.document_code,
+            stageOrder: updatedFormDocument.stage_order,
+            formKey: schema.formKey,
+            actionType: OPERATION_ACTION_TYPE.FORM_SUBMITTED
+          }
+        },
+        connection
+      );
+    }
     await connection.commit();
   } catch (error) {
     await connection.rollback();

@@ -10,7 +10,10 @@ export const NAVIGATION_STATUS = Object.freeze({
   FAILED: 'FAILED'
 });
 
-function normalizeNodeStatus(status, { isCurrentStage = false } = {}) {
+function normalizeNodeStatus(
+  status,
+  { isCurrentStage = false, isCompletedStage = false, isFirstWaitingSubmission = false } = {}
+) {
   if (['completed', 'not_applicable'].includes(status)) {
     return NAVIGATION_STATUS.COMPLETED;
   }
@@ -32,26 +35,32 @@ function normalizeNodeStatus(status, { isCurrentStage = false } = {}) {
   }
 
   if (['process_node'].includes(status)) {
-    return NAVIGATION_STATUS.COMPLETED;
+    if (isCompletedStage) {
+      return NAVIGATION_STATUS.COMPLETED;
+    }
+
+    return isCurrentStage ? NAVIGATION_STATUS.PROCESSING : NAVIGATION_STATUS.PENDING;
+  }
+
+  if (status === 'waiting_submission') {
+    return isCurrentStage && isFirstWaitingSubmission
+      ? NAVIGATION_STATUS.PROCESSING
+      : NAVIGATION_STATUS.PENDING;
   }
 
   return NAVIGATION_STATUS.PENDING;
 }
 
 function deriveStageStatus(stage, children) {
-  if (children.length === 0) {
-    if (stage.stageStatus === 'completed') {
-      return NAVIGATION_STATUS.COMPLETED;
-    }
+  if (stage.stageStatus === 'completed') {
+    return NAVIGATION_STATUS.COMPLETED;
+  }
 
+  if (children.length === 0) {
     return stage.isCurrent ? NAVIGATION_STATUS.PROCESSING : NAVIGATION_STATUS.PENDING;
   }
 
   const childStatuses = children.map((child) => child.status);
-  if (childStatuses.every((status) => status === NAVIGATION_STATUS.COMPLETED)) {
-    return NAVIGATION_STATUS.COMPLETED;
-  }
-
   if (childStatuses.some((status) => status === NAVIGATION_STATUS.FAILED)) {
     return NAVIGATION_STATUS.FAILED;
   }
@@ -64,7 +73,15 @@ function deriveStageStatus(stage, children) {
     return NAVIGATION_STATUS.WAIT_APPROVAL;
   }
 
-  if (stage.isCurrent || childStatuses.some((status) => status === NAVIGATION_STATUS.PROCESSING)) {
+  if (stage.isCurrent) {
+    return NAVIGATION_STATUS.PROCESSING;
+  }
+
+  if (childStatuses.every((status) => status === NAVIGATION_STATUS.COMPLETED)) {
+    return NAVIGATION_STATUS.COMPLETED;
+  }
+
+  if (childStatuses.some((status) => status === NAVIGATION_STATUS.PROCESSING)) {
     return NAVIGATION_STATUS.PROCESSING;
   }
 
@@ -94,8 +111,12 @@ function normalizeProjectStatus(status) {
   return NAVIGATION_STATUS.PENDING;
 }
 
-function buildNode(projectId, stage, node) {
-  const status = normalizeNodeStatus(node.nodeStatus, { isCurrentStage: stage.isCurrent });
+function buildNode(projectId, stage, node, { isFirstWaitingSubmission = false } = {}) {
+  const status = normalizeNodeStatus(node.nodeStatus, {
+    isCurrentStage: stage.isCurrent,
+    isCompletedStage: stage.stageStatus === 'completed',
+    isFirstWaitingSubmission
+  });
 
   return {
     name: node.nodeName,
@@ -111,7 +132,12 @@ function buildNode(projectId, stage, node) {
 }
 
 function buildStage(projectId, stage) {
-  const children = (stage.nodes || []).map((node) => buildNode(projectId, stage, node));
+  const firstWaitingSubmissionIndex = (stage.nodes || []).findIndex((node) => node.nodeStatus === 'waiting_submission');
+  const children = (stage.nodes || []).map((node, index) =>
+    buildNode(projectId, stage, node, {
+      isFirstWaitingSubmission: index === firstWaitingSubmissionIndex
+    })
+  );
   return {
     stageId: stage.stageId,
     stageOrder: stage.stageOrder,
@@ -126,8 +152,7 @@ function buildStage(projectId, stage) {
   };
 }
 
-export async function getProjectNavigation(projectId, user) {
-  const workspace = await getProjectWorkspace(projectId, user);
+export function buildProjectNavigationFromWorkspace(projectId, workspace) {
   const projectMode = getEffectiveProjectMode(workspace.project?.projectMode);
   const children = (workspace.stages || []).map((stage) => buildStage(projectId, stage));
 
@@ -141,4 +166,9 @@ export async function getProjectNavigation(projectId, user) {
     progress: calculateProgress(children),
     children
   };
+}
+
+export async function getProjectNavigation(projectId, user) {
+  const workspace = await getProjectWorkspace(projectId, user);
+  return buildProjectNavigationFromWorkspace(projectId, workspace);
 }

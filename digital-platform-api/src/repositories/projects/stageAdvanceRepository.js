@@ -205,20 +205,200 @@ async function buildCurrentStageGateSummary(connection, projectId, stageOrder) {
   return buildStageCompletenessSummary(rowsWithDerivedCompletion.map(mapGateDocument));
 }
 
-export async function advanceProjectStage(projectId, user, db = pool) {
-  const connection = await db.getConnection();
+function isSameId(left, right) {
+  return String(left) === String(right);
+}
 
-  try {
-    await connection.beginTransaction();
-    const projectRow = await selectProjectForUpdate(connection, projectId, user);
-    assertCanAdvanceProject(projectRow);
-    assertUserCanAdvanceProject(user, projectRow);
+function matchesExpectedCurrentStage(currentStage, { expectedStageId = null, expectedStageOrder = null } = {}) {
+  if (expectedStageId !== null && expectedStageId !== undefined && !isSameId(currentStage.id, expectedStageId)) {
+    return false;
+  }
 
-    const stageRows = await selectProjectStagesForUpdate(connection, projectId);
-    const currentStage = assertSingleCurrentStage(stageRows);
-    const gateSummary = await buildCurrentStageGateSummary(connection, projectId, currentStage.stage_order);
+  if (
+    expectedStageOrder !== null &&
+    expectedStageOrder !== undefined &&
+    Number(currentStage.stage_order) !== Number(expectedStageOrder)
+  ) {
+    return false;
+  }
 
-    if (gateSummary.incompleteRequiredCount > 0) {
+  return true;
+}
+
+function buildSkippedAutoAdvanceResult(reason, extra = {}) {
+  return {
+    attempted: true,
+    advanced: false,
+    reason,
+    ...extra
+  };
+}
+
+function buildStageAdvanceLogDetails({
+  mode,
+  triggerAction = null,
+  triggerMetadata = {},
+  currentStage,
+  nextStage,
+  gateSummary
+}) {
+  const details = {
+    advanceMode: mode,
+    fromStageKey: currentStage.stage_key,
+    fromStageName: currentStage.stage_name,
+    fromStageOrder: Number(currentStage.stage_order),
+    toStageKey: nextStage ? nextStage.stage_key : null,
+    toStageName: nextStage ? nextStage.stage_name : null,
+    toStageOrder: nextStage ? Number(nextStage.stage_order) : null,
+    completenessSummary: gateSummary
+  };
+
+  if (mode === 'automatic') {
+    details.triggerAction = triggerAction;
+    Object.assign(details, triggerMetadata || {});
+  }
+
+  return details;
+}
+
+function buildStageAdvanceSummary({ mode, currentStage, nextStage }) {
+  if (mode === 'automatic') {
+    return nextStage
+      ? `系统自动推进阶段：${currentStage.stage_name} -> ${nextStage.stage_name}`
+      : `系统自动推进阶段：${currentStage.stage_name} -> 项目完成`;
+  }
+
+  return nextStage
+    ? `手工推进阶段：${currentStage.stage_name} -> ${nextStage.stage_name}`
+    : `手工完成阶段：${currentStage.stage_name}`;
+}
+
+async function applyProjectStageAdvance(connection, {
+  projectId,
+  user,
+  currentStage,
+  nextStage,
+  gateSummary,
+  mode,
+  triggerAction = null,
+  triggerMetadata = {}
+}) {
+  await connection.execute(
+    `UPDATE project_stages
+    SET stage_status = ?,
+      is_current = 0,
+      completed_at = CURRENT_TIMESTAMP
+    WHERE id = ?`,
+    [STAGE_STATUS.COMPLETED, currentStage.id]
+  );
+
+  if (nextStage) {
+    await connection.execute(
+      `UPDATE project_stages
+      SET stage_status = ?,
+        is_current = 1,
+        started_at = CURRENT_TIMESTAMP
+      WHERE id = ?`,
+      [STAGE_STATUS.CURRENT, nextStage.id]
+    );
+  } else {
+    await connection.execute('UPDATE projects SET status = ? WHERE id = ?', [PROJECT_STATUS.COMPLETED, projectId]);
+  }
+
+  await insertOperationLog(connection, {
+    projectId,
+    actorUserId: user.id,
+    actionType: OPERATION_ACTION_TYPE.STAGE_ADVANCED,
+    targetType: OPERATION_TARGET_TYPE.STAGE,
+    targetId: currentStage.id,
+    summary: buildStageAdvanceSummary({ mode, currentStage, nextStage }),
+    details: buildStageAdvanceLogDetails({
+      mode,
+      triggerAction,
+      triggerMetadata,
+      currentStage,
+      nextStage,
+      gateSummary
+    })
+  });
+
+  if (!nextStage) {
+    await insertOperationLog(connection, {
+      projectId,
+      actorUserId: user.id,
+      actionType: OPERATION_ACTION_TYPE.PROJECT_COMPLETED,
+      targetType: OPERATION_TARGET_TYPE.PROJECT,
+      targetId: projectId,
+      summary: mode === 'automatic'
+        ? `系统自动完成项目：${currentStage.stage_name}`
+        : `项目完成：${currentStage.stage_name}`,
+      details: {
+        advanceMode: mode,
+        triggerAction: mode === 'automatic' ? triggerAction : null,
+        completedStageKey: currentStage.stage_key,
+        completedStageName: currentStage.stage_name,
+        completedStageOrder: Number(currentStage.stage_order)
+      }
+    });
+  }
+
+  return {
+    attempted: true,
+    advanced: true,
+    completedProject: !nextStage,
+    reason: nextStage ? 'advanced' : 'project_completed',
+    advancedStage: mapStage({
+      ...currentStage,
+      stage_status: STAGE_STATUS.COMPLETED,
+      is_current: 0
+    }),
+    nextStage: nextStage
+      ? mapStage({
+          ...nextStage,
+          stage_status: STAGE_STATUS.CURRENT,
+          is_current: 1
+        })
+      : null,
+    completenessSummary: gateSummary
+  };
+}
+
+async function advanceCurrentStageIfGateSatisfied(connection, {
+  projectId,
+  user,
+  mode,
+  triggerAction = null,
+  triggerMetadata = {},
+  expectedStageId = null,
+  expectedStageOrder = null,
+  throwWhenIncomplete = false
+}) {
+  const projectRow = await selectProjectForUpdate(connection, projectId, user);
+  if (projectRow.status === PROJECT_STATUS.COMPLETED) {
+    if (throwWhenIncomplete) {
+      assertCanAdvanceProject(projectRow);
+    }
+    return buildSkippedAutoAdvanceResult('project_completed');
+  }
+
+  if (projectRow.status === PROJECT_STATUS.ENDED) {
+    if (throwWhenIncomplete) {
+      assertCanAdvanceProject(projectRow);
+    }
+    return buildSkippedAutoAdvanceResult('project_ended');
+  }
+
+  const stageRows = await selectProjectStagesForUpdate(connection, projectId);
+  const currentStage = assertSingleCurrentStage(stageRows);
+  if (!matchesExpectedCurrentStage(currentStage, { expectedStageId, expectedStageOrder })) {
+    return buildSkippedAutoAdvanceResult('stage_mismatch', {
+      currentStage: mapStage(currentStage)
+    });
+  }
+
+  const gateSummary = await buildCurrentStageGateSummary(connection, projectId, currentStage.stage_order);
+  if (gateSummary.incompleteRequiredCount > 0) {
+    if (throwWhenIncomplete) {
       throw new ProjectStageAdvanceError(
         PROJECT_APPROVAL_ERROR.PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE,
         'Current stage has incomplete applicable required documents',
@@ -229,80 +409,93 @@ export async function advanceProjectStage(projectId, user, db = pool) {
       );
     }
 
-    const nextStage = assertNextStageCanReceiveAdvance(stageRows, currentStage);
+    return buildSkippedAutoAdvanceResult('stage_gate_incomplete', {
+      currentStage: mapStage(currentStage),
+      completenessSummary: gateSummary,
+      incompleteRequiredDocuments: gateSummary.incompleteRequiredDocuments
+    });
+  }
 
-    await connection.execute(
-      `UPDATE project_stages
-      SET stage_status = ?,
-        is_current = 0,
-        completed_at = CURRENT_TIMESTAMP
-      WHERE id = ?`,
-      [STAGE_STATUS.COMPLETED, currentStage.id]
-    );
+  const nextStage = assertNextStageCanReceiveAdvance(stageRows, currentStage);
+  return applyProjectStageAdvance(connection, {
+    projectId,
+    user,
+    currentStage,
+    nextStage,
+    gateSummary,
+    mode,
+    triggerAction,
+    triggerMetadata
+  });
+}
 
-    if (nextStage) {
-      await connection.execute(
-        `UPDATE project_stages
-        SET stage_status = ?,
-          is_current = 1,
-          started_at = CURRENT_TIMESTAMP
-        WHERE id = ?`,
-        [STAGE_STATUS.CURRENT, nextStage.id]
-      );
-    } else {
-      await connection.execute('UPDATE projects SET status = ? WHERE id = ?', [PROJECT_STATUS.COMPLETED, projectId]);
+export async function tryAutoAdvanceProjectStage({
+  projectId,
+  user,
+  triggerAction,
+  expectedStageId = null,
+  expectedStageOrder = null,
+  triggerMetadata = {}
+}, db = pool) {
+  const ownsConnection = typeof db?.getConnection === 'function';
+  const connection = ownsConnection ? await db.getConnection() : db;
+
+  try {
+    if (ownsConnection) {
+      await connection.beginTransaction();
     }
 
-    await insertOperationLog(connection, {
+    const result = await advanceCurrentStageIfGateSatisfied(connection, {
       projectId,
-      actorUserId: user.id,
-      actionType: OPERATION_ACTION_TYPE.STAGE_ADVANCED,
-      targetType: OPERATION_TARGET_TYPE.STAGE,
-      targetId: currentStage.id,
-      summary: nextStage
-        ? `手工推进阶段：${currentStage.stage_name} -> ${nextStage.stage_name}`
-        : `手工完成阶段：${currentStage.stage_name}`,
-      details: {
-        fromStageKey: currentStage.stage_key,
-        fromStageName: currentStage.stage_name,
-        toStageKey: nextStage ? nextStage.stage_key : null,
-        toStageName: nextStage ? nextStage.stage_name : null,
-        completenessSummary: gateSummary
-      }
+      user,
+      mode: 'automatic',
+      triggerAction,
+      triggerMetadata,
+      expectedStageId,
+      expectedStageOrder,
+      throwWhenIncomplete: false
     });
 
-    if (!nextStage) {
-      await insertOperationLog(connection, {
-        projectId,
-        actorUserId: user.id,
-        actionType: OPERATION_ACTION_TYPE.PROJECT_COMPLETED,
-        targetType: OPERATION_TARGET_TYPE.PROJECT,
-        targetId: projectId,
-        summary: `项目完成：${currentStage.stage_name}`,
-        details: {
-          completedStageKey: currentStage.stage_key,
-          completedStageName: currentStage.stage_name
-        }
-      });
+    if (ownsConnection) {
+      await connection.commit();
     }
+
+    return result;
+  } catch (error) {
+    if (ownsConnection) {
+      await connection.rollback();
+    }
+    throw error;
+  } finally {
+    if (ownsConnection) {
+      connection.release();
+    }
+  }
+}
+
+export async function advanceProjectStage(projectId, user, db = pool) {
+  const connection = await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+    const projectRow = await selectProjectForUpdate(connection, projectId, user);
+    assertCanAdvanceProject(projectRow);
+    assertUserCanAdvanceProject(user, projectRow);
+    const transition = await advanceCurrentStageIfGateSatisfied(connection, {
+      projectId,
+      user,
+      mode: 'manual_fallback',
+      throwWhenIncomplete: true
+    });
 
     const detail = await selectProjectDetailWithConnection(connection, projectId);
     await connection.commit();
 
     return {
       ...detail,
-      advancedStage: mapStage({
-        ...currentStage,
-        stage_status: STAGE_STATUS.COMPLETED,
-        is_current: 0
-      }),
-      nextStage: nextStage
-        ? mapStage({
-            ...nextStage,
-            stage_status: STAGE_STATUS.CURRENT,
-            is_current: 1
-          })
-        : null
+      advancedStage: transition.advancedStage,
+      nextStage: transition.nextStage,
+      stageAdvance: transition
     };
   } catch (error) {
     await connection.rollback();

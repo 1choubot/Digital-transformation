@@ -49,7 +49,10 @@ import {
   submitSolutionDesignWorkflowNode,
   uploadSolutionDesignWorkflowFile
 } from '../../src/repositories/projects/solutionDesignWorkflowRepository.js';
-import { advanceProjectStage } from '../../src/repositories/projects/stageAdvanceRepository.js';
+import {
+  advanceProjectStage,
+  tryAutoAdvanceProjectStage
+} from '../../src/repositories/projects/stageAdvanceRepository.js';
 import { getProjectOverviewDashboard } from '../../src/repositories/projects/overviewDashboardRepository.js';
 import {
   OPERATION_ACTION_TYPE,
@@ -61,6 +64,10 @@ import {
   COMPLETION_STATUS,
   mapDocument
 } from '../../src/repositories/stageDocuments/shared.js';
+import {
+  buildProjectNavigationFromWorkspace,
+  NAVIGATION_STATUS
+} from '../../src/services/navigationService.js';
 import { readZipEntries } from '../../src/utils/ooxmlZip.js';
 
 function dbUser({
@@ -485,6 +492,23 @@ const SOLUTION_DESIGN_STAGE_DOCUMENTS = Object.freeze([
   ['C18', '报价单'],
   ['C19', '投标书']
 ]);
+const SOLUTION_DESIGN_LEGACY_STAGE_DOCUMENT_CODE_BY_TARGET_CODE = Object.freeze({
+  C04: '2.1',
+  C05: '2.2',
+  C06: '2.3',
+  C07: '2.4',
+  C08: '2.5',
+  C09: '2.6',
+  C10: '2.7',
+  C11: '2.8',
+  C12: '2.9',
+  C13: '2.10',
+  C14: '2.11',
+  C15: '2.12',
+  C16: '2.13',
+  C17: '2.14',
+  C18: '2.15'
+});
 
 function buildProjectStages(projectId = 100, currentStageOrder = 2) {
   return [
@@ -550,6 +574,13 @@ function buildSolutionDesignStageDocuments(projectId = 100) {
     revision_resubmitted_by_user_id: null,
     revision_resubmitted_at: null
   }));
+}
+
+function useLegacySolutionDesignStageDocumentCodes(connection) {
+  for (const document of connection.stageDocuments) {
+    document.document_code =
+      SOLUTION_DESIGN_LEGACY_STAGE_DOCUMENT_CODE_BY_TARGET_CODE[document.document_code] || document.document_code;
+  }
 }
 
 async function activateAnalysisNode(db, storage = fakeUploadStorage()) {
@@ -938,6 +969,82 @@ async function assertStageAdvanceBlocked(db, user, expectedDocumentCodes) {
       return true;
     }
   );
+}
+
+function closeoutStageDocument(projectId = 100) {
+  return {
+    id: 9001,
+    project_id: projectId,
+    template_id: 9001,
+    template_version: 'v20260629',
+    stage_order: 8,
+    stage_key: 'closeout',
+    stage_name: '结题阶段',
+    document_code: '8.1',
+    document_order: 1,
+    document_name: '结题报告',
+    is_required: 1,
+    default_responsibility_role: null,
+    confirm_role: null,
+    owner_department: BUSINESS_DEPARTMENT.RD_CENTER,
+    review_department: BUSINESS_DEPARTMENT.RD_CENTER,
+    completion_mode: COMPLETION_MODE.APPROVAL_REQUIRED,
+    submit_mode: 'upload',
+    target_folder_path: null,
+    target_folder_id: null,
+    status: DOCUMENT_STATUS.CONFIRMED,
+    is_applicable: 1,
+    revision_required: 0,
+    revision_reason: null,
+    revision_source_document_id: null,
+    revision_requested_at: null,
+    revision_resubmitted_by_user_id: null,
+    revision_resubmitted_at: null
+  };
+}
+
+function buildNavigationWorkspaceFromConnection(connection) {
+  const currentStage = connection.stages.find((stage) => Boolean(stage.is_current));
+  return {
+    project: {
+      projectName: connection.project.project_name,
+      projectCode: connection.project.project_code,
+      projectMode: connection.project.project_mode || null,
+      status: connection.project.status
+    },
+    currentStage: currentStage
+      ? {
+          stageKey: currentStage.stage_key,
+          stageOrder: currentStage.stage_order,
+          stageName: currentStage.stage_name
+        }
+      : null,
+    stages: connection.stages.map((stage) => ({
+      stageId: stage.id,
+      stageOrder: stage.stage_order,
+      stageKey: stage.stage_key,
+      stageName: stage.stage_name,
+      stageStatus: stage.stage_status,
+      isCurrent: Boolean(stage.is_current),
+      configured: true,
+      nodes: stage.stage_key === 'contract'
+        ? [
+            {
+              nodeKey: 'prepare_technical_agreement',
+              nodeName: '准备技术协议',
+              nodeStatus: 'waiting_submission',
+              outputs: []
+            },
+            {
+              nodeKey: 'project_start_notice',
+              nodeName: '项目启动通知',
+              nodeStatus: 'process_node',
+              outputs: []
+            }
+          ]
+        : []
+    }))
+  };
 }
 
 function normalizeSql(sql) {
@@ -4903,7 +5010,7 @@ test('general manager selects quotation or tender branch and duplicate or non-GM
   assert.equal(db.connection.operationLogs.length, logCountBeforeFailures);
 });
 
-test('business owner uploads and submits quotation, accepted quotation approves node and opens contract gate', async () => {
+test('business owner uploads and submits quotation, accepted quotation approves node and auto advances to contract stage', async () => {
   const db = fakeDb();
   seedAssignedRoles(db.connection);
   const storage = fakeUploadStorage();
@@ -4985,15 +5092,25 @@ test('business owner uploads and submits quotation, accepted quotation approves 
     SOLUTION_DESIGN_NODE_STATUS.APPROVED
   );
   assert.equal(accepted.permissions.canAdvanceToContract, true);
-  assert.equal(accepted.currentStage.stageKey, 'solution');
+  assert.equal(accepted.currentStage.stageKey, 'contract');
   assert.deepEqual(
-    db.connection.operationLogs.slice(-3).map((log) => log.action_type),
+    db.connection.operationLogs.slice(-4).map((log) => log.action_type),
     [
       OPERATION_ACTION_TYPE.SOLUTION_DESIGN_QUOTATION_SUBMITTED,
       OPERATION_ACTION_TYPE.SOLUTION_DESIGN_QUOTATION_ACCEPTED,
-      OPERATION_ACTION_TYPE.SOLUTION_DESIGN_READY_FOR_CONTRACT
+      OPERATION_ACTION_TYPE.SOLUTION_DESIGN_READY_FOR_CONTRACT,
+      OPERATION_ACTION_TYPE.STAGE_ADVANCED
     ]
   );
+  const autoAdvanceLog = db.connection.operationLogs.at(-1);
+  const details = JSON.parse(autoAdvanceLog.details_json);
+  assert.equal(autoAdvanceLog.actor_user_id, businessOwner.id);
+  assert.equal(autoAdvanceLog.summary, '系统自动推进阶段：方案设计阶段 -> 合同签订阶段');
+  assert.equal(details.advanceMode, 'automatic');
+  assert.equal(details.triggerAction, OPERATION_ACTION_TYPE.SOLUTION_DESIGN_QUOTATION_ACCEPTED);
+  assert.equal(details.fromStageKey, 'solution');
+  assert.equal(details.toStageKey, 'contract');
+  assert.equal(details.completenessSummary.completionPercent, 100);
 });
 
 test('rejected quotation can return to RD cost and old cost revisions cannot bypass the new cycle', async () => {
@@ -5276,12 +5393,14 @@ test('tender branch requires both business and technical files before submitting
   );
   assert.equal(findWorkflowNode(approved, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER).status, SOLUTION_DESIGN_NODE_STATUS.APPROVED);
   assert.equal(approved.permissions.canAdvanceToContract, true);
+  assert.equal(approved.currentStage.stageKey, 'contract');
   assert.deepEqual(
-    db.connection.operationLogs.slice(-3).map((log) => log.action_type),
+    db.connection.operationLogs.slice(-4).map((log) => log.action_type),
     [
       OPERATION_ACTION_TYPE.SOLUTION_DESIGN_TENDER_SUBMITTED,
       OPERATION_ACTION_TYPE.SOLUTION_DESIGN_TENDER_APPROVED,
-      OPERATION_ACTION_TYPE.SOLUTION_DESIGN_READY_FOR_CONTRACT
+      OPERATION_ACTION_TYPE.SOLUTION_DESIGN_READY_FOR_CONTRACT,
+      OPERATION_ACTION_TYPE.STAGE_ADVANCED
     ]
   );
 });
@@ -5369,10 +5488,10 @@ test('solution design end-to-end smoke covers quotation and tender happy paths',
   );
   assert.equal(findWorkflowNode(accepted, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER).status, SOLUTION_DESIGN_NODE_STATUS.APPROVED);
   assert.equal(accepted.permissions.canAdvanceToContract, true);
-  assert.equal(accepted.currentStage.stageKey, 'solution');
+  assert.equal(accepted.currentStage.stageKey, 'contract');
   assert.equal(
     quotationDb.connection.operationLogs.at(-1).action_type,
-    OPERATION_ACTION_TYPE.SOLUTION_DESIGN_READY_FOR_CONTRACT
+    OPERATION_ACTION_TYPE.STAGE_ADVANCED
   );
 
   const tenderDb = fakeDb();
@@ -5402,22 +5521,21 @@ test('solution design end-to-end smoke covers quotation and tender happy paths',
   assert.equal(findWorkflowNode(tenderApproved, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER).status, SOLUTION_DESIGN_NODE_STATUS.APPROVED);
   assert.equal(tenderApproved.quotationTender.branchType, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.TENDER);
   assert.equal(tenderApproved.permissions.canAdvanceToContract, true);
-  assert.equal(tenderApproved.currentStage.stageKey, 'solution');
+  assert.equal(tenderApproved.currentStage.stageKey, 'contract');
   const tenderUploads = await listSolutionDesignUploads({ projectId: 100, user: tenderBusinessOwner }, tenderDb);
   assert.equal(findUploadSlot(tenderUploads, SOLUTION_DESIGN_UPLOAD_SLOT_KEY.TENDER_BUSINESS_FILE).currentFile.revision, 1);
   assert.equal(findUploadSlot(tenderUploads, SOLUTION_DESIGN_UPLOAD_SLOT_KEY.TENDER_TECHNICAL_FILE).currentFile.revision, 1);
   assert.equal(
     tenderDb.connection.operationLogs.at(-1).action_type,
-    OPERATION_ACTION_TYPE.SOLUTION_DESIGN_READY_FOR_CONTRACT
+    OPERATION_ACTION_TYPE.STAGE_ADVANCED
   );
 });
 
-test('quotation path derives stage gate complete and allows manual advance to contract stage', async () => {
+test('quotation path derives stage gate complete and auto advances to contract stage', async () => {
   const db = fakeDb();
   seedAssignedRoles(db.connection);
   const storage = fakeUploadStorage();
   const businessOwner = authUser(db.connection.users.get(13));
-  const generalManager = authUser(db.connection.users.get(30));
 
   await submitQuotation(db, storage);
   const accepted = await processSolutionDesignQuotationResult(
@@ -5430,21 +5548,97 @@ test('quotation path derives stage gate complete and allows manual advance to co
   );
 
   assert.equal(accepted.permissions.canAdvanceToContract, true);
-  assert.equal(accepted.currentStage.stageKey, 'solution');
+  assert.equal(accepted.currentStage.stageKey, 'contract');
   assert.equal(
     db.connection.stageDocuments.every((document) => document.status === DOCUMENT_STATUS.NOT_SUBMITTED),
     true
   );
 
-  const advanced = await advanceProjectStage(100, generalManager, db);
-  assert.equal(advanced.advancedStage.stageKey, 'solution');
-  assert.equal(advanced.nextStage.stageKey, 'contract');
-  assert.equal(advanced.currentStage.stageKey, 'contract');
   const stageAdvanceLog = db.connection.operationLogs.find(
     (log) => log.action_type === OPERATION_ACTION_TYPE.STAGE_ADVANCED
   );
   assert.ok(stageAdvanceLog);
   const details = JSON.parse(stageAdvanceLog.details_json);
+  assert.equal(details.advanceMode, 'automatic');
+  assert.equal(details.triggerAction, OPERATION_ACTION_TYPE.SOLUTION_DESIGN_QUOTATION_ACCEPTED);
+  assert.equal(details.completenessSummary.completionPercent, 100);
+  assert.equal(details.completenessSummary.incompleteRequiredCount, 0);
+});
+
+test('legacy v20260629 solution document codes derive stage gate complete and auto advance', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  useLegacySolutionDesignStageDocumentCodes(db.connection);
+  const storage = fakeUploadStorage();
+  const generalManager = authUser(db.connection.users.get(30));
+
+  await submitTenderForReview(db, storage);
+  const approved = await approveSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+      user: generalManager
+    },
+    db
+  );
+
+  assert.equal(approved.permissions.canAdvanceToContract, true);
+  assert.equal(approved.currentStage.stageKey, 'contract');
+  assert.equal(
+    db.connection.stageDocuments.some((document) => document.document_code === '2.1'),
+    true
+  );
+  const stageAdvanceLog = db.connection.operationLogs.find(
+    (log) => log.action_type === OPERATION_ACTION_TYPE.STAGE_ADVANCED
+  );
+  assert.ok(stageAdvanceLog);
+  const details = JSON.parse(stageAdvanceLog.details_json);
+  assert.equal(details.completenessSummary.completionPercent, 100);
+  assert.equal(details.completenessSummary.incompleteRequiredCount, 0);
+});
+
+test('manual fallback advances completed solution workflow projects that missed the write trigger', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const generalManager = authUser(db.connection.users.get(30));
+
+  await submitTenderForReview(db, storage);
+  const tenderNode = db.connection.nodes.find(
+    (node) => node.node_key === SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER
+  );
+  assert.equal(tenderNode.status, SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW);
+  Object.assign(tenderNode, {
+    status: SOLUTION_DESIGN_NODE_STATUS.APPROVED,
+    approved_at: '2026-07-08 11:00:00',
+    updated_at: '2026-07-08 11:00:00'
+  });
+  Object.assign(db.connection.quotationTenderFlow, {
+    branch_status: SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.APPROVED,
+    updated_by_user_id: generalManager.id,
+    updated_at: '2026-07-08 11:00:00'
+  });
+
+  assert.equal(db.connection.project.current_stage_key, 'solution');
+  assert.equal(
+    db.connection.operationLogs.some((log) => log.action_type === OPERATION_ACTION_TYPE.STAGE_ADVANCED),
+    false
+  );
+
+  const advanced = await advanceProjectStage(100, generalManager, db);
+
+  assert.equal(advanced.currentStage.stageKey, 'contract');
+  assert.equal(advanced.stageAdvance.advanced, true);
+  assert.equal(advanced.stageAdvance.advancedStage.stageKey, 'solution');
+  assert.equal(advanced.stageAdvance.nextStage.stageKey, 'contract');
+  const stageAdvanceLog = db.connection.operationLogs.find(
+    (log) => log.action_type === OPERATION_ACTION_TYPE.STAGE_ADVANCED
+  );
+  assert.ok(stageAdvanceLog);
+  const details = JSON.parse(stageAdvanceLog.details_json);
+  assert.equal(details.advanceMode, 'manual_fallback');
+  assert.equal(details.fromStageKey, 'solution');
+  assert.equal(details.toStageKey, 'contract');
   assert.equal(details.completenessSummary.completionPercent, 100);
   assert.equal(details.completenessSummary.incompleteRequiredCount, 0);
 });
@@ -5477,8 +5671,9 @@ test('completed solution design workflow does not inflate overview pending stage
   );
 
   assert.equal(overview.summary.myPendingStageDocumentTasks, 0);
-  assert.equal(overview.projects[0].currentStageCompletenessSummary.completionPercent, 100);
-  assert.equal(overview.projects[0].currentStageCompletenessSummary.incompleteRequiredCount, 0);
+  assert.equal(overview.projects[0].currentStageOrder, 3);
+  assert.equal(overview.projects[0].currentStageName, '合同签订阶段');
+  assert.equal(overview.projects[0].currentStageCompletenessSummary, null);
 });
 
 test('incomplete solution design workflow overview pending count follows derived document status', async () => {
@@ -5502,9 +5697,10 @@ test('non-applicable solution design output stays not_applicable and does not bl
   seedAssignedRoles(db.connection);
   const storage = fakeUploadStorage();
   const businessOwner = authUser(db.connection.users.get(13));
-  const generalManager = authUser(db.connection.users.get(30));
 
   await submitQuotation(db, storage);
+  const cycleTimeDocument = db.connection.stageDocuments.find((document) => document.document_code === 'C10');
+  cycleTimeDocument.is_applicable = 0;
   await processSolutionDesignQuotationResult(
     {
       projectId: 100,
@@ -5514,8 +5710,6 @@ test('non-applicable solution design output stays not_applicable and does not bl
     db
   );
 
-  const cycleTimeDocument = db.connection.stageDocuments.find((document) => document.document_code === 'C10');
-  cycleTimeDocument.is_applicable = 0;
   const rowsWithDerivedCompletion = await attachSolutionDesignDerivedCompletionToStageDocumentRows(
     db.connection,
     db.connection.stageDocuments.map((document) => ({ ...document }))
@@ -5527,12 +5721,10 @@ test('non-applicable solution design output stays not_applicable and does not bl
   assert.equal(cycleTimeDto.isApplicable, false);
   assert.equal(cycleTimeDto.isComplete, true);
   assert.equal(cycleTimeDto.completionStatus, COMPLETION_STATUS.NOT_APPLICABLE);
-
-  const advanced = await advanceProjectStage(100, generalManager, db);
-  assert.equal(advanced.currentStage.stageKey, 'contract');
+  assert.equal(db.connection.project.current_stage_key, 'contract');
 });
 
-test('tender path derives stage gate complete and allows manual advance to contract stage', async () => {
+test('tender path derives stage gate complete and auto advances to contract stage', async () => {
   const db = fakeDb();
   seedAssignedRoles(db.connection);
   const storage = fakeUploadStorage();
@@ -5549,18 +5741,274 @@ test('tender path derives stage gate complete and allows manual advance to contr
   );
 
   assert.equal(approved.permissions.canAdvanceToContract, true);
-  assert.equal(approved.currentStage.stageKey, 'solution');
-
-  const advanced = await advanceProjectStage(100, generalManager, db);
-  assert.equal(advanced.advancedStage.stageKey, 'solution');
-  assert.equal(advanced.nextStage.stageKey, 'contract');
-  assert.equal(advanced.currentStage.stageKey, 'contract');
+  assert.equal(approved.currentStage.stageKey, 'contract');
   const stageAdvanceLog = db.connection.operationLogs.find(
     (log) => log.action_type === OPERATION_ACTION_TYPE.STAGE_ADVANCED
   );
   const details = JSON.parse(stageAdvanceLog.details_json);
+  assert.equal(details.advanceMode, 'automatic');
+  assert.equal(details.triggerAction, OPERATION_ACTION_TYPE.SOLUTION_DESIGN_TENDER_APPROVED);
   assert.equal(details.completenessSummary.completionPercent, 100);
   assert.equal(details.completenessSummary.incompleteRequiredCount, 0);
+
+  const navigation = buildProjectNavigationFromWorkspace(
+    100,
+    buildNavigationWorkspaceFromConnection(db.connection)
+  );
+  const contractStage = navigation.children.find((stage) => stage.stageKey === 'contract');
+  const prepareTechnicalAgreementNode = contractStage.children.find(
+    (node) => node.nodeKey === 'prepare_technical_agreement'
+  );
+  const projectStartNoticeNode = contractStage.children.find((node) => node.nodeKey === 'project_start_notice');
+
+  assert.equal(navigation.currentStageKey, 'contract');
+  assert.equal(contractStage.status, NAVIGATION_STATUS.PROCESSING);
+  assert.equal(prepareTechnicalAgreementNode.status, NAVIGATION_STATUS.PROCESSING);
+  assert.notEqual(prepareTechnicalAgreementNode.status, NAVIGATION_STATUS.PENDING);
+  assert.notEqual(projectStartNoticeNode.status, NAVIGATION_STATUS.COMPLETED);
+});
+
+test('navigation process nodes respect current, future, and completed stage boundaries', () => {
+  const navigation = buildProjectNavigationFromWorkspace(100, {
+    project: {
+      projectName: '自动推进导航边界项目',
+      projectCode: 'NAV-BOUNDARY',
+      projectMode: null,
+      status: 'normal'
+    },
+    currentStage: {
+      stageKey: 'contract',
+      stageOrder: 3,
+      stageName: '合同签订阶段'
+    },
+    stages: [
+      {
+        stageId: 201,
+        stageOrder: 2,
+        stageKey: 'solution',
+        stageName: '方案设计阶段',
+        stageStatus: 'completed',
+        isCurrent: false,
+        configured: true,
+        nodes: [
+          {
+            nodeKey: 'solution_archive_notice',
+            nodeName: '方案设计归档说明',
+            nodeStatus: 'process_node',
+            outputs: []
+          }
+        ]
+      },
+      {
+        stageId: 202,
+        stageOrder: 3,
+        stageKey: 'contract',
+        stageName: '合同签订阶段',
+        stageStatus: 'current',
+        isCurrent: true,
+        configured: true,
+        nodes: [
+          {
+            nodeKey: 'prepare_technical_agreement',
+            nodeName: '准备技术协议',
+            nodeStatus: 'waiting_submission',
+            outputs: []
+          },
+          {
+            nodeKey: 'project_start_notice',
+            nodeName: '项目启动通知',
+            nodeStatus: 'process_node',
+            outputs: []
+          }
+        ]
+      },
+      {
+        stageId: 203,
+        stageOrder: 4,
+        stageKey: 'detailedDesign',
+        stageName: '详细设计阶段',
+        stageStatus: 'not_started',
+        isCurrent: false,
+        configured: true,
+        nodes: [
+          {
+            nodeKey: 'project_kickoff_meeting',
+            nodeName: '召开项目启动会',
+            nodeStatus: 'process_node',
+            outputs: []
+          }
+        ]
+      }
+    ]
+  });
+
+  const completedSolutionStage = navigation.children.find((stage) => stage.stageKey === 'solution');
+  const contractStage = navigation.children.find((stage) => stage.stageKey === 'contract');
+  const futureDetailedDesignStage = navigation.children.find((stage) => stage.stageKey === 'detailedDesign');
+  const prepareTechnicalAgreementNode = contractStage.children.find(
+    (node) => node.nodeKey === 'prepare_technical_agreement'
+  );
+  const currentProjectStartNoticeNode = contractStage.children.find((node) => node.nodeKey === 'project_start_notice');
+  const futureProcessNode = futureDetailedDesignStage.children.find((node) => node.nodeKey === 'project_kickoff_meeting');
+
+  assert.equal(navigation.currentStageKey, 'contract');
+  assert.equal(contractStage.status, NAVIGATION_STATUS.PROCESSING);
+  assert.equal(prepareTechnicalAgreementNode.status, NAVIGATION_STATUS.PROCESSING);
+  assert.notEqual(prepareTechnicalAgreementNode.status, NAVIGATION_STATUS.PENDING);
+  assert.equal(currentProjectStartNoticeNode.status, NAVIGATION_STATUS.PROCESSING);
+  assert.notEqual(currentProjectStartNoticeNode.status, NAVIGATION_STATUS.COMPLETED);
+  assert.equal(completedSolutionStage.children[0].status, NAVIGATION_STATUS.COMPLETED);
+  assert.equal(futureProcessNode.status, NAVIGATION_STATUS.PENDING);
+});
+
+test('auto advance completes project after final stage gate is satisfied', async () => {
+  const db = fakeDb({
+    project: baseProject({
+      current_stage_id: 208,
+      current_stage_order: 8,
+      current_stage_key: 'closeout',
+      current_stage_name: '结题阶段',
+      current_stage_status: 'in_progress'
+    })
+  });
+  db.connection.stageDocuments = [closeoutStageDocument()];
+  const actor = authUser(db.connection.users.get(30));
+
+  const result = await tryAutoAdvanceProjectStage(
+    {
+      projectId: 100,
+      user: actor,
+      triggerAction: 'document.confirmed',
+      expectedStageOrder: 8,
+      triggerMetadata: {
+        stageOrder: 8,
+        documentCode: '8.1'
+      }
+    },
+    db
+  );
+
+  assert.equal(result.advanced, true);
+  assert.equal(result.completedProject, true);
+  assert.equal(result.reason, 'project_completed');
+  assert.equal(db.connection.project.status, 'completed');
+  assert.equal(db.connection.stages.find((stage) => stage.stage_order === 8).is_current, 0);
+
+  const stageAdvanceLog = db.connection.operationLogs.at(-2);
+  const projectCompletedLog = db.connection.operationLogs.at(-1);
+  assert.equal(stageAdvanceLog.action_type, OPERATION_ACTION_TYPE.STAGE_ADVANCED);
+  assert.equal(stageAdvanceLog.actor_user_id, actor.id);
+  assert.equal(stageAdvanceLog.summary, '系统自动推进阶段：结题阶段 -> 项目完成');
+  assert.equal(projectCompletedLog.action_type, OPERATION_ACTION_TYPE.PROJECT_COMPLETED);
+  assert.equal(projectCompletedLog.actor_user_id, actor.id);
+  const details = JSON.parse(stageAdvanceLog.details_json);
+  assert.equal(details.advanceMode, 'automatic');
+  assert.equal(details.triggerAction, 'document.confirmed');
+  assert.equal(details.fromStageOrder, 8);
+  assert.equal(details.toStageKey, null);
+  assert.equal(details.documentCode, '8.1');
+});
+
+test('auto advance skips ended or completed projects without logs', async () => {
+  for (const status of ['ended', 'completed']) {
+    const db = fakeDb({ project: baseProject({ status }) });
+    const actor = authUser(db.connection.users.get(30));
+
+    const result = await tryAutoAdvanceProjectStage(
+      {
+        projectId: 100,
+        user: actor,
+        triggerAction: 'document.confirmed',
+        expectedStageOrder: 2
+      },
+      db
+    );
+
+    assert.equal(result.advanced, false);
+    assert.equal(result.reason, status === 'completed' ? 'project_completed' : 'project_ended');
+    assert.equal(db.connection.project.current_stage_key, 'solution');
+    assert.equal(db.connection.operationLogs.length, 0);
+  }
+});
+
+test('auto advance is idempotent when trigger stage no longer matches', async () => {
+  const db = fakeDb();
+  const actor = authUser(db.connection.users.get(30));
+
+  const result = await tryAutoAdvanceProjectStage(
+    {
+      projectId: 100,
+      user: actor,
+      triggerAction: 'document.confirmed',
+      expectedStageOrder: 1
+    },
+    db
+  );
+
+  assert.equal(result.advanced, false);
+  assert.equal(result.reason, 'stage_mismatch');
+  assert.equal(result.currentStage.stageKey, 'solution');
+  assert.equal(db.connection.project.current_stage_key, 'solution');
+  assert.equal(db.connection.operationLogs.length, 0);
+});
+
+test('auto advance rolls back and writes no success log when transition update fails', async () => {
+  const db = fakeDb({
+    project: baseProject({
+      current_stage_id: 208,
+      current_stage_order: 8,
+      current_stage_key: 'closeout',
+      current_stage_name: '结题阶段',
+      current_stage_status: 'in_progress'
+    })
+  });
+  db.connection.stageDocuments = [closeoutStageDocument()];
+  const actor = authUser(db.connection.users.get(30));
+  let snapshot = null;
+  const originalExecute = db.connection.execute.bind(db.connection);
+
+  db.connection.beginTransaction = async () => {
+    snapshot = {
+      project: { ...db.connection.project },
+      stages: db.connection.stages.map((stage) => ({ ...stage })),
+      operationLogs: db.connection.operationLogs.map((log) => ({ ...log }))
+    };
+  };
+  db.connection.rollback = async () => {
+    db.connection.rolledBack = true;
+    db.connection.project = { ...snapshot.project };
+    db.connection.stages = snapshot.stages.map((stage) => ({ ...stage }));
+    db.connection.operationLogs = snapshot.operationLogs.map((log) => ({ ...log }));
+  };
+  db.connection.execute = async (sql, params = []) => {
+    const text = normalizeSql(sql);
+    if (text.startsWith('UPDATE projects SET status = ?')) {
+      throw new Error('fake automatic advance project status failure');
+    }
+    return originalExecute(sql, params);
+  };
+
+  await assert.rejects(
+    () =>
+      tryAutoAdvanceProjectStage(
+        {
+          projectId: 100,
+          user: actor,
+          triggerAction: 'document.confirmed',
+          expectedStageOrder: 8
+        },
+        db
+      ),
+    /fake automatic advance project status failure/
+  );
+
+  assert.equal(db.connection.rolledBack, true);
+  assert.equal(db.connection.project.status, 'active');
+  assert.equal(db.connection.stages.find((stage) => stage.stage_order === 8).is_current, 1);
+  assert.equal(
+    db.connection.operationLogs.some((log) => log.action_type === OPERATION_ACTION_TYPE.STAGE_ADVANCED),
+    false
+  );
 });
 
 test('solution design derived gate blocks incomplete workflow, missing branch, unfinished branch, and old tender revision', async () => {

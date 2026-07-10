@@ -3457,9 +3457,34 @@ p {
 }
 
 .project-process-sidebar {
-  min-height: calc(100vh - 124px);
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  min-height: 0;
+  max-height: calc(100dvh - 160px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #dcdfe6 transparent;
   background: #ffffff;
   border-right: 1px solid #dcdfe6;
+}
+
+.project-process-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.project-process-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.project-process-sidebar::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: #dcdfe6;
+}
+
+.project-process-sidebar::-webkit-scrollbar-thumb:hover {
+  background: #c0c4cc;
 }
 
 .project-process-sidebar__project {
@@ -3744,8 +3769,12 @@ p {
   }
 
   .project-process-sidebar.el-aside {
+    position: static;
     width: 100% !important;
     min-height: auto;
+    max-height: none;
+    overflow-y: visible;
+    overscroll-behavior: auto;
     border-right: 0;
     border-bottom: 1px solid #dcdfe6;
   }

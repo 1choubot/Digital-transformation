@@ -56,7 +56,9 @@ function mapDailyReportHeader(row) {
     submittedAt: row.submitted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    project: row.project_code
+    // The project code is assigned later in the initiation flow, so it cannot
+    // be used as the existence check for an already-associated project.
+    project: row.project_id
       ? {
           id: row.project_id,
           projectCode: row.project_code,

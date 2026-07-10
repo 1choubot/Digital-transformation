@@ -16,7 +16,10 @@ import {
   normalizeWeeklyFinalReviewPayload,
   WEEKLY_REPORT_ERROR
 } from '../../src/domain/weeklyReports.js';
-import { getDailyReportExportDto } from '../../src/repositories/dailyReportRepository.js';
+import {
+  getDailyReportExportDto,
+  listDailyReports
+} from '../../src/repositories/dailyReportRepository.js';
 import { getWeeklyReportExportDtoForAuthorizedRead } from '../../src/repositories/weeklyReportRepository.js';
 import { resolveReadableDepartment } from '../../src/routes/centerDailyReports.js';
 import { generateCenterDailyReportWorkbook } from '../../src/services/centerDailyReportExportService.js';
@@ -47,6 +50,34 @@ function user(organizationRole, overrides = {}) {
     ...overrides
   };
 }
+
+test('daily report list keeps project name when project code is not assigned', async () => {
+  const executor = {
+    async execute() {
+      return [[{
+        id: 316,
+        user_id: 387,
+        report_date: '2026-07-10',
+        project_id: 793,
+        status: ReportStatus.SUBMITTED,
+        project_code: null,
+        project_name: 'Test-lixiang',
+        project_manager: null,
+        project_manager_user_id: null,
+        project_status: 'normal',
+        submitted_by_user_id: 387,
+        submitted_at: null,
+        created_at: null,
+        updated_at: null
+      }]];
+    }
+  };
+
+  const reports = await listDailyReports({ userId: 387 }, executor);
+
+  assert.equal(reports[0].project.projectName, 'Test-lixiang');
+  assert.equal(reports[0].project.projectCode, null);
+});
 
 function zipEntryText(buffer, name) {
   const entry = readZipEntries(buffer).find((candidate) => candidate.name === name);

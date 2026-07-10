@@ -6,9 +6,7 @@
       :current-user="currentUser"
       subtitle="新建项目完成后进入项目工作区，后续阶段、资料和节点产出在工作区处理。"
     >
-      <template #actions>
-        <button type="button" class="ghost-button" @click="navigate('/projects')">返回项目总览</button>
-      </template>
+
     </PageHeader>
 
     <section v-if="!canCreateProject" class="state-panel state-panel--error">

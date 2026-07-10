@@ -1,19 +1,8 @@
 <template>
   <section class="page-stack">
-    <PageHeader
-      eyebrow="跨项目入口"
-      title="项目总览"
-      :current-user="currentUser"
-      subtitle="齐套率基于资料 completionMode、基础状态和适用性派生完成状态计算。"
-    >
+    <PageHeader eyebrow="跨项目入口" title="项目总览" :current-user="currentUser"
+      subtitle="齐套率基于资料 completionMode、基础状态和适用性派生完成状态计算。">
       <template #actions>
-        <el-button
-          v-if="canCreateProject"
-          type="primary"
-          @click="navigate('/projects/new')"
-        >
-          新建项目
-        </el-button>
         <el-button :loading="loading" @click="loadDashboard">重新加载</el-button>
       </template>
     </PageHeader>
@@ -40,15 +29,9 @@
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :md="8" :lg="4">
-        <el-card
-          class="overview-metric-card overview-metric-card--button"
-          shadow="never"
-          role="button"
-          tabindex="0"
-          @click="navigate('/my-stage-document-tasks')"
-          @keydown.enter.prevent="navigate('/my-stage-document-tasks')"
-          @keydown.space.prevent="navigate('/my-stage-document-tasks')"
-        >
+        <el-card class="overview-metric-card overview-metric-card--button" shadow="never" role="button" tabindex="0"
+          @click="navigate('/my-stage-document-tasks')" @keydown.enter.prevent="navigate('/my-stage-document-tasks')"
+          @keydown.space.prevent="navigate('/my-stage-document-tasks')">
           <el-statistic title="我的待办资料" :value="summary.myPendingStageDocumentTasks" />
         </el-card>
       </el-col>
@@ -62,32 +45,19 @@
       <el-form class="overview-filters" label-position="top" @submit.prevent="loadDashboard">
         <el-form-item label="项目状态">
           <el-select v-model="statusFilter" :disabled="loading" @change="loadDashboard">
-            <el-option
-              v-for="option in statusOptions"
-              :key="option.value"
-              :label="option.label"
-              :value="option.value"
-            />
+            <el-option v-for="option in statusOptions" :key="option.value" :label="option.label"
+              :value="option.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="当前阶段">
           <el-select v-model="stageOrderFilter" :disabled="loading" @change="loadDashboard">
             <el-option label="全部阶段" value="" />
-            <el-option
-              v-for="option in stageOrderOptions"
-              :key="option.value"
-              :label="option.label"
-              :value="option.value"
-            />
+            <el-option v-for="option in stageOrderOptions" :key="option.value" :label="option.label"
+              :value="option.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="关键字" class="overview-filters__keyword">
-          <el-input
-            v-model="keywordFilter"
-            clearable
-            placeholder="项目编号、项目名称或客户名称"
-            @keyup.enter="loadDashboard"
-          />
+          <el-input v-model="keywordFilter" clearable placeholder="项目编号、项目名称或客户名称" @keyup.enter="loadDashboard" />
         </el-form-item>
         <el-form-item class="overview-filters__actions">
           <el-button type="primary" :loading="loading" native-type="submit">应用筛选</el-button>
@@ -105,14 +75,8 @@
 
       <el-skeleton v-if="loading" :rows="5" animated />
 
-      <el-alert
-        v-else-if="errorMessage"
-        title="项目总览加载失败"
-        :description="errorMessage"
-        type="error"
-        show-icon
-        :closable="false"
-      >
+      <el-alert v-else-if="errorMessage" title="项目总览加载失败" :description="errorMessage" type="error" show-icon
+        :closable="false">
         <template #default>
           <el-button type="primary" size="small" @click="loadDashboard">重试</el-button>
         </template>
@@ -121,69 +85,31 @@
       <el-empty v-else-if="projects.length === 0" description="当前筛选条件下没有可展示的项目。" />
 
       <div v-else class="overview-list">
-        <el-card
-          v-for="project in projects"
-          :key="project.projectId"
-          class="overview-project"
-          shadow="never"
-          @click="handleProjectCardClick($event, project)"
-        >
+        <el-card v-for="project in projects" :key="project.projectId" class="overview-project" shadow="never"
+          @click="handleProjectCardClick($event, project)">
           <div class="overview-project__main">
+
             <div class="overview-project__identity">
               <span class="mono">{{ formatProjectCode(project.projectCode) }}</span>
               <strong>{{ project.projectName }}</strong>
-              <small>
-                {{ project.customerName }} / {{ project.customerContactPerson || '-' }} / {{ formatProjectMode(project.projectMode) }} /
-                {{ formatUser(project.projectManagerUser) }}
-              </small>
             </div>
+
             <StatusBadge :status="project.status" />
+
             <div class="overview-project__stage">
               <span>当前阶段</span>
               <strong>{{ formatCurrentStage(project) }}</strong>
               <small v-if="project.currentStageIssue">{{ formatStageIssue(project.currentStageIssue) }}</small>
               <small v-else-if="project.status === 'ended'">结束原因：{{ project.endedReason || '-' }}</small>
             </div>
-            <div class="overview-project__completion">
-              <span>当前阶段齐套率</span>
-              <strong>{{ formatCompletionPercent(project.currentStageCompletenessSummary) }}</strong>
-              <small>{{ formatCompletionSummary(project.currentStageCompletenessSummary) }}</small>
-            </div>
+
             <div class="overview-project__dates">
               <span>计划时间</span>
               <strong>{{ formatDate(project.plannedStartDate) }} 至 {{ formatDate(project.plannedEndDate) }}</strong>
-              <small>创建人：{{ formatUser(project.createdBy) }}</small>
             </div>
-            <el-button @click.stop="navigateToProject(project)">
-              进入工作区
-            </el-button>
+
           </div>
 
-          <div class="overview-project__documents">
-            <div>
-              <span>可查看未完成资料</span>
-              <strong>{{ project.currentStageIncompleteRequiredDocuments.length }}</strong>
-            </div>
-            <el-collapse v-if="project.currentStageIncompleteRequiredDocuments.length > 0">
-              <el-collapse-item title="查看可见资料" :name="String(project.projectId)">
-                <ul>
-                  <li v-for="document in project.currentStageIncompleteRequiredDocuments" :key="document.id">
-                    <span class="mono">{{ document.documentCode }}</span>
-                    <strong>{{ document.documentName }}</strong>
-                    <span>{{ formatCompletionMode(document.completionMode) }}</span>
-                    <span>{{ formatCompletionStatus(document.completionStatus) }}</span>
-                    <StatusBadge :status="document.status" />
-                  </li>
-                </ul>
-              </el-collapse-item>
-            </el-collapse>
-            <p v-else-if="project.currentStageCompletenessSummary">
-              当前阶段适用资料均已按完成规则完成。
-            </p>
-            <p v-else>
-              {{ formatStageIssue(project.currentStageIssue) || '当前账号暂无可查看的齐套明细。' }}
-            </p>
-          </div>
         </el-card>
       </div>
     </el-card>
@@ -196,14 +122,7 @@ import { getProjectOverviewDashboard } from '../api/projects.js';
 import { toReadableApiError } from '../api/http.js';
 import PageHeader from '../components/PageHeader.vue';
 import StatusBadge from '../components/StatusBadge.vue';
-import {
-  formatCompletionMode,
-  formatCompletionStatus,
-  formatDate,
-  formatProjectCode,
-  formatProjectMode,
-  formatUser
-} from '../utils/format.js';
+import { formatDate, formatProjectCode } from '../utils/format.js';
 
 const props = defineProps({
   authToken: {
@@ -263,9 +182,6 @@ const dashboard = ref({
 
 const summary = computed(() => dashboard.value.summary || emptySummary);
 const projects = computed(() => dashboard.value.projects || []);
-const canCreateProject = computed(() =>
-  ['general_manager', 'center_manager'].includes(props.currentUser?.organizationRole)
-);
 
 function formatCurrentStage(project) {
   if (project.currentStageName) {
@@ -287,23 +203,6 @@ function formatCurrentStage(project) {
 
 function formatStageIssue(issue) {
   return stageIssueText[issue] || '';
-}
-
-function formatCompletionPercent(summaryValue) {
-  if (!summaryValue) {
-    return '-';
-  }
-
-  return `${summaryValue.completionPercent}%`;
-}
-
-function formatCompletionSummary(summaryValue) {
-  if (!summaryValue) {
-    return '暂无齐套摘要';
-  }
-
-  const completed = summaryValue.completedRequiredCount ?? summaryValue.confirmedRequiredCount;
-  return `适用资料 ${summaryValue.requiredTotal} 项，已完成 ${completed} 项，未完成 ${summaryValue.incompleteRequiredCount} 项`;
 }
 
 function navigateToProject(project) {

@@ -177,6 +177,38 @@ export const SOLUTION_DESIGN_GENERATED_FILE_STATUS = {
   FAILED: 'failed'
 };
 
+function solutionTemplateCell(target, source, label, required = false, options = {}) {
+  return { target, source, label, required, ...options };
+}
+
+function solutionTemplateCellBuilder(target, valueBuilder, sourcePaths, label, required = false, options = {}) {
+  return {
+    target,
+    valueBuilder,
+    sourcePaths,
+    label,
+    required,
+    preserveTemplateWhenEmpty: true,
+    ...options
+  };
+}
+
+function solutionTemplateImage(range, sourcePath, label, required = false, options = {}) {
+  const [fromCell, toCell] = String(range || '').split(':');
+  return {
+    target: {
+      range,
+      fromCell,
+      toCell: toCell || fromCell
+    },
+    source: sourcePath,
+    label,
+    required,
+    preserveAspectRatio: true,
+    ...options
+  };
+}
+
 export const SOLUTION_DESIGN_ANALYSIS_FORM_DEFINITION = {
   nodeKey: SOLUTION_DESIGN_NODE_KEY.ANALYSIS,
   documentCode: 'C05',
@@ -184,19 +216,83 @@ export const SOLUTION_DESIGN_ANALYSIS_FORM_DEFINITION = {
   templateName: '项目方案分析表-模板.xlsx',
   generatedFileNamePrefix: '项目方案分析表',
   templateMappings: [
-    { target: 'A1', source: 'definition.formName', label: '表单名称', required: true },
-    { target: 'A2', value: '项目编号', label: '项目编号标签' },
-    { target: 'B2', source: 'project.projectCode', label: '项目编号' },
-    { target: 'C2', value: '项目名称', label: '项目名称标签' },
-    { target: 'E2', source: 'project.projectName', label: '项目名称', required: true },
-    { target: 'B12', source: 'form.customerRequirements', label: '客户需求', required: true },
-    { target: 'B17', source: 'form.technicalRisks', label: '技术风险', required: true },
-    { target: 'B27', source: 'form.solutionScope', label: '方案范围', required: true }
+    solutionTemplateCell('B2', 'project.projectCode', '项目编号'),
+    solutionTemplateCell('E2', 'project.projectName', '项目名称', true),
+    solutionTemplateCellBuilder(
+      'B3',
+      'temperatureRange',
+      ['form.workingTemperatureMin', 'form.workingTemperatureMax'],
+      '工作温度'
+    ),
+    solutionTemplateCellBuilder(
+      'D3',
+      'storageTemperatureRange',
+      ['form.storageTemperatureMin', 'form.storageTemperatureMax'],
+      '储存温度'
+    ),
+    solutionTemplateCellBuilder(
+      'B4',
+      'humidityRange',
+      ['form.workingHumidityMin', 'form.workingHumidityMax'],
+      '工作湿度'
+    ),
+    solutionTemplateCellBuilder(
+      'D4',
+      'storageHumidityRange',
+      ['form.storageHumidityMin', 'form.storageHumidityMax'],
+      '储存湿度'
+    ),
+    solutionTemplateCellBuilder('B5', 'noiseLimit', ['form.noiseLimitValue'], '噪音'),
+    solutionTemplateCellBuilder('D5', 'ipProtection', ['form.ipProtectionLevel'], 'IP 防护等级'),
+    solutionTemplateCellBuilder('B6', 'antiCorrosion', ['form.antiCorrosionGrade'], '防腐等级'),
+    solutionTemplateCellBuilder('D6', 'altitudeLimit', ['form.altitudeLimitValue'], '海拔高度'),
+    solutionTemplateCellBuilder('B7', 'explosionProof', ['form.explosionProofRequirement'], '防爆要求'),
+    solutionTemplateCellBuilder('B8', 'siteCondition', ['form.siteConditionDescription'], '场地说明'),
+    solutionTemplateCellBuilder(
+      'B9',
+      'siteUtilities',
+      ['form.powerSupply', 'form.airSupply', 'form.hydraulicSource'],
+      '电源/气源/液压源'
+    ),
+    solutionTemplateCellBuilder('B10', 'liftingEquipment', ['form.liftingEquipment'], '吊装设备'),
+    solutionTemplateCell('B12', 'form.workpieceDescription', '工件描述', true),
+    solutionTemplateCell('B17', 'form.operationProcessDescription', '作业工艺', true),
+    solutionTemplateCell('B27', 'form.projectTargetDescription', '项目目标说明', true)
+  ],
+  imageMappings: [
+    solutionTemplateImage('D8:E10', 'formImages.siteConditionImages', '场地情况图片', false, {
+      maxImages: 3,
+      mergeAdjustment: {
+        unmergeRanges: ['B8:E8', 'B9:E9', 'B10:E10'],
+        textMergeRanges: ['B8:C8', 'B9:C9', 'B10:C10']
+      }
+    }),
+    solutionTemplateImage('B14:E15', 'formImages.workpieceImages', '工件描述图片', false, {
+      maxImages: 3,
+      mergeAdjustment: { unmergeRange: 'B12:E15', textMergeRange: 'B12:E13' }
+    }),
+    solutionTemplateImage('B22:E25', 'formImages.operationProcessImages', '作业工艺图片', false, {
+      maxImages: 3,
+      mergeAdjustment: { unmergeRange: 'B17:E25', textMergeRange: 'B17:E21' }
+    }),
+    solutionTemplateImage('B32:E36', 'formImages.projectTargetImages', '目标图片', false, {
+      maxImages: 3,
+      mergeAdjustment: { unmergeRange: 'B27:E36', textMergeRange: 'B27:E31' }
+    })
   ],
   unmappedFields: [
-    '模板中的环境要求、场地情况、工件描述、作业工艺、目标拆分字段尚未完成逐项字段确认；当前仅映射已确认的 customerRequirements、solutionScope、technicalRisks 及项目/节点上下文。'
+    '项目方案分析表按模板确认字段生成；C05 不再保留客户需求、技术风险、方案范围旧字段。'
   ]
 };
+
+export const SOLUTION_DESIGN_ANALYSIS_FORM_DOCUMENT_CODES = Object.freeze([
+  SOLUTION_DESIGN_ANALYSIS_FORM_DEFINITION.documentCode,
+  '2.2'
+]);
+
+export function isSolutionDesignAnalysisFormDocumentCode(documentCode) {
+  return SOLUTION_DESIGN_ANALYSIS_FORM_DOCUMENT_CODES.includes(String(documentCode || '').trim());
+}
 
 export const SOLUTION_DESIGN_UPLOAD_SLOTS = [
   {
@@ -367,7 +463,7 @@ export const SOLUTION_DESIGN_REVIEW_FORM_DEFINITIONS = [
       { target: 'D2', value: '客户名称', label: '客户名称标签' },
       { target: 'E2', source: 'project.customerName', label: '客户名称' },
       { target: 'A3', value: '评审类型', label: '评审类型标签' },
-      { target: 'B3', source: 'context.reviewRoundLabel', label: '评审轮次' },
+      { target: 'B3', source: 'context.reviewRoundLabel', label: '评审轮次', textFont: '宋体' },
       { target: 'A4', value: '项目经理', label: '项目经理标签' },
       { target: 'B4', source: 'roles.projectManagerName', label: '项目经理' },
       { target: 'C4', value: '技术负责人', label: '技术负责人标签' },
@@ -388,7 +484,8 @@ export const SOLUTION_DESIGN_REVIEW_FORM_DEFINITIONS = [
       {
         source: 'form.projectTargetDescription',
         label: '项目目标描述',
-        repeatRows: { column: 'B', startRow: 12, endRow: 14 }
+        repeatRows: { column: 'B', startRow: 12, endRow: 14 },
+        textFont: '宋体'
       },
       { target: 'A15', value: '项目风险评估', label: '项目风险评估标签' },
       {
@@ -411,8 +508,7 @@ export const SOLUTION_DESIGN_REVIEW_FORM_DEFINITIONS = [
       },
       { target: 'A39', value: '其他补充内容', label: '其他补充内容标签' },
       { target: 'B39', source: 'form.reviewConclusion', label: '评审结论', required: true },
-      { target: 'A42', value: '记录人：', label: '记录人标签' },
-      { target: 'B42', source: 'context.recorderName', label: '记录人' }
+      { target: 'A42', source: 'context.recorderLabel', label: '记录人', textFont: '宋体' }
     ],
     unmappedFields: [
       '方案评审记录表已映射项目目标描述、项目风险评估、项目方案建议、项目实施计划、其他补充内容等当前确认字段；后续如模板字段口径继续细化，可在不改变 C15/C16 独立语义的前提下补充扩展。'
@@ -431,7 +527,7 @@ export const SOLUTION_DESIGN_REVIEW_FORM_DEFINITIONS = [
       { target: 'D2', value: '客户名称', label: '客户名称标签' },
       { target: 'E2', source: 'project.customerName', label: '客户名称' },
       { target: 'A3', value: '评审类型', label: '评审类型标签' },
-      { target: 'B3', source: 'context.reviewRoundLabel', label: '评审轮次' },
+      { target: 'B3', source: 'context.reviewRoundLabel', label: '评审轮次', textFont: '宋体' },
       { target: 'A4', value: '项目经理', label: '项目经理标签' },
       { target: 'B4', source: 'roles.projectManagerName', label: '项目经理' },
       { target: 'C4', value: '技术负责人', label: '技术负责人标签' },
@@ -452,7 +548,8 @@ export const SOLUTION_DESIGN_REVIEW_FORM_DEFINITIONS = [
       {
         source: 'form.projectTargetDescription',
         label: '项目目标描述',
-        repeatRows: { column: 'B', startRow: 12, endRow: 14 }
+        repeatRows: { column: 'B', startRow: 12, endRow: 14 },
+        textFont: '宋体'
       },
       { target: 'A15', value: '项目风险评估', label: '项目风险评估标签' },
       {
@@ -475,8 +572,7 @@ export const SOLUTION_DESIGN_REVIEW_FORM_DEFINITIONS = [
       },
       { target: 'A39', value: '其他补充内容', label: '其他补充内容标签' },
       { target: 'B39', source: 'form.reviewConclusion', label: '评审结论', required: true },
-      { target: 'A42', value: '记录人：', label: '记录人标签' },
-      { target: 'B42', source: 'context.recorderName', label: '记录人' }
+      { target: 'A42', source: 'context.recorderLabel', label: '记录人', textFont: '宋体' }
     ],
     unmappedFields: [
       '方案评审记录表已映射项目目标描述、项目风险评估、项目方案建议、项目实施计划、其他补充内容等当前确认字段；后续如模板字段口径继续细化，可在不改变 C15/C16 独立语义的前提下补充扩展。'

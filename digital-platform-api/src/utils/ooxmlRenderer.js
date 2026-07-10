@@ -34,10 +34,19 @@ function rowHeightToEmu(heightPoints) {
   return Math.round(points * (96 / 72) * EMUS_PER_PIXEL);
 }
 
-function buildInlineCell(cellRef, value, existingAttributes = '') {
+function buildTextRun(value, { textFont = '', fontSize = 11 } = {}) {
+  if (!textFont) {
+    return `<t xml:space="preserve">${escapeXml(value)}</t>`;
+  }
+
+  return `<r><rPr><sz val="${escapeXml(fontSize)}"/><rFont val="${escapeXml(textFont)}"/><charset val="134"/><scheme val="minor"/></rPr><t xml:space="preserve">${escapeXml(value)}</t></r>`;
+}
+
+function buildInlineCell(cellRef, input, existingAttributes = '') {
+  const { value, textFont, fontSize, preserveStyle } = normalizeCellInput(input);
   const styleMatch = existingAttributes.match(/\ss="[^"]*"/);
-  const styleAttribute = styleMatch ? styleMatch[0] : '';
-  return `<c r="${cellRef}"${styleAttribute} t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
+  const styleAttribute = preserveStyle !== false && styleMatch ? styleMatch[0] : '';
+  return `<c r="${cellRef}"${styleAttribute} t="inlineStr"><is>${buildTextRun(value, { textFont, fontSize })}</is></c>`;
 }
 
 function buildInlineRichCheckboxCell(cellRef, { checkboxSymbol, fallbackText, checkboxFont, textFont }, existingAttributes = '') {
@@ -52,13 +61,19 @@ function normalizeCellInput(input) {
   if (input && typeof input === 'object' && !Array.isArray(input)) {
     return {
       value: input.value ?? '',
-      preserveTemplateWhenEmpty: input.preserveTemplateWhenEmpty === true
+      preserveTemplateWhenEmpty: input.preserveTemplateWhenEmpty === true,
+      preserveStyle: input.preserveStyle !== false,
+      textFont: input.textFont ? String(input.textFont) : '',
+      fontSize: Number.isFinite(Number(input.fontSize)) && Number(input.fontSize) > 0 ? Number(input.fontSize) : 11
     };
   }
 
   return {
     value: input ?? '',
-    preserveTemplateWhenEmpty: false
+    preserveTemplateWhenEmpty: false,
+    preserveStyle: true,
+    textFont: '',
+    fontSize: 11
   };
 }
 
@@ -71,10 +86,10 @@ function updateCellInRow(rowXml, cellRef, input) {
   const cellPattern = new RegExp(`<c\\b(?=[^>]*\\br="${cellRef}")[^>]*?(?:\\/>|>[\\s\\S]*?<\\/c>)`);
   const match = rowXml.match(cellPattern);
   if (match) {
-    return rowXml.replace(match[0], buildInlineCell(cellRef, value, match[0].match(/^<c\b([^>]*)>/)?.[1] || ''));
+    return rowXml.replace(match[0], buildInlineCell(cellRef, input, match[0].match(/^<c\b([^>]*)>/)?.[1] || ''));
   }
 
-  const newCell = buildInlineCell(cellRef, value);
+  const newCell = buildInlineCell(cellRef, input);
   const rowEnd = rowXml.lastIndexOf('</row>');
   if (rowEnd === -1) {
     return rowXml;
@@ -598,13 +613,33 @@ function prepareImageLayouts(images) {
 }
 
 function normalizeMergeAdjustment(adjustment) {
-  if (!adjustment?.unmergeRange && !adjustment?.textMergeRange) {
+  if (
+    !adjustment?.unmergeRange &&
+    !adjustment?.textMergeRange &&
+    !Array.isArray(adjustment?.unmergeRanges) &&
+    !Array.isArray(adjustment?.textMergeRanges)
+  ) {
     return null;
   }
 
+  const unmergeRanges = [
+    ...(Array.isArray(adjustment.unmergeRanges) ? adjustment.unmergeRanges : []),
+    adjustment.unmergeRange
+  ]
+    .filter(Boolean)
+    .map((range) => String(range).trim())
+    .filter(Boolean);
+  const textMergeRanges = [
+    ...(Array.isArray(adjustment.textMergeRanges) ? adjustment.textMergeRanges : []),
+    adjustment.textMergeRange
+  ]
+    .filter(Boolean)
+    .map((range) => String(range).trim())
+    .filter(Boolean);
+
   return {
-    unmergeRange: adjustment.unmergeRange ? String(adjustment.unmergeRange).trim() : '',
-    textMergeRange: adjustment.textMergeRange ? String(adjustment.textMergeRange).trim() : ''
+    unmergeRanges,
+    textMergeRanges
   };
 }
 
@@ -638,8 +673,8 @@ function applyImageMergeAdjustments(sheetXml, images) {
   }
 
   const { originalXml, refs } = parseMergeCellRefs(sheetXml);
-  const removeRefs = new Set(adjustments.map((adjustment) => adjustment.unmergeRange).filter(Boolean));
-  const addRefs = adjustments.map((adjustment) => adjustment.textMergeRange).filter(Boolean);
+  const removeRefs = new Set(adjustments.flatMap((adjustment) => adjustment.unmergeRanges));
+  const addRefs = adjustments.flatMap((adjustment) => adjustment.textMergeRanges);
   const nextRefs = [...refs.filter((ref) => !removeRefs.has(ref))];
   for (const ref of addRefs) {
     if (!nextRefs.includes(ref)) {

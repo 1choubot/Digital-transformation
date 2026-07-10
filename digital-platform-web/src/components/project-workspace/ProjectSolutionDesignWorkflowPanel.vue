@@ -204,11 +204,15 @@
               :auto-form-data="analysisAutoFormData"
               :loading="analysisFormLoading"
               :pending-action="pendingAction"
+              :image-state="analysisImageState"
               @load="loadAnalysisForm"
               @update="updateAnalysisFormField"
               @save="saveAnalysisForm"
               @submit="submitAnalysisForm"
               @download="downloadAnalysisGeneratedFile"
+              @upload-image="uploadAnalysisImage"
+              @download-image="downloadAnalysisImage"
+              @delete-image="deleteAnalysisImage"
             />
 
             <ReviewFormSection
@@ -311,6 +315,8 @@ import {
   downloadSolutionDesignAnalysisGeneratedFile,
   downloadSolutionDesignReviewGeneratedFile,
   downloadSolutionDesignWorkflowFile,
+  deleteStageDocumentOnlineFormImage,
+  downloadStageDocumentOnlineFormImage,
   getSolutionDesignAnalysisForm,
   getSolutionDesignReviewForm,
   processSolutionDesignQuotationResult,
@@ -323,6 +329,7 @@ import {
   submitSolutionDesignReviewForm,
   submitSolutionDesignWorkflowNode,
   toReadableApiError,
+  uploadStageDocumentOnlineFormImage,
   uploadSolutionDesignWorkflowFile
 } from '../../api/projects.js';
 
@@ -394,6 +401,8 @@ const reviewRepeatableFieldKeys = Object.freeze([
   'actionItems'
 ]);
 
+const MAX_ONLINE_FORM_IMAGE_FILE_SIZE = 10 * 1024 * 1024;
+
 const roleDefinitions = [
   { roleKey: 'project_manager', label: '项目经理', payloadKey: 'projectManagerUserId' },
   { roleKey: 'technical_owner', label: '技术负责人', payloadKey: 'technicalOwnerUserId' },
@@ -409,10 +418,47 @@ const analysisAutoFields = [
   { key: 'customerName', label: '客户名称', type: 'readonly' }
 ];
 
-const analysisFields = [
-  { key: 'customerRequirements', label: '客户需求', type: 'textarea', required: true },
-  { key: 'technicalRisks', label: '技术风险', type: 'textarea', required: true },
-  { key: 'solutionScope', label: '方案范围', type: 'textarea', required: true }
+const analysisEnvironmentFields = [
+  { key: 'workingTemperatureMin', label: '工作温度最小值', type: 'text' },
+  { key: 'workingTemperatureMax', label: '工作温度最大值', type: 'text' },
+  { key: 'storageTemperatureMin', label: '储存温度最小值', type: 'text' },
+  { key: 'storageTemperatureMax', label: '储存温度最大值', type: 'text' },
+  { key: 'workingHumidityMin', label: '工作湿度最小值', type: 'text' },
+  { key: 'workingHumidityMax', label: '工作湿度最大值', type: 'text' },
+  { key: 'storageHumidityMin', label: '储存湿度最小值', type: 'text' },
+  { key: 'storageHumidityMax', label: '储存湿度最大值', type: 'text' },
+  { key: 'noiseLimitValue', label: '噪音上限', type: 'text' },
+  { key: 'ipProtectionLevel', label: 'IP 防护等级', type: 'text' },
+  { key: 'antiCorrosionGrade', label: '防腐等级', type: 'text' },
+  { key: 'altitudeLimitValue', label: '海拔高度上限', type: 'text' },
+  { key: 'explosionProofRequirement', label: '防爆要求', type: 'text' }
+];
+
+const analysisSiteFields = [
+  { key: 'siteConditionDescription', label: '场地说明', type: 'textarea' },
+  { key: 'powerSupply', label: '电源', type: 'text' },
+  { key: 'airSupply', label: '气源', type: 'text' },
+  { key: 'hydraulicSource', label: '液压源', type: 'text' },
+  { key: 'liftingEquipment', label: '吊装设备', type: 'text' }
+];
+
+const analysisProcessFields = [
+  { key: 'workpieceDescription', label: '工件描述', type: 'textarea', required: true },
+  { key: 'operationProcessDescription', label: '作业工艺', type: 'textarea', required: true },
+  { key: 'projectTargetDescription', label: '项目目标说明', type: 'textarea', required: true }
+];
+
+const analysisImageFields = [
+  { key: 'siteConditionImages', label: '场地情况图片', maxImages: 3 },
+  { key: 'workpieceImages', label: '工件描述图片', maxImages: 3 },
+  { key: 'operationProcessImages', label: '作业工艺图片', maxImages: 3 },
+  { key: 'projectTargetImages', label: '目标图片', maxImages: 3 }
+];
+
+const analysisFieldGroups = [
+  { title: '环境要求', fields: analysisEnvironmentFields },
+  { title: '场地情况', fields: analysisSiteFields },
+  { title: '工件、工艺和目标', fields: analysisProcessFields }
 ];
 
 const reviewFields = [
@@ -485,6 +531,11 @@ const quotationRejectAction = ref('return_to_rd_cost');
 const analysisFormDto = ref(null);
 const analysisFormData = reactive({});
 const analysisFormLoading = ref(false);
+const analysisImageState = reactive({
+  uploadPendingFieldKey: '',
+  downloadPendingId: null,
+  deletePendingId: null
+});
 const reviewFormDtos = reactive({});
 const reviewFormData = reactive({});
 const reviewFormLoading = ref(false);
@@ -926,6 +977,169 @@ async function downloadAnalysisGeneratedFile() {
   );
 }
 
+function getAnalysisImages() {
+  const dto = analysisFormDto.value || {};
+  return Array.isArray(dto.images)
+    ? dto.images
+    : Array.isArray(dto.form?.images)
+      ? dto.form.images
+      : [];
+}
+
+function setAnalysisImages(images) {
+  const sortedImages = [...images].sort((left, right) => {
+    if (left.fieldKey !== right.fieldKey) {
+      return String(left.fieldKey).localeCompare(String(right.fieldKey));
+    }
+    return String(left.uploadedAt || '').localeCompare(String(right.uploadedAt || '')) || Number(left.id) - Number(right.id);
+  });
+  const current = analysisFormDto.value;
+  if (!current) {
+    return;
+  }
+  analysisFormDto.value = {
+    ...current,
+    images: sortedImages,
+    form: current.form
+      ? {
+          ...current.form,
+          images: sortedImages
+        }
+      : current.form
+  };
+}
+
+function upsertAnalysisImage(fieldKey, image) {
+  const currentImages = getAnalysisImages().filter((item) => String(item.id) !== String(image.id));
+  setAnalysisImages([...currentImages, { ...image, fieldKey: image.fieldKey || fieldKey }]);
+}
+
+function removeAnalysisImage(imageId) {
+  setAnalysisImages(getAnalysisImages().filter((item) => String(item.id) !== String(imageId)));
+}
+
+function markAnalysisGeneratedFileOutdated() {
+  const current = analysisFormDto.value;
+  if (!current) {
+    return;
+  }
+
+  analysisFormDto.value = {
+    ...current,
+    permissions: {
+      ...current.permissions,
+      canSubmitNode: false
+    },
+    form: current.form
+      ? {
+          ...current.form,
+          generatedFile: current.form.generatedFile
+            ? {
+                ...current.form.generatedFile,
+                status: 'not_started',
+                fileName: null,
+                mimeType: null,
+                fileSize: null,
+                generatedAt: null,
+                generatedByUserId: null,
+                errorMessage: null,
+                canDownload: false
+              }
+            : current.form.generatedFile
+        }
+      : current.form
+  };
+}
+
+async function uploadAnalysisImage({ field, file }) {
+  localError.value = '';
+  localMessage.value = '';
+  const stageDocumentId = analysisFormDto.value?.stageDocumentId || analysisFormDto.value?.form?.stageDocumentId;
+  if (!stageDocumentId || !analysisFormDto.value?.permissions?.canEditForm) {
+    localError.value = '当前账号无权上传该在线表单图片。';
+    return;
+  }
+  const limit = Number(field?.maxImages) || 3;
+  if (getAnalysisImages().filter((image) => image.fieldKey === field.key).length >= limit) {
+    localError.value = `该区域最多上传 ${limit} 张图片。`;
+    return;
+  }
+  if (!file || !['image/png', 'image/jpeg'].includes(file.type) || file.size <= 0 || file.size > MAX_ONLINE_FORM_IMAGE_FILE_SIZE) {
+    localError.value = '图片文件无效，请选择 10MB 以内的 png/jpg/jpeg 图片。';
+    return;
+  }
+
+  analysisImageState.uploadPendingFieldKey = field.key;
+  try {
+    const image = await uploadStageDocumentOnlineFormImage(
+      props.projectId,
+      stageDocumentId,
+      field.key,
+      file,
+      props.authToken
+    );
+    upsertAnalysisImage(field.key, image);
+    markAnalysisGeneratedFileOutdated();
+    localMessage.value = '项目方案分析表图片已上传，请重新提交表单生成文件。';
+  } catch (error) {
+    localError.value = toReadableApiError(error);
+  } finally {
+    analysisImageState.uploadPendingFieldKey = '';
+  }
+}
+
+async function downloadAnalysisImage({ image }) {
+  localError.value = '';
+  localMessage.value = '';
+  const stageDocumentId = analysisFormDto.value?.stageDocumentId || analysisFormDto.value?.form?.stageDocumentId;
+  if (!stageDocumentId || !image?.id) {
+    localError.value = '图片尚不可下载。';
+    return;
+  }
+
+  analysisImageState.downloadPendingId = image.id;
+  try {
+    const download = await downloadStageDocumentOnlineFormImage(
+      props.projectId,
+      stageDocumentId,
+      image.id,
+      props.authToken
+    );
+    saveBlob(download, image.originalFileName || '项目方案分析表图片');
+  } catch (error) {
+    localError.value = toReadableApiError(error);
+  } finally {
+    analysisImageState.downloadPendingId = null;
+  }
+}
+
+async function deleteAnalysisImage({ image }) {
+  localError.value = '';
+  localMessage.value = '';
+  const stageDocumentId = analysisFormDto.value?.stageDocumentId || analysisFormDto.value?.form?.stageDocumentId;
+  if (!stageDocumentId || !image?.id) {
+    localError.value = '图片尚不可删除。';
+    return;
+  }
+
+  analysisImageState.deletePendingId = image.id;
+  try {
+    await deleteStageDocumentOnlineFormImage(
+      props.projectId,
+      stageDocumentId,
+      image.id,
+      props.authToken
+    );
+    removeAnalysisImage(image.id);
+    markAnalysisGeneratedFileOutdated();
+    localMessage.value = '项目方案分析表图片已删除，请重新提交表单生成文件。';
+  } catch (error) {
+    localError.value = toReadableApiError(error);
+  } finally {
+    analysisImageState.deletePendingId = null;
+  }
+}
+
 async function loadReviewForm(nodeKey, { sequence = ++formReloadSequence } = {}) {
   if (!nodeKey || !props.projectId) {
     return;
@@ -1123,6 +1337,13 @@ function isGenericSubmitNode(node) {
 }
 
 function canExecuteGenericSubmit(node) {
+  if (node?.nodeKey === 'solution_analysis') {
+    const generatedFile = analysisFormDto.value?.form?.generatedFile;
+    if (generatedFile && (generatedFile.status !== 'generated' || generatedFile.canDownload !== true)) {
+      return false;
+    }
+  }
+
   return isGenericSubmitNode(node) && node?.permissions?.canSubmit === true && !isPending(`submit:${node.nodeKey}`);
 }
 
@@ -1163,7 +1384,7 @@ function formatUser(user) {
   if (!user) {
     return '-';
   }
-  return user.name || user.displayName || user.account || `用户 ${user.id}`;
+  return user.name || user.displayName || user.display_name || user.account || `用户 ${user.id}`;
 }
 
 function firstNonEmptyValue(...values) {
@@ -1451,9 +1672,127 @@ const FormFieldList = defineComponent({
   }
 });
 
+const AnalysisImageFieldList = defineComponent({
+  name: 'AnalysisImageFieldList',
+  props: {
+    fields: {
+      type: Array,
+      required: true
+    },
+    images: {
+      type: Array,
+      default: () => []
+    },
+    disabled: {
+      type: Boolean,
+      default: false
+    },
+    imageState: {
+      type: Object,
+      default: () => ({})
+    },
+    hasStageDocument: {
+      type: Boolean,
+      default: false
+    }
+  },
+  emits: ['upload', 'download', 'delete'],
+  setup(componentProps, { emit: componentEmit }) {
+    function fieldImages(field) {
+      return componentProps.images.filter((image) => image.fieldKey === field.key);
+    }
+
+    function isUploadPending(field) {
+      return componentProps.imageState?.uploadPendingFieldKey === field.key;
+    }
+
+    function isDownloadPending(image) {
+      return Boolean(image?.id) && String(componentProps.imageState?.downloadPendingId ?? '') === String(image.id);
+    }
+
+    function isDeletePending(image) {
+      return Boolean(image?.id) && String(componentProps.imageState?.deletePendingId ?? '') === String(image.id);
+    }
+
+    function handleFileChange(field, event) {
+      const file = event.target.files?.[0] || null;
+      event.target.value = '';
+      if (!file || componentProps.disabled || isUploadPending(field)) {
+        return;
+      }
+      componentEmit('upload', { field, file });
+    }
+
+    function renderImageField(field) {
+      const images = fieldImages(field);
+      const limit = Number(field.maxImages) || 3;
+      const uploadDisabled =
+        componentProps.disabled ||
+        !componentProps.hasStageDocument ||
+        isUploadPending(field) ||
+        images.length >= limit;
+      return h('label', { key: field.key, class: 'form-grid__wide online-form-image-field' }, [
+        h('span', field.label),
+        images.length
+          ? h(
+              'div',
+              { class: 'online-form-image-field__list' },
+              images.map((image, imageIndex) =>
+                h('div', { key: image.id, class: 'online-form-image-field__current' }, [
+                  h('div', [
+                    h('strong', `${imageIndex + 1}. ${image.originalFileName}`),
+                    h('small', formatFileSize(image.fileSize))
+                  ]),
+                  h('div', { class: 'online-form-image-field__actions' }, [
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        class: 'ghost-button',
+                        disabled: isDownloadPending(image),
+                        onClick: () => componentEmit('download', { field, image })
+                      },
+                      isDownloadPending(image) ? '下载中...' : '下载'
+                    ),
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        class: 'ghost-button',
+                        disabled: componentProps.disabled || isDeletePending(image),
+                        onClick: () => componentEmit('delete', { field, image })
+                      },
+                      isDeletePending(image) ? '删除中...' : '删除'
+                    )
+                  ])
+                ])
+              )
+            )
+          : null,
+        h('div', { class: 'online-form-image-field__upload' }, [
+          h('input', {
+            type: 'file',
+            accept: 'image/png,image/jpeg',
+            disabled: uploadDisabled,
+            onChange: (event) => handleFileChange(field, event)
+          }),
+          h('span', isUploadPending(field) ? '上传中...' : images.length >= limit ? `已达上限 ${limit} 张` : `选择图片（${images.length}/${limit}）`)
+        ])
+      ]);
+    }
+
+    return () =>
+      h(
+        'div',
+        { class: 'form-grid solution-design-workflow__form-grid' },
+        componentProps.fields.map((field) => renderImageField(field))
+      );
+  }
+});
+
 const AnalysisFormSection = defineComponent({
   name: 'AnalysisFormSection',
-  components: { GeneratedFilePanel, FormFieldList },
+  components: { AnalysisImageFieldList, GeneratedFilePanel, FormFieldList },
   props: {
     dto: {
       type: Object,
@@ -1474,9 +1813,13 @@ const AnalysisFormSection = defineComponent({
     pendingAction: {
       type: String,
       default: ''
+    },
+    imageState: {
+      type: Object,
+      default: () => ({})
     }
   },
-  emits: ['load', 'update', 'save', 'submit', 'download'],
+  emits: ['load', 'update', 'save', 'submit', 'download', 'upload-image', 'download-image', 'delete-image'],
   setup(componentProps, { emit: componentEmit }) {
     return () =>
       h('section', { class: 'solution-design-workflow__section' }, [
@@ -1504,13 +1847,38 @@ const AnalysisFormSection = defineComponent({
               h(
                 'p',
                 { class: 'inline-muted solution-design-workflow__form-note' },
-                '项目编号、项目名称和客户名称由项目基础信息自动带入；客户需求、技术风险和方案范围由技术负责人填写。'
+                '项目编号、项目名称和客户名称由项目基础信息自动带入；生成文件按当前项目方案分析表模板写入已确认单元格。'
               ),
-              h(FormFieldList, {
-                fields: analysisFields,
-                formData: componentProps.formData,
+              ...analysisFieldGroups.flatMap((group) => [
+                h('div', { class: 'solution-design-workflow__subheading' }, [
+                  h('span', { class: 'section-eyebrow' }, group.title)
+                ]),
+                group.note
+                  ? h(
+                      'p',
+                      { class: 'inline-muted solution-design-workflow__form-note' },
+                      group.note
+                    )
+                  : null,
+                h(FormFieldList, {
+                  fields: group.fields,
+                  formData: componentProps.formData,
+                  disabled: !componentProps.dto.permissions?.canEditForm,
+                  onUpdate: (payload) => componentEmit('update', payload)
+                })
+              ]),
+              h('div', { class: 'solution-design-workflow__subheading' }, [
+                h('span', { class: 'section-eyebrow' }, '图片')
+              ]),
+              h(AnalysisImageFieldList, {
+                fields: analysisImageFields,
+                images: componentProps.dto.images || componentProps.dto.form?.images || [],
                 disabled: !componentProps.dto.permissions?.canEditForm,
-                onUpdate: (payload) => componentEmit('update', payload)
+                imageState: componentProps.imageState,
+                hasStageDocument: Boolean(componentProps.dto.stageDocumentId || componentProps.dto.form?.stageDocumentId),
+                onUpload: (payload) => componentEmit('upload-image', payload),
+                onDownload: (payload) => componentEmit('download-image', payload),
+                onDelete: (payload) => componentEmit('delete-image', payload)
               })
             ]
           : null,

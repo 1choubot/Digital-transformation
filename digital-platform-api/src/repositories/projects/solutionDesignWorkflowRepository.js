@@ -4,6 +4,7 @@ import { pool } from '../../db/pool.js';
 import {
   BUSINESS_DEPARTMENT,
   ORGANIZATION_ROLE,
+  SOLUTION_DESIGN_ANALYSIS_FORM_DOCUMENT_CODES,
   SOLUTION_DESIGN_ANALYSIS_FORM_STATUS,
   SOLUTION_DESIGN_ANALYSIS_FORM_DEFINITION,
   SOLUTION_DESIGN_COST_UPLOAD_SLOT_BY_NODE_KEY,
@@ -54,6 +55,11 @@ import {
 } from '../../storage/stageDocumentGeneratedFileStorage.js';
 import { renderXlsxTemplate } from '../../utils/ooxmlRenderer.js';
 import {
+  listStageDocumentOnlineFormImagesForDocument,
+  listStageDocumentOnlineFormImagesForGeneration,
+  readOnlineFormImageForGeneration
+} from '../stageDocuments/onlineFormImageRepository.js';
+import {
   OPERATION_ACTION_TYPE,
   OPERATION_TARGET_TYPE,
   insertOperationLog
@@ -80,6 +86,30 @@ const REVIEW_FORM_REPEATABLE_FIELD_KEYS = Object.freeze([
   'actionItems'
 ]);
 
+const ANALYSIS_FORM_TEXT_FIELD_KEYS = Object.freeze([
+  'workingTemperatureMin',
+  'workingTemperatureMax',
+  'storageTemperatureMin',
+  'storageTemperatureMax',
+  'workingHumidityMin',
+  'workingHumidityMax',
+  'storageHumidityMin',
+  'storageHumidityMax',
+  'noiseLimitValue',
+  'ipProtectionLevel',
+  'antiCorrosionGrade',
+  'altitudeLimitValue',
+  'explosionProofRequirement',
+  'siteConditionDescription',
+  'powerSupply',
+  'airSupply',
+  'hydraulicSource',
+  'liftingEquipment',
+  'workpieceDescription',
+  'operationProcessDescription',
+  'projectTargetDescription'
+]);
+
 const defaultSolutionDesignUploadStorage = {
   createStorageKey: createSolutionDesignUploadStorageKey,
   writeFile: writeSolutionDesignUploadFile,
@@ -102,6 +132,13 @@ const defaultSolutionDesignGeneratedFileStorage = {
 
 function resolveGeneratedFileStorage(db, storage) {
   return storage || db?.generatedFileStorage || defaultSolutionDesignGeneratedFileStorage;
+}
+
+function resolveOnlineFormImageReader(db) {
+  if (db?.onlineFormImageStorage?.readFile) {
+    return (image) => db.onlineFormImageStorage.readFile(image.storageKey, image);
+  }
+  return readOnlineFormImageForGeneration;
 }
 
 const PROCESSABLE_NODE_STATUSES = new Set([
@@ -211,11 +248,11 @@ function normalizeUploadFile(file) {
 }
 
 function normalizeAnalysisFormPayload(payload = {}) {
-  const formData = Object.hasOwn(payload, 'formData') ? payload.formData : payload;
+  const sourceFormData = Object.hasOwn(payload, 'formData') ? payload.formData : payload;
   if (
-    formData === null ||
-    Array.isArray(formData) ||
-    typeof formData !== 'object'
+    sourceFormData === null ||
+    Array.isArray(sourceFormData) ||
+    typeof sourceFormData !== 'object'
   ) {
     throw new SolutionDesignWorkflowError(
       SOLUTION_DESIGN_ERROR.INVALID_ANALYSIS_FORM,
@@ -223,6 +260,13 @@ function normalizeAnalysisFormPayload(payload = {}) {
       400,
       ['formData']
     );
+  }
+
+  const formData = {};
+  for (const fieldKey of ANALYSIS_FORM_TEXT_FIELD_KEYS) {
+    if (Object.hasOwn(sourceFormData, fieldKey)) {
+      formData[fieldKey] = String(sourceFormData[fieldKey] ?? '').trim();
+    }
   }
 
   const formDataJson = JSON.stringify(formData);
@@ -722,6 +766,37 @@ async function selectCurrentAnalysisForm(executor, projectId, { forUpdate = fals
   );
 
   return rows[0] || null;
+}
+
+async function selectProjectStageDocumentByCode(executor, projectId, documentCode, { forUpdate = false } = {}) {
+  const [rows] = await executor.execute(
+    `SELECT
+      d.*,
+      u.department AS responsible_department,
+      u.organization_role AS responsible_organization_role,
+      u.role AS responsible_role,
+      u.is_enabled AS responsible_is_enabled
+    FROM project_stage_documents d
+    LEFT JOIN users u
+      ON u.id = d.responsible_user_id
+    WHERE d.project_id = ?
+      AND d.document_code = ?
+    LIMIT 1${forUpdate ? ' FOR UPDATE' : ''}`,
+    [projectId, documentCode]
+  );
+
+  return rows[0] || null;
+}
+
+async function selectProjectStageDocumentByAnyCode(executor, projectId, documentCodes, { forUpdate = false } = {}) {
+  for (const documentCode of documentCodes) {
+    const row = await selectProjectStageDocumentByCode(executor, projectId, documentCode, { forUpdate });
+    if (row) {
+      return row;
+    }
+  }
+
+  return null;
 }
 
 async function selectMaxAnalysisFormRevision(executor, projectId) {
@@ -1242,6 +1317,86 @@ function normalizeTemplateDisplayValue(value) {
   return String(value);
 }
 
+function cleanTemplateValue(value) {
+  return normalizeTemplateDisplayValue(value).trim();
+}
+
+const SOLUTION_DESIGN_TEMPLATE_VALUE_BUILDERS = Object.freeze({
+  temperatureRange: ([min, max]) => {
+    if (!cleanTemplateValue(min) && !cleanTemplateValue(max)) {
+      return '';
+    }
+    return `工作温度：（${cleanTemplateValue(min)}）℃~（${cleanTemplateValue(max)}）℃`;
+  },
+  storageTemperatureRange: ([min, max]) => {
+    if (!cleanTemplateValue(min) && !cleanTemplateValue(max)) {
+      return '';
+    }
+    return `储存温度：（${cleanTemplateValue(min)}）℃~（${cleanTemplateValue(max)}）℃`;
+  },
+  humidityRange: ([min, max]) => {
+    if (!cleanTemplateValue(min) && !cleanTemplateValue(max)) {
+      return '';
+    }
+    return `工作湿度：（${cleanTemplateValue(min)}）%~（${cleanTemplateValue(max)}）%`;
+  },
+  storageHumidityRange: ([min, max]) => {
+    if (!cleanTemplateValue(min) && !cleanTemplateValue(max)) {
+      return '';
+    }
+    return `储存湿度：（${cleanTemplateValue(min)}）%~（${cleanTemplateValue(max)}）%`;
+  },
+  noiseLimit: ([value]) => {
+    if (!cleanTemplateValue(value)) {
+      return '';
+    }
+    return `噪音：≤（${cleanTemplateValue(value)}）dB`;
+  },
+  ipProtection: ([value]) => {
+    if (!cleanTemplateValue(value)) {
+      return '';
+    }
+    const level = cleanTemplateValue(value).replace(/^IP/i, '');
+    return `IP防护等级：IP（${level}）`;
+  },
+  antiCorrosion: ([value]) => {
+    if (!cleanTemplateValue(value)) {
+      return '';
+    }
+    return `防腐等级：（${cleanTemplateValue(value)}）`;
+  },
+  altitudeLimit: ([value]) => {
+    if (!cleanTemplateValue(value)) {
+      return '';
+    }
+    return `海拔高度：≤（${cleanTemplateValue(value)}）m`;
+  },
+  explosionProof: ([value]) => {
+    if (!cleanTemplateValue(value)) {
+      return '';
+    }
+    return `防爆要求：（${cleanTemplateValue(value)}）`;
+  },
+  siteCondition: ([value]) => {
+    if (!cleanTemplateValue(value)) {
+      return '';
+    }
+    return `可用场地尺寸（如有图纸请提供）：\n${normalizeTemplateDisplayValue(value)}`;
+  },
+  siteUtilities: ([powerSupply, airSupply, hydraulicSource]) => {
+    if (![powerSupply, airSupply, hydraulicSource].some((value) => cleanTemplateValue(value))) {
+      return '';
+    }
+    return `电源：（${cleanTemplateValue(powerSupply)}）  气源：（${cleanTemplateValue(airSupply)}）  液压源：（${cleanTemplateValue(hydraulicSource)}）`;
+  },
+  liftingEquipment: ([value]) => {
+    if (!cleanTemplateValue(value)) {
+      return '';
+    }
+    return `吊装设备：${normalizeTemplateDisplayValue(value)}`;
+  }
+});
+
 function getTemplateSourceValue(source, pathExpression) {
   if (!pathExpression) {
     return null;
@@ -1252,12 +1407,39 @@ function getTemplateSourceValue(source, pathExpression) {
     .reduce((value, key) => (value === null || value === undefined ? null : value[key]), source);
 }
 
+function getTemplateSourceValues(source, mapping) {
+  if (Array.isArray(mapping.sourcePaths)) {
+    return mapping.sourcePaths.map((pathExpression) => getTemplateSourceValue(source, pathExpression));
+  }
+
+  return [getTemplateSourceValue(source, mapping.source)];
+}
+
+function buildTemplateMappingValue(mapping, source) {
+  if (Object.hasOwn(mapping, 'value')) {
+    return mapping.value;
+  }
+
+  const values = getTemplateSourceValues(source, mapping);
+  if (!mapping.valueBuilder) {
+    return values[0];
+  }
+
+  const builder = SOLUTION_DESIGN_TEMPLATE_VALUE_BUILDERS[mapping.valueBuilder];
+  if (!builder) {
+    throw new Error(`Solution design template value builder is not registered: ${mapping.valueBuilder}`);
+  }
+
+  return builder(values);
+}
+
 function buildGeneratedFormSource({ projectRow, definition, formRow, roleState }) {
   const formData = parseStoredJson(formRow.form_data_json, {});
   const revision = Number(formRow.revision ?? 1);
   const submittedAt = formRow.submitted_at || '';
   const submittedByName = formRow.submitted_by_display_name || '';
-  const recorderName = normalizeTemplateDisplayValue(formData.recorder || submittedByName || '');
+  const submittedByAccount = formRow.submitted_by_account || '';
+  const recorderName = normalizeTemplateDisplayValue(formData.recorder || submittedByName || submittedByAccount || '');
   const reviewRoundLabel = definition.reviewType === 'customer'
     ? `甲方，第（${revision}）次`
     : definition.reviewType === 'internal'
@@ -1300,10 +1482,11 @@ function buildGeneratedFormSource({ projectRow, definition, formRow, roleState }
       revision,
       submittedAt,
       submittedByName,
+      submittedByAccount,
       reviewRoundLabel,
       generatedContext,
       recorderName,
-      recorderLabel: submittedByName ? `记录人：${submittedByName}` : '记录人：'
+      recorderLabel: recorderName ? `记录人：${recorderName}` : '记录人：'
     }
   };
 }
@@ -1312,7 +1495,7 @@ function buildGeneratedFormCellValues({ projectRow, definition, formRow, roleSta
   const source = buildGeneratedFormSource({ projectRow, definition, formRow, roleState });
   const cellValues = {};
   for (const mapping of definition.templateMappings || []) {
-    const rawValue = Object.hasOwn(mapping, 'value') ? mapping.value : getTemplateSourceValue(source, mapping.source);
+    const rawValue = buildTemplateMappingValue(mapping, source);
     if (mapping.repeatRows) {
       const { column, startRow, endRow } = mapping.repeatRows;
       const start = Number(startRow);
@@ -1330,7 +1513,10 @@ function buildGeneratedFormCellValues({ projectRow, definition, formRow, roleSta
           : rows[offset] || '';
         cellValues[`${column}${start + offset}`] = {
           value: truncateGeneratedCellValue(normalizeTemplateDisplayValue(rowValue)),
-          preserveTemplateWhenEmpty: mapping.preserveTemplateWhenEmpty === true
+          preserveTemplateWhenEmpty: mapping.preserveTemplateWhenEmpty === true,
+          preserveStyle: mapping.preserveStyle !== false,
+          textFont: mapping.textFont || '',
+          fontSize: mapping.fontSize || null
         };
       }
       continue;
@@ -1342,10 +1528,60 @@ function buildGeneratedFormCellValues({ projectRow, definition, formRow, roleSta
 
     cellValues[mapping.target] = {
       value: truncateGeneratedCellValue(normalizeTemplateDisplayValue(rawValue)),
-      preserveTemplateWhenEmpty: mapping.preserveTemplateWhenEmpty === true
+      preserveTemplateWhenEmpty: mapping.preserveTemplateWhenEmpty === true,
+      preserveStyle: mapping.preserveStyle !== false,
+      textFont: mapping.textFont || '',
+      fontSize: mapping.fontSize || null
     };
   }
   return cellValues;
+}
+
+function groupOnlineFormImagesByFieldKey(images = []) {
+  const grouped = {};
+  for (const image of images) {
+    if (!grouped[image.fieldKey]) {
+      grouped[image.fieldKey] = [];
+    }
+    grouped[image.fieldKey].push(image);
+  }
+  return grouped;
+}
+
+async function buildGeneratedFormImageValues({ executor, projectRow, definition, stageDocumentRow, readOnlineFormImage }) {
+  const imageMappings = definition.imageMappings || [];
+  if (imageMappings.length === 0 || !stageDocumentRow?.id) {
+    return [];
+  }
+
+  const formImages = groupOnlineFormImagesByFieldKey(
+    await listStageDocumentOnlineFormImagesForGeneration(executor, projectRow.id, stageDocumentRow.id)
+  );
+  const imageValues = [];
+  for (const mapping of imageMappings) {
+    const images = getTemplateSourceValue({ formImages }, mapping.source);
+    const activeImages = Array.isArray(images) ? images : [];
+    if (activeImages.length === 0) {
+      continue;
+    }
+
+    const maxImages = Number.isSafeInteger(Number(mapping.maxImages)) ? Number(mapping.maxImages) : 3;
+    for (const [index, image] of activeImages.slice(0, maxImages).entries()) {
+      const buffer = await readOnlineFormImage(image);
+      imageValues.push({
+        target: mapping.target,
+        layoutIndex: index,
+        layoutCount: Math.min(activeImages.length, maxImages),
+        originalFileName: image.originalFileName,
+        mimeType: image.mimeType,
+        buffer,
+        preserveAspectRatio: mapping.preserveAspectRatio !== false,
+        mergeAdjustment: mapping.mergeAdjustment || null
+      });
+    }
+  }
+
+  return imageValues;
 }
 
 async function readSolutionDesignTemplate(templateName) {
@@ -1721,10 +1957,20 @@ function buildAnalysisFormPermissions({ projectRow, analysisNode, roleState, use
   };
 }
 
-function buildAnalysisFormDto({ projectRow, nodes, rolesRow, uploadSlots, analysisFormRow, user }) {
+function buildAnalysisFormDto({
+  projectRow,
+  nodes,
+  rolesRow,
+  uploadSlots,
+  analysisFormRow,
+  user,
+  analysisStageDocumentRow = null,
+  analysisImages = []
+}) {
   const materializedNodes = nodes.length > 0 ? nodes : buildVirtualNodes();
   const roleState = buildRoleStateWithoutUserDetails(projectRow, rolesRow);
   const analysisNode = getNodeByKey(materializedNodes, SOLUTION_DESIGN_NODE_KEY.ANALYSIS);
+  const form = mapAnalysisForm(analysisFormRow);
 
   return {
     projectId: projectRow.id,
@@ -1732,7 +1978,15 @@ function buildAnalysisFormDto({ projectRow, nodes, rolesRow, uploadSlots, analys
     nodeKey: SOLUTION_DESIGN_NODE_KEY.ANALYSIS,
     nodeStatus: analysisNode?.status ?? SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED,
     nodeRevision: analysisNode?.current_revision ?? 1,
-    form: mapAnalysisForm(analysisFormRow),
+    stageDocumentId: analysisStageDocumentRow?.id ?? null,
+    images: analysisImages,
+    form: form
+      ? {
+          ...form,
+          stageDocumentId: analysisStageDocumentRow?.id ?? null,
+          images: analysisImages
+        }
+      : null,
     permissions: buildAnalysisFormPermissions({
       projectRow,
       analysisNode,
@@ -3979,7 +4233,9 @@ async function generateSolutionDesignFormFile({
   formRow,
   actorUserId,
   storage,
-  roleState
+  roleState,
+  stageDocumentRow = null,
+  readOnlineFormImage = readOnlineFormImageForGeneration
 }) {
   let storageKey = null;
   const templateName = definition.templateName;
@@ -3991,13 +4247,21 @@ async function generateSolutionDesignFormFile({
 
   try {
     const templateBuffer = await readSolutionDesignTemplate(templateName);
+    const imageValues = await buildGeneratedFormImageValues({
+      executor,
+      projectRow,
+      definition,
+      stageDocumentRow,
+      readOnlineFormImage
+    });
     const generatedBuffer = renderXlsxTemplate(templateBuffer, {
       cellValues: buildGeneratedFormCellValues({
         projectRow,
         definition,
         formRow,
         roleState
-      })
+      }),
+      imageValues
     });
     storageKey = storage.createStorageKey({
       projectId: projectRow.id,
@@ -4030,7 +4294,9 @@ async function generateAndPersistAnalysisFormFile(executor, {
   formRow,
   actorUserId,
   storage,
-  roleState
+  roleState,
+  stageDocumentRow,
+  readOnlineFormImage
 }) {
   const generation = await generateSolutionDesignFormFile({
     executor,
@@ -4039,7 +4305,9 @@ async function generateAndPersistAnalysisFormFile(executor, {
     formRow,
     actorUserId,
     storage,
-    roleState
+    roleState,
+    stageDocumentRow,
+    readOnlineFormImage
   });
 
   if (generation.success) {
@@ -5876,6 +6144,21 @@ export async function getSolutionDesignAnalysisForm({ projectId, user }, db = po
     const nodes = await ensureSolutionDesignNodes(connection, projectRow);
     const uploadSlots = await ensureSolutionDesignUploadSlots(connection, projectRow);
     const analysisFormRow = await selectCurrentAnalysisForm(connection, projectId);
+    const analysisStageDocumentRow = await selectProjectStageDocumentByAnyCode(
+      connection,
+      projectId,
+      SOLUTION_DESIGN_ANALYSIS_FORM_DOCUMENT_CODES
+    );
+    const analysisImages = analysisStageDocumentRow
+      ? await listStageDocumentOnlineFormImagesForDocument({
+          executor: connection,
+          projectId,
+          documentId: analysisStageDocumentRow.id,
+          user,
+          project: projectRow,
+          document: analysisStageDocumentRow
+        })
+      : [];
 
     return buildAnalysisFormDto({
       projectRow,
@@ -5883,7 +6166,9 @@ export async function getSolutionDesignAnalysisForm({ projectId, user }, db = po
       rolesRow,
       uploadSlots,
       analysisFormRow,
-      user
+      user,
+      analysisStageDocumentRow,
+      analysisImages
     });
   });
 }
@@ -5895,6 +6180,7 @@ async function saveOrSubmitSolutionDesignAnalysisForm(
 ) {
   const normalized = normalizeAnalysisFormPayload(payload);
   const storage = resolveGeneratedFileStorage(db, generatedFileStorage);
+  const readOnlineFormImage = resolveOnlineFormImageReader(db);
 
   return withConnection(db, async (connection) => {
     const projectRow = await selectProjectContext(connection, projectId, { forUpdate: true });
@@ -5916,6 +6202,12 @@ async function saveOrSubmitSolutionDesignAnalysisForm(
     assertNodeProcessable(analysisNode, SOLUTION_DESIGN_NODE_KEY.ANALYSIS, 'processed');
 
     const currentFormRow = await selectCurrentAnalysisForm(connection, projectId, { forUpdate: true });
+    const analysisStageDocumentRow = await selectProjectStageDocumentByAnyCode(
+      connection,
+      projectId,
+      SOLUTION_DESIGN_ANALYSIS_FORM_DOCUMENT_CODES,
+      { forUpdate: true }
+    );
     let savedFormRow = await saveAnalysisFormVersion(connection, {
       projectId,
       nodeRevision: analysisNode.current_revision,
@@ -5939,7 +6231,9 @@ async function saveOrSubmitSolutionDesignAnalysisForm(
         formRow: savedFormRow,
         actorUserId: user.id,
         storage,
-        roleState: buildRoleState({ projectRow, rolesRow, usersById: templateUsersById })
+        roleState: buildRoleState({ projectRow, rolesRow, usersById: templateUsersById }),
+        stageDocumentRow: analysisStageDocumentRow,
+        readOnlineFormImage
       });
     } else {
       await insertAnalysisFormLog(connection, {
@@ -5953,13 +6247,25 @@ async function saveOrSubmitSolutionDesignAnalysisForm(
 
     const refreshedNodes = await selectSolutionDesignNodes(connection, projectId);
     const uploadSlots = await selectSolutionDesignUploadSlots(connection, projectId);
+    const analysisImages = analysisStageDocumentRow
+      ? await listStageDocumentOnlineFormImagesForDocument({
+          executor: connection,
+          projectId,
+          documentId: analysisStageDocumentRow.id,
+          user,
+          project: projectRow,
+          document: analysisStageDocumentRow
+        })
+      : [];
     return buildAnalysisFormDto({
       projectRow,
       nodes: refreshedNodes.length > 0 ? refreshedNodes : nodes,
       rolesRow,
       uploadSlots,
       analysisFormRow: savedFormRow,
-      user
+      user,
+      analysisStageDocumentRow,
+      analysisImages
     });
   });
 }

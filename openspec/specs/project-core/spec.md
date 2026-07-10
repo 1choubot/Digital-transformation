@@ -2659,3 +2659,77 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **WHEN** 系统处理阶段推进
 - **THEN** 系统 SHALL treat the submit / approve / return / resubmit / history stage gate approval mechanism as legacy
 - **AND** 系统 SHALL NOT 将该机制作为主流程阶段推进前置条件
+
+### Requirement: C05 项目方案分析表生成文件字段
+系统 MUST 按项目方案分析表模板填充 C05 项目方案分析表的确认字段，且新保存/提交数据 MUST 只保留模板已确认字段。
+
+#### Scenario: C05 生成文件包含项目方案分析关键字段
+- **WHEN** 技术负责人提交 C05 项目方案分析表在线表单并生成文件成功
+- **THEN** 生成文件 MUST 包含项目编号和项目名称等模板已确认的项目基础信息
+- **AND** 生成文件 MUST 按模板填充环境要求字段，包括工作温度、储存温度、工作湿度、储存湿度、噪音、IP、防腐、海拔、防爆中的已提交字段
+- **AND** 生成文件 MUST 按模板填充场地情况字段，包括场地说明、电源、气源、液压源、吊装设备中的已提交字段
+- **AND** 生成文件 MUST 按模板填充工件描述、作业工艺和项目目标说明
+- **AND** 新提交的 C05 表单数据 MUST NOT 保留 `customerRequirements`、`technicalRisks`、`solutionScope`
+
+#### Scenario: C05 生成文件包含模板图片
+- **WHEN** 技术负责人为 C05 上传场地情况、工件描述、作业工艺或目标图片
+- **AND** 提交 C05 项目方案分析表在线表单并生成文件成功
+- **THEN** 生成文件 MUST 将图片嵌入 `项目方案分析表-模板.xlsx` 对应区域
+- **AND** 生成文件 MUST 包含 Excel media、drawing 和 anchor 结构
+- **AND** 图片区域 MUST 与文本区域拆分，不得覆盖场地情况、工件描述、作业工艺或目标文本单元格
+- **AND** 系统 MUST 复用现有在线表单图片存储，不得新增图片表
+
+#### Scenario: C05 图片变更使生成文件失效
+- **WHEN** C05 当前表单已提交且生成文件成功
+- **AND** 技术负责人上传或删除 C05 在线表单图片
+- **THEN** 系统 MUST 保留当前 C05 表单提交状态
+- **AND** 系统 MUST 将当前 C05 生成文件状态置为未生成并清空下载文件引用
+- **AND** 用户重新提交 C05 表单前 MUST NOT 下载旧的项目方案分析表生成文件
+- **AND** 用户重新提交 C05 表单后生成文件 MUST 使用最新图片列表
+
+#### Scenario: C05 图片锚点兼容 legacy 资料编码
+- **WHEN** 项目资料行使用 v20260629 legacy 编码 `2.2` 表示项目方案分析表
+- **THEN** C05 图片上传、下载、删除和生成文件快照 MUST 使用该 `2.2` 资料行作为锚点
+- **AND** 系统 MUST NOT 因资料编码不是 `C05` 而禁用图片入口或拒绝 C05 图片 API
+
+#### Scenario: C05 图片查看覆盖方案设计角色
+- **WHEN** 用户属于当前项目方案设计 workflow 角色之一
+- **AND** 用户打开 C05 项目方案分析表
+- **THEN** 系统 MUST 允许其查看和下载 C05 已上传图片
+- **AND** 非技术负责人 MUST NOT 上传或删除 C05 图片
+- **AND** 技术负责人权限判断 MUST 继续校验当前项目阶段和 `solution_analysis` 节点可编辑状态
+
+#### Scenario: 在线表单图片字段按资料类型限制
+- **WHEN** 调用通用在线表单图片 API
+- **THEN** 立项项目需求表 MUST 只接受场地情况、工件描述和作业工艺图片字段
+- **AND** C05 项目方案分析表 MUST 接受场地情况、工件描述、作业工艺和目标图片字段
+- **AND** 系统 MUST 拒绝把 C05 专属 `projectTargetImages` 写入立项项目需求表
+
+### Requirement: C15 C16 方案评审记录表生成字段
+系统 MUST 按内部评审和客户评审上下文生成 C15/C16 评审类型、项目目标描述和记录人，且生成内容必须可读无乱码并使用正常中文字体。
+
+#### Scenario: C15 生成文件评审类型项目目标和记录人正确
+- **WHEN** 技术负责人提交 C15 内部方案评审记录表并生成文件成功
+- **THEN** 生成文件中的评审类型 MUST 精确为 `内部，第（n）次`
+- **AND** 生成文件中的项目目标描述 MUST 与在线表单提交的多行内容一致
+- **AND** 生成文件中的记录人 MUST 优先使用表单 `recorder`
+- **AND** 当表单 `recorder` 为空时 MUST 回退提交人显示名、账号或当前用户可读名
+- **AND** 记录人 MUST 写入 A42 合并单元格，内容为 `记录人：xxx`
+- **AND** B3 和 B12:B14 写入文本 MUST NOT 使用 Wingdings 2 样式
+- **AND** 生成文件 MUST NOT 出现乱码、错误编码或空记录人
+
+#### Scenario: C16 生成文件评审类型项目目标和记录人正确
+- **WHEN** 技术负责人提交 C16 客户方案评审记录表并生成文件成功
+- **THEN** 生成文件中的评审类型 MUST 精确为 `甲方，第（n）次`
+- **AND** 生成文件中的项目目标描述 MUST 与在线表单提交的多行内容一致
+- **AND** 生成文件中的记录人 MUST 优先使用表单 `recorder`
+- **AND** 当表单 `recorder` 为空时 MUST 回退提交人显示名、账号或当前用户可读名
+- **AND** 记录人 MUST 写入 A42 合并单元格，内容为 `记录人：xxx`
+- **AND** B3 和 B12:B14 写入文本 MUST NOT 使用 Wingdings 2 样式
+- **AND** 生成文件 MUST NOT 出现乱码、错误编码或空记录人
+
+#### Scenario: C15 C16 独立生成不串数据
+- **WHEN** 同一项目分别提交 C15 内部方案评审和 C16 客户方案评审
+- **THEN** C15 生成文件 MUST 使用 C15 当前 revision 的表单数据和内部评审类型
+- **AND** C16 生成文件 MUST 使用 C16 当前 revision 的表单数据和甲方评审类型
+- **AND** 系统 MUST NOT 在 C15/C16 间复用错误的项目目标描述、记录人或评审类型

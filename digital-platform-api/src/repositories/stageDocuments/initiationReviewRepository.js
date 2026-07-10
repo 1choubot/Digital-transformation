@@ -27,6 +27,7 @@ import {
   OPERATION_ACTION_TYPE,
   OPERATION_TARGET_TYPE
 } from '../operationLogRepository.js';
+import { tryAutoAdvanceProjectStage } from '../projects/stageAdvanceRepository.js';
 import {
   INITIATION_TEMPLATE_TRIGGER_EVENT,
   generateInitiationTemplateFile
@@ -1220,6 +1221,24 @@ export async function approveInitiationReviewNode({
     completed &&
     nodeKey === INITIATION_REVIEW_NODE_KEY.GENERAL &&
     String(document.document_code) === INITIATION_REVIEW_DOCUMENT_CODE;
+  if (shouldGenerateTemplateFile) {
+    await tryAutoAdvanceProjectStage(
+      {
+        projectId,
+        user,
+        triggerAction: 'initiation_review.general_approved',
+        expectedStageOrder: document.stage_order,
+        triggerMetadata: {
+          documentId,
+          documentCode: document.document_code,
+          nodeKey,
+          stageOrder: document.stage_order,
+          actionType: OPERATION_ACTION_TYPE.INITIATION_REVIEW_GENERAL_APPROVED
+        }
+      },
+      connection
+    );
+  }
 
   const updatedDocument = await selectInitiationDocumentForUpdate(connection, projectId, documentId);
     const result = await mapDocumentWithInitiationReview(connection, updatedDocument, user);

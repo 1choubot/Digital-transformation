@@ -266,7 +266,7 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 #### Scenario: 需返工阻塞推进
 - **WHEN** 当前阶段存在 `revision_required = true` 的适用资料
 - **THEN** 页面 MUST 将其展示为门禁未完成原因
-- **AND** 页面 MUST NOT 因资料基础状态为 `submitted` 或 `confirmed` 将其显示为可推进
+- **AND** 页面 MUST NOT 因资料基础状态为 `submitted` 或 `confirmed` 将其显示为齐套满足
 
 ### Requirement: 项目详情页资料适用性操作与展示
 
@@ -317,15 +317,15 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **WHEN** 用户打开项目详情页阶段资料清单
 - **THEN** 页面必须展示可读说明，明确“不适用”是人工业务判断，用于说明该项目不需要该资料，不代表资料已提交、已确认或已归档
 
-### Requirement: 项目详情页手工阶段推进
+### Requirement: 项目详情页阶段齐套和自动推进展示
 
-前端 MUST 在项目详情页提供当前阶段的手工推进入口，并 MUST 展示阶段推进所需的当前阶段适用资料按 `completionMode`、`revision_required` 和特殊资料派生规则计算的完成情况。
+前端 MUST 在项目详情页展示当前阶段适用资料按 `completionMode`、`revision_required` 和特殊资料派生规则计算的完成情况；正常主流程不得要求用户执行手工推进操作，阶段齐套后的阶段变化 MUST 以后端自动推进结果为准。
 
 #### Scenario: 1.2 未最终通过时推进不可用
 
 - **WHEN** 第 1 阶段的 `1.2 项目立项审批表` 尚未完成商务评价、技术评价和总经理审批的最终通过
-- **THEN** 页面 MUST 按后端门禁结果展示阶段推进不可用
-- **AND** 页面 MUST NOT 因 `1.2` 单个节点已通过或资料基础状态为 `confirmed` 就展示可推进
+- **THEN** 页面 MUST 按后端门禁结果展示阶段齐套未满足
+- **AND** 页面 MUST NOT 因 `1.2` 单个节点已通过或资料基础状态为 `confirmed` 就展示齐套满足
 
 #### Scenario: 1.2 返工未清除时显示阻塞
 
@@ -760,15 +760,16 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **WHEN** 当前用户是某项目的项目经理
 - **THEN** 项目详情页必须允许其查看该项目全量阶段、资料、齐套摘要、责任人、附件进度和业务日志
 
-#### Scenario: 项目经理推进入口仍受齐套门禁
+#### Scenario: 项目经理查看阶段齐套摘要
 
-- **WHEN** 当前用户是某项目的项目经理且页面显示阶段推进入口
-- **THEN** 页面必须继续基于后端返回的当前阶段适用资料齐套摘要、返工门禁和推进权限提示是否可推进
+- **WHEN** 当前用户是某项目的项目经理且查看项目详情
+- **THEN** 页面必须继续展示后端返回的当前阶段适用资料齐套摘要、返工门禁、缺失资料和自动推进后的当前阶段
+- **AND** 页面不得将项目经理身份表达为项目详情页主流程手工推进操作
 
-#### Scenario: 非项目经理不显示阶段推进入口
+#### Scenario: 非项目经理不获得手工推进主流程操作
 
-- **WHEN** 当前用户不是该项目项目经理，也不具备后端返回的其他推进权限
-- **THEN** 页面不得仅因其可查看项目而显示该项目阶段推进入口
+- **WHEN** 当前用户不是该项目项目经理
+- **THEN** 页面不得仅因其可查看项目而显示该项目手工推进主流程操作
 
 ### Requirement: 前端资料责任人和项目参与人展示
 前端 MUST 继续以资料项责任人展示资料职责，并 MUST 将项目参与人作为资料责任人的派生结果展示或统计。
@@ -813,7 +814,7 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 当前 20260625 在线平台内部资料闭环中，前端 MUST NOT 将泛化阶段审批状态、阶段审批历史或二级阶段审批进度作为项目详情页当前阶段推进前置展示；资料级 `approval_required` 的审核状态仍 MUST 在资料项上正常展示。
 
 #### Scenario: 不展示泛化阶段审批状态作为推进条件
-- **WHEN** 页面展示项目详情、阶段列表或当前阶段推进入口
+- **WHEN** 页面展示项目详情、阶段列表或当前阶段齐套摘要
 - **THEN** 页面 MUST NOT 将阶段 `approval_status`、阶段审批状态或阶段关口审批状态展示为当前阶段推进条件
 - **AND** 页面 MUST NOT 提示必须先完成泛化阶段审批才能推进
 
@@ -833,7 +834,7 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 ### Requirement: 阶段审批流前端操作入口
 
-当前 20260625 在线平台内部资料闭环中，前端 MUST NOT 提供泛化阶段审批提交、重新提交、审批通过或审批退回入口；前端只展示资料级 `approval_required` 的提交、审核通过和退回操作，并按 `completionMode` 完成情况与推进权限展示阶段推进入口。
+当前 20260625 在线平台内部资料闭环中，前端 MUST NOT 提供泛化阶段审批提交、重新提交、审批通过或审批退回入口；前端只展示资料级 `approval_required` 的提交、审核通过和退回操作，并按 `completionMode` 完成情况展示阶段齐套摘要、缺失资料、阻塞原因和自动推进后的当前阶段。
 
 #### Scenario: 不展示提交阶段审批入口
 - **WHEN** 页面展示项目详情、阶段区域或当前阶段操作区
@@ -849,33 +850,32 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **THEN** 页面可以展示资料项审核通过和退回修改入口
 - **AND** 页面 MUST 表达该操作对象是单个资料项
 
-#### Scenario: 阶段推进入口不绑定阶段审批操作
+#### Scenario: 阶段齐套展示不绑定阶段审批操作
 - **WHEN** 当前阶段适用资料已经按 `completionMode` 完成
-- **AND** 当前用户具备阶段推进权限
-- **THEN** 页面可以展示阶段推进入口
+- **THEN** 页面可以展示阶段齐套满足和后端自动推进结果
 - **AND** 页面 MUST NOT 要求用户先提交或通过泛化阶段审批
 
-### Requirement: 审批状态下的阶段推进前端
+### Requirement: 审批状态下的阶段齐套前端
 
-前端 MUST 将阶段推进入口绑定当前阶段适用资料按 `completionMode` 派生的完成情况和当前用户可推进身份，并 MUST 不提供跳阶段、回退或自动流转入口。
+前端 MUST 将阶段齐套摘要绑定当前阶段适用资料按 `completionMode` 派生的完成情况，并 MUST 不提供跳阶段、回退或手工流转入口；自动推进后的阶段变化 MUST 以后端当前阶段为准。
 
-#### Scenario: 阶段审批未通过不隐藏推进入口
+#### Scenario: 阶段审批未通过不隐藏齐套摘要
 - **WHEN** 当前阶段适用资料已经按 `completionMode` 完成
-- **THEN** 页面 MUST NOT 仅因当前阶段审批状态不是 `approved` 而隐藏可点击的阶段推进入口
+- **THEN** 页面 MUST NOT 仅因当前阶段审批状态不是 `approved` 而隐藏齐套满足结果、自动推进结果或后端返回的阻塞原因
 - **AND** 页面 MUST NOT 展示“需先完成阶段关口审批”或等价提示
 
 #### Scenario: 阶段推进仍展示资料门禁
 - **WHEN** 当前阶段存在适用资料未按 `completionMode` 完成
-- **THEN** 页面必须展示后端返回的缺失资料和派生完成状态并禁止推进
+- **THEN** 页面必须展示后端返回的缺失资料、派生完成状态和阻塞原因
 
-#### Scenario: 有权限用户可推进
-- **WHEN** 当前用户具备项目经理、中心负责人、管理员或其他规格允许的推进身份
-- **AND** 当前阶段适用资料已经按 `completionMode` 完成
-- **THEN** 页面可以展示阶段推进入口
+#### Scenario: 手工兜底不作为主页面操作
+- **WHEN** 当前阶段适用资料已经按 `completionMode` 完成
+- **THEN** 页面 MUST 展示齐套满足和自动推进后的当前阶段
+- **AND** 页面 MUST NOT 将项目经理、中心负责人或总经理身份写成项目详情页按钮展示规则
 
-#### Scenario: 不新增自动流转入口
-- **WHEN** 页面实现阶段推进展示和操作
-- **THEN** 页面不得新增自动阶段流转、跳阶段、阶段回退、批量审批、消息通知、日报周报或文件管理平台联动入口
+#### Scenario: 不新增额外流转入口
+- **WHEN** 页面实现阶段齐套和自动推进结果展示
+- **THEN** 页面不得新增跳阶段、阶段回退、批量审批、消息通知、日报周报或文件管理平台联动入口
 
 ### Requirement: 审批错误提示前端
 
@@ -973,8 +973,8 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **AND** 页面 MUST NOT 展示提交审核、审核通过或退回入口
 
 #### Scenario: 不展示阶段关口审批前置说明
-- **WHEN** 页面展示阶段推进入口或不可推进原因
-- **THEN** 页面必须说明阶段推进依据为当前阶段适用资料按各自 `completionMode` 完成且用户具备推进权限
+- **WHEN** 页面展示阶段齐套摘要或阻塞原因
+- **THEN** 页面必须说明阶段推进依据为当前阶段适用资料按各自 `completionMode` 完成
 - **AND** 页面 MUST NOT 说明阶段推进需要同时满足“资料全部 confirmed”和“阶段关口审批通过”
 
 #### Scenario: 不展示总经理阶段关口审批入口
@@ -984,7 +984,8 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 ### Requirement: 我的工作台页面
 
-前端 MUST 将当前“我的资料任务”升级或改名为“我的工作台 / 我的待办”，并 MUST 展示当前用户的资料责任待办、资料审核待办、`1.2` 专用节点审批待办和阶段推进待办；当前 20260625 在线平台内部资料闭环 MUST NOT 展示泛化阶段关口审批待办分类或入口，且 MUST 展示需返工资料待办。
+前端 MUST 将当前“我的资料任务”升级或改名为“我的工作台 / 我的待办”，并 MUST 展示当前用户的资料责任待办、资料审核待办、`1.2` 专用节点审批待办和需返工资料待办。
+当前 20260625 在线平台内部资料闭环 MUST NOT 展示泛化阶段关口审批待办分类或入口，并 MUST NOT 展示普通 `stage_advance` 阶段推进待办。
 
 #### Scenario: 1.2 节点审批待办按后端返回展示
 
@@ -1203,11 +1204,11 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **WHEN** 普通员工从资料责任待办或项目详情进入受限视图
 - **THEN** 页面 MUST 以后端过滤后的资料清单为准，不得展示其他人资料或跨中心附件入口
 
-#### Scenario: 阶段推进入口按归属中心判断本中心项目
+#### Scenario: 本中心归属不生成主流程手工推进操作
 
-- **WHEN** 页面判断中心负责人是否可看到阶段推进入口
-- **THEN** 页面 MUST 在资料项存在 `ownerDepartment` 或 `reviewDepartment` 时只按这两个字段判断本中心相关资料
-- **AND** 仅当 `ownerDepartment` 和 `reviewDepartment` 都为空时，才 MAY 使用 `responsibleUser.department` 作为旧数据兼容判断
+- **WHEN** 页面展示中心负责人的项目详情
+- **THEN** 页面 MUST NOT 因结构化归属中心匹配而生成主流程手工推进操作
+- **AND** 若未来展示 manual fallback API / 运维兜底状态，归属判断才 MAY 使用资料项 `ownerDepartment`、`reviewDepartment` 或旧数据兼容的 `responsibleUser.department`
 
 ### Requirement: 简单资料闭环前端边界
 
@@ -1231,9 +1232,9 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **WHEN** 页面展示合同审核记录表、采购申请表、采购合同审核记录表、发票或设计变更资料
 - **THEN** 页面不得提供合同审批流、采购审批流、付款流、发票流转、发票审批流、设计变更流程引擎或额外流程状态机入口
 
-#### Scenario: 阶段推进说明
-- **WHEN** 页面展示阶段推进入口或阶段推进不可用原因
-- **THEN** 页面必须说明阶段推进需要当前阶段适用资料按 `completionMode` 完成且用户具备推进权限
+#### Scenario: 阶段齐套说明
+- **WHEN** 页面展示阶段齐套摘要或阶段阻塞原因
+- **THEN** 页面必须说明阶段推进需要当前阶段适用资料按 `completionMode` 完成
 - **AND** 页面 MUST NOT 说明阶段推进还需要泛化阶段关口审批通过
 - **AND** 页面 MUST NOT 说明阶段推进需要所有资料均为 `confirmed`
 
@@ -1298,8 +1299,8 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **AND** `isApplicable = true`
 - **THEN** 前端 MUST 按提交或上传后完成展示该资料状态
 
-#### Scenario: 阶段推进说明按完成规则表达
-- **WHEN** 前端展示阶段推进入口或不可推进原因
+#### Scenario: 阶段齐套说明按完成规则表达
+- **WHEN** 前端展示阶段齐套摘要或阻塞原因
 - **THEN** 页面 MUST 说明阶段推进依据为当前阶段适用资料按各自完成规则完成
 - **AND** 页面 MUST NOT 表达为资料齐套后还需要额外通过泛化的阶段级审批
 
@@ -1606,16 +1607,18 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **AND** 前端 MUST 展示对应产出工作区和评价/审批面板
 - **AND** 前端 MUST NOT 因深链自动打开在线表单
 
-#### Scenario: 工作台资料责任和阶段推进深链定位
+#### Scenario: 工作台资料责任深链定位和 legacy 阶段推进深链兼容
 - **WHEN** 用户从我的工作台资料责任待办进入项目工作区
 - **THEN** 前端 MUST 根据 `documentId` 选中包含该资料产出的蓝色节点
 - **AND** `1.1` MUST 定位到项目市场调研，`1.2` MUST 定位到项目立项审批，`1.3` MUST 定位到项目立项通知
 - **AND** 对其他 7 个阶段中尚未配置蓝色节点的资料，前端 MUST 根据阶段资料清单定位到该资料所属阶段
 - **AND** 前端 MUST NOT 因未找到蓝色节点产出而错误回到默认立项阶段
 - **AND** 前端 MUST NOT 因其他阶段资料深链自动打开在线表单
-- **WHEN** 用户从阶段推进待办进入项目工作区
+- **WHEN** 用户通过历史 `stage_advance` 深链或运维兼容链接进入项目工作区
 - **THEN** 前端 MUST 根据 `stageId` 选中对应阶段
 - **AND** 前端 MUST NOT 因深链自动打开在线表单
+- **AND** 前端 MUST NOT 因该兼容逻辑恢复普通 `stage_advance` 工作台待办
+- **AND** 前端 MUST NOT 展示手工推进主流程操作
 
 #### Scenario: 其他阶段不阻塞第一版
 - **WHEN** 方案设计、合同签订、详细设计、生产制作、预验收、终验收或结题阶段尚未配置完整蓝色节点
@@ -1785,7 +1788,7 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 #### Scenario: 工作台不生成候选待办
 - **WHEN** 用户查看我的工作台待办
-- **THEN** 前端 MUST NOT 因 71 项候选清单生成新增资料填写、评价审批或阶段推进入口
+- **THEN** 前端 MUST NOT 因 71 项候选清单生成新增资料填写、评价审批或阶段推进主流程操作
 - **AND** 工作台深链 MUST 继续依赖后端返回的真实任务和现有项目资料
 
 #### Scenario: 后续展示需等待独立实现
@@ -2570,12 +2573,13 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **AND** 前端 MUST NOT 同时展示普通资料审核待办和专用节点审批待办
 
 ### Requirement: 方案设计阶段齐套展示使用派生结果
-项目核心前端 MUST 使用后端返回的方案设计 C04-C19 派生完成状态展示第 2 阶段齐套情况和阶段推进入口。
+项目核心前端 MUST 使用后端返回的方案设计 C04-C19 派生完成状态展示第 2 阶段齐套摘要、阻塞原因和自动推进结果展示。
 
-#### Scenario: workflow 完成后阶段推进按钮可用
+#### Scenario: workflow 完成后展示齐套满足和自动推进结果
 - **WHEN** 后端返回方案设计 workflow 已满足第 2 阶段 C04-C19 派生完成规则
 - **THEN** 项目详情页 MUST 展示第 2 阶段齐套满足
-- **AND** 对有权限用户 MUST 展示可用的阶段推进按钮
+- **AND** 如后端已自动推进，项目详情页 MUST 展示新的当前阶段
+- **AND** 如后端仍停在方案设计阶段，项目详情页 MUST 只展示齐套满足、缺失资料和阻塞原因，不展示手工推进操作
 - **AND** 前端 MUST NOT 仅凭普通资料基础状态将阶段判断为未齐套
 
 #### Scenario: workflow 未完成时展示派生阻塞
@@ -2589,14 +2593,26 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **AND** 前端 MAY 展示该资料因分支选择不适用
 - **AND** 前端 MUST NOT 将非当前分支资料列为缺失阻塞项
 
-### Requirement: 合同签订门禁文案保持手工推进口径
-项目核心前端 MUST 清楚表达 `canAdvanceToContract=true` 只是第 2 阶段手工推进门禁满足，不代表已经进入合同签订阶段。
+### Requirement: 自动推进后阶段展示和历史方案设计查看
+项目核心前端 MUST 以后端当前阶段为准展示自动推进结果；报价/投标完成后如后端已自动推进，前端 MUST 展示新的当前阶段，并且用户查看历史方案设计节点时仍 MUST 展示方案设计专用 workflow 面板。
 
-#### Scenario: 门禁文案不暗示自动推进
+#### Scenario: 报价投标完成后展示后端当前阶段
 - **WHEN** 方案设计报价/投标节点通过，且后端返回 `canAdvanceToContract=true`
-- **THEN** 前端 MUST 展示可手工推进到合同签订阶段的提示
-- **AND** 前端 MUST NOT 显示项目已自动进入合同签订阶段
+- **AND** 后端当前阶段已自动推进到合同签订阶段或后续阶段
+- **THEN** 前端 MUST 展示新的当前阶段
+- **AND** 前端 MUST NOT 展示通过手工动作进入合同签订阶段的主流程提示
 - **AND** 前端 MUST NOT 展示合同签订阶段业务已完成或已初始化的承诺
+
+#### Scenario: 历史方案设计节点仍展示专用面板
+- **WHEN** 项目当前阶段已进入合同签订阶段或后续阶段
+- **AND** 用户点击历史方案设计阶段下的方案设计专用 workflow 节点
+- **THEN** 前端 MUST 渲染方案设计专用 workflow 面板并定位对应节点内容
+- **AND** 前端 MUST NOT 落入通用节点兜底开发中页面
+
+#### Scenario: 仍在方案设计阶段时显示自动推进口径
+- **WHEN** 方案设计报价/投标节点通过但后端当前阶段仍为方案设计阶段
+- **THEN** 前端 MAY 展示阶段齐套满足、系统将在配置触发点完成后自动推进的提示
+- **AND** 前端 MUST NOT 暗示需要用户执行手工推进操作
 
 ### Requirement: C04-C19 普通资料入口仍不可绕过
 项目核心前端 MUST 保持 C04-C19 的普通资料 submit/confirm/return 入口隐藏或禁用，并 MUST 引导用户使用方案设计专用 workflow。
@@ -2611,3 +2627,40 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **THEN** 前端 MUST 展示必须使用方案设计专用 workflow 的可读提示
 - **AND** 前端 MUST 刷新阶段齐套和方案设计节点状态
 
+### Requirement: 前端不要求手动推进阶段
+项目核心前端 SHALL NOT require users to click manual stage advance after a stage is completed.
+
+#### Scenario: 业务动作完成后展示新阶段
+- **WHEN** 用户完成可能触发自动阶段推进的业务动作
+- **AND** 后端已自动推进项目阶段
+- **THEN** 项目详情页 SHALL 刷新并展示新的当前阶段
+- **AND** 项目详情页 SHALL NOT 要求用户额外执行手工推进操作
+
+#### Scenario: 未自动推进时展示阻塞原因
+- **WHEN** 后端未自动推进项目阶段
+- **THEN** 项目详情页 SHALL 展示后端返回的阶段齐套摘要、缺失资料和阻塞原因
+- **AND** 项目详情页 SHALL NOT 使用本地硬编码判断替代后端门禁
+
+### Requirement: 工作台不显示正常阶段推进待办
+工作台 SHALL NOT show normal `stage_advance` todos as part of the primary workflow.
+
+#### Scenario: 阶段齐套后不产生手动推进待办
+- **WHEN** 当前阶段齐套门禁满足
+- **AND** 系统能够自动推进项目阶段
+- **THEN** 工作台 SHALL NOT 显示普通 `stage_advance` 待办
+- **AND** 工作台 SHALL 通过项目当前阶段变化反映自动推进结果
+
+#### Scenario: manual fallback 不作为主前端入口
+- **WHEN** 后端返回当前阶段齐套门禁已满足
+- **AND** 项目仍停留在该阶段
+- **THEN** 项目详情页 SHALL NOT expose manual fallback as a primary workflow action
+- **AND** manual fallback SHALL remain an API / operations fallback outside the normal project detail workflow
+- **AND** 工作台 SHALL NOT 恢复普通 `stage_advance` 待办
+
+### Requirement: 旧阶段关口审批面板不作为主流程入口
+项目详情页 SHALL NOT display the legacy `ProjectStageApprovalPanel` as a required primary workflow step.
+
+#### Scenario: 项目详情页隐藏 legacy 审批入口
+- **WHEN** 用户查看项目详情页
+- **THEN** 项目详情页 SHALL NOT 要求用户通过 legacy 阶段关口审批面板完成阶段推进
+- **AND** 项目详情页 SHALL 使用阶段资料和专用 workflow 的状态展示阶段完成情况

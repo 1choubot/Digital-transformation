@@ -40,8 +40,7 @@ const WORKBENCH_TODO_TYPES = [
   'document_responsibility',
   'document_review',
   INITIATION_REVIEW_TODO_TYPE,
-  SOLUTION_DESIGN_WORKBENCH_TODO_TYPE,
-  'stage_advance'
+  SOLUTION_DESIGN_WORKBENCH_TODO_TYPE
 ];
 
 const SOLUTION_DESIGN_DEDICATED_DOCUMENT_PLACEHOLDERS = SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES
@@ -797,8 +796,7 @@ export async function getMyWorkbench(user) {
     selectInitiationNoticeSyntheticTodos(user),
     selectDocumentReviewTodos(user),
     selectInitiationReviewWorkbenchTodos(pool, user),
-    selectSolutionDesignWorkbenchTodos(user),
-    selectStageAdvanceTodos(user)
+    selectSolutionDesignWorkbenchTodos(user)
   ]);
   const items = sortWorkbenchItems(groups.flat());
 

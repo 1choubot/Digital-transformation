@@ -33,6 +33,7 @@ import {
   OPERATION_ACTION_TYPE,
   OPERATION_TARGET_TYPE
 } from '../operationLogRepository.js';
+import { tryAutoAdvanceProjectStage } from '../projects/stageAdvanceRepository.js';
 import {
   mapDocument,
   getDocumentCompletionMode,
@@ -825,6 +826,23 @@ export async function updateProjectStageDocumentStatus({
         buildRevisionCompletedOperationLogPayload({ projectId, documentId, userId: user.id, currentDocument })
       );
     }
+    if (ownsConnection && [DOCUMENT_STATUS_ACTION.SUBMIT, DOCUMENT_STATUS_ACTION.CONFIRM].includes(action)) {
+      await tryAutoAdvanceProjectStage(
+        {
+          projectId,
+          user,
+          triggerAction: action === DOCUMENT_STATUS_ACTION.SUBMIT ? 'document.submitted' : 'document.confirmed',
+          expectedStageOrder: currentDocument.stage_order,
+          triggerMetadata: {
+            documentId,
+            documentCode: currentDocument.document_code,
+            stageOrder: currentDocument.stage_order,
+            actionType: action
+          }
+        },
+        connection
+      );
+    }
     if (ownsConnection) {
       await connection.commit();
     }
@@ -913,6 +931,21 @@ export async function completeProjectStageDocumentRevision({ projectId, document
     await insertOperationLog(
       connection,
       buildRevisionCompletedOperationLogPayload({ projectId, documentId, userId: user.id, currentDocument })
+    );
+    await tryAutoAdvanceProjectStage(
+      {
+        projectId,
+        user,
+        triggerAction: 'document.revision_completed',
+        expectedStageOrder: currentDocument.stage_order,
+        triggerMetadata: {
+          documentId,
+          documentCode: currentDocument.document_code,
+          stageOrder: currentDocument.stage_order,
+          actionType: 'revision_completed'
+        }
+      },
+      connection
     );
     const updatedDocument = await selectProjectStageDocument(connection, projectId, documentId);
     await connection.commit();

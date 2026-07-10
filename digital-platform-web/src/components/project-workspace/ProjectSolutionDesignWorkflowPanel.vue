@@ -29,8 +29,8 @@
       </section>
 
       <div v-if="workflow.permissions?.canAdvanceToContract" class="solution-design-workflow__contract-gate">
-        <strong>合同签订门禁已满足</strong>
-        <span>报价/投标节点已通过，当前仅开放进入合同签订阶段的后端门禁。</span>
+        <strong>{{ solutionCompletionTitle }}</strong>
+        <span>{{ solutionCompletionDescription }}</span>
       </div>
 
       <div
@@ -247,11 +247,11 @@
               </div>
               <div class="solution-design-workflow__action-row">
                 <button
-                  v-if="showGenericSubmitAction(selectedNode)"
+                  v-if="isGenericSubmitNode(selectedNode)"
                   type="button"
                   class="primary-button"
-                  :disabled="isPending(`submit:${selectedNode.nodeKey}`)"
-                  @click="submitNode(selectedNode.nodeKey)"
+                  :disabled="!canExecuteGenericSubmit(selectedNode)"
+                  @click="submitGenericNode(selectedNode)"
                 >
                   {{ isPending(`submit:${selectedNode.nodeKey}`) ? '提交中...' : formatSubmitNodeLabel(selectedNode) }}
                 </button>
@@ -281,7 +281,7 @@
                 </button>
               </div>
 
-              <p v-if="!hasAnyNodeAction(selectedNode)" class="inline-muted">
+              <p v-if="!hasVisibleNodeAction(selectedNode)" class="inline-muted">
                 当前账号在该节点没有可执行动作。
               </p>
             </section>
@@ -463,6 +463,17 @@ const branchStatusText = {
   ended: '项目结束'
 };
 
+const stageOrderByKey = Object.freeze({
+  initiation: 1,
+  solution: 2,
+  contract: 3,
+  detailedDesign: 4,
+  manufacturing: 5,
+  preAcceptance: 6,
+  finalAcceptance: 7,
+  closeout: 8
+});
+
 const selectedNodeKey = ref('');
 const roleSelections = reactive({});
 const pendingAction = ref('');
@@ -522,6 +533,35 @@ const activeReviewFormDto = computed(() => {
     permissions: buildReviewPermissionsFromNode(selectedNode.value)
   };
 });
+
+function getWorkflowStageOrder(stage) {
+  const value = Number(stage?.stageOrder ?? stage?.stage_order ?? stage?.order);
+  if (Number.isFinite(value) && value > 0) {
+    return value;
+  }
+
+  return stageOrderByKey[stage?.stageKey] || 0;
+}
+
+const hasAdvancedPastSolutionStage = computed(() => {
+  const currentStage = props.workflow?.currentStage || null;
+  const currentStageKey = String(currentStage?.stageKey || '').trim();
+  if (currentStageKey && currentStageKey !== 'solution') {
+    return getWorkflowStageOrder(currentStage) > stageOrderByKey.solution;
+  }
+
+  return props.workflow?.isProjectCompleted === true;
+});
+
+const solutionCompletionTitle = computed(() =>
+  hasAdvancedPastSolutionStage.value ? '方案设计已完成' : '阶段齐套已满足'
+);
+
+const solutionCompletionDescription = computed(() =>
+  hasAdvancedPastSolutionStage.value
+    ? '方案设计已完成，项目已进入后续阶段。'
+    : '报价/投标节点已通过，阶段齐套满足，系统将在配置的触发点完成后自动推进。'
+);
 
 watch(
   () => props.workflow,
@@ -959,6 +999,14 @@ async function submitNode(nodeKey) {
   );
 }
 
+async function submitGenericNode(node) {
+  if (!canExecuteGenericSubmit(node)) {
+    return;
+  }
+
+  await submitNode(node.nodeKey);
+}
+
 async function approveNode(nodeKey) {
   await runAction(
     `approve:${nodeKey}`,
@@ -1051,13 +1099,37 @@ function getNodeName(nodeKey) {
   return sortedNodes.value.find((node) => node.nodeKey === nodeKey)?.nodeName || '节点';
 }
 
-function showGenericSubmitAction(node) {
-  return node?.permissions?.canSubmit === true && node.nodeKey !== 'quotation_or_tender';
+function isGenericSubmitNode(node) {
+  if (!node?.nodeKey || node.nodeKey === 'quotation_or_tender') {
+    return false;
+  }
+
+  if (node.permissions?.canSubmit === true) {
+    return true;
+  }
+
+  if (!['pending', 'returned'].includes(node.status)) {
+    return false;
+  }
+
+  const permissions = node.permissions || {};
+  return (
+    permissions.canEditAnalysisForm === true ||
+    permissions.canSubmitAnalysisForm === true ||
+    permissions.canEditReviewForm === true ||
+    permissions.canSubmitReviewForm === true ||
+    selectedNodeSlots.value.some((slot) => slot.permissions?.canUpload === true)
+  );
 }
 
-function hasAnyNodeAction(node) {
+function canExecuteGenericSubmit(node) {
+  return isGenericSubmitNode(node) && node?.permissions?.canSubmit === true && !isPending(`submit:${node.nodeKey}`);
+}
+
+function hasVisibleNodeAction(node) {
   return (
-    showGenericSubmitAction(node) ||
+    isGenericSubmitNode(node) ||
+    node?.nodeKey === 'quotation_or_tender' ||
     node?.permissions?.canApprove === true ||
     node?.permissions?.canReturn === true
   );

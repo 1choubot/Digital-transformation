@@ -4,7 +4,7 @@
       eyebrow="我的待办"
       title="我的工作台"
       :current-user="currentUser"
-      subtitle="工作台汇总待我填写资料、待我评价/审批和待我推进阶段事项，进入项目工作区后只定位目标，不自动打开在线表单。"
+      subtitle="工作台汇总待我填写资料、待我评价/审批和方案设计事项，进入项目工作区后只定位目标，不自动打开在线表单。"
     >
       <template #actions>
         <button type="button" class="ghost-button" :disabled="loading" @click="loadWorkbench">
@@ -165,8 +165,7 @@ const emit = defineEmits(['auth-expired']);
 const typeOptions = [
   { value: 'document_responsibility', label: '待我填写资料' },
   { value: 'document_review', label: '待我评价/审批' },
-  { value: 'solution_design_workflow', label: '方案设计待办' },
-  { value: 'stage_advance', label: '待我推进阶段' }
+  { value: 'solution_design_workflow', label: '方案设计待办' }
 ];
 
 const solutionDesignStatusText = {

@@ -68,7 +68,33 @@ export const COMPLETION_STATUS = {
 };
 
 const SOLUTION_DESIGN_DERIVED_SOURCE = 'solution_design_workflow';
-const SOLUTION_DESIGN_DOCUMENT_CODES = new Set(SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES);
+const SOLUTION_DESIGN_LEGACY_DOCUMENT_CODE_BY_TARGET_CODE = Object.freeze({
+  C04: '2.1',
+  C05: '2.2',
+  C06: '2.3',
+  C07: '2.4',
+  C08: '2.5',
+  C09: '2.6',
+  C10: '2.7',
+  C11: '2.8',
+  C12: '2.9',
+  C13: '2.10',
+  C14: '2.11',
+  C15: '2.12',
+  C16: '2.13',
+  C17: '2.14',
+  C18: '2.15'
+});
+const SOLUTION_DESIGN_TARGET_DOCUMENT_CODE_BY_LEGACY_CODE = new Map(
+  Object.entries(SOLUTION_DESIGN_LEGACY_DOCUMENT_CODE_BY_TARGET_CODE).map(([targetCode, legacyCode]) => [
+    legacyCode,
+    targetCode
+  ])
+);
+const SOLUTION_DESIGN_DOCUMENT_CODES = new Set([
+  ...SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES,
+  ...Object.values(SOLUTION_DESIGN_LEGACY_DOCUMENT_CODE_BY_TARGET_CODE)
+]);
 const SOLUTION_DESIGN_WORKFLOW_ANCHOR_DOCUMENT_CODES = new Set(
   SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES.filter((documentCode) => documentCode !== 'C18' && documentCode !== 'C19')
 );
@@ -145,6 +171,14 @@ export function isRevisionResubmitted(document) {
 
 function getDocumentCode(document) {
   return String(document?.documentCode ?? document?.document_code ?? '').trim();
+}
+
+function normalizeSolutionDesignDocumentCode(documentCode) {
+  return SOLUTION_DESIGN_TARGET_DOCUMENT_CODE_BY_LEGACY_CODE.get(documentCode) || documentCode;
+}
+
+function isLegacySolutionDesignDocumentCode(documentCode) {
+  return SOLUTION_DESIGN_TARGET_DOCUMENT_CODE_BY_LEGACY_CODE.has(documentCode);
 }
 
 function getSolutionDesignDerivedCompletion(document) {
@@ -584,18 +618,24 @@ function groupByProjectId(rows) {
   return grouped;
 }
 
-function mapSolutionDesignDocumentCodesByProject(rows) {
+function mapSolutionDesignDocumentCodeContextByProject(rows) {
   const grouped = new Map();
   for (const row of rows) {
     const projectId = Number(row.project_id ?? row.projectId);
-    const documentCode = getDocumentCode(row);
-    if (!Number.isSafeInteger(projectId) || !SOLUTION_DESIGN_DOCUMENT_CODES.has(documentCode)) {
+    const rawDocumentCode = getDocumentCode(row);
+    const documentCode = normalizeSolutionDesignDocumentCode(rawDocumentCode);
+    if (!Number.isSafeInteger(projectId) || !SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES.includes(documentCode)) {
       continue;
     }
     if (!grouped.has(projectId)) {
-      grouped.set(projectId, new Set());
+      grouped.set(projectId, {
+        documentCodes: new Set(),
+        usesLegacyCodes: false
+      });
     }
-    grouped.get(projectId).add(documentCode);
+    const context = grouped.get(projectId);
+    context.documentCodes.add(documentCode);
+    context.usesLegacyCodes = context.usesLegacyCodes || isLegacySolutionDesignDocumentCode(rawDocumentCode);
   }
   return grouped;
 }
@@ -611,6 +651,37 @@ function hasSolutionDesignWorkflowAnchors(documentCodes) {
 
 function shouldApplySolutionDesignDerivedCompletion(documentCodes) {
   return hasSolutionDesignWorkflowAnchors(documentCodes);
+}
+
+function hasSolutionDesignWorkflowContext(context) {
+  return Boolean(context?.nodesByKey?.size);
+}
+
+function hasSolutionDesignWorkflowActivity(context) {
+  if (!hasSolutionDesignWorkflowContext(context)) {
+    return false;
+  }
+
+  for (const node of context.nodesByKey.values()) {
+    if (![SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED, SOLUTION_DESIGN_NODE_STATUS.PENDING].includes(node.status)) {
+      return true;
+    }
+  }
+
+  for (const slot of context.slotsByKey.values()) {
+    if (
+      slot.current_file_id ||
+      [SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.UPLOADED, SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.SUBMITTED].includes(slot.status)
+    ) {
+      return true;
+    }
+  }
+
+  return Boolean(
+    context.analysisForm ||
+    context.reviewFormsByNodeKey.size > 0 ||
+    context.quotationTenderFlow
+  );
 }
 
 function mapRowsByProjectAndKey(rows, keyName) {
@@ -1021,18 +1092,28 @@ export async function attachSolutionDesignDerivedCompletionToStageDocumentRows(e
   }
 
   const projectIds = [...groupByProjectId(solutionDesignRows).keys()];
-  const solutionDesignDocumentCodesByProject = mapSolutionDesignDocumentCodesByProject(solutionDesignRows);
+  const solutionDesignDocumentCodeContextByProject = mapSolutionDesignDocumentCodeContextByProject(solutionDesignRows);
   const contextsByProjectId = await selectSolutionDesignDerivedContexts(executor, projectIds);
 
   return rows.map((row) => {
-    const documentCode = getDocumentCode(row);
-    if (!SOLUTION_DESIGN_DOCUMENT_CODES.has(documentCode)) {
+    const rawDocumentCode = getDocumentCode(row);
+    const documentCode = normalizeSolutionDesignDocumentCode(rawDocumentCode);
+    if (!SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES.includes(documentCode)) {
       return row;
     }
 
     const projectId = Number(row.project_id ?? row.projectId);
     const context = contextsByProjectId.get(projectId);
-    if (!shouldApplySolutionDesignDerivedCompletion(solutionDesignDocumentCodesByProject.get(projectId))) {
+    const documentCodeContext = solutionDesignDocumentCodeContextByProject.get(projectId);
+    if (!hasSolutionDesignWorkflowContext(context)) {
+      return row;
+    }
+
+    if (documentCodeContext?.usesLegacyCodes && !hasSolutionDesignWorkflowActivity(context)) {
+      return row;
+    }
+
+    if (!shouldApplySolutionDesignDerivedCompletion(documentCodeContext?.documentCodes)) {
       return row;
     }
 

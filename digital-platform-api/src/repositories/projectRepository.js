@@ -11,6 +11,7 @@ export {
   PROJECT_OVERVIEW_DASHBOARD_ERROR,
   ProjectStageAdvanceError
 } from './projects/shared.js';
+export { SolutionDesignWorkflowError } from '../domain/solutionDesignWorkflow.js';
 export {
   assertProjectAuditViewable,
   assertProjectViewable,
@@ -26,6 +27,27 @@ export {
 } from './projects/overviewDashboardRepository.js';
 export { getProjectWorkspace } from './projects/workspaceRepository.js';
 export { advanceProjectStage } from './projects/stageAdvanceRepository.js';
+export {
+  assignSolutionDesignRoles,
+  approveSolutionDesignWorkflowNode,
+  getSolutionDesignAnalysisGeneratedFileDownload,
+  getSolutionDesignAnalysisForm,
+  getSolutionDesignReviewGeneratedFileDownload,
+  getSolutionDesignReviewForm,
+  getSolutionDesignUploadDownload,
+  getSolutionDesignWorkflow,
+  listSolutionDesignUploads,
+  processSolutionDesignQuotationResult,
+  returnSolutionDesignWorkflowNode,
+  saveSolutionDesignAnalysisForm,
+  saveSolutionDesignReviewForm,
+  selectSolutionDesignQuotationTenderBranch,
+  submitSolutionDesignAnalysisForm,
+  submitSolutionDesignQuotation,
+  submitSolutionDesignReviewForm,
+  submitSolutionDesignWorkflowNode,
+  uploadSolutionDesignWorkflowFile
+} from './projects/solutionDesignWorkflowRepository.js';
 export {
   approveStageApproval,
   listStageApprovalHistory,

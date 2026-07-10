@@ -13,8 +13,8 @@
 
     <el-container v-else-if="detail" class="project-workspace-shell">
       <ProjectProcessTree
-        v-if="workspace && projectNavigation && !workspaceLoading && !projectNavigationLoading"
-        :navigation="projectNavigation"
+        v-if="workspace && projectNavigationDisplay && !workspaceLoading && !projectNavigationLoading"
+        :navigation="projectNavigationDisplay"
         :selected-stage-key="selectedWorkspaceStageKey"
         :selected-node-key="selectedWorkspaceNodeKey"
         @select-node="selectWorkspaceNodeFromNavigation"
@@ -36,7 +36,28 @@
         <template v-else-if="workspace">
           <el-card class="project-node-card" shadow="never">
 
+            <ProjectSolutionDesignWorkflowPanel
+              v-if="isActiveSolutionWorkspaceStage"
+              ref="solutionDesignPanelRef"
+              :project-id="projectId"
+              :auth-token="authToken"
+              :current-user="currentUser"
+              :project="detail.project"
+              :workflow="solutionDesignWorkflow"
+              :uploads="solutionDesignUploads"
+              :loading="solutionDesignWorkflowLoading || solutionDesignUploadsLoading"
+              :error-message="solutionDesignWorkflowErrorMessage || solutionDesignUploadsErrorMessage"
+              :responsibility-candidates="responsibilityCandidates"
+              :responsibility-candidates-loading="responsibilityCandidatesLoading"
+              :responsibility-candidates-error-message="responsibilityCandidatesErrorMessage"
+              :selected-node-key="selectedWorkspaceNodeKey"
+              :focus-node-key="focusNodeKey"
+              hide-node-nav
+              @changed="refreshSolutionDesignState"
+            />
+
             <NodePageRouter
+              v-else
               :project-id="projectId"
               :auth-token="authToken"
               :current-user="currentUser"
@@ -74,7 +95,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import {
   approveInitiationReviewNode,
   confirmStageDocument,
@@ -91,8 +112,10 @@ import {
   // workspace API 不包含完整文档详情。删除其 UI 渲染，保留数据调用。
   getProjectStageDocumentChecklist,
   getProjectWorkspace,
+  getSolutionDesignWorkflow,
   getStageDocumentOnlineForm,
   listStageDocumentAttachments,
+  listSolutionDesignUploads,
   markStageDocumentNotApplicable,
   markStageDocumentSubmitted,
   restoreStageDocumentApplicable,
@@ -109,6 +132,7 @@ import { getProjectNavigation } from '../../api/navigation.js';
 import { listResponsibilityCandidates } from '../../api/users.js';
 import NodePageRouter from '../project-node/NodePageRouter.vue';
 import ProjectProcessTree from '../../components/project-workspace/ProjectProcessTree.vue';
+import ProjectSolutionDesignWorkflowPanel from '../../components/project-workspace/ProjectSolutionDesignWorkflowPanel.vue';
 import {
   actionKey,
   getCompletionMode,
@@ -167,6 +191,13 @@ const workspace = ref(null);
 const projectNavigationLoading = ref(false);
 const projectNavigationErrorMessage = ref('');
 const projectNavigation = ref(null);
+const solutionDesignWorkflowLoading = ref(false);
+const solutionDesignWorkflowErrorMessage = ref('');
+const solutionDesignWorkflow = ref(null);
+const solutionDesignUploadsLoading = ref(false);
+const solutionDesignUploadsErrorMessage = ref('');
+const solutionDesignUploads = ref(null);
+const solutionDesignPanelRef = ref(null);
 const selectedWorkspaceStageKey = ref('');
 const selectedWorkspaceNodeKey = ref('');
 const lastAppliedWorkspaceRouteKey = ref('');
@@ -194,6 +225,25 @@ const pendingAction = ref('');
 /* ── 文档操作临时状态 ── */
 const returnReasons = reactive({});
 const notApplicableReasons = reactive({});
+
+const solutionDesignDedicatedDocumentCodes = new Set([
+  'C04',
+  'C05',
+  'C06',
+  'C07',
+  'C08',
+  'C09',
+  'C10',
+  'C11',
+  'C12',
+  'C13',
+  'C14',
+  'C15',
+  'C16',
+  'C17',
+  'C18',
+  'C19'
+]);
 const responsibilitySelections = reactive({});
 const attachmentStates = reactive({});
 const onlineFormImageState = reactive({
@@ -209,17 +259,25 @@ const MAX_ONLINE_FORM_IMAGE_FILE_SIZE = 10 * 1024 * 1024;
 const notFound = computed(() => errorCode.value === 'PROJECT_NOT_FOUND');
 const isProjectCompleted = computed(() => detail.value?.project.status === 'completed');
 const isProjectEnded = computed(() => detail.value?.project.status === 'ended');
+const currentDetailStage = computed(() => {
+  if (detail.value?.currentStage) {
+    return detail.value.currentStage;
+  }
+
+  return detail.value?.stages?.find((stage) => stage.isCurrent) || null;
+});
 const currentStageTitle = computed(() => {
   if (isProjectEnded.value) {
     return '项目已结束';
   }
 
-  if (detail.value?.currentStage) {
-    return detail.value.currentStage.stageName;
+  if (currentDetailStage.value) {
+    return currentDetailStage.value.stageName;
   }
 
   return isProjectCompleted.value ? '项目已完成' : '-';
 });
+const isSolutionDesignStage = computed(() => currentDetailStage.value?.stageKey === 'solution');
 
 const currentUserOrganizationRole = computed(() => props.currentUser?.organizationRole || '');
 const isCurrentUserProjectManager = computed(() => {
@@ -238,12 +296,115 @@ const allStageDocuments = computed(() =>
 const activeWorkspaceStage = computed(
   () => (workspace.value?.stages || []).find((stage) => stage.stageKey === selectedWorkspaceStageKey.value) || null
 );
+const solutionDesignWorkspaceStage = computed(() => {
+  const baseStage = (workspace.value?.stages || []).find((stage) => stage.stageKey === 'solution') || null;
+  const nodes = [...(solutionDesignWorkflow.value?.nodes || [])]
+    .sort((left, right) => Number(left.nodeOrder || 0) - Number(right.nodeOrder || 0))
+    .map((node) => ({
+      nodeKey: node.nodeKey,
+      nodeName: node.nodeName,
+      nodeStatus: mapSolutionDesignWorkspaceStatus(node.status),
+      nodeOrder: node.nodeOrder,
+      outputs: [],
+      solutionDesignNode: node
+    }));
+
+  if (!baseStage || nodes.length === 0) {
+    if (!baseStage) {
+      return null;
+    }
+
+    return {
+      ...baseStage,
+      stageKey: 'solution',
+      stageName: '方案设计阶段',
+      configured: true,
+      nodes: [],
+      placeholderStatus: 'process_node',
+      placeholderText: solutionDesignWorkflowLoading.value
+        ? '方案设计阶段内部节点正在加载，请稍候。'
+        : '当前项目未返回方案设计阶段内部节点。'
+    };
+  }
+
+  return {
+    ...baseStage,
+    stageKey: 'solution',
+    stageName: '方案设计阶段',
+    configured: true,
+    nodes
+  };
+});
+const workspaceDisplayStages = computed(() => {
+  const stages = workspace.value?.stages || [];
+  if (!isSolutionDesignStage.value || !solutionDesignWorkspaceStage.value) {
+    return stages;
+  }
+
+  return stages.map((stage) => (stage.stageKey === 'solution' ? solutionDesignWorkspaceStage.value : stage));
+});
+const projectNavigationDisplay = computed(() => {
+  const navigation = projectNavigation.value;
+  if (!navigation || !isSolutionDesignStage.value || !solutionDesignWorkspaceStage.value) {
+    return navigation;
+  }
+
+  const children = (navigation.children || []).map((stage) => {
+    if (stage.stageKey !== 'solution') {
+      return stage;
+    }
+
+    const solutionChildren = (solutionDesignWorkspaceStage.value.nodes || []).map((node) => ({
+      name: node.nodeName,
+      nodeCode: node.nodeKey,
+      nodeKey: node.nodeKey,
+      status: mapSolutionDesignNavigationStatus(node.solutionDesignNode?.status),
+      route: `/projects/${props.projectId}/node/${node.nodeKey}`,
+      outputCount: Array.isArray(node.outputs) ? node.outputs.length : 0,
+      actionHints: node.solutionDesignNode?.actionHints || [],
+      blockingReasons: node.solutionDesignNode?.blockingReasons || [],
+      notes: node.solutionDesignNode?.notes || ''
+    }));
+
+    return {
+      ...stage,
+      stageName: solutionDesignWorkspaceStage.value.stageName || stage.stageName,
+      name: stage.name || solutionDesignWorkspaceStage.value.stageName || '方案设计阶段',
+      configured: true,
+      children: solutionChildren,
+      status: deriveNavigationStageStatus(stage, solutionChildren)
+    };
+  });
+
+  return {
+    ...navigation,
+    children,
+    progress: calculateNavigationProgress(children)
+  };
+});
+const activeWorkspaceDisplayStage = computed(() => {
+  if (
+    isSolutionDesignStage.value &&
+    activeWorkspaceStage.value?.stageKey === 'solution' &&
+    solutionDesignWorkspaceStage.value
+  ) {
+    return solutionDesignWorkspaceStage.value;
+  }
+
+  return activeWorkspaceStage.value;
+});
+const isActiveSolutionWorkspaceStage = computed(
+  () =>
+    isSolutionDesignStage.value &&
+    activeWorkspaceDisplayStage.value?.stageKey === 'solution' &&
+    Boolean(solutionDesignWorkspaceStage.value)
+);
 const activeWorkspaceNode = computed(
-  () => (activeWorkspaceStage.value?.nodes || []).find((node) => node.nodeKey === selectedWorkspaceNodeKey.value) || null
+  () => (activeWorkspaceDisplayStage.value?.nodes || []).find((node) => node.nodeKey === selectedWorkspaceNodeKey.value) || null
 );
 const activeNavigationStage = computed(
   () =>
-    (projectNavigation.value?.children || []).find((stage) => stage.stageKey === selectedWorkspaceStageKey.value) ||
+    (projectNavigationDisplay.value?.children || []).find((stage) => stage.stageKey === selectedWorkspaceStageKey.value) ||
     null
 );
 const activeNavigationNode = computed(
@@ -331,6 +492,71 @@ function navigationStatusTagType(status) {
   }[status] || 'info';
 }
 
+function mapSolutionDesignWorkspaceStatus(status) {
+  return {
+    not_started: 'process_node',
+    pending: 'in_progress',
+    pending_review: 'pending_review',
+    pending_general_review: 'pending_review',
+    returned: 'returned_for_rework',
+    approved: 'completed',
+    skipped: 'not_applicable',
+    ended: 'completed'
+  }[status] || 'process_node';
+}
+
+function mapSolutionDesignNavigationStatus(status) {
+  return {
+    not_started: 'PENDING',
+    pending: 'PROCESSING',
+    pending_review: 'WAIT_APPROVAL',
+    pending_general_review: 'WAIT_APPROVAL',
+    returned: 'RETURNED',
+    approved: 'COMPLETED',
+    skipped: 'COMPLETED',
+    ended: 'COMPLETED'
+  }[status] || 'PENDING';
+}
+
+function deriveNavigationStageStatus(stage, children) {
+  const statuses = children.map((child) => child.status);
+  if (statuses.length === 0) {
+    return stage.status || 'PENDING';
+  }
+
+  if (statuses.every((status) => status === 'COMPLETED')) {
+    return 'COMPLETED';
+  }
+
+  if (statuses.some((status) => status === 'FAILED')) {
+    return 'FAILED';
+  }
+
+  if (statuses.some((status) => status === 'RETURNED')) {
+    return 'RETURNED';
+  }
+
+  if (statuses.some((status) => status === 'WAIT_APPROVAL')) {
+    return 'WAIT_APPROVAL';
+  }
+
+  if (stage.isCurrent || statuses.some((status) => status === 'PROCESSING')) {
+    return 'PROCESSING';
+  }
+
+  return 'PENDING';
+}
+
+function calculateNavigationProgress(stages) {
+  const nodes = stages.flatMap((stage) => stage.children || []);
+  if (nodes.length === 0) {
+    return projectNavigation.value?.progress ?? 0;
+  }
+
+  const completedNodes = nodes.filter((node) => node.status === 'COMPLETED').length;
+  return Math.round((completedNodes / nodes.length) * 100);
+}
+
 /* ── 文档权限判断 ── */
 function isActionPending(documentId, action) {
   return pendingAction.value === actionKey(documentId, action);
@@ -342,6 +568,20 @@ function getOutputDocument(output) {
     allStageDocuments.value.find((document) => document.documentCode === output?.documentCode) ||
     null
   );
+}
+
+function findSolutionDesignWorkflowNodeKey(nodeKey) {
+  const normalized = String(nodeKey || '').trim();
+  if (!normalized) {
+    return '';
+  }
+
+  return (solutionDesignWorkflow.value?.nodes || []).some((node) => node.nodeKey === normalized) ? normalized : '';
+}
+
+function isSolutionDesignDedicatedStageDocument(document) {
+  const documentCode = String(document?.documentCode || document?.code || '').trim();
+  return isSolutionDesignStage.value && solutionDesignDedicatedDocumentCodes.has(documentCode);
 }
 
 function getDocumentPermissions(document) {
@@ -403,6 +643,10 @@ function findActiveNodeInStage(stage) {
 
 /* ── 工作区节点选择（阶段是导航目录，只有节点才驱动内容更新） ── */
 function selectWorkspaceNode(stage, node) {
+  if (!stage || !node) {
+    return;
+  }
+
   manualWorkspaceSelectionRouteKey.value = getWorkspaceRouteKey();
   selectedWorkspaceStageKey.value = stage.stageKey;
   selectedWorkspaceNodeKey.value = node.nodeKey;
@@ -411,6 +655,14 @@ function selectWorkspaceNode(stage, node) {
 }
 
 function selectWorkspaceNodeFromNavigation({ stage, node }) {
+  if (isSolutionDesignStage.value && stage?.stageKey === 'solution' && solutionDesignWorkspaceStage.value) {
+    const solutionNode = (solutionDesignWorkspaceStage.value.nodes || []).find((item) => item.nodeKey === node.nodeCode);
+    if (solutionNode) {
+      selectWorkspaceNode(solutionDesignWorkspaceStage.value, solutionNode);
+    }
+    return;
+  }
+
   const workspaceStage = (workspace.value?.stages || []).find((item) => item.stageKey === stage.stageKey);
   const workspaceNode = (workspaceStage?.nodes || []).find((item) => item.nodeKey === node.nodeCode);
   if (!workspaceStage) {
@@ -433,8 +685,8 @@ function selectCurrentWorkspaceNode() {
    * 1. 用项目的 currentStage（而非硬编码 initiation）作为默认阶段
    * 2. 在该阶段内找第一个「非完成」节点作为活跃节点（阶段只是目录，不停留）
    * 3. 更新 URL hash 以便刷新后仍定位到同一节点 */
-  const currentStageKey = detail.value?.currentStage?.stageKey;
-  const stages = workspace.value?.stages || [];
+  const currentStageKey = currentDetailStage.value?.stageKey;
+  const stages = workspaceDisplayStages.value || [];
 
   const targetStage = currentStageKey
     ? stages.find((stage) => stage.stageKey === currentStageKey)
@@ -458,7 +710,7 @@ function selectCurrentWorkspaceNode() {
 }
 
 function restoreWorkspaceSelection(stageKey, nodeKey) {
-  const stage = (workspace.value?.stages || []).find((item) => item.stageKey === stageKey);
+  const stage = (workspaceDisplayStages.value || []).find((item) => item.stageKey === stageKey);
   if (!stage) {
     return false;
   }
@@ -469,7 +721,7 @@ function restoreWorkspaceSelection(stageKey, nodeKey) {
 }
 
 function restoreWorkspaceSelectionByNodeKey(nodeKey) {
-  for (const stage of workspace.value?.stages || []) {
+  for (const stage of workspaceDisplayStages.value || []) {
     if ((stage.nodes || []).some((node) => node.nodeKey === nodeKey)) {
       selectedWorkspaceStageKey.value = stage.stageKey;
       selectedWorkspaceNodeKey.value = nodeKey;
@@ -724,8 +976,12 @@ async function refreshProjectWorkspaceState(options = {}) {
   await Promise.all([
     loadChecklist(options),
     loadWorkspace({ preserveSelection: true, ...options }),
-    loadProjectNavigation()
+    loadProjectNavigation(),
+    loadSolutionDesignWorkflow(),
+    loadSolutionDesignUploads()
   ]);
+
+  ensureSolutionDesignWorkspaceSelection(options);
 
   if (options.preserveOnlineFormState && activeOnlineFormDocumentId.value) {
     await reloadActiveOnlineForm();
@@ -743,6 +999,75 @@ async function handleBusinessStateChanged(payload = {}) {
   await refreshProjectWorkspaceState({
     preserveOnlineFormState: shouldRefreshCurrentDetail
   });
+}
+
+async function refreshProjectDetailOnly() {
+  try {
+    detail.value = await getProjectDetail(props.projectId, props.authToken);
+  } catch (error) {
+    actionErrorMessage.value = toReadableApiError(error);
+  }
+}
+
+async function refreshSolutionDesignState() {
+  clearActionState();
+  clearStageAdvanceState();
+  await refreshProjectDetailOnly();
+  await refreshProjectWorkspaceState({ preserveSelection: true });
+}
+
+async function focusSolutionDesignPanelFromRoute() {
+  if (!isSolutionDesignStage.value || !String(props.focusNodeKey || '').trim()) {
+    return;
+  }
+
+  await nextTick();
+  const panelElement = solutionDesignPanelRef.value?.$el || solutionDesignPanelRef.value;
+  panelElement?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+}
+
+function syncSolutionWorkspaceFocusNodeFromRoute() {
+  if (!isActiveSolutionWorkspaceStage.value || !String(props.focusNodeKey || '').trim()) {
+    return false;
+  }
+
+  if (manualWorkspaceSelectionRouteKey.value === getWorkspaceRouteKey()) {
+    return false;
+  }
+
+  const focusedNodeKey = findSolutionDesignWorkflowNodeKey(props.focusNodeKey);
+  if (!focusedNodeKey) {
+    return false;
+  }
+
+  selectedWorkspaceStageKey.value = 'solution';
+  selectedWorkspaceNodeKey.value = focusedNodeKey;
+  clearOnlineFormState();
+  return true;
+}
+
+function ensureSolutionDesignWorkspaceSelection(options = {}) {
+  if (!isSolutionDesignStage.value || !workspace.value || !solutionDesignWorkflow.value) {
+    return;
+  }
+
+  if (
+    options.preserveSelection &&
+    selectedWorkspaceStageKey.value === 'solution' &&
+    findSolutionDesignWorkflowNodeKey(selectedWorkspaceNodeKey.value)
+  ) {
+    return;
+  }
+
+  const focusedNodeKey = findSolutionDesignWorkflowNodeKey(props.focusNodeKey);
+  if (focusedNodeKey) {
+    selectedWorkspaceStageKey.value = 'solution';
+    selectedWorkspaceNodeKey.value = focusedNodeKey;
+    clearWorkspaceOnlineForm(options);
+    return;
+  }
+
+  selectWorkspaceTargetFromRoute(options);
 }
 
 async function runDocumentAction(document, action, runner, successText, onSuccess = null) {
@@ -767,6 +1092,11 @@ async function runDocumentAction(document, action, runner, successText, onSucces
 async function submitDocument(document) {
   if (isInitiationOnlineFormDocument(document)) {
     actionErrorMessage.value = '请通过在线表单提交或重提该资料。';
+    return;
+  }
+
+  if (isSolutionDesignDedicatedStageDocument(document)) {
+    actionErrorMessage.value = '请通过方案设计专用节点流程处理该资料。';
     return;
   }
 
@@ -800,6 +1130,11 @@ async function completeRevisionDocument(document) {
     return;
   }
 
+  if (isSolutionDesignDedicatedStageDocument(document)) {
+    actionErrorMessage.value = '请通过方案设计专用节点流程完成该资料返工。';
+    return;
+  }
+
   await runDocumentAction(
     document,
     'complete-revision',
@@ -809,6 +1144,11 @@ async function completeRevisionDocument(document) {
 }
 
 async function confirmDocument(document) {
+  if (isSolutionDesignDedicatedStageDocument(document)) {
+    actionErrorMessage.value = '请通过方案设计专用节点审批该资料。';
+    return;
+  }
+
   await runDocumentAction(
     document,
     'confirm',
@@ -820,6 +1160,11 @@ async function confirmDocument(document) {
 async function returnDocument(payload) {
   clearActionState();
   const document = payload?.document || payload;
+  if (isSolutionDesignDedicatedStageDocument(document)) {
+    actionErrorMessage.value = '请通过方案设计专用节点退回该资料。';
+    return;
+  }
+
   const reason = String(returnReasons[document.id] || '').trim();
   const revisionTargetDocumentIds = Array.isArray(payload?.revisionTargetDocumentIds)
     ? payload.revisionTargetDocumentIds
@@ -1338,6 +1683,48 @@ async function loadProjectNavigation() {
   }
 }
 
+async function loadSolutionDesignWorkflow() {
+  if (!isSolutionDesignStage.value) {
+    solutionDesignWorkflowLoading.value = false;
+    solutionDesignWorkflowErrorMessage.value = '';
+    solutionDesignWorkflow.value = null;
+    return;
+  }
+
+  solutionDesignWorkflowLoading.value = true;
+  solutionDesignWorkflowErrorMessage.value = '';
+
+  try {
+    solutionDesignWorkflow.value = await getSolutionDesignWorkflow(props.projectId, props.authToken);
+  } catch (error) {
+    solutionDesignWorkflowErrorMessage.value = toReadableApiError(error);
+    solutionDesignWorkflow.value = null;
+  } finally {
+    solutionDesignWorkflowLoading.value = false;
+  }
+}
+
+async function loadSolutionDesignUploads() {
+  if (!isSolutionDesignStage.value) {
+    solutionDesignUploadsLoading.value = false;
+    solutionDesignUploadsErrorMessage.value = '';
+    solutionDesignUploads.value = null;
+    return;
+  }
+
+  solutionDesignUploadsLoading.value = true;
+  solutionDesignUploadsErrorMessage.value = '';
+
+  try {
+    solutionDesignUploads.value = await listSolutionDesignUploads(props.projectId, props.authToken);
+  } catch (error) {
+    solutionDesignUploadsErrorMessage.value = toReadableApiError(error);
+    solutionDesignUploads.value = null;
+  } finally {
+    solutionDesignUploadsLoading.value = false;
+  }
+}
+
 async function openOnlineForm(output) {
   if (!output?.documentId) {
     onlineFormErrorMessage.value = '关联资料未初始化，无法打开在线表单。';
@@ -1434,8 +1821,12 @@ async function loadDetail() {
   checklist.value = null;
   workspace.value = null;
   projectNavigation.value = null;
+  solutionDesignWorkflow.value = null;
+  solutionDesignUploads.value = null;
   workspaceErrorMessage.value = '';
   projectNavigationErrorMessage.value = '';
+  solutionDesignWorkflowErrorMessage.value = '';
+  solutionDesignUploadsErrorMessage.value = '';
   responsibilityCandidates.value = [];
   responsibilityCandidatesErrorMessage.value = '';
   clearAttachmentStates();
@@ -1457,8 +1848,11 @@ async function loadDetail() {
       loadChecklist(),
       loadWorkspace(),
       loadProjectNavigation(),
+      loadSolutionDesignWorkflow(),
+      loadSolutionDesignUploads(),
       loadResponsibilityCandidates()
     ]);
+    ensureSolutionDesignWorkspaceSelection();
   }
 }
 
@@ -1470,6 +1864,19 @@ watch(
     if (workspace.value) {
       selectWorkspaceTargetFromRoute();
     }
+    void focusSolutionDesignPanelFromRoute();
+  }
+);
+watch(
+  () => [
+    isActiveSolutionWorkspaceStage.value,
+    props.focusNodeKey,
+    solutionDesignWorkflow.value?.projectId,
+    solutionDesignWorkflow.value?.nodes?.length
+  ],
+  () => {
+    syncSolutionWorkspaceFocusNodeFromRoute();
+    void focusSolutionDesignPanelFromRoute();
   }
 );
 </script>

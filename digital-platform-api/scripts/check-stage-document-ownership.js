@@ -5925,7 +5925,7 @@ assert.equal(stageAdvanceRepositorySource.includes('PROJECT_APPROVAL_NOT_APPROVE
 assert.equal(stageAdvanceRepositorySource.includes('approval_status !=='), false);
 
 const projectDetailSource = await fs.readFile(
-  new URL('../../digital-platform-web/src/pages/ProjectDetailPage.vue', import.meta.url),
+  new URL('../../digital-platform-web/src/pages/project-detail/ProjectDetailLayout.vue', import.meta.url),
   'utf8'
 );
 assert.equal(projectDetailSource.includes('ProjectStageApprovalPanel'), false);

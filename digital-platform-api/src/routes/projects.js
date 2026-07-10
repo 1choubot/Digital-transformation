@@ -3,13 +3,18 @@ import { requireAuth, requireReportProjectSearchUser } from '../middleware/auth.
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import {
   advanceProjectStageHandler,
+  assignSolutionDesignRolesHandler,
   approveInitiationReviewNodeHandler,
+  approveSolutionDesignWorkflowNodeHandler,
   approveStageApprovalHandler,
   confirmStageDocumentHandler,
   completeStageDocumentRevisionHandler,
   createProjectHandler,
+  downloadSolutionDesignAnalysisGeneratedFileHandler,
+  downloadSolutionDesignReviewGeneratedFileHandler,
   deleteStageDocumentAttachmentHandler,
   deleteStageDocumentOnlineFormImageHandler,
+  downloadSolutionDesignWorkflowFileHandler,
   downloadStageDocumentAttachmentHandler,
   downloadStageDocumentGeneratedFileHandler,
   downloadStageDocumentOnlineFormImageHandler,
@@ -17,26 +22,40 @@ import {
   getProjectNavigationHandler,
   getProjectOverviewDashboardHandler,
   getProjectWorkspaceHandler,
+  getSolutionDesignAnalysisFormHandler,
+  getSolutionDesignReviewFormHandler,
+  getSolutionDesignWorkflowHandler,
   getStageDocumentOnlineFormHandler,
   getStageDocumentGeneratedFileStatusHandler,
   listStageApprovalHistoryHandler,
   getStageDocumentChecklistHandler,
   listProjectOperationLogsHandler,
   listProjectsHandler,
+  listSolutionDesignUploadsHandler,
   listMyActiveProjectsHandler,
   listStageDocumentAttachmentsHandler,
   markStageDocumentNotApplicableHandler,
+  processSolutionDesignQuotationResultHandler,
   restoreStageDocumentApplicableHandler,
   returnStageApprovalHandler,
   returnInitiationReviewNodeHandler,
+  returnSolutionDesignWorkflowNodeHandler,
   returnStageDocumentHandler,
   resubmitStageApprovalHandler,
   saveStageDocumentOnlineFormHandler,
+  saveSolutionDesignAnalysisFormHandler,
+  saveSolutionDesignReviewFormHandler,
+  selectSolutionDesignQuotationTenderBranchHandler,
+  submitSolutionDesignAnalysisFormHandler,
+  submitSolutionDesignQuotationHandler,
+  submitSolutionDesignReviewFormHandler,
+  submitSolutionDesignWorkflowNodeHandler,
   submitStageDocumentHandler,
   submitStageDocumentOnlineFormHandler,
   submitStageApprovalHandler,
   updateProjectCodeHandler,
   updateStageDocumentResponsibleUserHandler,
+  uploadSolutionDesignWorkflowFileHandler,
   uploadStageDocumentAttachmentHandler,
   uploadStageDocumentOnlineFormImageHandler
 } from './projectRouteHandlers.js';
@@ -87,6 +106,120 @@ projectsRouter.get(
   '/:projectId/navigation',
   requireAuth,
   asyncHandler(getProjectNavigationHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/solution-design-workflow',
+  requireAuth,
+  asyncHandler(getSolutionDesignWorkflowHandler)
+);
+
+projectsRouter.put(
+  '/:projectId/solution-design-workflow/roles',
+  requireAuth,
+  asyncHandler(assignSolutionDesignRolesHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/solution-design-workflow/quotation-tender/select',
+  requireAuth,
+  asyncHandler(selectSolutionDesignQuotationTenderBranchHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/solution-design-workflow/quotation-tender/quotation/submit',
+  requireAuth,
+  asyncHandler(submitSolutionDesignQuotationHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/solution-design-workflow/quotation-tender/quotation/result',
+  requireAuth,
+  asyncHandler(processSolutionDesignQuotationResultHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/solution-design-workflow/analysis-form',
+  requireAuth,
+  asyncHandler(getSolutionDesignAnalysisFormHandler)
+);
+
+projectsRouter.put(
+  '/:projectId/solution-design-workflow/analysis-form',
+  requireAuth,
+  asyncHandler(saveSolutionDesignAnalysisFormHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/solution-design-workflow/analysis-form/submit',
+  requireAuth,
+  asyncHandler(submitSolutionDesignAnalysisFormHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/solution-design-workflow/analysis-form/generated-file/download',
+  requireAuth,
+  asyncHandler(downloadSolutionDesignAnalysisGeneratedFileHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/solution-design-workflow/nodes/:nodeKey/review-form',
+  requireAuth,
+  asyncHandler(getSolutionDesignReviewFormHandler)
+);
+
+projectsRouter.put(
+  '/:projectId/solution-design-workflow/nodes/:nodeKey/review-form',
+  requireAuth,
+  asyncHandler(saveSolutionDesignReviewFormHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/solution-design-workflow/nodes/:nodeKey/review-form/submit',
+  requireAuth,
+  asyncHandler(submitSolutionDesignReviewFormHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/solution-design-workflow/nodes/:nodeKey/review-form/generated-file/download',
+  requireAuth,
+  asyncHandler(downloadSolutionDesignReviewGeneratedFileHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/solution-design-workflow/uploads',
+  requireAuth,
+  asyncHandler(listSolutionDesignUploadsHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/solution-design-workflow/uploads/:slotKey/download',
+  requireAuth,
+  asyncHandler(downloadSolutionDesignWorkflowFileHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/solution-design-workflow/uploads/:slotKey',
+  requireAuth,
+  asyncHandler(uploadSolutionDesignWorkflowFileHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/solution-design-workflow/nodes/:nodeKey/submit',
+  requireAuth,
+  asyncHandler(submitSolutionDesignWorkflowNodeHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/solution-design-workflow/nodes/:nodeKey/approve',
+  requireAuth,
+  asyncHandler(approveSolutionDesignWorkflowNodeHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/solution-design-workflow/nodes/:nodeKey/return',
+  requireAuth,
+  asyncHandler(returnSolutionDesignWorkflowNodeHandler)
 );
 
 projectsRouter.post(

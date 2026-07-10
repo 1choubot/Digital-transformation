@@ -117,7 +117,10 @@ function pageProps(targetRoute) {
         taskMode: routeQuery(targetRoute.query?.taskMode),
         focusDocumentId: routeQuery(targetRoute.query?.documentId),
         focusStageId: routeQuery(targetRoute.query?.stageId),
-        focusNodeKey: routeParam(targetRoute.params?.nodeCode) || routeQuery(targetRoute.query?.nodeKey)
+        focusNodeKey:
+          routeParam(targetRoute.params?.nodeCode) ||
+          routeQuery(targetRoute.query?.focusNodeKey) ||
+          routeQuery(targetRoute.query?.nodeKey)
       };
     case 'daily-report':
     case 'weekly-report':

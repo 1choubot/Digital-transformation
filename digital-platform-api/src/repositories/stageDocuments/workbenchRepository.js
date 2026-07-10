@@ -12,14 +12,18 @@ import {
   INITIATION_REVIEW_DOCUMENT_CODE,
   isInitiationOnlineFormDocument
 } from '../../domain/initiationReview.js';
+import { SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES } from '../../domain/solutionDesignWorkflow.js';
 import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import { attachStageDocumentPermissions } from './accessControl.js';
 import {
+  attachSolutionDesignDerivedCompletionToStageDocumentRows,
+  buildStageCompletenessSummary,
   getDocumentCompletionMode,
   isRevisionRequired,
   isRevisionResubmitted,
   isReviewCompletionMode,
   isStageDocumentComplete,
+  mapGateDocument,
   mapDocument
 } from './shared.js';
 import {
@@ -27,13 +31,22 @@ import {
   INITIATION_REVIEW_TODO_TYPE,
   selectInitiationReviewWorkbenchTodos
 } from './initiationReviewRepository.js';
+import {
+  SOLUTION_DESIGN_WORKBENCH_TODO_TYPE,
+  selectSolutionDesignWorkbenchTodos
+} from '../projects/solutionDesignWorkflowRepository.js';
 
 const WORKBENCH_TODO_TYPES = [
   'document_responsibility',
   'document_review',
   INITIATION_REVIEW_TODO_TYPE,
+  SOLUTION_DESIGN_WORKBENCH_TODO_TYPE,
   'stage_advance'
 ];
+
+const SOLUTION_DESIGN_DEDICATED_DOCUMENT_PLACEHOLDERS = SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES
+  .map(() => '?')
+  .join(', ');
 
 const INITIATION_COLLABORATION_METADATA_KEY = '_collaboration';
 const INITIATION_COLLABORATION_PART = {
@@ -287,6 +300,7 @@ async function selectDocumentResponsibilityTodos(user) {
       AND d.is_applicable = 1
       AND d.document_code <> ?
       AND d.document_code <> ?
+      AND d.document_code NOT IN (${SOLUTION_DESIGN_DEDICATED_DOCUMENT_PLACEHOLDERS})
       AND (
         d.status IN (?, ?)
         OR (
@@ -311,6 +325,7 @@ async function selectDocumentResponsibilityTodos(user) {
       PROJECT_STATUS.ENDED,
       INITIATION_REVIEW_DOCUMENT_CODE,
       INITIATION_NOTICE_DOCUMENT_CODE,
+      ...SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES,
       DOCUMENT_STATUS.NOT_SUBMITTED,
       DOCUMENT_STATUS.RETURNED,
       COMPLETION_MODE.APPROVAL_REQUIRED,
@@ -550,6 +565,7 @@ async function selectDocumentReviewTodos(user) {
     WHERE d.is_applicable = 1
       AND p.status <> ?
       AND d.document_code <> '1.2'
+      AND d.document_code NOT IN (${SOLUTION_DESIGN_DEDICATED_DOCUMENT_PLACEHOLDERS})
       AND d.status = ?
       AND d.completion_mode = ?
       AND (
@@ -572,7 +588,14 @@ async function selectDocumentReviewTodos(user) {
       d.stage_order ASC,
       d.document_order ASC,
       d.id ASC`,
-    [PROJECT_STATUS.ENDED, DOCUMENT_STATUS.SUBMITTED, COMPLETION_MODE.APPROVAL_REQUIRED, user.department, user.department]
+    [
+      PROJECT_STATUS.ENDED,
+      ...SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES,
+      DOCUMENT_STATUS.SUBMITTED,
+      COMPLETION_MODE.APPROVAL_REQUIRED,
+      user.department,
+      user.department
+    ]
   );
 
   return rows.map((row) =>
@@ -643,61 +666,6 @@ async function selectStageAdvanceTodos(user) {
         WHERE stage_documents.project_id = p.id
           AND stage_documents.stage_order = s.stage_order
       )
-      AND NOT EXISTS (
-        SELECT 1
-          FROM project_stage_documents incomplete_documents
-          WHERE incomplete_documents.project_id = p.id
-            AND incomplete_documents.stage_order = s.stage_order
-            AND incomplete_documents.is_applicable = 1
-            AND (
-            incomplete_documents.revision_required = 1
-            OR
-            (
-              incomplete_documents.document_code = '1.2'
-              AND (
-                NOT EXISTS (
-                  SELECT 1
-                  FROM project_initiation_review_nodes initiation_nodes
-                  WHERE initiation_nodes.stage_document_id = incomplete_documents.id
-                  GROUP BY initiation_nodes.stage_document_id
-                  HAVING COUNT(*) = 3
-                    AND SUM(
-                      initiation_nodes.node_key = 'business_review'
-                      AND initiation_nodes.node_status = 'approved'
-                      AND NULLIF(TRIM(COALESCE(initiation_nodes.comment, '')), '') IS NOT NULL
-                    ) = 1
-                    AND SUM(
-                      initiation_nodes.node_key = 'technical_review'
-                      AND initiation_nodes.node_status = 'approved'
-                      AND NULLIF(TRIM(COALESCE(initiation_nodes.comment, '')), '') IS NOT NULL
-                    ) = 1
-                    AND SUM(
-                      initiation_nodes.node_key = 'general_review'
-                      AND initiation_nodes.node_status = 'approved'
-                    ) = 1
-                )
-                OR EXISTS (
-                  SELECT 1
-                  FROM project_stage_documents initiation_rework_target
-                  WHERE initiation_rework_target.project_id = incomplete_documents.project_id
-                    AND initiation_rework_target.document_code = '1.1'
-                    AND initiation_rework_target.revision_required = 1
-                    AND initiation_rework_target.revision_source_document_id = incomplete_documents.id
-                )
-              )
-            )
-            OR
-            incomplete_documents.status = ?
-            OR (
-              incomplete_documents.completion_mode IN (?, ?)
-              AND incomplete_documents.status NOT IN (?, ?)
-            )
-            OR (
-              incomplete_documents.completion_mode IN (?, ?)
-              AND incomplete_documents.status <> ?
-            )
-          )
-      )
     ORDER BY
       p.project_code ASC,
       s.stage_order ASC,
@@ -705,20 +673,21 @@ async function selectStageAdvanceTodos(user) {
     [
       ...params,
       PROJECT_STATUS.COMPLETED,
-      PROJECT_STATUS.ENDED,
-      DOCUMENT_STATUS.RETURNED,
-      COMPLETION_MODE.SUBMIT_ONLY,
-      COMPLETION_MODE.CONDITIONAL_SUBMIT,
-      DOCUMENT_STATUS.SUBMITTED,
-      DOCUMENT_STATUS.CONFIRMED,
-      COMPLETION_MODE.APPROVAL_REQUIRED,
-      COMPLETION_MODE.CONDITIONAL_APPROVAL,
-      DOCUMENT_STATUS.CONFIRMED
+      PROJECT_STATUS.ENDED
     ]
   );
 
-  return rows
-    .filter((row) => canAdvanceProjectStage(user, mapWorkbenchProject(row)))
+  const candidateRows = rows.filter((row) => canAdvanceProjectStage(user, mapWorkbenchProject(row)));
+  if (candidateRows.length === 0) {
+    return [];
+  }
+
+  const completenessByStage = await selectStageAdvanceCompletenessByStage(candidateRows, user);
+  return candidateRows
+    .filter((row) => {
+      const key = buildStageAdvanceCompletenessKey(row.project_id, row.stage_order);
+      return completenessByStage.get(key)?.incompleteRequiredCount === 0;
+    })
     .map((row) =>
       buildStageTodo({
         row,
@@ -727,6 +696,63 @@ async function selectStageAdvanceTodos(user) {
         taskMode: 'stageAdvance'
       })
     );
+}
+
+function buildStageAdvanceCompletenessKey(projectId, stageOrder) {
+  return `${projectId}:${stageOrder}`;
+}
+
+async function selectStageAdvanceCompletenessByStage(rows, user) {
+  const projectIds = [...new Set(rows.map((row) => Number(row.project_id)).filter(Number.isSafeInteger))];
+  if (projectIds.length === 0) {
+    return new Map();
+  }
+
+  const [rawDocumentRows] = await pool.execute(
+    `SELECT
+      d.id,
+      d.project_id,
+      d.document_code,
+      d.document_name,
+      d.stage_order,
+      d.is_required,
+      d.completion_mode,
+      d.status,
+      d.is_applicable,
+      d.revision_required,
+      d.revision_reason,
+      d.revision_source_document_id,
+      d.revision_requested_at,
+      d.revision_resubmitted_by_user_id,
+      d.revision_resubmitted_at,
+      source.document_code AS revision_source_document_code,
+      source.document_name AS revision_source_document_name
+    FROM project_stage_documents d
+    LEFT JOIN project_stage_documents source
+      ON source.id = d.revision_source_document_id
+    WHERE d.project_id IN (${projectIds.map(() => '?').join(', ')})
+    ORDER BY d.project_id ASC, d.stage_order ASC, d.document_order ASC, d.id ASC`,
+    projectIds
+  );
+  const rowsWithInitiationReview = await attachInitiationReviewToStageDocumentRows(pool, rawDocumentRows, user);
+  const rowsWithDerivedCompletion = await attachSolutionDesignDerivedCompletionToStageDocumentRows(
+    pool,
+    rowsWithInitiationReview
+  );
+  const grouped = new Map();
+
+  for (const row of rowsWithDerivedCompletion) {
+    const key = buildStageAdvanceCompletenessKey(row.project_id, row.stage_order);
+    if (!grouped.has(key)) {
+      grouped.set(key, []);
+    }
+    grouped.get(key).push(mapGateDocument(row));
+  }
+
+  return new Map([...grouped.entries()].map(([key, documents]) => [
+    key,
+    buildStageCompletenessSummary(documents)
+  ]));
 }
 
 function buildSummary(items) {
@@ -771,6 +797,7 @@ export async function getMyWorkbench(user) {
     selectInitiationNoticeSyntheticTodos(user),
     selectDocumentReviewTodos(user),
     selectInitiationReviewWorkbenchTodos(pool, user),
+    selectSolutionDesignWorkbenchTodos(user),
     selectStageAdvanceTodos(user)
   ]);
   const items = sortWorkbenchItems(groups.flat());

@@ -92,22 +92,29 @@
               <small>第 {{ item.stageOrder }} 阶段</small>
             </div>
             <div>
-              <span>资料项</span>
-              <strong>{{ item.documentName || '-' }}</strong>
-              <small class="mono">{{ item.documentCode || '-' }}</small>
+              <span>{{ isSolutionDesignTodo(item) ? '节点' : '资料项' }}</span>
+              <strong>{{ formatTodoSubject(item) }}</strong>
+              <small class="mono">{{ formatTodoSubjectCode(item) }}</small>
             </div>
             <div>
-              <span>完成规则</span>
-              <strong>{{ item.completionMode ? formatCompletionMode(item.completionMode) : '-' }}</strong>
+              <span>{{ isSolutionDesignTodo(item) ? '版本' : '完成规则' }}</span>
+              <strong>{{ formatTodoRule(item) }}</strong>
             </div>
             <div>
               <span>状态</span>
-              <strong>{{ item.completionStatus ? formatCompletionStatus(item.completionStatus) : formatStatus(item.status) }}</strong>
+              <strong>{{ formatTodoStatus(item) }}</strong>
             </div>
             <div>
               <span>更新时间</span>
               <time>{{ formatDateTime(item.updatedAt || item.createdAt) }}</time>
             </div>
+          </div>
+
+          <div v-if="item.blockingReasons?.length" class="task-card__blocking">
+            <span>阻塞原因</span>
+            <ul>
+              <li v-for="reason in item.blockingReasons" :key="reason">{{ reason }}</li>
+            </ul>
           </div>
 
           <div class="task-card__footer">
@@ -158,8 +165,20 @@ const emit = defineEmits(['auth-expired']);
 const typeOptions = [
   { value: 'document_responsibility', label: '待我填写资料' },
   { value: 'document_review', label: '待我评价/审批' },
+  { value: 'solution_design_workflow', label: '方案设计待办' },
   { value: 'stage_advance', label: '待我推进阶段' }
 ];
+
+const solutionDesignStatusText = {
+  not_started: '未开始',
+  pending: '待提交',
+  pending_review: '待审批',
+  pending_general_review: '待总经理审批',
+  returned: '已退回',
+  approved: '已通过',
+  skipped: '已跳过',
+  ended: '已结束'
+};
 
 const selectedType = ref('all');
 const projectKeyword = ref('');
@@ -200,7 +219,14 @@ function summaryCountForType(type) {
 }
 
 function itemKey(item) {
-  return [item.type, item.projectId, item.stageId || '', item.documentId || '', item.nodeKey || ''].join(':');
+  return [
+    item.type,
+    item.projectId,
+    item.stageId || '',
+    item.documentId || '',
+    item.nodeKey || '',
+    item.actionKey || item.actionText || ''
+  ].join(':');
 }
 
 function formatTodoType(type, item = null) {
@@ -215,9 +241,45 @@ function formatTodoType(type, item = null) {
   return typeOptions.find((option) => option.value === type)?.label || type || '-';
 }
 
+function isSolutionDesignTodo(item) {
+  return item?.type === 'solution_design_workflow' || item?.taskType === 'solution_design_workflow';
+}
+
+function formatTodoSubject(item) {
+  return isSolutionDesignTodo(item) ? item.nodeName || item.nodeKey || '-' : item.documentName || '-';
+}
+
+function formatTodoSubjectCode(item) {
+  return isSolutionDesignTodo(item) ? item.nodeKey || '-' : item.documentCode || '-';
+}
+
+function formatTodoRule(item) {
+  return isSolutionDesignTodo(item)
+    ? `v${item.revision || 1}`
+    : item.completionMode
+      ? formatCompletionMode(item.completionMode)
+      : '-';
+}
+
+function formatTodoStatus(item) {
+  if (item.completionStatus) {
+    return formatCompletionStatus(item.completionStatus);
+  }
+
+  if (isSolutionDesignTodo(item)) {
+    return solutionDesignStatusText[item.status] || formatStatus(item.status);
+  }
+
+  return formatStatus(item.status);
+}
+
 function taskTone(item) {
   if (item.type === 'stage_advance') {
     return 'stage';
+  }
+
+  if (isSolutionDesignTodo(item)) {
+    return 'solution';
   }
 
   if (item.type === 'document_review' || item.type === 'initiation_review') {

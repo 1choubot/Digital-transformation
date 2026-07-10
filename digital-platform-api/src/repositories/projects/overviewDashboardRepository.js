@@ -1,12 +1,17 @@
 import { pool } from '../../db/pool.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
-import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import {
   INITIATION_NOTICE_DOCUMENT_CODE,
   INITIATION_REVIEW_DOCUMENT_CODE
 } from '../../domain/initiationReview.js';
 import { canViewCompleteStageDocumentSet } from '../stageDocuments/accessControl.js';
-import { buildStageCompletenessSummary } from '../stageDocuments/shared.js';
+import {
+  attachSolutionDesignDerivedCompletionToStageDocumentRows,
+  buildStageCompletenessSummary,
+  COMPLETION_STATUS,
+  deriveStageDocumentCompletion,
+  isStageDocumentComplete
+} from '../stageDocuments/shared.js';
 import { attachInitiationReviewToStageDocumentRows } from '../stageDocuments/initiationReviewRepository.js';
 import { mapCreator } from '../userRepository.js';
 import {
@@ -117,6 +122,7 @@ function buildProjectOverviewWhereClause(filters, user) {
 }
 
 function mapProjectOverviewDocument(row) {
+  const solutionDesignDerivedCompletion = row.solutionDesignDerivedCompletion ?? null;
   return {
     id: row.id,
     documentCode: row.document_code,
@@ -138,7 +144,12 @@ function mapProjectOverviewDocument(row) {
       : null,
     revisionRequestedAt: row.revision_requested_at ?? null,
     revisionResubmittedByUserId: row.revision_resubmitted_by_user_id ?? null,
-    revisionResubmittedAt: row.revision_resubmitted_at ?? null
+    revisionResubmittedAt: row.revision_resubmitted_at ?? null,
+    solutionDesignDerivedCompletion,
+    derivedCompletionSource: solutionDesignDerivedCompletion?.source ?? null,
+    derivedCompletionStatus: solutionDesignDerivedCompletion?.derivedCompletionStatus ?? null,
+    derivedBlockingReasons: solutionDesignDerivedCompletion?.derivedBlockingReasons ?? [],
+    derivedNotApplicable: solutionDesignDerivedCompletion?.derivedNotApplicable === true
   };
 }
 
@@ -258,9 +269,9 @@ function buildOverviewSummary(projects, myPendingStageDocumentTasks) {
   };
 }
 
-async function selectProjectOverviewRows(filters, user) {
+async function selectProjectOverviewRows(filters, user, executor = pool) {
   const { whereClause, params } = buildProjectOverviewWhereClause(filters, user);
-  const [rows] = await pool.execute(
+  const [rows] = await executor.execute(
     `SELECT
       p.id,
       p.project_code,
@@ -305,12 +316,12 @@ async function selectProjectOverviewRows(filters, user) {
   return rows;
 }
 
-async function selectProjectOverviewStages(projectIds) {
+async function selectProjectOverviewStages(projectIds, executor = pool) {
   if (projectIds.length === 0) {
     return [];
   }
 
-  const [rows] = await pool.execute(
+  const [rows] = await executor.execute(
     `SELECT
       id,
       project_id,
@@ -328,12 +339,12 @@ async function selectProjectOverviewStages(projectIds) {
   return rows;
 }
 
-async function selectProjectOverviewDocuments(projectIds) {
+async function selectProjectOverviewDocuments(projectIds, executor = pool) {
   if (projectIds.length === 0) {
     return [];
   }
 
-  const [rows] = await pool.execute(
+  const [rows] = await executor.execute(
     `SELECT
       d.id,
       d.project_id,
@@ -364,54 +375,95 @@ async function selectProjectOverviewDocuments(projectIds) {
   return rows;
 }
 
-async function countMyPendingStageDocumentTasks(userId) {
-  const [rows] = await pool.execute(
-    `SELECT COUNT(*) AS count
+async function selectPendingStageDocumentTaskCandidateRows(userId, executor = pool) {
+  const [rows] = await executor.execute(
+    `SELECT
+      d.id,
+      d.project_id,
+      d.stage_order,
+      d.document_order,
+      d.document_code,
+      d.document_name,
+      d.is_required,
+      d.is_applicable,
+      d.completion_mode,
+      d.status,
+      d.revision_required,
+      d.revision_reason,
+      d.revision_source_document_id,
+      d.revision_requested_at,
+      d.revision_resubmitted_by_user_id,
+      d.revision_resubmitted_at,
+      source.document_code AS revision_source_document_code,
+      source.document_name AS revision_source_document_name
     FROM project_stage_documents d
     INNER JOIN projects p
       ON p.id = d.project_id
+    LEFT JOIN project_stage_documents source
+      ON source.id = d.revision_source_document_id
     WHERE d.responsible_user_id = ?
       AND p.status <> ?
-      AND d.is_applicable = 1
       AND d.document_code NOT IN (?, ?)
-      AND (
-        (
-          d.revision_required = 1
-          AND NOT (
-            d.completion_mode IN (?, ?)
-            AND d.status = ?
-            AND d.revision_resubmitted_at IS NOT NULL
-          )
-        )
-        OR d.status IN (?, ?)
-      )`,
+    ORDER BY d.project_id ASC, d.stage_order ASC, d.document_order ASC, d.id ASC`,
     [
       userId,
       PROJECT_STATUS.ENDED,
       INITIATION_REVIEW_DOCUMENT_CODE,
-      INITIATION_NOTICE_DOCUMENT_CODE,
-      COMPLETION_MODE.APPROVAL_REQUIRED,
-      COMPLETION_MODE.CONDITIONAL_APPROVAL,
-      DOCUMENT_STATUS.SUBMITTED,
-      DOCUMENT_STATUS.NOT_SUBMITTED,
-      DOCUMENT_STATUS.RETURNED
+      INITIATION_NOTICE_DOCUMENT_CODE
     ]
   );
 
-  return Number(rows[0].count);
+  return rows;
 }
 
-export async function getProjectOverviewDashboard(user, filters) {
+function isPendingStageDocumentTask(document) {
+  if (isStageDocumentComplete(document)) {
+    return false;
+  }
+
+  const completion = deriveStageDocumentCompletion(document);
+  return [
+    COMPLETION_STATUS.INCOMPLETE,
+    COMPLETION_STATUS.REVISION_REQUIRED
+  ].includes(completion.completionStatus);
+}
+
+async function countMyPendingStageDocumentTasks(user, executor = pool) {
+  const candidateRows = await selectPendingStageDocumentTaskCandidateRows(user.id, executor);
+  if (candidateRows.length === 0) {
+    return 0;
+  }
+
+  const candidateIds = new Set(candidateRows.map((row) => row.id));
+  const projectIds = [...new Set(candidateRows.map((row) => row.project_id))];
+  const projectDocumentRows = await selectProjectOverviewDocuments(projectIds, executor);
+  const rowsWithInitiationReview = await attachInitiationReviewToStageDocumentRows(executor, projectDocumentRows, user);
+  const rowsWithDerivedCompletion = await attachSolutionDesignDerivedCompletionToStageDocumentRows(
+    executor,
+    rowsWithInitiationReview
+  );
+
+  return rowsWithDerivedCompletion
+    .filter((row) => candidateIds.has(row.id))
+    .filter(isPendingStageDocumentTask)
+    .length;
+}
+
+export async function getProjectOverviewDashboard(user, filters, executor = pool) {
   const [projectRows, myPendingStageDocumentTasks] = await Promise.all([
-    selectProjectOverviewRows(filters, user),
-    countMyPendingStageDocumentTasks(user.id)
+    selectProjectOverviewRows(filters, user, executor),
+    countMyPendingStageDocumentTasks(user, executor)
   ]);
   const projectIds = projectRows.map((project) => project.id);
   const [stageRows, rawDocumentRows] = await Promise.all([
-    selectProjectOverviewStages(projectIds),
-    selectProjectOverviewDocuments(projectIds)
+    selectProjectOverviewStages(projectIds, executor),
+    selectProjectOverviewDocuments(projectIds, executor)
   ]);
-  const documentRows = await attachInitiationReviewToStageDocumentRows(pool, rawDocumentRows, user);
+  const rowsWithInitiationReview = await attachInitiationReviewToStageDocumentRows(executor, rawDocumentRows, user);
+  const documentRows = await attachSolutionDesignDerivedCompletionToStageDocumentRows(
+    executor,
+    rowsWithInitiationReview
+  );
   const stagesByProject = groupRowsBy(stageRows, 'project_id');
   const documentsByProject = groupRowsBy(documentRows, 'project_id');
   const projects = projectRows

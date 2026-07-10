@@ -36,6 +36,18 @@ export function buildProjectVisibilityCondition(user, projectAlias = 'p') {
   const projectManagerCondition = `${projectAlias}.project_manager_user_id = ?`;
   const businessResponsibleCondition = `${projectAlias}.business_responsible_user_id = ?`;
   const technicalResponsibleCondition = `${projectAlias}.technical_responsible_user_id = ?`;
+  const solutionDesignRoleCondition = `EXISTS (
+    SELECT 1
+    FROM project_solution_design_roles visible_solution_design_roles
+    WHERE visible_solution_design_roles.project_id = ${projectAlias}.id
+      AND ? IN (
+        visible_solution_design_roles.technical_owner_user_id,
+        visible_solution_design_roles.business_owner_user_id,
+        visible_solution_design_roles.procurement_owner_user_id,
+        visible_solution_design_roles.finance_accountant_user_id,
+        visible_solution_design_roles.finance_owner_user_id
+      )
+  )`;
   const responsibleUserCondition = `EXISTS (
     SELECT 1
     FROM project_stage_documents visible_user_documents
@@ -44,8 +56,8 @@ export function buildProjectVisibilityCondition(user, projectAlias = 'p') {
   )`;
 
   return {
-    sql: `(${projectCreatorCondition} OR ${projectManagerCondition} OR ${businessResponsibleCondition} OR ${technicalResponsibleCondition} OR ${responsibleUserCondition})`,
-    params: [user.id, user.id, user.id, user.id, user.id]
+    sql: `(${projectCreatorCondition} OR ${projectManagerCondition} OR ${businessResponsibleCondition} OR ${technicalResponsibleCondition} OR ${solutionDesignRoleCondition} OR ${responsibleUserCondition})`,
+    params: [user.id, user.id, user.id, user.id, user.id, user.id]
   };
 }
 

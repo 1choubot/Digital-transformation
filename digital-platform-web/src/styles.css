@@ -824,30 +824,33 @@ p {
 }
 
 .overview-project__main {
-  display: grid;
-  grid-template-columns:
-    minmax(190px, 1.25fr)
-    96px
-    minmax(150px, 0.95fr)
-    minmax(170px, 1fr)
-    minmax(170px, 1fr)
-    96px;
-  gap: 12px;
+  display: flex;
   align-items: center;
+  gap: 14px;
 }
 
 .overview-project__identity,
 .overview-project__stage,
-.overview-project__completion,
 .overview-project__dates {
-  display: grid;
-  gap: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
+}
+
+.overview-project__identity {
+  flex: 0.9;
+  min-width: 140px;
+}
+
+.overview-project__identity .mono {
+  color: #667789;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .overview-project__identity strong,
 .overview-project__stage strong,
-.overview-project__completion strong,
 .overview-project__dates strong {
   min-width: 0;
   color: #17212f;
@@ -855,9 +858,33 @@ p {
   overflow-wrap: anywhere;
 }
 
+.overview-project__meta {
+  flex: 1;
+  min-width: 260px;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 10px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.overview-project__meta span {
+  white-space: nowrap;
+}
+
+.overview-project__stage {
+  flex: 0.8;
+  min-width: 120px;
+}
+
+.overview-project__dates {
+  flex: 0 0 auto;
+  min-width: 100px;
+  white-space: nowrap;
+}
+
 .overview-project__identity small,
 .overview-project__stage small,
-.overview-project__completion small,
 .overview-project__dates small,
 .overview-project__documents span,
 .overview-project__documents p {
@@ -867,7 +894,6 @@ p {
 }
 
 .overview-project__stage > span,
-.overview-project__completion > span,
 .overview-project__dates > span {
   color: #667789;
   font-size: 12px;
@@ -2526,6 +2552,14 @@ p {
   margin-top: 4px;
   color: #17212f;
   font-size: 18px;
+}
+
+.online-form-editor__heading-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .project-workspace__node-grid {

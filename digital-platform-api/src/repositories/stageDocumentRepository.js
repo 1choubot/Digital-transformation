@@ -47,6 +47,7 @@ export {
   returnInitiationReviewNode
 } from './stageDocuments/initiationReviewRepository.js';
 export {
+  generateStageDocumentOnlineFormFile,
   getStageDocumentGeneratedFileDownload,
   getStageDocumentGeneratedFileStatus,
   StageDocumentGeneratedFileError,

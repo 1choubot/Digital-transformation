@@ -94,6 +94,26 @@
               <strong>{{ project.projectName }}</strong>
             </div>
 
+            <div class="overview-project__dates">
+              <span>客户名称</span>
+              <strong>{{ project.customerName || '-' }}</strong>
+            </div>
+
+            <div class="overview-project__dates">
+              <span>商务负责</span>
+              <strong>{{ project.businessResponsibleUser?.name || '-' }}</strong>
+            </div>
+
+            <div class="overview-project__dates">
+              <span>项目经理</span>
+              <strong>{{ project.projectManagerUser?.name || '-' }}</strong>
+            </div>
+
+            <div class="overview-project__dates">
+              <span>技术负责人</span>
+              <strong>{{ project.technicalResponsibleUser?.name || '-' }}</strong>
+            </div>
+
             <StatusBadge :status="project.status" />
 
             <div class="overview-project__stage">
@@ -104,10 +124,9 @@
             </div>
 
             <div class="overview-project__dates">
-              <span>计划时间</span>
-              <strong>{{ formatDate(project.plannedStartDate) }} 至 {{ formatDate(project.plannedEndDate) }}</strong>
+              <span>立项日期</span>
+              <strong>{{ project.initiationDate ? formatDate(project.initiationDate) : '-' }}</strong>
             </div>
-
           </div>
 
         </el-card>
@@ -256,10 +275,7 @@ onMounted(loadDashboard);
 <style>
 .page-stack {
   max-width: 1500px;
-  /* 最大宽度限制 */
   margin: 0 auto;
-  /* 水平居中 */
   padding: 1.5rem;
-  /* 内边距 */
 }
 </style>

@@ -226,6 +226,14 @@ export async function submitStageDocumentOnlineForm(projectId, documentId, formD
   });
 }
 
+export async function generateStageDocumentOnlineFormFile(projectId, documentId, authToken) {
+  return request(`/api/projects/${projectId}/stage-documents/${documentId}/online-form/generated-file`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({})
+  });
+}
+
 export async function uploadStageDocumentOnlineFormImage(projectId, documentId, fieldKey, file, authToken) {
   const formData = new FormData();
   formData.append('file', file);

@@ -47,6 +47,7 @@ import {
 } from '../repositories/operationLogRepository.js';
 import {
   approveInitiationReviewNode,
+  generateStageDocumentOnlineFormFile,
   getProjectStageDocumentChecklist,
   completeProjectStageDocumentRevision,
   deleteStageDocumentOnlineFormImage,
@@ -894,6 +895,22 @@ export async function getStageDocumentGeneratedFileStatusHandler(req, res) {
 
   res.json({
     data: status
+  });
+}
+
+export async function generateStageDocumentOnlineFormFileHandler(req, res) {
+  const projectId = parseAttachmentProjectId(req.params.projectId);
+  const documentId = parseAttachmentDocumentId(req.params.documentId);
+
+  await assertProjectViewable(projectId, req.auth.user);
+  const result = await generateStageDocumentOnlineFormFile({
+    projectId,
+    documentId,
+    user: req.auth.user
+  });
+
+  res.status(201).json({
+    data: result
   });
 }
 

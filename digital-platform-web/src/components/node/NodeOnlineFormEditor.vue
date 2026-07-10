@@ -5,7 +5,17 @@
         <span class="section-eyebrow">在线表单</span>
         <h3>{{ form.documentCode }} {{ form.documentName }}</h3>
       </div>
-      <span class="stage-document-pill">{{ form.status }}</span>
+      <div class="online-form-editor__heading-actions">
+        <button
+          type="button"
+          class="ghost-button"
+          :disabled="downloadDisabled || downloading"
+          @click="$emit('download-form')"
+        >
+          下载表单
+        </button>
+        <span class="stage-document-pill">{{ form.status }}</span>
+      </div>
     </div>
 
     <section v-if="errorMessage" class="state-panel state-panel--inline state-panel--error">
@@ -228,7 +238,15 @@
 </template>
 
 <script setup>
-const emit = defineEmits(['save', 'submit', 'update-field', 'upload-image', 'download-image', 'delete-image']);
+const emit = defineEmits([
+  'save',
+  'submit',
+  'update-field',
+  'upload-image',
+  'download-image',
+  'delete-image',
+  'download-form'
+]);
 
 const props = defineProps({
   form: {
@@ -248,6 +266,14 @@ const props = defineProps({
     default: false
   },
   submitting: {
+    type: Boolean,
+    default: false
+  },
+  downloading: {
+    type: Boolean,
+    default: false
+  },
+  downloadDisabled: {
     type: Boolean,
     default: false
   },

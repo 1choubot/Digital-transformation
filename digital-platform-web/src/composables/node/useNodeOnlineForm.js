@@ -111,6 +111,22 @@ export function useNodeOnlineForm({ props, emit, documentCode, affectedNodeCodes
     notifyFormChanged();
   }
 
+  async function downloadOnlineFormFile() {
+    const targetOutput = output.value;
+    if (!targetOutput?.documentId) {
+      return;
+    }
+
+    if (activeForm.value?.permissions?.canEdit) {
+      const saved = await invoke('saveOnlineForm', { refreshWorkspace: false, showMessage: false });
+      if (saved === false) {
+        return;
+      }
+    }
+
+    await invoke('downloadOnlineFormFile', targetOutput);
+  }
+
   return {
     emptyObject,
     context,
@@ -120,6 +136,7 @@ export function useNodeOnlineForm({ props, emit, documentCode, affectedNodeCodes
     invoke,
     saveOnlineForm,
     submitOnlineForm,
+    downloadOnlineFormFile,
     notifyFormChanged
   };
 }

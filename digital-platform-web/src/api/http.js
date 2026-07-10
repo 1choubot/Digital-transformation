@@ -522,6 +522,14 @@ export function toReadableApiError(error) {
     return '请选择有效项目后再提交日报。';
   }
 
+  if (error.code === 'GENERATED_FILE_TEMPLATE_NOT_AVAILABLE') {
+    return '当前在线表单尚未配置可下载模板。';
+  }
+
+  if (error.code === 'GENERATED_FILE_GENERATION_FAILED') {
+    return error.message ? `在线表单文件生成失败：${error.message}` : '在线表单文件生成失败，请检查表单必填项后重试。';
+  }
+
   if (error.code === 'WEEKLY_REPORT_WRITER_REQUIRED') {
     return '当前账号无权填写个人周报。';
   }

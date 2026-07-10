@@ -7,9 +7,12 @@
       :error-message="context.onlineFormErrorMessage || ''"
       :saving="context.onlineFormSaving === true"
       :submitting="context.onlineFormSubmitting === true"
+      :downloading="String(context.onlineFormDownloadPendingDocumentId || '') === String(output?.documentId || '')"
+      :download-disabled="!output?.documentId"
       :image-state="context.onlineFormImageState || emptyObject"
       @save="saveOnlineForm"
       @submit="submitOnlineForm"
+      @download-form="downloadOnlineFormFile"
       @update-field="invoke('updateOnlineFormField', $event)"
       @upload-image="invoke('uploadOnlineFormImage', $event)"
       @download-image="invoke('downloadOnlineFormImage', $event)"
@@ -244,6 +247,7 @@ const {
   invoke,
   saveOnlineForm,
   submitOnlineForm,
+  downloadOnlineFormFile,
   notifyFormChanged
 } = useNodeOnlineForm({
   props,

@@ -163,6 +163,28 @@ function stripCompletenessSummary(summary) {
   };
 }
 
+function extractInitiationDate(documents) {
+  const initiationDocument = documents.find(
+    (doc) => doc.document_code === '1.2' && doc.status === 'confirmed'
+  );
+  return initiationDocument?.confirmed_at ?? null;
+}
+
+function mapUserFromPrefix(row, prefix) {
+  const idKey = `${prefix}_responsible_user_id`;
+  if (row[idKey] == null) return null;
+  return {
+    id: row[idKey],
+    account: row[`${prefix}_account`],
+    name: row[`${prefix}_display_name`],
+    department: row[`${prefix}_department`],
+    organizationRole: row[`${prefix}_organization_role`],
+    role: row[`${prefix}_role`],
+    isEnabled: row[`${prefix}_is_enabled`],
+    filePlatformUserId: row[`${prefix}_file_platform_user_id`] ?? null
+  };
+}
+
 function buildProjectOverviewCard(projectRow, stages, documents, user) {
   const isCompleted = projectRow.status === PROJECT_STATUS.COMPLETED;
   const isEnded = projectRow.status === PROJECT_STATUS.ENDED;
@@ -178,7 +200,9 @@ function buildProjectOverviewCard(projectRow, stages, documents, user) {
     projectManagerUser: mapProjectManagerUser(projectRow),
     projectManager: projectRow.project_manager_display_name || projectRow.project_manager,
     businessResponsibleUserId: projectRow.business_responsible_user_id,
+    businessResponsibleUser: mapUserFromPrefix(projectRow, 'business'),
     technicalResponsibleUserId: projectRow.technical_responsible_user_id,
+    technicalResponsibleUser: mapUserFromPrefix(projectRow, 'technical'),
     status: projectRow.status,
     endedReason: projectRow.ended_reason ?? null,
     endedAt: projectRow.ended_at ?? null,
@@ -190,8 +214,7 @@ function buildProjectOverviewCard(projectRow, stages, documents, user) {
     currentStageIncompleteRequiredDocuments: [],
     currentStageIssue: null,
     createdBy: mapCreator(projectRow),
-    plannedStartDate: projectRow.planned_start_date,
-    plannedEndDate: projectRow.planned_end_date
+    initiationDate: extractInitiationDate(documents)
   };
 
   if (isCompleted || isEnded) {
@@ -302,12 +325,30 @@ async function selectProjectOverviewRows(filters, user, executor = pool) {
       pm.organization_role AS project_manager_organization_role,
       pm.role AS project_manager_role,
       pm.is_enabled AS project_manager_is_enabled,
-      pm.file_platform_user_id AS project_manager_file_platform_user_id
+      pm.file_platform_user_id AS project_manager_file_platform_user_id,
+      bu.account AS business_account,
+      bu.display_name AS business_display_name,
+      bu.department AS business_department,
+      bu.organization_role AS business_organization_role,
+      bu.role AS business_role,
+      bu.is_enabled AS business_is_enabled,
+      bu.file_platform_user_id AS business_file_platform_user_id,
+      tu.account AS technical_account,
+      tu.display_name AS technical_display_name,
+      tu.department AS technical_department,
+      tu.organization_role AS technical_organization_role,
+      tu.role AS technical_role,
+      tu.is_enabled AS technical_is_enabled,
+      tu.file_platform_user_id AS technical_file_platform_user_id
     FROM projects p
     LEFT JOIN users u
       ON u.id = p.created_by_user_id
     LEFT JOIN users pm
       ON pm.id = p.project_manager_user_id
+    LEFT JOIN users bu
+      ON bu.id = p.business_responsible_user_id
+    LEFT JOIN users tu
+      ON tu.id = p.technical_responsible_user_id
     ${whereClause}
     ORDER BY p.project_code ASC, p.id ASC`,
     params
@@ -362,6 +403,7 @@ async function selectProjectOverviewDocuments(projectIds, executor = pool) {
       d.revision_requested_at,
       d.revision_resubmitted_by_user_id,
       d.revision_resubmitted_at,
+      d.confirmed_at,
       source.document_code AS revision_source_document_code,
       source.document_name AS revision_source_document_name
     FROM project_stage_documents d

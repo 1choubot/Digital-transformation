@@ -1,13 +1,8 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import { pool } from '../../db/pool.js';
 import {
-  BUSINESS_DEPARTMENT,
-  ORGANIZATION_ROLE,
   SOLUTION_DESIGN_ANALYSIS_FORM_DOCUMENT_CODES,
   SOLUTION_DESIGN_ANALYSIS_FORM_STATUS,
   SOLUTION_DESIGN_ANALYSIS_FORM_DEFINITION,
-  SOLUTION_DESIGN_COST_UPLOAD_SLOT_BY_NODE_KEY,
   SOLUTION_DESIGN_COST_UPLOAD_SLOT_KEYS,
   SOLUTION_DESIGN_ERROR,
   SOLUTION_DESIGN_GENERATED_FILE_STATUS,
@@ -53,10 +48,8 @@ import {
   createStageDocumentGeneratedFileStorageKey,
   writeStageDocumentGeneratedFile
 } from '../../storage/stageDocumentGeneratedFileStorage.js';
-import { renderXlsxTemplate } from '../../utils/ooxmlRenderer.js';
 import {
   listStageDocumentOnlineFormImagesForDocument,
-  listStageDocumentOnlineFormImagesForGeneration,
   readOnlineFormImageForGeneration
 } from '../stageDocuments/onlineFormImageRepository.js';
 import {
@@ -65,50 +58,69 @@ import {
   insertOperationLog
 } from '../operationLogRepository.js';
 import { canViewProject } from './visibility.js';
-import {
-  ProjectAuthorizationError,
-  ProjectNotFoundError
-} from './shared.js';
+import { ProjectAuthorizationError } from './shared.js';
 import { tryAutoAdvanceProjectStage } from './stageAdvanceRepository.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
+import {
+  GENERATED_XLSX_MIME_TYPE,
+  SOLUTION_DESIGN_FORM_GENERATED_FILE_TYPE,
+  generateSolutionDesignFormFile
+} from './solutionDesignWorkflow/generatedFiles.js';
+import {
+  normalizeAnalysisFormPayload,
+  normalizeReviewFormPayload
+} from './solutionDesignWorkflow/formPayloads.js';
+import {
+  buildAnalysisFormDto,
+  buildReviewFormDto,
+  isGeneratedFormDtoCurrent,
+  mapAnalysisForm,
+  mapGeneratedFileStatus,
+  mapReviewForm
+} from './solutionDesignWorkflow/formDtos.js';
+import {
+  assertQuotationTenderSlotProcessable,
+  canActAsReviewerForSolutionDesignNode,
+  canDownloadUploadFile,
+  canProcessAnalysisForm,
+  canProcessQuotationResult,
+  canProcessReviewForm,
+  canReviewSolutionDesignNode,
+  canSelectQuotationTenderBranch,
+  canSubmitNode,
+  canSubmitQuotation,
+  canSubmitTender,
+  buildUploadSlotPermissions,
+  canViewFinanceCostUploadFile,
+  getCostUploadSlotKeyForNode,
+  isAnalysisFormGeneratedForRevision,
+  isAnalysisFormSubmittedForRevision,
+  isCostEstimationNode,
+  isFinanceCostUploadSlot,
+  isNodeProcessableStatus,
+  isProductFunctionDiagramUploadedForRevision,
+  isQuotationBranchCurrent,
+  isQuotationTenderUploadSlot,
+  isReviewFormGeneratedForRevision,
+  isReviewFormSubmittedForRevision,
+  isTenderBranchCurrent
+} from './solutionDesignWorkflow/permissions.js';
+import {
+  selectCurrentAnalysisForm,
+  selectCurrentReviewForm,
+  selectCurrentReviewForms,
+  selectProjectContext,
+  selectProjectStageDocumentByAnyCode,
+  selectProjectStageDocumentByCode,
+  selectQuotationTenderFlow,
+  selectSolutionDesignNodes,
+  selectSolutionDesignRoles,
+  selectSolutionDesignRolesForUpdate,
+  selectSolutionDesignUploadSlots
+} from './solutionDesignWorkflow/queries.js';
 
 const DEFAULT_UPLOAD_MIME_TYPE = 'application/octet-stream';
-const GENERATED_XLSX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const MAX_UPLOAD_TEXT_FIELD_LENGTH = 255;
-const MAX_ANALYSIS_FORM_JSON_LENGTH = 100000;
-const MAX_REVIEW_FORM_JSON_LENGTH = 100000;
-const SOLUTION_DESIGN_TEMPLATE_DIRECTORY_NAME = '智能制造项目管理文件模板v1';
-const SOLUTION_DESIGN_FORM_GENERATED_FILE_TYPE = 'xlsx';
-const REVIEW_FORM_REPEATABLE_FIELD_KEYS = Object.freeze([
-  'projectTargetDescription',
-  'technicalRisks',
-  'solutionSuggestions',
-  'actionItems'
-]);
-
-const ANALYSIS_FORM_TEXT_FIELD_KEYS = Object.freeze([
-  'workingTemperatureMin',
-  'workingTemperatureMax',
-  'storageTemperatureMin',
-  'storageTemperatureMax',
-  'workingHumidityMin',
-  'workingHumidityMax',
-  'storageHumidityMin',
-  'storageHumidityMax',
-  'noiseLimitValue',
-  'ipProtectionLevel',
-  'antiCorrosionGrade',
-  'altitudeLimitValue',
-  'explosionProofRequirement',
-  'siteConditionDescription',
-  'powerSupply',
-  'airSupply',
-  'hydraulicSource',
-  'liftingEquipment',
-  'workpieceDescription',
-  'operationProcessDescription',
-  'projectTargetDescription'
-]);
 
 const defaultSolutionDesignUploadStorage = {
   createStorageKey: createSolutionDesignUploadStorageKey,
@@ -247,106 +259,6 @@ function normalizeUploadFile(file) {
   };
 }
 
-function normalizeAnalysisFormPayload(payload = {}) {
-  const sourceFormData = Object.hasOwn(payload, 'formData') ? payload.formData : payload;
-  if (
-    sourceFormData === null ||
-    Array.isArray(sourceFormData) ||
-    typeof sourceFormData !== 'object'
-  ) {
-    throw new SolutionDesignWorkflowError(
-      SOLUTION_DESIGN_ERROR.INVALID_ANALYSIS_FORM,
-      'Solution analysis form data must be an object',
-      400,
-      ['formData']
-    );
-  }
-
-  const formData = {};
-  for (const fieldKey of ANALYSIS_FORM_TEXT_FIELD_KEYS) {
-    if (Object.hasOwn(sourceFormData, fieldKey)) {
-      formData[fieldKey] = String(sourceFormData[fieldKey] ?? '').trim();
-    }
-  }
-
-  const formDataJson = JSON.stringify(formData);
-  if (formDataJson.length > MAX_ANALYSIS_FORM_JSON_LENGTH) {
-    throw new SolutionDesignWorkflowError(
-      SOLUTION_DESIGN_ERROR.INVALID_ANALYSIS_FORM,
-      'Solution analysis form data is too large',
-      400,
-      ['formData']
-    );
-  }
-
-  return {
-    formData,
-    formDataJson
-  };
-}
-
-function normalizeRepeatableReviewFormValue(value) {
-  if (value === null || value === undefined) {
-    return [];
-  }
-
-  const rawValues = Array.isArray(value)
-    ? value
-    : String(value).split(/\r?\n/);
-
-  return rawValues
-    .map((item) => {
-      if (item === null || item === undefined) {
-        return '';
-      }
-      if (typeof item === 'object') {
-        return JSON.stringify(item);
-      }
-      return String(item);
-    })
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function normalizeReviewFormPayload(payload = {}) {
-  const sourceFormData = Object.hasOwn(payload, 'formData') ? payload.formData : payload;
-  if (
-    sourceFormData === null ||
-    Array.isArray(sourceFormData) ||
-    typeof sourceFormData !== 'object'
-  ) {
-    throw new SolutionDesignWorkflowError(
-      SOLUTION_DESIGN_ERROR.INVALID_REVIEW_FORM,
-      'Solution review form data must be an object',
-      400,
-      ['formData']
-    );
-  }
-
-  const formData = { ...sourceFormData };
-  for (const fieldKey of REVIEW_FORM_REPEATABLE_FIELD_KEYS) {
-    formData[fieldKey] = normalizeRepeatableReviewFormValue(formData[fieldKey]);
-  }
-  if (Object.hasOwn(formData, 'recorder')) {
-    formData.recorder = String(formData.recorder ?? '').trim();
-  }
-
-  const formDataJson = JSON.stringify(formData);
-  if (formDataJson.length > MAX_REVIEW_FORM_JSON_LENGTH) {
-    throw new SolutionDesignWorkflowError(
-      SOLUTION_DESIGN_ERROR.INVALID_REVIEW_FORM,
-      'Solution review form data is too large',
-      400,
-      ['formData']
-    );
-  }
-
-  return {
-    formData,
-    formDataJson
-  };
-}
-
 function normalizeReturnReason(payload = {}) {
   const reason = String(payload.returnReason ?? payload.reason ?? '').trim();
   if (!reason) {
@@ -441,47 +353,6 @@ function shouldPersistInitialNodes(projectRow) {
   return !isSolutionDesignProjectEnded(projectRow) && isProjectInSolutionDesignStage(projectRow);
 }
 
-async function selectProjectContext(executor, projectId, { forUpdate = false } = {}) {
-  const [rows] = await executor.execute(
-    `SELECT
-      p.id,
-      p.project_code,
-      p.project_name,
-      p.customer_name,
-      p.status,
-      p.project_manager,
-      p.project_manager_user_id,
-      pm.account AS project_manager_account,
-      pm.display_name AS project_manager_display_name,
-      pm.department AS project_manager_department,
-      pm.organization_role AS project_manager_organization_role,
-      pm.role AS project_manager_role,
-      pm.is_enabled AS project_manager_is_enabled,
-      pm.is_platform_admin AS project_manager_is_platform_admin,
-      pm.file_platform_user_id AS project_manager_file_platform_user_id,
-      s.id AS current_stage_id,
-      s.stage_order AS current_stage_order,
-      s.stage_key AS current_stage_key,
-      s.stage_name AS current_stage_name,
-      s.stage_status AS current_stage_status
-    FROM projects p
-    LEFT JOIN users pm
-      ON pm.id = p.project_manager_user_id
-    LEFT JOIN project_stages s
-      ON s.project_id = p.id AND s.is_current = 1
-    WHERE p.id = ?
-    LIMIT 1${forUpdate ? ' FOR UPDATE' : ''}`,
-    [projectId]
-  );
-
-  const row = rows[0];
-  if (!row) {
-    throw new ProjectNotFoundError(projectId);
-  }
-
-  return row;
-}
-
 function isSolutionDesignRoleActor({ projectRow, rolesRow, user }) {
   if (!projectRow || !user?.id) {
     return false;
@@ -504,43 +375,6 @@ async function assertWorkflowViewable(executor, projectId, user, { projectRow = 
       ['projectId']
     );
   }
-}
-
-async function selectSolutionDesignRoles(executor, projectId) {
-  const [rows] = await executor.execute(
-    `SELECT *
-    FROM project_solution_design_roles
-    WHERE project_id = ?
-    LIMIT 1`,
-    [projectId]
-  );
-
-  return rows[0] || null;
-}
-
-async function selectSolutionDesignRolesForUpdate(executor, projectId) {
-  const [rows] = await executor.execute(
-    `SELECT *
-    FROM project_solution_design_roles
-    WHERE project_id = ?
-    LIMIT 1
-    FOR UPDATE`,
-    [projectId]
-  );
-
-  return rows[0] || null;
-}
-
-async function selectSolutionDesignNodes(executor, projectId) {
-  const [rows] = await executor.execute(
-    `SELECT *
-    FROM project_solution_design_nodes
-    WHERE project_id = ?
-    ORDER BY node_order ASC`,
-    [projectId]
-  );
-
-  return rows;
 }
 
 async function selectSolutionDesignNodeForUpdate(executor, projectId, nodeKey) {
@@ -583,32 +417,6 @@ async function ensureSolutionDesignNodes(executor, projectRow) {
     await insertMissingInitialNodes(executor, projectRow.id, rows);
     return selectSolutionDesignNodes(executor, projectRow.id);
   }
-
-  return rows;
-}
-
-async function selectSolutionDesignUploadSlots(executor, projectId) {
-  const [rows] = await executor.execute(
-    `SELECT
-      s.*,
-      f.id AS current_file_id,
-      f.revision AS current_file_revision,
-      f.original_file_name AS current_file_original_file_name,
-      f.mime_type AS current_file_mime_type,
-      f.file_size AS current_file_size,
-      f.uploaded_by_user_id AS current_file_uploaded_by_user_id,
-      f.uploaded_at AS current_file_uploaded_at,
-      u.account AS current_file_uploaded_by_account,
-      u.display_name AS current_file_uploaded_by_display_name
-    FROM project_solution_design_upload_slots s
-    LEFT JOIN project_solution_design_upload_files f
-      ON f.slot_id = s.id AND f.is_current = 1
-    LEFT JOIN users u
-      ON u.id = f.uploaded_by_user_id
-    WHERE s.project_id = ?
-    ORDER BY s.slot_order ASC`,
-    [projectId]
-  );
 
   return rows;
 }
@@ -742,63 +550,6 @@ async function selectUploadFileWithUploader(executor, fileId) {
   return rows[0] || null;
 }
 
-async function selectCurrentAnalysisForm(executor, projectId, { forUpdate = false } = {}) {
-  const [rows] = await executor.execute(
-    `SELECT
-      f.*,
-      submitter.account AS submitted_by_account,
-      submitter.display_name AS submitted_by_display_name,
-      creator.account AS created_by_account,
-      creator.display_name AS created_by_display_name,
-      updater.account AS updated_by_account,
-      updater.display_name AS updated_by_display_name
-    FROM project_solution_design_analysis_forms f
-    LEFT JOIN users submitter
-      ON submitter.id = f.submitted_by_user_id
-    LEFT JOIN users creator
-      ON creator.id = f.created_by_user_id
-    LEFT JOIN users updater
-      ON updater.id = f.updated_by_user_id
-    WHERE f.project_id = ?
-      AND f.is_current = 1
-    LIMIT 1${forUpdate ? ' FOR UPDATE' : ''}`,
-    [projectId]
-  );
-
-  return rows[0] || null;
-}
-
-async function selectProjectStageDocumentByCode(executor, projectId, documentCode, { forUpdate = false } = {}) {
-  const [rows] = await executor.execute(
-    `SELECT
-      d.*,
-      u.department AS responsible_department,
-      u.organization_role AS responsible_organization_role,
-      u.role AS responsible_role,
-      u.is_enabled AS responsible_is_enabled
-    FROM project_stage_documents d
-    LEFT JOIN users u
-      ON u.id = d.responsible_user_id
-    WHERE d.project_id = ?
-      AND d.document_code = ?
-    LIMIT 1${forUpdate ? ' FOR UPDATE' : ''}`,
-    [projectId, documentCode]
-  );
-
-  return rows[0] || null;
-}
-
-async function selectProjectStageDocumentByAnyCode(executor, projectId, documentCodes, { forUpdate = false } = {}) {
-  for (const documentCode of documentCodes) {
-    const row = await selectProjectStageDocumentByCode(executor, projectId, documentCode, { forUpdate });
-    if (row) {
-      return row;
-    }
-  }
-
-  return null;
-}
-
 async function selectMaxAnalysisFormRevision(executor, projectId) {
   const [rows] = await executor.execute(
     `SELECT COALESCE(MAX(revision), 0) AS max_revision
@@ -808,59 +559,6 @@ async function selectMaxAnalysisFormRevision(executor, projectId) {
   );
 
   return Number(rows[0]?.max_revision ?? 0);
-}
-
-async function selectCurrentReviewForm(executor, projectId, nodeKey, { forUpdate = false } = {}) {
-  const [rows] = await executor.execute(
-    `SELECT
-      f.*,
-      submitter.account AS submitted_by_account,
-      submitter.display_name AS submitted_by_display_name,
-      creator.account AS created_by_account,
-      creator.display_name AS created_by_display_name,
-      updater.account AS updated_by_account,
-      updater.display_name AS updated_by_display_name
-    FROM project_solution_design_review_forms f
-    LEFT JOIN users submitter
-      ON submitter.id = f.submitted_by_user_id
-    LEFT JOIN users creator
-      ON creator.id = f.created_by_user_id
-    LEFT JOIN users updater
-      ON updater.id = f.updated_by_user_id
-    WHERE f.project_id = ?
-      AND f.node_key = ?
-      AND f.is_current = 1
-    LIMIT 1${forUpdate ? ' FOR UPDATE' : ''}`,
-    [projectId, nodeKey]
-  );
-
-  return rows[0] || null;
-}
-
-async function selectCurrentReviewForms(executor, projectId) {
-  const [rows] = await executor.execute(
-    `SELECT
-      f.*,
-      submitter.account AS submitted_by_account,
-      submitter.display_name AS submitted_by_display_name,
-      creator.account AS created_by_account,
-      creator.display_name AS created_by_display_name,
-      updater.account AS updated_by_account,
-      updater.display_name AS updated_by_display_name
-    FROM project_solution_design_review_forms f
-    LEFT JOIN users submitter
-      ON submitter.id = f.submitted_by_user_id
-    LEFT JOIN users creator
-      ON creator.id = f.created_by_user_id
-    LEFT JOIN users updater
-      ON updater.id = f.updated_by_user_id
-    WHERE f.project_id = ?
-      AND f.is_current = 1
-    ORDER BY f.node_key ASC`,
-    [projectId]
-  );
-
-  return rows;
 }
 
 async function selectMaxReviewFormRevision(executor, projectId, nodeKey) {
@@ -873,18 +571,6 @@ async function selectMaxReviewFormRevision(executor, projectId, nodeKey) {
   );
 
   return Number(rows[0]?.max_revision ?? 0);
-}
-
-async function selectQuotationTenderFlow(executor, projectId, { forUpdate = false } = {}) {
-  const [rows] = await executor.execute(
-    `SELECT *
-    FROM project_solution_design_quotation_tender_flows
-    WHERE project_id = ?
-    LIMIT 1${forUpdate ? ' FOR UPDATE' : ''}`,
-    [projectId]
-  );
-
-  return rows[0] || null;
 }
 
 function buildVirtualNodes() {
@@ -1032,187 +718,6 @@ function assertNodeProcessable(nodeRow, nodeKey, action) {
   }
 }
 
-function isNodeProcessableStatus(status) {
-  return PROCESSABLE_NODE_STATUSES.has(status);
-}
-
-function isCenterManagerOf(user, department) {
-  return (
-    user?.organizationRole === ORGANIZATION_ROLE.CENTER_MANAGER &&
-    user?.department === department
-  );
-}
-
-function isManufacturingCenterManager(user) {
-  return isCenterManagerOf(user, BUSINESS_DEPARTMENT.MANUFACTURING_CENTER);
-}
-
-function isFinanceCostUploadSlot(slotKey) {
-  return slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.FINANCE_COST_ESTIMATION;
-}
-
-function isQuotationTenderUploadSlot(slotKey) {
-  return [
-    SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE,
-    SOLUTION_DESIGN_UPLOAD_SLOT_KEY.TENDER_BUSINESS_FILE,
-    SOLUTION_DESIGN_UPLOAD_SLOT_KEY.TENDER_TECHNICAL_FILE
-  ].includes(slotKey);
-}
-
-function isTenderUploadSlot(slotKey) {
-  return SOLUTION_DESIGN_TENDER_UPLOAD_SLOT_KEYS.includes(slotKey);
-}
-
-function isCostEstimationNode(nodeKey) {
-  return Object.hasOwn(SOLUTION_DESIGN_COST_UPLOAD_SLOT_BY_NODE_KEY, nodeKey);
-}
-
-function getCostUploadSlotKeyForNode(nodeKey) {
-  return SOLUTION_DESIGN_COST_UPLOAD_SLOT_BY_NODE_KEY[nodeKey] || null;
-}
-
-function canViewFinanceCostUploadFile({ roleState, user }) {
-  return (
-    isSolutionDesignGeneralManager(user) ||
-    isSameId(roleState[SOLUTION_DESIGN_ROLE_KEY.FINANCE_ACCOUNTANT]?.userId, user?.id) ||
-    isSameId(roleState[SOLUTION_DESIGN_ROLE_KEY.FINANCE_OWNER]?.userId, user?.id)
-  );
-}
-
-function canDownloadUploadFile({ slot, roleState, user }) {
-  if (!slot) {
-    return false;
-  }
-
-  if (isFinanceCostUploadSlot(slot.slotKey)) {
-    return canViewFinanceCostUploadFile({ roleState, user });
-  }
-
-  return true;
-}
-
-function isQuotationTenderFlowCurrentForNode(flowRow, nodeRow) {
-  return Boolean(flowRow) && Number(flowRow.revision ?? 0) >= Number(nodeRow?.current_revision ?? 1);
-}
-
-function isQuotationBranchCurrent(flowRow, nodeRow) {
-  return (
-    isQuotationTenderFlowCurrentForNode(flowRow, nodeRow) &&
-    flowRow.branch_type === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION
-  );
-}
-
-function isTenderBranchCurrent(flowRow, nodeRow) {
-  return (
-    isQuotationTenderFlowCurrentForNode(flowRow, nodeRow) &&
-    flowRow.branch_type === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.TENDER
-  );
-}
-
-function canSelectQuotationTenderBranch({ projectEnded, inSolutionStage, user, nodeRow, flowRow }) {
-  return (
-    !projectEnded &&
-    inSolutionStage &&
-    isSolutionDesignGeneralManager(user) &&
-    nodeRow?.node_key === SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER &&
-    nodeRow.status === SOLUTION_DESIGN_NODE_STATUS.PENDING &&
-    !isQuotationTenderFlowCurrentForNode(flowRow, nodeRow)
-  );
-}
-
-function canUploadQuotationTenderSlot({ slot, nodeRow, flowRow }) {
-  if (!isQuotationTenderUploadSlot(slot?.slotKey)) {
-    return true;
-  }
-
-  if (!isNodeProcessableStatus(nodeRow?.status)) {
-    return false;
-  }
-
-  if (slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE) {
-    return (
-      isQuotationBranchCurrent(flowRow, nodeRow) &&
-      flowRow.branch_status === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED
-    );
-  }
-
-  return (
-    isTenderBranchCurrent(flowRow, nodeRow) &&
-    [
-      SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED,
-      SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.RETURNED
-    ].includes(flowRow.branch_status)
-  );
-}
-
-function assertQuotationTenderSlotProcessable({ slot, nodeRow, flowRow }) {
-  if (!canUploadQuotationTenderSlot({ slot, nodeRow, flowRow })) {
-    throw new SolutionDesignWorkflowError(
-      SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
-      'Quotation/tender upload slot cannot be processed in its current branch status',
-      409,
-      {
-        nodeKey: slot?.nodeKey ?? SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
-        slotKey: slot?.slotKey ?? null,
-        nodeStatus: nodeRow?.status ?? null,
-        branchType: flowRow?.branch_type ?? null,
-        branchStatus: flowRow?.branch_status ?? null,
-        branchRevision: flowRow?.revision ?? null,
-        nodeRevision: nodeRow?.current_revision ?? null
-      }
-    );
-  }
-}
-
-function canSubmitQuotation({ projectEnded, inSolutionStage, roleState, user, nodeRow, flowRow, uploadSlotRevisionByKey }) {
-  return (
-    !projectEnded &&
-    inSolutionStage &&
-    areAllRolesAssigned(roleState) &&
-    isSameId(roleState[SOLUTION_DESIGN_ROLE_KEY.BUSINESS_OWNER]?.userId, user?.id) &&
-    isNodeProcessableStatus(nodeRow?.status) &&
-    isQuotationBranchCurrent(flowRow, nodeRow) &&
-    flowRow.branch_status === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED &&
-    Number(uploadSlotRevisionByKey.get(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE) ?? 0) >=
-      Number(nodeRow.current_revision ?? 1)
-  );
-}
-
-function canProcessQuotationResult({ projectEnded, inSolutionStage, roleState, user, nodeRow, flowRow }) {
-  return (
-    !projectEnded &&
-    inSolutionStage &&
-    areAllRolesAssigned(roleState) &&
-    isSameId(roleState[SOLUTION_DESIGN_ROLE_KEY.BUSINESS_OWNER]?.userId, user?.id) &&
-    isNodeProcessableStatus(nodeRow?.status) &&
-    isQuotationBranchCurrent(flowRow, nodeRow) &&
-    flowRow.branch_status === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SUBMITTED
-  );
-}
-
-function areTenderFilesUploadedForRevision(uploadSlotRevisionByKey, requiredRevision) {
-  const revision = Number(requiredRevision ?? 1);
-  return SOLUTION_DESIGN_TENDER_UPLOAD_SLOT_KEYS.every(
-    (slotKey) => Number(uploadSlotRevisionByKey.get(slotKey) ?? 0) >= revision
-  );
-}
-
-function canSubmitTender({ projectEnded, inSolutionStage, roleState, user, nodeRow, flowRow, uploadSlotRevisionByKey }) {
-  return (
-    !projectEnded &&
-    inSolutionStage &&
-    areAllRolesAssigned(roleState) &&
-    isSameId(roleState[SOLUTION_DESIGN_ROLE_KEY.BUSINESS_OWNER]?.userId, user?.id) &&
-    isNodeProcessableStatus(nodeRow?.status) &&
-    isTenderBranchCurrent(flowRow, nodeRow) &&
-    [
-      SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED,
-      SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.RETURNED
-    ].includes(flowRow.branch_status) &&
-    areTenderFilesUploadedForRevision(uploadSlotRevisionByKey, nodeRow.current_revision)
-  );
-}
-
 function buildRoleStateWithoutUserDetails(projectRow, rolesRow) {
   return buildRoleState({
     projectRow,
@@ -1262,442 +767,6 @@ function mapUploadedFile(row) {
       account: row.uploaded_by_account,
       name: row.uploaded_by_display_name
     }
-  };
-}
-
-function parseStoredJson(value, fallback = {}) {
-  if (value === null || value === undefined) {
-    return fallback;
-  }
-
-  if (typeof value !== 'string') {
-    return value;
-  }
-
-  try {
-    return JSON.parse(value);
-  } catch {
-    return fallback;
-  }
-}
-
-function sanitizeGeneratedFileNamePart(value) {
-  return String(value || '')
-    .replace(/[\\/:*?"<>|]/g, '_')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 80);
-}
-
-function buildGeneratedFormFileName({ projectRow, definition, revision }) {
-  const projectName = sanitizeGeneratedFileNamePart(projectRow.project_name || `项目${projectRow.id}`);
-  const documentCode = sanitizeGeneratedFileNamePart(definition.documentCode);
-  const formName = sanitizeGeneratedFileNamePart(definition.generatedFileNamePrefix || definition.formName);
-  return `${documentCode}-${formName}-${projectName}-v${revision}.${SOLUTION_DESIGN_FORM_GENERATED_FILE_TYPE}`;
-}
-
-function truncateGeneratedCellValue(value, maxLength = 30000) {
-  const text = typeof value === 'string' ? value : JSON.stringify(value ?? '');
-  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
-}
-
-function normalizeTemplateDisplayValue(value) {
-  if (value === null || value === undefined) {
-    return '';
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => normalizeTemplateDisplayValue(item)).filter(Boolean).join('\n');
-  }
-
-  if (typeof value === 'object') {
-    return JSON.stringify(value);
-  }
-
-  return String(value);
-}
-
-function cleanTemplateValue(value) {
-  return normalizeTemplateDisplayValue(value).trim();
-}
-
-const SOLUTION_DESIGN_TEMPLATE_VALUE_BUILDERS = Object.freeze({
-  temperatureRange: ([min, max]) => {
-    if (!cleanTemplateValue(min) && !cleanTemplateValue(max)) {
-      return '';
-    }
-    return `工作温度：（${cleanTemplateValue(min)}）℃~（${cleanTemplateValue(max)}）℃`;
-  },
-  storageTemperatureRange: ([min, max]) => {
-    if (!cleanTemplateValue(min) && !cleanTemplateValue(max)) {
-      return '';
-    }
-    return `储存温度：（${cleanTemplateValue(min)}）℃~（${cleanTemplateValue(max)}）℃`;
-  },
-  humidityRange: ([min, max]) => {
-    if (!cleanTemplateValue(min) && !cleanTemplateValue(max)) {
-      return '';
-    }
-    return `工作湿度：（${cleanTemplateValue(min)}）%~（${cleanTemplateValue(max)}）%`;
-  },
-  storageHumidityRange: ([min, max]) => {
-    if (!cleanTemplateValue(min) && !cleanTemplateValue(max)) {
-      return '';
-    }
-    return `储存湿度：（${cleanTemplateValue(min)}）%~（${cleanTemplateValue(max)}）%`;
-  },
-  noiseLimit: ([value]) => {
-    if (!cleanTemplateValue(value)) {
-      return '';
-    }
-    return `噪音：≤（${cleanTemplateValue(value)}）dB`;
-  },
-  ipProtection: ([value]) => {
-    if (!cleanTemplateValue(value)) {
-      return '';
-    }
-    const level = cleanTemplateValue(value).replace(/^IP/i, '');
-    return `IP防护等级：IP（${level}）`;
-  },
-  antiCorrosion: ([value]) => {
-    if (!cleanTemplateValue(value)) {
-      return '';
-    }
-    return `防腐等级：（${cleanTemplateValue(value)}）`;
-  },
-  altitudeLimit: ([value]) => {
-    if (!cleanTemplateValue(value)) {
-      return '';
-    }
-    return `海拔高度：≤（${cleanTemplateValue(value)}）m`;
-  },
-  explosionProof: ([value]) => {
-    if (!cleanTemplateValue(value)) {
-      return '';
-    }
-    return `防爆要求：（${cleanTemplateValue(value)}）`;
-  },
-  siteCondition: ([value]) => {
-    if (!cleanTemplateValue(value)) {
-      return '';
-    }
-    return `可用场地尺寸（如有图纸请提供）：\n${normalizeTemplateDisplayValue(value)}`;
-  },
-  siteUtilities: ([powerSupply, airSupply, hydraulicSource]) => {
-    if (![powerSupply, airSupply, hydraulicSource].some((value) => cleanTemplateValue(value))) {
-      return '';
-    }
-    return `电源：（${cleanTemplateValue(powerSupply)}）  气源：（${cleanTemplateValue(airSupply)}）  液压源：（${cleanTemplateValue(hydraulicSource)}）`;
-  },
-  liftingEquipment: ([value]) => {
-    if (!cleanTemplateValue(value)) {
-      return '';
-    }
-    return `吊装设备：${normalizeTemplateDisplayValue(value)}`;
-  }
-});
-
-function getTemplateSourceValue(source, pathExpression) {
-  if (!pathExpression) {
-    return null;
-  }
-
-  return String(pathExpression)
-    .split('.')
-    .reduce((value, key) => (value === null || value === undefined ? null : value[key]), source);
-}
-
-function getTemplateSourceValues(source, mapping) {
-  if (Array.isArray(mapping.sourcePaths)) {
-    return mapping.sourcePaths.map((pathExpression) => getTemplateSourceValue(source, pathExpression));
-  }
-
-  return [getTemplateSourceValue(source, mapping.source)];
-}
-
-function buildTemplateMappingValue(mapping, source) {
-  if (Object.hasOwn(mapping, 'value')) {
-    return mapping.value;
-  }
-
-  const values = getTemplateSourceValues(source, mapping);
-  if (!mapping.valueBuilder) {
-    return values[0];
-  }
-
-  const builder = SOLUTION_DESIGN_TEMPLATE_VALUE_BUILDERS[mapping.valueBuilder];
-  if (!builder) {
-    throw new Error(`Solution design template value builder is not registered: ${mapping.valueBuilder}`);
-  }
-
-  return builder(values);
-}
-
-function buildGeneratedFormSource({ projectRow, definition, formRow, roleState }) {
-  const formData = parseStoredJson(formRow.form_data_json, {});
-  const revision = Number(formRow.revision ?? 1);
-  const submittedAt = formRow.submitted_at || '';
-  const submittedByName = formRow.submitted_by_display_name || '';
-  const submittedByAccount = formRow.submitted_by_account || '';
-  const recorderName = normalizeTemplateDisplayValue(formData.recorder || submittedByName || submittedByAccount || '');
-  const reviewRoundLabel = definition.reviewType === 'customer'
-    ? `甲方，第（${revision}）次`
-    : definition.reviewType === 'internal'
-      ? `内部，第（${revision}）次`
-      : `第（${revision}）版`;
-  const generatedContext = [
-    `${definition.documentCode} ${definition.formName}`,
-    `节点：${definition.nodeKey}`,
-    definition.reviewType ? `评审类型：${definition.reviewType}` : null,
-    `版本：${revision}`,
-    submittedAt ? `提交时间：${submittedAt}` : null,
-    submittedByName ? `提交人：${submittedByName}` : null
-  ].filter(Boolean).join('\n');
-
-  return {
-    project: {
-      projectCode: projectRow.project_code,
-      projectName: projectRow.project_name,
-      customerName: projectRow.customer_name
-    },
-    definition: {
-      documentCode: definition.documentCode,
-      formName: definition.formName,
-      nodeKey: definition.nodeKey,
-      reviewType: definition.reviewType || null,
-      templateName: definition.templateName
-    },
-    form: formData,
-    roles: {
-      projectManagerName: roleState?.[SOLUTION_DESIGN_ROLE_KEY.PROJECT_MANAGER]?.user?.name
-        || projectRow.project_manager
-        || '',
-      technicalOwnerName: roleState?.[SOLUTION_DESIGN_ROLE_KEY.TECHNICAL_OWNER]?.user?.name || '',
-      businessOwnerName: roleState?.[SOLUTION_DESIGN_ROLE_KEY.BUSINESS_OWNER]?.user?.name || '',
-      procurementOwnerName: roleState?.[SOLUTION_DESIGN_ROLE_KEY.PROCUREMENT_OWNER]?.user?.name || '',
-      financeAccountantName: roleState?.[SOLUTION_DESIGN_ROLE_KEY.FINANCE_ACCOUNTANT]?.user?.name || '',
-      financeOwnerName: roleState?.[SOLUTION_DESIGN_ROLE_KEY.FINANCE_OWNER]?.user?.name || ''
-    },
-    context: {
-      revision,
-      submittedAt,
-      submittedByName,
-      submittedByAccount,
-      reviewRoundLabel,
-      generatedContext,
-      recorderName,
-      recorderLabel: recorderName ? `记录人：${recorderName}` : '记录人：'
-    }
-  };
-}
-
-function buildGeneratedFormCellValues({ projectRow, definition, formRow, roleState }) {
-  const source = buildGeneratedFormSource({ projectRow, definition, formRow, roleState });
-  const cellValues = {};
-  for (const mapping of definition.templateMappings || []) {
-    const rawValue = buildTemplateMappingValue(mapping, source);
-    if (mapping.repeatRows) {
-      const { column, startRow, endRow } = mapping.repeatRows;
-      const start = Number(startRow);
-      const end = Number(endRow);
-      if (!column || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || end < start) {
-        continue;
-      }
-
-      const rows = normalizeRepeatableReviewFormValue(rawValue);
-      const rowCount = end - start + 1;
-      for (let offset = 0; offset < rowCount; offset += 1) {
-        const isLastRow = offset === rowCount - 1;
-        const rowValue = isLastRow
-          ? rows.slice(offset).join('\n')
-          : rows[offset] || '';
-        cellValues[`${column}${start + offset}`] = {
-          value: truncateGeneratedCellValue(normalizeTemplateDisplayValue(rowValue)),
-          preserveTemplateWhenEmpty: mapping.preserveTemplateWhenEmpty === true,
-          preserveStyle: mapping.preserveStyle !== false,
-          textFont: mapping.textFont || '',
-          fontSize: mapping.fontSize || null
-        };
-      }
-      continue;
-    }
-
-    if (!mapping.target) {
-      continue;
-    }
-
-    cellValues[mapping.target] = {
-      value: truncateGeneratedCellValue(normalizeTemplateDisplayValue(rawValue)),
-      preserveTemplateWhenEmpty: mapping.preserveTemplateWhenEmpty === true,
-      preserveStyle: mapping.preserveStyle !== false,
-      textFont: mapping.textFont || '',
-      fontSize: mapping.fontSize || null
-    };
-  }
-  return cellValues;
-}
-
-function groupOnlineFormImagesByFieldKey(images = []) {
-  const grouped = {};
-  for (const image of images) {
-    if (!grouped[image.fieldKey]) {
-      grouped[image.fieldKey] = [];
-    }
-    grouped[image.fieldKey].push(image);
-  }
-  return grouped;
-}
-
-async function buildGeneratedFormImageValues({ executor, projectRow, definition, stageDocumentRow, readOnlineFormImage }) {
-  const imageMappings = definition.imageMappings || [];
-  if (imageMappings.length === 0 || !stageDocumentRow?.id) {
-    return [];
-  }
-
-  const formImages = groupOnlineFormImagesByFieldKey(
-    await listStageDocumentOnlineFormImagesForGeneration(executor, projectRow.id, stageDocumentRow.id)
-  );
-  const imageValues = [];
-  for (const mapping of imageMappings) {
-    const images = getTemplateSourceValue({ formImages }, mapping.source);
-    const activeImages = Array.isArray(images) ? images : [];
-    if (activeImages.length === 0) {
-      continue;
-    }
-
-    const maxImages = Number.isSafeInteger(Number(mapping.maxImages)) ? Number(mapping.maxImages) : 3;
-    for (const [index, image] of activeImages.slice(0, maxImages).entries()) {
-      const buffer = await readOnlineFormImage(image);
-      imageValues.push({
-        target: mapping.target,
-        layoutIndex: index,
-        layoutCount: Math.min(activeImages.length, maxImages),
-        originalFileName: image.originalFileName,
-        mimeType: image.mimeType,
-        buffer,
-        preserveAspectRatio: mapping.preserveAspectRatio !== false,
-        mergeAdjustment: mapping.mergeAdjustment || null
-      });
-    }
-  }
-
-  return imageValues;
-}
-
-async function readSolutionDesignTemplate(templateName) {
-  const candidatePaths = [
-    path.resolve(process.cwd(), '..', SOLUTION_DESIGN_TEMPLATE_DIRECTORY_NAME, templateName),
-    path.resolve(process.cwd(), SOLUTION_DESIGN_TEMPLATE_DIRECTORY_NAME, templateName)
-  ];
-
-  for (const candidatePath of candidatePaths) {
-    try {
-      return await fs.readFile(candidatePath);
-    } catch (error) {
-      if (error?.code !== 'ENOENT') {
-        throw error;
-      }
-    }
-  }
-
-  const error = new Error(`Solution design template file not found: ${templateName}`);
-  error.code = 'SOLUTION_DESIGN_TEMPLATE_NOT_FOUND';
-  throw error;
-}
-
-function buildGenerationErrorMessage(error) {
-  const message = error?.message || 'Solution design generated file failed';
-  return error?.code ? `${error.code}: ${message}` : message;
-}
-
-function mapGeneratedFileStatus(row, { templateName = null } = {}) {
-  const status = row.generated_file_status;
-  const canDownload = status === SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED && Boolean(row.generated_file_storage_key);
-  return {
-    status,
-    fileName: row.generated_file_name,
-    mimeType: row.generated_file_mime_type,
-    fileSize: row.generated_file_size === null || row.generated_file_size === undefined
-      ? null
-      : Number(row.generated_file_size),
-    templateName: row.generated_file_template_name ?? templateName,
-    generatedByUserId: row.generated_by_user_id ?? null,
-    generatedAt: row.generated_at,
-    errorMessage: row.generation_error_message,
-    canDownload
-  };
-}
-
-function mapAnalysisForm(row) {
-  if (!row) {
-    return null;
-  }
-
-  return {
-    id: row.id,
-    projectId: row.project_id,
-    nodeKey: row.node_key,
-    revision: row.revision,
-    status: row.form_status,
-    formData: parseStoredJson(row.form_data_json),
-    isCurrent: Boolean(row.is_current),
-    submittedByUserId: row.submitted_by_user_id,
-    submittedAt: row.submitted_at,
-    submittedByUser: row.submitted_by_user_id
-      ? {
-          id: row.submitted_by_user_id,
-          account: row.submitted_by_account,
-          name: row.submitted_by_display_name
-        }
-      : null,
-    documentCode: SOLUTION_DESIGN_ANALYSIS_FORM_DEFINITION.documentCode,
-    formName: SOLUTION_DESIGN_ANALYSIS_FORM_DEFINITION.formName,
-    templateName: SOLUTION_DESIGN_ANALYSIS_FORM_DEFINITION.templateName,
-    generatedFile: mapGeneratedFileStatus(row, {
-      templateName: SOLUTION_DESIGN_ANALYSIS_FORM_DEFINITION.templateName
-    }),
-    createdByUserId: row.created_by_user_id,
-    updatedByUserId: row.updated_by_user_id,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
-  };
-}
-
-function mapReviewForm(row) {
-  if (!row) {
-    return null;
-  }
-
-  const definition = getSolutionDesignReviewFormDefinition(row.node_key);
-
-  return {
-    id: row.id,
-    projectId: row.project_id,
-    nodeKey: row.node_key,
-    reviewType: row.review_type,
-    documentCode: definition?.documentCode ?? null,
-    formName: definition?.formName ?? null,
-    templateName: definition?.templateName ?? null,
-    revision: row.revision,
-    status: row.form_status,
-    formData: parseStoredJson(row.form_data_json),
-    isCurrent: Boolean(row.is_current),
-    submittedByUserId: row.submitted_by_user_id,
-    submittedAt: row.submitted_at,
-    submittedByUser: row.submitted_by_user_id
-      ? {
-          id: row.submitted_by_user_id,
-          account: row.submitted_by_account,
-          name: row.submitted_by_display_name
-        }
-      : null,
-    generatedFile: mapGeneratedFileStatus(row, {
-      templateName: definition?.templateName ?? null
-    }),
-    createdByUserId: row.created_by_user_id,
-    updatedByUserId: row.updated_by_user_id,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
   };
 }
 
@@ -1754,100 +823,6 @@ function mapQuotationTenderFlow(row) {
     updatedByUserId: row.updated_by_user_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at
-  };
-}
-
-function isTechnicalOwner(roleState, user) {
-  return isSameId(roleState[SOLUTION_DESIGN_ROLE_KEY.TECHNICAL_OWNER]?.userId, user?.id);
-}
-
-function canProcessAnalysisForm({ projectEnded, inSolutionStage, roleState, user, analysisNode }) {
-  return (
-    !projectEnded &&
-    inSolutionStage &&
-    areAllRolesAssigned(roleState) &&
-    isTechnicalOwner(roleState, user) &&
-    analysisNode?.node_key === SOLUTION_DESIGN_NODE_KEY.ANALYSIS &&
-    isNodeProcessableStatus(analysisNode?.status)
-  );
-}
-
-function canProcessReviewForm({ projectEnded, inSolutionStage, roleState, user, reviewNode }) {
-  return (
-    !projectEnded &&
-    inSolutionStage &&
-    areAllRolesAssigned(roleState) &&
-    isTechnicalOwner(roleState, user) &&
-    Boolean(getSolutionDesignReviewFormDefinition(reviewNode?.node_key)) &&
-    isNodeProcessableStatus(reviewNode?.status)
-  );
-}
-
-function isAnalysisFormSubmittedForRevision(analysisFormRow, requiredRevision) {
-  return (
-    analysisFormRow?.form_status === SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.SUBMITTED &&
-    Number(analysisFormRow.revision ?? 0) >= Number(requiredRevision ?? 1)
-  );
-}
-
-function isAnalysisFormGeneratedForRevision(analysisFormRow, requiredRevision) {
-  return (
-    isAnalysisFormSubmittedForRevision(analysisFormRow, requiredRevision) &&
-    analysisFormRow.generated_file_status === SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED &&
-    Boolean(analysisFormRow.generated_file_storage_key)
-  );
-}
-
-function isReviewFormSubmittedForRevision(reviewFormRow, requiredRevision) {
-  return (
-    reviewFormRow?.form_status === SOLUTION_DESIGN_REVIEW_FORM_STATUS.SUBMITTED &&
-    Number(reviewFormRow.revision ?? 0) >= Number(requiredRevision ?? 1)
-  );
-}
-
-function isReviewFormGeneratedForRevision(reviewFormRow, requiredRevision) {
-  return (
-    isReviewFormSubmittedForRevision(reviewFormRow, requiredRevision) &&
-    reviewFormRow.generated_file_status === SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED &&
-    Boolean(reviewFormRow.generated_file_storage_key)
-  );
-}
-
-function isProductFunctionDiagramUploadedForRevision(uploadSlotRevisionByKey, requiredRevision) {
-  return (
-    Number(uploadSlotRevisionByKey.get(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PRODUCT_FUNCTION_DIAGRAM) ?? 0) >=
-    Number(requiredRevision ?? 1)
-  );
-}
-
-function areSolutionDesignOutputsUploadedForRevision(uploadSlotRevisionByKey, requiredRevision) {
-  const revision = Number(requiredRevision ?? 1);
-  return SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS.every(
-    (slotKey) => Number(uploadSlotRevisionByKey.get(slotKey) ?? 0) >= revision
-  );
-}
-
-function isCostUploadSlotUploadedForRevision(uploadSlotRevisionByKey, nodeKey, requiredRevision) {
-  const slotKey = getCostUploadSlotKeyForNode(nodeKey);
-  if (!slotKey) {
-    return false;
-  }
-
-  return Number(uploadSlotRevisionByKey.get(slotKey) ?? 0) >= Number(requiredRevision ?? 1);
-}
-
-function buildUploadSlotPermissions({ slot, roleState, user, projectEnded, inSolutionStage, nodeRow, quotationTenderFlow }) {
-  const canWrite =
-    !projectEnded &&
-    inSolutionStage &&
-    areAllRolesAssigned(roleState) &&
-    isNodeProcessableStatus(nodeRow?.status) &&
-    canUploadQuotationTenderSlot({ slot, nodeRow, flowRow: quotationTenderFlow });
-  return {
-    canUpload:
-      canWrite &&
-      Boolean(slot?.requiredRoleKey) &&
-      isSameId(roleState[slot.requiredRoleKey]?.userId, user?.id)
   };
 }
 
@@ -1921,139 +896,6 @@ function buildUploadsDto({ projectRow, slots, nodes, rolesRow, user, quotationTe
       canViewUploads: true
     },
     isProjectEnded: projectEnded
-  };
-}
-
-function buildAnalysisFormPermissions({ projectRow, analysisNode, roleState, user, analysisFormRow, uploadSlots }) {
-  const projectEnded = isSolutionDesignProjectEnded(projectRow);
-  const inSolutionStage = isProjectInSolutionDesignStage(projectRow);
-  const uploadSlotRevisionByKey = buildCurrentUploadSlotRevisionMap(uploadSlots);
-  const canEditForm = canProcessAnalysisForm({
-    projectEnded,
-    inSolutionStage,
-    roleState,
-    user,
-    analysisNode
-  });
-  const canSubmitNode =
-    canEditForm &&
-    isAnalysisFormGeneratedForRevision(analysisFormRow, analysisNode?.current_revision) &&
-    isProductFunctionDiagramUploadedForRevision(uploadSlotRevisionByKey, analysisNode?.current_revision);
-  const canReview = canReviewSolutionDesignNode({
-    nodeRow: analysisNode || {},
-    user,
-    roleState,
-    projectEnded,
-    inSolutionStage
-  });
-
-  return {
-    canViewForm: true,
-    canEditForm,
-    canSubmitForm: canEditForm,
-    canSubmitNode,
-    canApprove: canReview,
-    canReturn: canReview
-  };
-}
-
-function buildAnalysisFormDto({
-  projectRow,
-  nodes,
-  rolesRow,
-  uploadSlots,
-  analysisFormRow,
-  user,
-  analysisStageDocumentRow = null,
-  analysisImages = []
-}) {
-  const materializedNodes = nodes.length > 0 ? nodes : buildVirtualNodes();
-  const roleState = buildRoleStateWithoutUserDetails(projectRow, rolesRow);
-  const analysisNode = getNodeByKey(materializedNodes, SOLUTION_DESIGN_NODE_KEY.ANALYSIS);
-  const form = mapAnalysisForm(analysisFormRow);
-
-  return {
-    projectId: projectRow.id,
-    stageKey: SOLUTION_DESIGN_STAGE.STAGE_KEY,
-    nodeKey: SOLUTION_DESIGN_NODE_KEY.ANALYSIS,
-    nodeStatus: analysisNode?.status ?? SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED,
-    nodeRevision: analysisNode?.current_revision ?? 1,
-    stageDocumentId: analysisStageDocumentRow?.id ?? null,
-    images: analysisImages,
-    form: form
-      ? {
-          ...form,
-          stageDocumentId: analysisStageDocumentRow?.id ?? null,
-          images: analysisImages
-        }
-      : null,
-    permissions: buildAnalysisFormPermissions({
-      projectRow,
-      analysisNode,
-      roleState,
-      user,
-      analysisFormRow,
-      uploadSlots
-    }),
-    isProjectEnded: isSolutionDesignProjectEnded(projectRow)
-  };
-}
-
-function buildReviewFormPermissions({ projectRow, reviewNode, roleState, user, reviewFormRow }) {
-  const projectEnded = isSolutionDesignProjectEnded(projectRow);
-  const inSolutionStage = isProjectInSolutionDesignStage(projectRow);
-  const canEditReviewForm = canProcessReviewForm({
-    projectEnded,
-    inSolutionStage,
-    roleState,
-    user,
-    reviewNode
-  });
-  const canReview = canReviewSolutionDesignNode({
-    nodeRow: reviewNode || {},
-    user,
-    roleState,
-    projectEnded,
-    inSolutionStage
-  });
-
-  return {
-    canViewReviewForm: true,
-    canEditReviewForm,
-    canSubmitReviewForm: canEditReviewForm,
-    canSubmitNode:
-      canEditReviewForm &&
-      isReviewFormGeneratedForRevision(reviewFormRow, reviewNode?.current_revision),
-    canApprove: canReview,
-    canReturn: canReview
-  };
-}
-
-function buildReviewFormDto({ projectRow, nodes, rolesRow, reviewFormRow, nodeKey, user }) {
-  const definition = getSolutionDesignReviewFormDefinition(nodeKey);
-  const materializedNodes = nodes.length > 0 ? nodes : buildVirtualNodes();
-  const roleState = buildRoleStateWithoutUserDetails(projectRow, rolesRow);
-  const reviewNode = getNodeByKey(materializedNodes, nodeKey);
-
-  return {
-    projectId: projectRow.id,
-    stageKey: SOLUTION_DESIGN_STAGE.STAGE_KEY,
-    nodeKey,
-    nodeStatus: reviewNode?.status ?? SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED,
-    nodeRevision: reviewNode?.current_revision ?? 1,
-    reviewType: definition.reviewType,
-    documentCode: definition.documentCode,
-    formName: definition.formName,
-    templateName: definition.templateName,
-    form: mapReviewForm(reviewFormRow),
-    permissions: buildReviewFormPermissions({
-      projectRow,
-      reviewNode,
-      roleState,
-      user,
-      reviewFormRow
-    }),
-    isProjectEnded: isSolutionDesignProjectEnded(projectRow)
   };
 }
 
@@ -2137,164 +979,6 @@ function buildNodeBlockingReasons(
   }
 
   return [];
-}
-
-function canSubmitNode({
-  nodeRow,
-  roleState,
-  user,
-  projectEnded,
-  inSolutionStage,
-  currentFileSlotKeys,
-  uploadSlotRevisionByKey,
-  analysisFormRow,
-  reviewFormRowsByNodeKey = new Map(),
-  quotationTenderFlow = null
-}) {
-  if (
-    projectEnded ||
-    !inSolutionStage ||
-    !areAllRolesAssigned(roleState) ||
-    !isNodeProcessableStatus(nodeRow.status)
-  ) {
-    return false;
-  }
-
-  const requiredRoleKey = getSubmitNodeRoleKey(nodeRow.node_key);
-  if (!requiredRoleKey || !isSameId(roleState[requiredRoleKey]?.userId, user?.id)) {
-    return false;
-  }
-
-  if (nodeRow.node_key === SOLUTION_DESIGN_NODE_KEY.PREPARATION) {
-    return currentFileSlotKeys.has(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.WORK_PLAN);
-  }
-
-  if (nodeRow.node_key === SOLUTION_DESIGN_NODE_KEY.ANALYSIS) {
-    return (
-      isAnalysisFormGeneratedForRevision(analysisFormRow, nodeRow.current_revision) &&
-      isProductFunctionDiagramUploadedForRevision(uploadSlotRevisionByKey, nodeRow.current_revision)
-    );
-  }
-
-  if (nodeRow.node_key === SOLUTION_DESIGN_NODE_KEY.DESIGN) {
-    return areSolutionDesignOutputsUploadedForRevision(uploadSlotRevisionByKey, nodeRow.current_revision);
-  }
-
-  if (getSolutionDesignReviewFormDefinition(nodeRow.node_key)) {
-    return isReviewFormGeneratedForRevision(
-      reviewFormRowsByNodeKey.get(nodeRow.node_key),
-      nodeRow.current_revision
-    );
-  }
-
-  if (isCostEstimationNode(nodeRow.node_key)) {
-    return isCostUploadSlotUploadedForRevision(
-      uploadSlotRevisionByKey,
-      nodeRow.node_key,
-      nodeRow.current_revision
-    );
-  }
-
-  if (nodeRow.node_key === SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER) {
-    return canSubmitTender({
-      projectEnded,
-      inSolutionStage,
-      roleState,
-      user,
-      nodeRow,
-      flowRow: quotationTenderFlow,
-      uploadSlotRevisionByKey
-    });
-  }
-
-  return false;
-}
-
-function canReviewSolutionDesignNode({ nodeRow, user, roleState, projectEnded, inSolutionStage }) {
-  if (projectEnded || !inSolutionStage) {
-    return false;
-  }
-
-  if (
-    [
-      SOLUTION_DESIGN_NODE_KEY.ANALYSIS,
-      SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
-      SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
-      SOLUTION_DESIGN_NODE_KEY.RD_COST
-    ].includes(nodeRow?.node_key)
-  ) {
-    return (
-      nodeRow.status === SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW &&
-      canAssignSolutionDesignRoles(user)
-    );
-  }
-
-  if (nodeRow?.node_key === SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST) {
-    return (
-      nodeRow.status === SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW &&
-      isManufacturingCenterManager(user)
-    );
-  }
-
-  if (nodeRow?.node_key === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST) {
-    if (nodeRow.status === SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW) {
-      return isSameId(roleState[SOLUTION_DESIGN_ROLE_KEY.FINANCE_OWNER]?.userId, user?.id);
-    }
-
-    return (
-      nodeRow.status === SOLUTION_DESIGN_NODE_STATUS.PENDING_GENERAL_REVIEW &&
-      isSolutionDesignGeneralManager(user)
-    );
-  }
-
-  if (nodeRow?.node_key === SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER) {
-    return (
-      nodeRow.status === SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW &&
-      isSolutionDesignGeneralManager(user)
-    );
-  }
-
-  return (
-    false
-  );
-}
-
-function canActAsReviewerForSolutionDesignNode({ nodeRow, user, roleState }) {
-  if (
-    [
-      SOLUTION_DESIGN_NODE_KEY.ANALYSIS,
-      SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
-      SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
-      SOLUTION_DESIGN_NODE_KEY.RD_COST
-    ].includes(nodeRow?.node_key)
-  ) {
-    return canAssignSolutionDesignRoles(user);
-  }
-
-  if (nodeRow?.node_key === SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST) {
-    return isManufacturingCenterManager(user);
-  }
-
-  if (nodeRow?.node_key === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST) {
-    if (nodeRow.status === SOLUTION_DESIGN_NODE_STATUS.PENDING_GENERAL_REVIEW) {
-      return isSolutionDesignGeneralManager(user);
-    }
-
-    if (nodeRow.status === SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW) {
-      return isSameId(roleState[SOLUTION_DESIGN_ROLE_KEY.FINANCE_OWNER]?.userId, user?.id);
-    }
-
-    return (
-      isSameId(roleState[SOLUTION_DESIGN_ROLE_KEY.FINANCE_OWNER]?.userId, user?.id) ||
-      isSolutionDesignGeneralManager(user)
-    );
-  }
-
-  if (nodeRow?.node_key === SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER) {
-    return isSolutionDesignGeneralManager(user);
-  }
-
-  return false;
 }
 
 function mapNode(
@@ -2618,16 +1302,6 @@ function getWorkflowNodeDto(workflow, nodeKey) {
 
 function isWorkflowRoleAssignmentComplete(workflow) {
   return SOLUTION_DESIGN_ROLE_DEFINITIONS.every((definition) => Boolean(workflow?.roles?.[definition.roleKey]?.userId));
-}
-
-function isGeneratedFormDtoCurrent(formDto, requiredRevision) {
-  return (
-    formDto?.status === SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.SUBMITTED ||
-    formDto?.status === SOLUTION_DESIGN_REVIEW_FORM_STATUS.SUBMITTED
-  ) &&
-    Number(formDto?.revision ?? 0) >= Number(requiredRevision ?? 1) &&
-    formDto?.generatedFile?.status === SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED &&
-    formDto?.generatedFile?.canDownload === true;
 }
 
 function buildSolutionDesignWorkbenchTargetRoute(projectId, nodeKey) {
@@ -4224,69 +2898,6 @@ async function markReviewFormGenerationFailed(executor, {
       formId
     ]
   );
-}
-
-async function generateSolutionDesignFormFile({
-  executor,
-  projectRow,
-  definition,
-  formRow,
-  actorUserId,
-  storage,
-  roleState,
-  stageDocumentRow = null,
-  readOnlineFormImage = readOnlineFormImageForGeneration
-}) {
-  let storageKey = null;
-  const templateName = definition.templateName;
-  const fileName = buildGeneratedFormFileName({
-    projectRow,
-    definition,
-    revision: formRow.revision
-  });
-
-  try {
-    const templateBuffer = await readSolutionDesignTemplate(templateName);
-    const imageValues = await buildGeneratedFormImageValues({
-      executor,
-      projectRow,
-      definition,
-      stageDocumentRow,
-      readOnlineFormImage
-    });
-    const generatedBuffer = renderXlsxTemplate(templateBuffer, {
-      cellValues: buildGeneratedFormCellValues({
-        projectRow,
-        definition,
-        formRow,
-        roleState
-      }),
-      imageValues
-    });
-    storageKey = storage.createStorageKey({
-      projectId: projectRow.id,
-      documentCode: definition.documentCode,
-      revision: formRow.revision
-    });
-    const stored = await storage.writeFile(storageKey, generatedBuffer);
-    return {
-      success: true,
-      storageKey,
-      fileName,
-      mimeType: GENERATED_XLSX_MIME_TYPE,
-      fileSize: Number(stored.size ?? generatedBuffer.length),
-      templateName
-    };
-  } catch (error) {
-    if (storageKey) {
-      await storage.cleanupFile(storageKey);
-    }
-    return {
-      success: false,
-      templateName,
-      errorMessage: buildGenerationErrorMessage(error)
-    };
-  }
 }
 
 async function generateAndPersistAnalysisFormFile(executor, {

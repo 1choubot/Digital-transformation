@@ -3373,6 +3373,12 @@ test('technical owner can save and submit solution analysis form', async () => {
   assert.equal(download.fileName, submitted.form.generatedFile.fileName);
   assert.equal(download.mimeType, submitted.form.generatedFile.mimeType);
   assert.equal(download.filePath, db.generatedFileStorage.written[0].storageKey);
+  db.connection.currentAnalysisForm().generated_file_mime_type = null;
+  const fallbackMimeDownload = await getSolutionDesignAnalysisGeneratedFileDownload(
+    { projectId: 100, user: technicalOwner },
+    db
+  );
+  assert.equal(fallbackMimeDownload.mimeType, submitted.form.generatedFile.mimeType);
   db.connection.visible = false;
   const unrelatedUser = authUser(db.connection.users.get(31));
   await assert.rejects(

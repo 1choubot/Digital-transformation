@@ -1,59 +1,43 @@
 <template>
   <section class="page-stack daily-report-list-page animate-fadeIn">
     <!-- 无权限警告 -->
-    <section v-if="!canUseDailyReport" class="state-panel state-panel--error panel">
-      <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10" />
-        <line x1="12" y1="8" x2="12" y2="12" />
-        <line x1="12" y1="16" x2="12.01" y2="16" />
-      </svg>
-      <h3>无日报访问权限</h3>
-      <p>当前账号不是员工（employee），不能访问个人日报列表。</p>
-    </section>
+    <el-alert v-if="!canUseDailyReport" title="无日报访问权限" description="当前账号不是员工（employee），不能访问个人日报列表。" type="error" show-icon :closable="false" />
 
     <template v-else>
       <!-- 筛选面板（新布局） -->
       <section class="panel daily-filter-panel">
-        <form class="daily-filters" @submit.prevent="loadReports">
+        <el-form class="daily-filters" @submit.prevent="loadReports">
           <span class="filter-text">查询从</span>
           <div class="filter-group filter-group--inline">
-            <input v-model="filters.dateFrom" type="date" class="filter-input" />
+            <el-date-picker v-model="filters.dateFrom" type="date" value-format="YYYY-MM-DD" placeholder="开始日期" />
           </div>
 
           <span class="filter-text">到</span>
           <div class="filter-group filter-group--inline">
-            <input v-model="filters.dateTo" type="date" class="filter-input" />
+            <el-date-picker v-model="filters.dateTo" type="date" value-format="YYYY-MM-DD" placeholder="结束日期" />
           </div>
 
           <span class="filter-text">状态</span>
           <div class="filter-group filter-group--inline">
-            <select v-model="filters.status" class="filter-select">
-              <option value="">全部</option>
-              <option :value="ReportStatus.DRAFT">草稿</option>
-              <option :value="ReportStatus.SUBMITTED">已提交</option>
-            </select>
+            <el-select v-model="filters.status" placeholder="全部状态">
+              <el-option label="全部" value="" />
+              <el-option label="草稿" :value="ReportStatus.DRAFT" />
+              <el-option label="已提交" :value="ReportStatus.SUBMITTED" />
+            </el-select>
           </div>
 
           <span class="filter-text">的日报</span>
 
           <div class="filter-actions">
-            <button type="submit" class="primary-button apply-btn" :disabled="loading">
-              <span>应用筛选</span>
-            </button>
+            <el-button type="primary" native-type="submit" :loading="loading">应用筛选</el-button>
           </div>
-        </form>
+        </el-form>
       </section>
 
       <!-- 错误提示 -->
-      <section v-if="errorMessage" class="state-panel state-panel--error panel">
-        <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="12" y1="8" x2="12" y2="12" />
-          <line x1="12" y1="16" x2="12.01" y2="16" />
-        </svg>
-        <p>{{ errorMessage }}</p>
-        <button type="button" class="primary-button inline-btn" @click="loadReports">重新尝试</button>
-      </section>
+      <el-alert v-if="errorMessage" title="日报列表加载失败" :description="errorMessage" type="error" show-icon :closable="false">
+        <template #default><el-button type="primary" size="small" @click="loadReports">重新尝试</el-button></template>
+      </el-alert>
 
       <!-- 日报列表面板 -->
       <section class="panel daily-list-panel">
@@ -63,33 +47,15 @@
             <span class="toolbar-subtitle">共 {{ reports.length }} 条</span>
           </div>
           <div class="toolbar-actions">
-            <button type="button" class="ghost-button reload-btn" :disabled="loading" @click="loadReports">
-              <svg v-if="loading" class="spinner btn-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                <circle cx="12" cy="12" r="10" stroke="rgba(0,0,0,0.1)" />
-              </svg>
-              <span>{{ loading ? '加载中...' : '重新加载' }}</span>
-            </button>
+            <el-button :loading="loading" @click="loadReports">重新加载</el-button>
           </div>
         </div>
 
         <!-- 加载中 -->
-        <div v-if="loading" class="state-panel state-panel--inline">
-          <div class="loading-wave">
-            <div class="wave-bar"></div>
-            <div class="wave-bar"></div>
-            <div class="wave-bar"></div>
-          </div>
-          <p>正在加载日报列表，请稍候...</p>
-        </div>
+        <el-skeleton v-if="loading" :rows="5" animated />
 
         <!-- 空状态 -->
-        <div v-else-if="reports.length === 0" class="state-panel state-panel--empty">
-          <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-1.125 1.125-1.125V11.25a9 9 0 00-9-9z" />
-          </svg>
-          <h3>暂无日报记录</h3>
-          <p>您还没有填写过日报，点击“填写日报”开始记录每日工作。</p>
-        </div>
+        <el-empty v-else-if="reports.length === 0" description="暂无日报记录。" />
 
         <!-- 列表表格 -->
         <div v-else class="table-container">
@@ -117,9 +83,7 @@
 
                 <!-- 状态 -->
                 <div class="daily-table__cell">
-                  <span :class="['status-badge', statusClass(report.status)]">
-                    {{ statusLabel(report.status) }}
-                  </span>
+                  <el-tag :type="report.status === ReportStatus.SUBMITTED ? 'success' : 'info'">{{ statusLabel(report.status) }}</el-tag>
                 </div>
 
                 <!-- 更新时间 -->
@@ -129,16 +93,16 @@
 
                 <!-- 操作按钮组 -->
                 <div class="daily-table__cell daily-table__actions">
-                  <button type="button" class="row-btn action-btn" @click="navigate(`/daily-report/${report.id}`)">打开</button>
-                  <button type="button" class="row-btn action-btn" @click="downloadReportExcel(report)">导出</button>
-                  <button
+                  <el-button link type="primary" @click="navigate(`/daily-report/${report.id}`)">打开</el-button>
+                  <el-button link type="primary" @click="downloadReportExcel(report)">导出</el-button>
+                  <el-button
                     v-if="report.status === ReportStatus.DRAFT"
-                    type="button"
-                    class="row-btn action-btn action-btn--danger"
+                    link
+                    type="danger"
                     @click="removeDraft(report)"
                   >
                     删除草稿
-                  </button>
+                  </el-button>
                 </div>
               </article>
             </div>
@@ -147,34 +111,12 @@
       </section>
     </template>
 
-    <!-- Toast 消息 -->
-    <Transition name="toast">
-      <div v-if="toastVisible" class="toast" :class="{ 'toast--error': toastType === 'error', 'toast--success': toastType === 'success' }">
-        <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <template v-if="toastType === 'error'">
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="8" x2="12" y2="12" />
-            <line x1="12" y1="16" x2="12.01" y2="16" />
-          </template>
-          <template v-else>
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-            <polyline points="22 4 12 14.01 9 11.01" />
-          </template>
-        </svg>
-        <span>{{ toastMessage }}</span>
-        <button type="button" class="toast-close" @click="hideToast">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-      </div>
-    </Transition>
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { OrganizationRole, ReportStatus } from '../constants/reports.js';
 import {
   deleteDailyReport,
@@ -209,25 +151,6 @@ const filters = reactive({
   status: ''
 });
 
-const toastVisible = ref(false);
-const toastMessage = ref('');
-const toastType = ref('error');
-let toastTimer = null;
-
-function showToast(msg, type = 'error') {
-  if (toastTimer) clearTimeout(toastTimer);
-  toastMessage.value = msg;
-  toastType.value = type;
-  toastVisible.value = true;
-  toastTimer = setTimeout(() => {
-    toastVisible.value = false;
-  }, 3000);
-}
-function hideToast() {
-  if (toastTimer) clearTimeout(toastTimer);
-  toastVisible.value = false;
-}
-
 const canUseDailyReport = computed(() => props.currentUser.organizationRole === OrganizationRole.EMPLOYEE);
 
 function formatDateTime(value) {
@@ -237,10 +160,6 @@ function formatDateTime(value) {
 
 function statusLabel(status) {
   return status === ReportStatus.SUBMITTED ? '已提交' : '草稿';
-}
-
-function statusClass(status) {
-  return status === ReportStatus.SUBMITTED ? 'status-badge--done' : 'status-badge--draft';
 }
 
 function saveBlob(download, fallbackName) {
@@ -286,9 +205,16 @@ async function downloadReportExcel(report) {
 async function removeDraft(report) {
   errorMessage.value = '';
   try {
+    await ElMessageBox.confirm('删除后无法恢复，确认删除该日报草稿吗？', '删除日报草稿', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消'
+    });
     await deleteDailyReport(report.id, props.authToken);
     await loadReports();
+    ElMessage.success('日报草稿已删除');
   } catch (error) {
+    if (error === 'cancel' || error === 'close') return;
     errorMessage.value = toReadableApiError(error);
   }
 }
@@ -329,38 +255,6 @@ onMounted(loadReports);
   50% { transform: scaleY(1); }
 }
 
-/* ===== 按钮基础 ===== */
-.primary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  background: #3e63dd;
-  color: #ffffff;
-  border: none;
-  font-weight: 500;
-  padding: 0.5rem 1.25rem;
-  border-radius: 4px;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  height: 36px;
-  white-space: nowrap;
-}
-.primary-button:hover:not(:disabled) {
-  background: #5275e7;
-}
-.primary-button:disabled {
-  opacity: 0.6;
-  background: #a0cfff;
-  cursor: not-allowed;
-}
-.btn-icon {
-  width: 16px;
-  height: 16px;
-  stroke: currentColor;
-}
-
 /* ===== 面板 ===== */
 .panel {
   background: #ffffff;
@@ -388,29 +282,11 @@ onMounted(loadReports);
   display: inline-flex;
   align-items: center;
 }
-.filter-input,
-.filter-select {
-  height: 32px;
-  padding: 0 0.6rem;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  background: #ffffff;
-  font-size: 0.9rem;
-  color: #303133;
-  outline: none;
-  transition: border-color 0.2s ease;
-}
-.filter-input {
+.filter-group--inline .el-date-editor {
   width: 140px;
 }
-.filter-select {
+.filter-group--inline .el-select {
   width: 110px;
-  appearance: auto;
-  cursor: pointer;
-}
-.filter-input:focus,
-.filter-select:focus {
-  border-color: #3e63dd;
 }
 .filter-actions {
   display: flex;
@@ -514,41 +390,6 @@ onMounted(loadReports);
   align-items: center;
   gap: 0.75rem;
 }
-.ghost-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  background: #ffffff;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  color: #606266;
-  cursor: pointer;
-  transition: all 0.2s;
-  height: 36px;
-  white-space: nowrap;
-}
-.ghost-button:hover:not(:disabled) {
-  border-color: #c6e2ff;
-  background: #ecf5ff;
-  color: #3e63dd;
-}
-.ghost-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.spinner {
-  width: 16px;
-  height: 16px;
-  animation: spin 0.8s linear infinite;
-  stroke: currentColor;
-}
-.btn-spinner {
-  stroke: #3e63dd;
-}
-
 /* ===== 表格 ===== */
 .table-container {
   overflow-x: auto;
@@ -649,77 +490,6 @@ onMounted(loadReports);
   justify-content: flex-end;
   flex-wrap: wrap;
 }
-.row-btn {
-  padding: 0.25rem 0.7rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  background: #ffffff;
-  border: 1px solid #dcdfe6;
-  color: #606266;
-  white-space: nowrap;
-}
-.action-btn:hover {
-  border-color: #a4b3ff;
-  color: #3e63dd;
-  background: #f0f3ff;
-}
-.action-btn--danger:hover {
-  border-color: #fbc4c4;
-  color: #f56c6c;
-  background: #fef0f0;
-}
-
-/* ===== Toast ===== */
-.toast {
-  position: fixed;
-  top: 2rem;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.7rem 1rem;
-  border-radius: 4px;
-  background: #ffffff;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: #303133;
-  z-index: 10000;
-  border: 1px solid #ebeef5;
-  max-width: 90%;
-}
-.toast--error { border-left: 4px solid #f56c6c; }
-.toast--error .toast-icon { stroke: #f56c6c; flex-shrink: 0; width: 20px; height: 20px; }
-.toast--success { border-left: 4px solid #67c23a; }
-.toast--success .toast-icon { stroke: #67c23a; flex-shrink: 0; width: 20px; height: 20px; }
-.toast-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  padding: 0;
-  margin-left: 0.5rem;
-  flex-shrink: 0;
-  border-radius: 50%;
-  transition: background 0.2s;
-  color: #c0c4cc;
-}
-.toast-close:hover { background: #f4f4f5; }
-.toast-close svg { width: 14px; height: 14px; }
-.toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
-.toast-enter-from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
-.toast-enter-to { opacity: 1; transform: translateX(-50%) translateY(0); }
-.toast-leave-from { opacity: 1; transform: translateX(-50%) translateY(0); }
-.toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(-20px); }
-
 /* ===== 响应式 ===== */
 @media (max-width: 900px) {
   .daily-filters {
@@ -733,8 +503,8 @@ onMounted(loadReports);
   .filter-group--inline {
     width: 100%;
   }
-  .filter-input,
-  .filter-select {
+  .filter-group--inline .el-date-editor,
+  .filter-group--inline .el-select {
     width: 100%;
     box-sizing: border-box;
   }

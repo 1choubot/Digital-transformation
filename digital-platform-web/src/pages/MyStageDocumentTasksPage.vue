@@ -7,9 +7,7 @@
       subtitle="工作台汇总待我填写资料、待我评价/审批和方案设计事项，进入项目工作区后只定位目标，不自动打开在线表单。"
     >
       <template #actions>
-        <button type="button" class="ghost-button" :disabled="loading" @click="loadWorkbench">
-          {{ loading ? '加载中...' : '重新加载' }}
-        </button>
+        <el-button :loading="loading" @click="loadWorkbench">重新加载</el-button>
       </template>
     </PageHeader>
 
@@ -28,18 +26,15 @@
       <div class="task-filters">
         <label>
           <span>待办类型</span>
-          <select v-model="selectedType" :disabled="loading">
-            <option value="all">全部待办</option>
-            <option v-for="option in typeOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
+          <el-select v-model="selectedType" :disabled="loading">
+            <el-option label="全部待办" value="all" />
+            <el-option v-for="option in typeOptions" :key="option.value" :label="option.label" :value="option.value" />
+          </el-select>
         </label>
         <label>
           <span>项目关键字</span>
-          <input
+          <el-input
             v-model.trim="projectKeyword"
-            type="search"
             autocomplete="off"
             placeholder="项目编号或项目名称"
           />
@@ -55,20 +50,13 @@
         </div>
       </div>
 
-      <div v-if="loading" class="state-panel state-panel--inline">
-        <p>正在加载我的工作台...</p>
-      </div>
+      <el-skeleton v-if="loading" :rows="5" animated />
 
-      <div v-else-if="errorMessage" class="state-panel state-panel--error">
-        <h3>我的工作台加载失败</h3>
-        <p>{{ errorMessage }}</p>
-        <button type="button" class="primary-button" @click="loadWorkbench">重试</button>
-      </div>
+      <el-alert v-else-if="errorMessage" title="我的工作台加载失败" :description="errorMessage" type="error" show-icon :closable="false">
+        <template #default><el-button type="primary" size="small" @click="loadWorkbench">重试</el-button></template>
+      </el-alert>
 
-      <div v-else-if="filteredItems.length === 0" class="state-panel state-panel--inline">
-        <h3>暂无匹配待办</h3>
-        <p>当前筛选下没有需要你处理的事项。</p>
-      </div>
+      <el-empty v-else-if="filteredItems.length === 0" description="当前筛选下没有需要你处理的事项。" />
 
       <div v-else class="task-list">
         <article
@@ -122,9 +110,7 @@
               <span>入口动作</span>
               <strong>{{ formatActionText(item) }}</strong>
             </div>
-            <button type="button" class="primary-button" @click="openTodo(item)">
-              进入项目工作区
-            </button>
+            <el-button type="primary" @click="openTodo(item)">进入项目工作区</el-button>
           </div>
         </article>
       </div>

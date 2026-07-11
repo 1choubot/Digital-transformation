@@ -5,50 +5,37 @@
     <!-- 筛选栏 -->
     <section class="panel overview-filter-panel">
       <div class="panel-toolbar">
-        <form class="weekly-overview-filters" @submit.prevent="loadOverview">
+        <el-form class="weekly-overview-filters" @submit.prevent="loadOverview">
           <div class="filter-group">
             <span class="filter-label">周开始</span>
             <div class="input-wrapper">
-              <input v-model="overviewFilters.weekStart" type="date" />
+              <el-date-picker v-model="overviewFilters.weekStart" type="date" value-format="YYYY-MM-DD" placeholder="选择周开始日期" />
             </div>
           </div>
           <div v-if="canReadAllCenters" class="filter-group">
             <span class="filter-label">中心</span>
             <div class="input-wrapper">
-              <select v-model="overviewFilters.department">
-                <option value="">全部中心</option>
-                <option value="operations_center">运营中心</option>
-                <option value="marketing_center">营销中心</option>
-                <option value="manufacturing_center">制造中心</option>
-                <option value="rd_center">研发中心</option>
-              </select>
+              <el-select v-model="overviewFilters.department" placeholder="全部中心">
+                <el-option label="全部中心" value="" />
+                <el-option label="运营中心" value="operations_center" />
+                <el-option label="营销中心" value="marketing_center" />
+                <el-option label="制造中心" value="manufacturing_center" />
+                <el-option label="研发中心" value="rd_center" />
+              </el-select>
             </div>
           </div>
-          <button type="submit" class="primary-button" :disabled="overviewLoading">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            查询
-          </button>
-        </form>
+          <el-button type="primary" native-type="submit" :loading="overviewLoading">查询</el-button>
+        </el-form>
       </div>
     </section>
 
     <!-- 错误 / 加载 / 空状态 / 表格 -->
     <section class="panel overview-result-panel">
-      <section v-if="overviewError" class="state-panel state-panel--error panel state-panel--compact">
-        <p>{{ overviewError }}</p>
-      </section>
+      <el-alert v-if="overviewError" title="中心周报加载失败" :description="overviewError" type="error" show-icon :closable="false" />
 
-      <div v-if="overviewLoading" class="state-panel panel">
-        <div class="loading-spinner"></div>
-        <p>正在加载中心周报...</p>
-      </div>
+      <el-skeleton v-if="overviewLoading" :rows="5" animated />
 
-      <div v-else-if="overviewRows.length === 0" class="state-panel panel state-panel--empty">
-        <p>暂无考评记录。</p>
-      </div>
+      <el-empty v-else-if="overviewRows.length === 0" description="暂无考评记录。" />
 
       <div v-else class="table-container">
         <div class="weekly-overview-table">
@@ -64,13 +51,11 @@
           <div v-for="row in overviewRows" :key="row.reportId" class="weekly-overview-table__row">
             <strong>{{ row.userName }}</strong>
             <span>{{ formatBusinessDepartment(row.department) }}</span>
-            <span class="status-badge" :class="approvalStatusClass(row.approvalStatus)">{{ approvalStatusLabel(row.approvalStatus) }}</span>
+            <el-tag :type="approvalStatusType(row.approvalStatus)">{{ approvalStatusLabel(row.approvalStatus) }}</el-tag>
             <span>{{ overviewFinalScoreText(row) }}</span>
             <span>{{ overviewReferenceScoreText(row) }}</span>
             <span>{{ row.approvalReviewedByName || '-' }}</span>
-            <button type="button" class="row-btn action-btn" @click="navigate(`/weekly-report-review/${row.reportId}?from=overview`)">
-              审核
-            </button>
+            <el-button link type="primary" @click="navigate(`/weekly-report-review/${row.reportId}?from=overview`)">审核</el-button>
           </div>
         </div>
       </div>
@@ -80,7 +65,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
-import { OrganizationRole, ReportStatus, WeeklyApprovalStatus } from '../constants/reports.js';
+import { OrganizationRole, WeeklyApprovalStatus } from '../constants/reports.js';
 import {
   listWeeklyComparisonOverview,
   toReadableApiError
@@ -132,14 +117,6 @@ function previousWeekStart() {
   return `${year}-${month}-${date}`;
 }
 
-function statusLabel(status) {
-  return status === ReportStatus.SUBMITTED ? '已提交' : '草稿';
-}
-
-function statusClass(status) {
-  return status === ReportStatus.SUBMITTED ? 'status-badge--done' : 'status-badge--draft';
-}
-
 // Weekly overview rows surface approval progress for center-manager review.
 function approvalStatusLabel(status) {
   const labels = {
@@ -152,14 +129,13 @@ function approvalStatusLabel(status) {
 }
 
 // Approval badge classes mirror the employee-facing weekly list.
-function approvalStatusClass(status) {
-  const classes = {
-    [WeeklyApprovalStatus.NOT_SUBMITTED]: 'status-badge--draft',
-    [WeeklyApprovalStatus.PENDING]: 'status-badge--pending',
-    [WeeklyApprovalStatus.APPROVED]: 'status-badge--done',
-    [WeeklyApprovalStatus.RETURNED]: 'status-badge--returned'
-  };
-  return classes[status] || classes[WeeklyApprovalStatus.NOT_SUBMITTED];
+function approvalStatusType(status) {
+  return {
+    [WeeklyApprovalStatus.NOT_SUBMITTED]: 'info',
+    [WeeklyApprovalStatus.PENDING]: 'warning',
+    [WeeklyApprovalStatus.APPROVED]: 'success',
+    [WeeklyApprovalStatus.RETURNED]: 'danger'
+  }[status] || 'info';
 }
 
 function sourceLabel(source) {
@@ -251,67 +227,6 @@ onMounted(() => {
   border-bottom: 1px solid #ebeef5;
   flex-wrap: wrap;
   gap: 0.75rem;
-}
-
-/* ===== 按钮 ===== */
-.ghost-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  background: #ffffff;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  color: #606266;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  height: 36px;
-  white-space: nowrap;
-}
-.ghost-button:hover:not(:disabled) {
-  border-color: #c6e2ff;
-  background: #ecf5ff;
-  color: #3e63dd;
-}
-.ghost-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.primary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  background: #3e63dd;
-  color: #ffffff;
-  border: none;
-  font-weight: 500;
-  padding: 0.5rem 1.25rem;
-  border-radius: 4px;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  height: 36px;
-  white-space: nowrap;
-}
-.primary-button:hover:not(:disabled) {
-  background: #5275e7;
-}
-.primary-button:disabled {
-  opacity: 0.6;
-  background: #a0cfff;
-  cursor: not-allowed;
-}
-
-.btn-icon {
-  width: 16px;
-  height: 16px;
-  stroke: currentColor;
-  flex-shrink: 0;
 }
 
 /* ===== 状态面板 ===== */
@@ -439,6 +354,10 @@ onMounted(() => {
   gap: 0.75rem;
   flex-wrap: wrap;
 }
+.weekly-overview-filters .el-date-editor,
+.weekly-overview-filters .el-select {
+  width: 180px;
+}
 .weekly-overview-filters .filter-group {
   min-width: 140px;
 }
@@ -446,7 +365,7 @@ onMounted(() => {
 .weekly-overview-filters .filter-group .input-wrapper select {
   height: 36px;
 }
-.weekly-overview-filters .primary-button {
+.weekly-overview-filters .el-button {
   height: 36px;
 }
 
@@ -488,33 +407,8 @@ onMounted(() => {
 .weekly-overview-table__row:hover {
   background: #fdfdfe;
 }
-.weekly-overview-table__row .row-btn {
-  font-size: 0.7rem;
-  padding: 0.15rem 0.5rem;
+.weekly-overview-table__row .el-button {
   justify-self: flex-end;
-}
-
-/* ===== 行内操作按钮 ===== */
-.row-btn {
-  padding: 0.2rem 0.6rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  background: #ffffff;
-  border: 1px solid #dcdfe6;
-  color: #606266;
-  white-space: nowrap;
-}
-.row-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.action-btn:hover:not(:disabled) {
-  border-color: #a4b3ff;
-  color: #3e63dd;
-  background: #f0f3ff;
 }
 
 /* ===== 响应式 ===== */
@@ -544,7 +438,7 @@ onMounted(() => {
     border-radius: 4px;
     margin-bottom: 0.5rem;
   }
-  .weekly-overview-table__row .row-btn {
+  .weekly-overview-table__row .el-button {
     justify-self: flex-start;
   }
 }

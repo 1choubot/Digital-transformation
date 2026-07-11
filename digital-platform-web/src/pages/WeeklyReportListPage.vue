@@ -28,25 +28,16 @@
             <div class="filter-group">
               <span class="filter-label">设为本周锚点</span>
               <div class="input-wrapper">
-                <select v-model="selectedAnchorMode" :disabled="savingRestMode">
-                  <option :value="WeeklyRestMode.SINGLE_REST">本周单休</option>
-                  <option :value="WeeklyRestMode.DOUBLE_REST">本周双休</option>
-                </select>
+                <el-select v-model="selectedAnchorMode" :disabled="savingRestMode">
+                  <el-option label="本周单休" :value="WeeklyRestMode.SINGLE_REST" />
+                  <el-option label="本周双休" :value="WeeklyRestMode.DOUBLE_REST" />
+                </el-select>
               </div>
             </div>
-            <button type="button" class="primary-button" :disabled="savingRestMode" @click="handleSetRestMode">
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                <polyline points="17 21 17 13 7 13 7 21" />
-                <polyline points="7 3 7 8 15 8" />
-              </svg>
-              {{ savingRestMode ? '正在保存...' : '设置锚点' }}
-            </button>
+            <el-button type="primary" :loading="savingRestMode" @click="handleSetRestMode">设置锚点</el-button>
           </div>
         </div>
-        <section v-if="restModeError" class="state-panel state-panel--error state-panel--compact">
-          <p>{{ restModeError }}</p>
-        </section>
+        <el-alert v-if="restModeError" :description="restModeError" type="error" show-icon :closable="false" />
       </div>
     </section>
 
@@ -69,15 +60,7 @@
     <!-- 权限警告（仅针对个人周报）                   -->
     <!-- ============================================= -->
 
-    <section v-if="!canUseWeeklyReport" class="state-panel state-panel--error panel">
-      <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10" />
-        <line x1="12" y1="8" x2="12" y2="12" />
-        <line x1="12" y1="16" x2="12.01" y2="16" />
-      </svg>
-      <h3>无周报访问权限</h3>
-      <p>当前账号不能访问个人周报，但可查看单双休设置。</p>
-    </section>
+    <el-alert v-if="!canUseWeeklyReport" title="无周报访问权限" description="当前账号不能访问个人周报，但可查看单双休设置。" type="error" show-icon :closable="false" />
 
     <!-- ============================================= -->
     <!-- 本人周报列表                                  -->
@@ -89,26 +72,14 @@
           <strong class="toolbar-title">本人周报</strong>
           <span class="toolbar-subtitle">{{ loading ? '正在加载' : `共 ${reports.length} 条` }}</span>
         </div>
-        <button type="button" class="ghost-button" :disabled="loading" @click="loadReports">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9" />
-          </svg>
-          刷新
-        </button>
+        <el-button :loading="loading" @click="loadReports">刷新</el-button>
       </div>
 
-      <section v-if="errorMessage" class="state-panel state-panel--error panel state-panel--compact">
-        <p>{{ errorMessage }}</p>
-      </section>
+      <el-alert v-if="errorMessage" title="周报列表加载失败" :description="errorMessage" type="error" show-icon :closable="false" />
 
-      <div v-if="loading" class="state-panel panel">
-        <div class="loading-spinner"></div>
-        <p>正在加载周报列表...</p>
-      </div>
+      <el-skeleton v-if="loading" :rows="5" animated />
 
-      <div v-else-if="reports.length === 0" class="state-panel panel state-panel--empty">
-        <p>暂无周报记录。</p>
-      </div>
+      <el-empty v-else-if="reports.length === 0" description="暂无周报记录。" />
 
       <div v-else class="table-container">
         <div class="weekly-report-table" :class="{ 'weekly-report-table--employee': isEmployeeUser }">
@@ -124,21 +95,21 @@
             <div>
               <strong>{{ report.weekStart }} 至 {{ report.weekEnd }}</strong>
             </div>
-            <span class="status-badge" :class="approvalStatusClass(report.approvalStatus)">{{ approvalStatusLabel(report.approvalStatus) }}</span>
+            <el-tag :type="approvalStatusType(report.approvalStatus)">{{ approvalStatusLabel(report.approvalStatus) }}</el-tag>
             <span v-if="!isEmployeeUser">{{ finalScoreText(report) }}</span>
             <span v-if="!isEmployeeUser">{{ sourceLabel(report.aiEvaluationSource) }}</span>
             <time>{{ formatDateTime(report.updatedAt) }}</time>
             <div class="weekly-report-table__actions">
-              <button type="button" class="row-btn action-btn" @click="navigate(`/weekly-report/${report.id}`)">详情</button>
-              <button type="button" class="row-btn action-btn" @click="downloadReportExcel(report)">导出</button>
-              <button
+              <el-button link type="primary" @click="navigate(`/weekly-report/${report.id}`)">详情</el-button>
+              <el-button link type="primary" @click="downloadReportExcel(report)">导出</el-button>
+              <el-button
                 v-if="report.status === ReportStatus.DRAFT"
-                type="button"
-                class="row-btn action-btn action-btn--danger"
+                link
+                type="danger"
                 @click="removeDraft(report)"
               >
                 删除
-              </button>
+              </el-button>
             </div>
           </div>
         </div>
@@ -149,6 +120,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { OrganizationRole, ReportStatus, WeeklyApprovalStatus, WeeklyRestMode } from '../constants/reports.js';
 import {
   deleteWeeklyReport,
@@ -223,14 +195,6 @@ function formatDateTime(value) {
   return String(value).replace('T', ' ').slice(0, 16);
 }
 
-function statusLabel(status) {
-  return status === ReportStatus.SUBMITTED ? '已提交' : '草稿';
-}
-
-function statusClass(status) {
-  return status === ReportStatus.SUBMITTED ? 'status-badge--done' : 'status-badge--draft';
-}
-
 // Employees track review progress through the independent approval status.
 function approvalStatusLabel(status) {
   const labels = {
@@ -243,14 +207,13 @@ function approvalStatusLabel(status) {
 }
 
 // Badge colors distinguish pending, approved, and returned reports at a glance.
-function approvalStatusClass(status) {
-  const classes = {
-    [WeeklyApprovalStatus.NOT_SUBMITTED]: 'status-badge--draft',
-    [WeeklyApprovalStatus.PENDING]: 'status-badge--pending',
-    [WeeklyApprovalStatus.APPROVED]: 'status-badge--done',
-    [WeeklyApprovalStatus.RETURNED]: 'status-badge--returned'
-  };
-  return classes[status] || classes[WeeklyApprovalStatus.NOT_SUBMITTED];
+function approvalStatusType(status) {
+  return {
+    [WeeklyApprovalStatus.NOT_SUBMITTED]: 'info',
+    [WeeklyApprovalStatus.PENDING]: 'warning',
+    [WeeklyApprovalStatus.APPROVED]: 'success',
+    [WeeklyApprovalStatus.RETURNED]: 'danger'
+  }[status] || 'info';
 }
 
 function sourceLabel(source) {
@@ -344,9 +307,16 @@ async function removeDraft(report) {
   errorMessage.value = '';
 
   try {
+    await ElMessageBox.confirm('删除后无法恢复，确认删除该周报草稿吗？', '删除周报草稿', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消'
+    });
     await deleteWeeklyReport(report.id, props.authToken);
     await loadReports();
+    ElMessage.success('周报草稿已删除');
   } catch (error) {
+    if (error === 'cancel' || error === 'close') return;
     errorMessage.value = toReadableApiError(error);
   }
 }
@@ -426,72 +396,6 @@ onMounted(() => {
 .toolbar-subtitle {
   font-size: 0.8rem;
   color: #909399;
-}
-
-/* ===== 按钮基础 ===== */
-.ghost-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  background: #ffffff;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  color: #606266;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  height: 36px;
-  white-space: nowrap;
-}
-.ghost-button:hover:not(:disabled) {
-  border-color: #c6e2ff;
-  background: #ecf5ff;
-  color: #3e63dd;
-}
-.ghost-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.ghost-button.active {
-  border-color: #3e63dd;
-  background: #ecf5ff;
-  color: #3e63dd;
-}
-
-.primary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  background: #3e63dd;
-  color: #ffffff;
-  border: none;
-  font-weight: 500;
-  padding: 0.5rem 1.25rem;
-  border-radius: 4px;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  height: 36px;
-  white-space: nowrap;
-}
-.primary-button:hover:not(:disabled) {
-  background: #5275e7;
-}
-.primary-button:disabled {
-  opacity: 0.6;
-  background: #a0cfff;
-  cursor: not-allowed;
-}
-
-.btn-icon {
-  width: 16px;
-  height: 16px;
-  stroke: currentColor;
-  flex-shrink: 0;
 }
 
 /* ===== 状态面板 ===== */
@@ -663,11 +567,14 @@ onMounted(() => {
   gap: 0.75rem;
   flex-wrap: wrap;
 }
+.rest-mode-actions .el-select {
+  width: 150px;
+}
 .rest-mode-actions .filter-group {
   min-width: 140px;
 }
-.rest-mode-actions .primary-button {
-  height: 48px;          /* 与 input-wrapper 高度一致，保证底部对齐 */
+.rest-mode-actions .el-button {
+  height: 48px;
 }
 
 /* ===== 表格容器 ===== */
@@ -725,39 +632,6 @@ onMounted(() => {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
-.weekly-report-table__actions .row-btn {
-  font-size: 0.7rem;
-  padding: 0.15rem 0.5rem;
-}
-
-/* ===== 行内操作按钮 ===== */
-.row-btn {
-  padding: 0.2rem 0.6rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  background: #ffffff;
-  border: 1px solid #dcdfe6;
-  color: #606266;
-  white-space: nowrap;
-}
-.row-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.action-btn:hover:not(:disabled) {
-  border-color: #a4b3ff;
-  color: #3e63dd;
-  background: #f0f3ff;
-}
-.action-btn--danger:hover:not(:disabled) {
-  border-color: #fbc4c4;
-  color: #f56c6c;
-  background: #fef0f0;
-}
-
 /* ===== 响应式 ===== */
 @media (max-width: 900px) {
   .page-stack {

@@ -6,14 +6,13 @@
         <h2>项目列表</h2>
         <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
       </div>
-      <button
+      <el-button
         v-if="canCreateProject"
-        type="button"
-        class="primary-button"
+        type="primary"
         @click="navigate('/projects/new')"
       >
         新建项目
-      </button>
+      </el-button>
     </div>
 
     <section class="panel">
@@ -22,33 +21,18 @@
           <strong>后端数据源</strong>
           <span>{{ apiBaseUrl }}</span>
         </div>
-        <button type="button" class="ghost-button" :disabled="loading" @click="loadProjects">
-          重新加载
-        </button>
+        <el-button :loading="loading" @click="loadProjects">重新加载</el-button>
       </div>
 
-      <div v-if="loading" class="state-panel state-panel--inline">
-        <p>正在加载项目数据...</p>
-      </div>
+      <el-skeleton v-if="loading" :rows="5" animated />
 
-      <div v-else-if="errorMessage" class="state-panel state-panel--error">
-        <h3>项目列表加载失败</h3>
-        <p>{{ errorMessage }}</p>
-        <button type="button" class="primary-button" @click="loadProjects">重试</button>
-      </div>
+      <el-alert v-else-if="errorMessage" title="项目列表加载失败" :description="errorMessage" type="error" show-icon :closable="false">
+        <template #default><el-button type="primary" size="small" @click="loadProjects">重试</el-button></template>
+      </el-alert>
 
-      <div v-else-if="projects.length === 0" class="state-panel state-panel--inline">
-        <h3>暂无项目</h3>
-        <p v-if="!canCreateProject">当前账号暂无可见项目。</p>
-        <button
-          v-else
-          type="button"
-          class="primary-button"
-          @click="navigate('/projects/new')"
-        >
-          新建项目
-        </button>
-      </div>
+      <el-empty v-else-if="projects.length === 0" :description="canCreateProject ? '暂无项目' : '当前账号暂无可见项目。'">
+        <el-button v-if="canCreateProject" type="primary" @click="navigate('/projects/new')">新建项目</el-button>
+      </el-empty>
 
       <div v-else class="project-table">
         <div class="project-table__head">
@@ -74,7 +58,7 @@
           <span>{{ project.currentStage?.stageName || '-' }}</span>
           <span>{{ formatUser(project.createdBy) }}</span>
           <span>{{ formatDate(project.plannedStartDate) }} 至 {{ formatDate(project.plannedEndDate) }}</span>
-          <button type="button" class="ghost-button" @click="navigate(`/projects/${project.id}`)">查看详情</button>
+          <el-button link type="primary" @click="navigate(`/projects/${project.id}`)">查看详情</el-button>
         </article>
       </div>
     </section>

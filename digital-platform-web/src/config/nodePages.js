@@ -3,12 +3,30 @@ import MarketResearchPage from '../pages/project-node/project-approval/MarketRes
 import ProjectApprovalPage from '../pages/project-node/project-approval/ProjectApprovalPage.vue';
 import ProjectInputPage from '../pages/project-node/project-approval/ProjectInputPage.vue';
 import ProjectNoticePage from '../pages/project-node/project-approval/ProjectNoticePage.vue';
+import SolutionAnalysisPage from '../pages/project-node/solution-design/SolutionAnalysisPage.vue';
+import SolutionCostEstimationPage from '../pages/project-node/solution-design/SolutionCostEstimationPage.vue';
+import SolutionCustomerReviewPage from '../pages/project-node/solution-design/SolutionCustomerReviewPage.vue';
+import SolutionDesignPage from '../pages/project-node/solution-design/SolutionDesignPage.vue';
+import SolutionFinanceCostPage from '../pages/project-node/solution-design/SolutionFinanceCostPage.vue';
+import SolutionInternalReviewPage from '../pages/project-node/solution-design/SolutionInternalReviewPage.vue';
+import SolutionManufacturingCostPage from '../pages/project-node/solution-design/SolutionManufacturingCostPage.vue';
+import SolutionPreparationPage from '../pages/project-node/solution-design/SolutionPreparationPage.vue';
+import SolutionQuotationTenderPage from '../pages/project-node/solution-design/SolutionQuotationTenderPage.vue';
 
 export const nodePages = {
   project_input: ProjectInputPage,
   market_research: MarketResearchPage,
   initiation_approval: ProjectApprovalPage,
-  initiation_notice: ProjectNoticePage
+  initiation_notice: ProjectNoticePage,
+  solution_preparation: SolutionPreparationPage,
+  solution_analysis: SolutionAnalysisPage,
+  solution_design: SolutionDesignPage,
+  internal_solution_review: SolutionInternalReviewPage,
+  customer_solution_review: SolutionCustomerReviewPage,
+  rd_cost_estimation: SolutionCostEstimationPage,
+  manufacturing_cost_estimation: SolutionManufacturingCostPage,
+  finance_cost_estimation: SolutionFinanceCostPage,
+  quotation_or_tender: SolutionQuotationTenderPage
 };
 
 export function resolveNodePage(nodeCode) {

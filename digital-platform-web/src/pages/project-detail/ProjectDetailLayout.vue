@@ -36,28 +36,8 @@
         <template v-else-if="workspace">
           <el-card class="project-node-card" shadow="never">
 
-            <ProjectSolutionDesignWorkflowPanel
-              v-if="isActiveSolutionWorkspaceStage"
-              ref="solutionDesignPanelRef"
-              :project-id="projectId"
-              :auth-token="authToken"
-              :current-user="currentUser"
-              :project="detail.project"
-              :workflow="solutionDesignWorkflow"
-              :uploads="solutionDesignUploads"
-              :loading="solutionDesignWorkflowLoading || solutionDesignUploadsLoading"
-              :error-message="solutionDesignWorkflowErrorMessage || solutionDesignUploadsErrorMessage"
-              :responsibility-candidates="responsibilityCandidates"
-              :responsibility-candidates-loading="responsibilityCandidatesLoading"
-              :responsibility-candidates-error-message="responsibilityCandidatesErrorMessage"
-              :selected-node-key="selectedWorkspaceNodeKey"
-              :focus-node-key="focusNodeKey"
-              hide-node-nav
-              @changed="refreshSolutionDesignState"
-            />
-
             <NodePageRouter
-              v-else
+              ref="nodePageRouterRef"
               :project-id="projectId"
               :auth-token="authToken"
               :current-user="currentUser"
@@ -133,7 +113,6 @@ import { getProjectNavigation } from '../../api/navigation.js';
 import { listResponsibilityCandidates } from '../../api/users.js';
 import NodePageRouter from '../project-node/project-approval/NodePageRouter.vue';
 import ProjectProcessTree from '../../components/project-workspace/ProjectProcessTree.vue';
-import ProjectSolutionDesignWorkflowPanel from '../../components/project-workspace/ProjectSolutionDesignWorkflowPanel.vue';
 import {
   actionKey,
   getCompletionMode,
@@ -198,7 +177,7 @@ const solutionDesignWorkflow = ref(null);
 const solutionDesignUploadsLoading = ref(false);
 const solutionDesignUploadsErrorMessage = ref('');
 const solutionDesignUploads = ref(null);
-const solutionDesignPanelRef = ref(null);
+const nodePageRouterRef = ref(null);
 const selectedWorkspaceStageKey = ref('');
 const selectedWorkspaceNodeKey = ref('');
 const lastAppliedWorkspaceRouteKey = ref('');
@@ -504,6 +483,8 @@ const nodePageContext = computed(() => ({
   responsibilityCandidates: visibleResponsibilityCandidates.value,
   responsibilityCandidatesLoading: responsibilityCandidatesLoading.value,
   responsibilityCandidatesErrorMessage: responsibilityCandidatesErrorMessage.value,
+  // 方案设计角色分配沿用拆分前的完整候选列表；不能复用其他节点的部门过滤视图。
+  solutionDesignResponsibilityCandidates: responsibilityCandidates.value,
   solutionDesignWorkflow: solutionDesignWorkflow.value,
   solutionDesignUploads: solutionDesignUploads.value,
   solutionDesignLoading: solutionDesignWorkflowLoading.value || solutionDesignUploadsLoading.value,
@@ -1136,8 +1117,8 @@ async function focusSolutionDesignPanelFromRoute() {
   }
 
   await nextTick();
-  const panelElement = solutionDesignPanelRef.value?.$el || solutionDesignPanelRef.value;
-  panelElement?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  const nodePageElement = nodePageRouterRef.value?.$el || nodePageRouterRef.value;
+  nodePageElement?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
 }
 
 function syncSolutionWorkspaceFocusNodeFromRoute() {

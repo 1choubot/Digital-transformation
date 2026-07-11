@@ -36,7 +36,28 @@
         <template v-else-if="workspace">
           <el-card class="project-node-card" shadow="never">
 
+            <ProjectSolutionDesignWorkflowPanel
+              v-if="isActiveSolutionWorkspaceStage"
+              ref="solutionDesignPanelRef"
+              :project-id="projectId"
+              :auth-token="authToken"
+              :current-user="currentUser"
+              :project="detail.project"
+              :workflow="solutionDesignWorkflow"
+              :uploads="solutionDesignUploads"
+              :loading="solutionDesignWorkflowLoading || solutionDesignUploadsLoading"
+              :error-message="solutionDesignWorkflowErrorMessage || solutionDesignUploadsErrorMessage"
+              :responsibility-candidates="responsibilityCandidates"
+              :responsibility-candidates-loading="responsibilityCandidatesLoading"
+              :responsibility-candidates-error-message="responsibilityCandidatesErrorMessage"
+              :selected-node-key="selectedWorkspaceNodeKey"
+              :focus-node-key="focusNodeKey"
+              hide-node-nav
+              @changed="refreshSolutionDesignState"
+            />
+
             <NodePageRouter
+              v-else
               :project-id="projectId"
               :auth-token="authToken"
               :current-user="currentUser"
@@ -74,7 +95,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import {
   approveInitiationReviewNode,
   confirmStageDocument,
@@ -112,6 +133,7 @@ import { getProjectNavigation } from '../../api/navigation.js';
 import { listResponsibilityCandidates } from '../../api/users.js';
 import NodePageRouter from '../project-node/project-approval/NodePageRouter.vue';
 import ProjectProcessTree from '../../components/project-workspace/ProjectProcessTree.vue';
+import ProjectSolutionDesignWorkflowPanel from '../../components/project-workspace/ProjectSolutionDesignWorkflowPanel.vue';
 import {
   actionKey,
   getCompletionMode,
@@ -176,6 +198,7 @@ const solutionDesignWorkflow = ref(null);
 const solutionDesignUploadsLoading = ref(false);
 const solutionDesignUploadsErrorMessage = ref('');
 const solutionDesignUploads = ref(null);
+const solutionDesignPanelRef = ref(null);
 const selectedWorkspaceStageKey = ref('');
 const selectedWorkspaceNodeKey = ref('');
 const lastAppliedWorkspaceRouteKey = ref('');
@@ -436,6 +459,13 @@ const activeWorkspaceDisplayStage = computed(() => {
 
   return activeWorkspaceStage.value;
 });
+const isActiveSolutionWorkspaceStage = computed(
+  () =>
+    hasReachedSolutionDesignStage.value &&
+    isSelectedSolutionDesignWorkspaceStage.value &&
+    activeWorkspaceDisplayStage.value?.stageKey === 'solution' &&
+    Boolean(solutionDesignWorkspaceStage.value)
+);
 const activeWorkspaceNode = computed(
   () => (activeWorkspaceDisplayStage.value?.nodes || []).find((node) => node.nodeKey === selectedWorkspaceNodeKey.value) || null
 );
@@ -1098,6 +1128,36 @@ async function refreshProjectDetailOnly() {
 async function refreshSolutionDesignState() {
   clearActionState();
   await refreshProjectWorkspaceState({ preserveSelection: true });
+}
+
+async function focusSolutionDesignPanelFromRoute() {
+  if (!isActiveSolutionWorkspaceStage.value || !String(props.focusNodeKey || '').trim()) {
+    return;
+  }
+
+  await nextTick();
+  const panelElement = solutionDesignPanelRef.value?.$el || solutionDesignPanelRef.value;
+  panelElement?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+}
+
+function syncSolutionWorkspaceFocusNodeFromRoute() {
+  if (!isActiveSolutionWorkspaceStage.value || !String(props.focusNodeKey || '').trim()) {
+    return false;
+  }
+
+  if (manualWorkspaceSelectionRouteKey.value === getWorkspaceRouteKey()) {
+    return false;
+  }
+
+  const focusedNodeKey = findSolutionDesignWorkflowNodeKey(props.focusNodeKey);
+  if (!focusedNodeKey) {
+    return false;
+  }
+
+  selectedWorkspaceStageKey.value = 'solution';
+  selectedWorkspaceNodeKey.value = focusedNodeKey;
+  clearOnlineFormState();
+  return true;
 }
 
 function ensureSolutionDesignWorkspaceSelection(options = {}) {
@@ -1972,6 +2032,19 @@ watch(
     if (workspace.value) {
       selectWorkspaceTargetFromRoute();
     }
+    void focusSolutionDesignPanelFromRoute();
+  }
+);
+watch(
+  () => [
+    isActiveSolutionWorkspaceStage.value,
+    props.focusNodeKey,
+    solutionDesignWorkflow.value?.projectId,
+    solutionDesignWorkflow.value?.nodes?.length
+  ],
+  () => {
+    syncSolutionWorkspaceFocusNodeFromRoute();
+    void focusSolutionDesignPanelFromRoute();
   }
 );
 </script>

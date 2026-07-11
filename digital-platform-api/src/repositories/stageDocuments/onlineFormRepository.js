@@ -1,7 +1,7 @@
 import { pool } from '../../db/pool.js';
 import {
   BUSINESS_DEPARTMENT,
-  isCenterManagerUser
+  isCenterManagerOf
 } from '../../domain/organization.js';
 import {
   INITIATION_NOTICE_DOCUMENT_CODE,
@@ -1026,7 +1026,7 @@ async function updateProjectCodeFromInitiationNoticeForm({
 }
 
 function isMarketingCenterManager(user) {
-  return isCenterManagerUser(user) && user.department === BUSINESS_DEPARTMENT.MARKETING_CENTER;
+  return isCenterManagerOf(user, BUSINESS_DEPARTMENT.MARKETING_CENTER);
 }
 
 function isResponsibleUser(user, document) {

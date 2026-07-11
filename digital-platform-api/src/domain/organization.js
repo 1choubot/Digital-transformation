@@ -57,24 +57,36 @@ export function isDepartmentOrganizationRole(value) {
   return DEPARTMENT_ROLES.has(value);
 }
 
+export function hasOrganizationRole(user, role) {
+  return Boolean(user) && user.organizationRole === role;
+}
+
 export function isSystemAdminUser(user) {
-  return user?.organizationRole === ORGANIZATION_ROLE.SYSTEM_ADMIN;
+  return hasOrganizationRole(user, ORGANIZATION_ROLE.SYSTEM_ADMIN);
 }
 
 export function isGeneralManagerUser(user) {
-  return user?.organizationRole === ORGANIZATION_ROLE.GENERAL_MANAGER;
+  return hasOrganizationRole(user, ORGANIZATION_ROLE.GENERAL_MANAGER);
 }
 
 export function isGeneralManagerAssistantUser(user) {
-  return user?.organizationRole === ORGANIZATION_ROLE.GENERAL_MANAGER_ASSISTANT;
+  return hasOrganizationRole(user, ORGANIZATION_ROLE.GENERAL_MANAGER_ASSISTANT);
 }
 
 export function isCenterManagerUser(user) {
-  return user?.organizationRole === ORGANIZATION_ROLE.CENTER_MANAGER;
+  return hasOrganizationRole(user, ORGANIZATION_ROLE.CENTER_MANAGER);
+}
+
+export function isCenterManager(user) {
+  return isCenterManagerUser(user);
+}
+
+export function isCenterManagerOf(user, department) {
+  return isCenterManager(user) && isValidBusinessDepartment(department) && user.department === department;
 }
 
 export function isEmployeeUser(user) {
-  return user?.organizationRole === ORGANIZATION_ROLE.EMPLOYEE;
+  return hasOrganizationRole(user, ORGANIZATION_ROLE.EMPLOYEE);
 }
 
 export function isDepartmentUser(user) {
@@ -98,11 +110,20 @@ export function canCreateProject(user) {
 }
 
 export function isProjectManagerForProject(user, project) {
+  return isProjectManagerOf(user, project);
+}
+
+export function isProjectManagerOf(user, projectLike) {
   return (
     Boolean(user?.id) &&
-    Boolean(project?.project_manager_user_id ?? project?.projectManagerUserId) &&
-    String(user.id) === String(project.project_manager_user_id ?? project.projectManagerUserId)
+    Boolean(projectLike?.project_manager_user_id ?? projectLike?.projectManagerUserId) &&
+    String(user.id) === String(projectLike.project_manager_user_id ?? projectLike.projectManagerUserId)
   );
+}
+
+export function isResponsibleUserOf(user, documentLike) {
+  const responsibleUserId = documentLike?.responsible_user_id ?? documentLike?.responsibleUserId;
+  return Boolean(user?.id) && Boolean(responsibleUserId) && String(user.id) === String(responsibleUserId);
 }
 
 export function getProjectParticipatingDepartments(project) {
@@ -191,8 +212,7 @@ export function canApproveStageDocument(user, { project = null, document = null 
 }
 
 export function canSubmitStageDocument(user, { document = null } = {}) {
-  const responsibleUserId = document?.responsible_user_id ?? document?.responsibleUserId;
-  return Boolean(responsibleUserId) && String(responsibleUserId) === String(user?.id);
+  return isResponsibleUserOf(user, document);
 }
 
 export function canManageStageDocumentApplicability(user, { project = null, document = null } = {}) {

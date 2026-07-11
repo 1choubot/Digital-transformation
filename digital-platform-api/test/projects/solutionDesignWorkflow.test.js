@@ -3,7 +3,8 @@ import test from 'node:test';
 import { DOCUMENT_STATUS_ACTION } from '../../src/domain/stageDocumentStatus.js';
 import {
   COMPLETION_MODE,
-  DOCUMENT_STATUS
+  DOCUMENT_STATUS,
+  EXPECTED_STAGE_DOCUMENT_ITEM_COUNT
 } from '../../src/domain/stageDocumentTemplates.js';
 import {
   SOLUTION_DESIGN_ANALYSIS_FORM_STATUS,
@@ -6207,6 +6208,9 @@ test('quotation path derives stage gate complete and auto advances to contract s
 
   assert.equal(accepted.permissions.canAdvanceToContract, true);
   assert.equal(accepted.currentStage.stageKey, 'contract');
+  assert.equal(db.connection.stages.length, 8);
+  assert.equal(EXPECTED_STAGE_DOCUMENT_ITEM_COUNT, 71);
+  assert.equal(db.connection.stageDocuments.some((document) => document.stage_order === 3), false);
   assert.equal(
     db.connection.stageDocuments.every((document) => document.status === DOCUMENT_STATUS.NOT_SUBMITTED),
     true
@@ -6400,6 +6404,9 @@ test('tender path derives stage gate complete and auto advances to contract stag
 
   assert.equal(approved.permissions.canAdvanceToContract, true);
   assert.equal(approved.currentStage.stageKey, 'contract');
+  assert.equal(db.connection.stages.length, 8);
+  assert.equal(EXPECTED_STAGE_DOCUMENT_ITEM_COUNT, 71);
+  assert.equal(db.connection.stageDocuments.some((document) => document.stage_order === 3), false);
   const stageAdvanceLog = db.connection.operationLogs.find(
     (log) => log.action_type === OPERATION_ACTION_TYPE.STAGE_ADVANCED
   );

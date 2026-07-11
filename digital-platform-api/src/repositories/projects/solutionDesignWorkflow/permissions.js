@@ -1,6 +1,5 @@
 import {
   BUSINESS_DEPARTMENT,
-  ORGANIZATION_ROLE,
   SOLUTION_DESIGN_ANALYSIS_FORM_STATUS,
   SOLUTION_DESIGN_COST_UPLOAD_SLOT_BY_NODE_KEY,
   SOLUTION_DESIGN_ERROR,
@@ -20,6 +19,7 @@ import {
   getSolutionDesignReviewFormDefinition,
   isSolutionDesignGeneralManager
 } from '../../../domain/solutionDesignWorkflow.js';
+import { isCenterManagerOf } from '../../../domain/organization.js';
 
 const PROCESSABLE_NODE_STATUSES = new Set([
   SOLUTION_DESIGN_NODE_STATUS.PENDING,
@@ -42,13 +42,6 @@ function areAllRolesAssigned(roles) {
 
 export function isNodeProcessableStatus(status) {
   return PROCESSABLE_NODE_STATUSES.has(status);
-}
-
-function isCenterManagerOf(user, department) {
-  return (
-    user?.organizationRole === ORGANIZATION_ROLE.CENTER_MANAGER &&
-    user?.department === department
-  );
 }
 
 function isManufacturingCenterManager(user) {

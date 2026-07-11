@@ -1705,3 +1705,58 @@ TBD - created by archiving change define-technical-architecture. Update Purpose 
 - **AND** 实现 MUST NOT introduce a broad unified permission resolver rewrite in this change
 - **AND** implementation MAY leave existing high-risk orchestration in the facade for later separately planned changes
 
+### Requirement: 立项 workflow 回归测试架构
+技术架构 MUST 在后续权限 resolver、共享阶段机制和合同阶段开发前，为立项关键路径提供后端自动化回归保护。
+
+#### Scenario: 后续共享机制开发前具备保护网
+- **WHEN** 团队后续实现权限 resolver、共享阶段机制、阶段资料派生重构或合同签订阶段业务
+- **THEN** 后端 MUST 已具备覆盖 `1.1 / 1.2 / 1.3` 立项关键路径的自动化回归测试
+- **AND** 这些测试 MUST 覆盖提交、审批、退回、精准返工、返工重提、项目编号唯一性、工作台待办和阶段自动推进
+
+#### Scenario: 复用现有后端测试模式
+- **WHEN** 实现立项 workflow 回归测试
+- **THEN** 测试 SHOULD 优先复用现有 Node test runner、fake db、mock storage 和 repository 级测试模式
+- **AND** 测试 SHOULD 能直接断言数据库行、DTO、权限、blocking reasons、operation log、工作台待办和阶段状态
+
+#### Scenario: 不引入外部运行依赖
+- **WHEN** 实现立项关键路径回归测试
+- **THEN** 测试 MUST NOT 依赖真实 MySQL migration、真实文件平台、真实外部服务或浏览器环境才能运行
+- **AND** 测试 MUST NOT 通过新增 migration 或改变 schema 来满足测试夹具
+
+#### Scenario: 不用前端 E2E 替代后端关键路径
+- **WHEN** 团队补充立项阶段测试覆盖
+- **THEN** 前端 E2E 或手工 smoke MAY 作为补充验证
+- **AND** 前端 E2E 或手工 smoke MUST NOT 替代后端 repository 级关键路径测试
+
+#### Scenario: 测试脚本保持可独立运行
+- **WHEN** 后续新增立项 workflow 测试文件或 npm script
+- **THEN** 该测试 SHOULD 支持独立运行以便快速回归
+- **AND** `cmd /c npm.cmd run check` MUST 继续覆盖新增测试文件的语法检查或等价静态检查入口
+
+### Requirement: 项目权限 resolver 分层收敛
+技术架构 MUST 逐步收敛项目权限身份判断到统一 resolver/helper，并保持查看权限和操作权限分离。
+
+#### Scenario: 基础身份判断统一
+- **WHEN** 后端代码需要判断总经理、总经理助理、系统管理员、中心负责人、项目经理或资料责任人身份
+- **THEN** 实现 MUST 优先复用统一 helper/resolver，而不是在 repository、route 或 workflow 模块中新增孤立判断
+- **AND** 中心负责人判断 MUST 支持参数化部门输入，覆盖 `BUSINESS_DEPARTMENT` 的实际枚举
+
+#### Scenario: 查看权限不自动升级为操作权限
+- **WHEN** resolver 返回用户可查看项目、资料或日志
+- **THEN** 系统 MUST NOT 因可查看结果自动授予提交、审批、退回、上传、删除或阶段推进权限
+- **AND** 操作权限 MUST 使用单独的操作语义或显式 gate 判断
+
+#### Scenario: 不引入复杂 RBAC 或按钮矩阵
+- **WHEN** 后端收敛项目权限 resolver
+- **THEN** resolver MUST NOT 引入复杂 RBAC、按钮级权限矩阵或前端驱动的权限配置系统
+- **AND** resolver MUST 保持面向现有项目、阶段、资料、节点和角色上下文的后端 helper 形态
+
+#### Scenario: 第一批迁移保持行为不变
+- **WHEN** 实现第一批身份 helper 收敛
+- **THEN** 实现 MUST 保持现有 API、DTO、SQL、operation log、工作台待办和自动推进语义不变
+- **AND** 实现 MUST 通过现有后端回归测试证明权限结果未变化
+
+#### Scenario: 后续阶段流程复用统一权限基础
+- **WHEN** 后续实现合同签订阶段、共享阶段机制或新的阶段 workflow
+- **THEN** 后端 MUST 复用统一权限 helper/resolver 的基础身份和项目上下文能力
+- **AND** 后续流程 MUST NOT 新建孤立权限判断体系

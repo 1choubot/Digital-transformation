@@ -60,6 +60,10 @@ import {
 } from '../../src/repositories/operationLogRepository.js';
 import { updateProjectStageDocumentStatus } from '../../src/repositories/stageDocuments/statusRepository.js';
 import {
+  deleteStageDocumentOnlineFormImage,
+  uploadStageDocumentOnlineFormImage
+} from '../../src/repositories/stageDocuments/onlineFormImageRepository.js';
+import {
   attachSolutionDesignDerivedCompletionToStageDocumentRows,
   COMPLETION_STATUS,
   mapDocument
@@ -68,6 +72,8 @@ import {
   buildProjectNavigationFromWorkspace,
   NAVIGATION_STATUS
 } from '../../src/services/navigationService.js';
+import { pool } from '../../src/db/pool.js';
+import { INITIATION_REWORK_TARGET_DOCUMENT_CODE } from '../../src/domain/initiationReview.js';
 import { readZipEntries } from '../../src/utils/ooxmlZip.js';
 
 function dbUser({
@@ -371,6 +377,25 @@ function fakeGeneratedFileStorage({ failWrite = false } = {}) {
   };
 }
 
+function tinyPngBuffer() {
+  return Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+    'base64'
+  );
+}
+
+function fakeOnlineFormImageStorage(files = {}) {
+  const buffers = new Map(Object.entries(files).map(([key, value]) => [key, Buffer.from(value)]));
+  return {
+    files: buffers,
+    async readFile(storageKey) {
+      const buffer = buffers.get(storageKey);
+      assert.ok(buffer, `Expected online form image ${storageKey}`);
+      return Buffer.from(buffer);
+    }
+  };
+}
+
 function setNodeStatus(connection, nodeKey, status) {
   const node = connection.nodes.find((candidate) => candidate.node_key === nodeKey);
   assert.ok(node, `Expected node ${nodeKey} to exist`);
@@ -427,6 +452,14 @@ function extractXlsxCellText(buffer, cellRef) {
   return decodeXmlText(cellXml.match(/<v>([\s\S]*?)<\/v>/)?.[1] || '');
 }
 
+function extractXlsxCellXml(buffer, cellRef) {
+  const entries = readZipEntries(buffer);
+  const sheetXml = entries.find((entry) => entry.name === 'xl/worksheets/sheet1.xml')?.data.toString('utf8') || '';
+  const cellMatch = sheetXml.match(new RegExp(`<c\\b(?=[^>]*\\br="${cellRef}")[^>]*?(?:/>|>[\\s\\S]*?</c>)`));
+  assert.ok(cellMatch, `Expected generated xlsx cell ${cellRef}`);
+  return cellMatch[0];
+}
+
 function generatedFileBuffer(storage, storageKey) {
   const stored = storage.files.get(storageKey);
   assert.ok(stored, `Expected generated storage key ${storageKey}`);
@@ -449,12 +482,62 @@ function assertGeneratedXlsxCellNotIncludes(storage, storageKey, cellRef, unexpe
   assert.equal(value.includes(unexpected), false, `${cellRef} should not include ${unexpected}`);
 }
 
+function assertGeneratedXlsxCellUsesTextFont(storage, storageKey, cellRef, fontName) {
+  const cellXml = extractXlsxCellXml(generatedFileBuffer(storage, storageKey), cellRef);
+  assert.match(cellXml, new RegExp(`<rFont\\s+val="${fontName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`));
+  assert.equal(cellXml.includes('Wingdings 2'), false, `${cellRef} should not use Wingdings 2 rich text`);
+}
+
+function assertGeneratedXlsxContainsImages(storage, storageKey) {
+  const entries = readZipEntries(generatedFileBuffer(storage, storageKey));
+  assert.ok(entries.some((entry) => entry.name.startsWith('xl/media/')), 'Expected generated xlsx media files');
+  const drawingEntries = entries.filter((entry) => entry.name.startsWith('xl/drawings/') && entry.name.endsWith('.xml'));
+  assert.ok(drawingEntries.length > 0, 'Expected generated xlsx drawing XML');
+  assert.ok(
+    drawingEntries.some((entry) => entry.data.toString('utf8').includes('<xdr:twoCellAnchor')),
+    'Expected generated xlsx image anchor'
+  );
+}
+
+function generatedXlsxSheetXml(storage, storageKey) {
+  const entries = readZipEntries(generatedFileBuffer(storage, storageKey));
+  return entries.find((entry) => entry.name === 'xl/worksheets/sheet1.xml')?.data.toString('utf8') || '';
+}
+
+function generatedXlsxDrawingXml(storage, storageKey) {
+  const entries = readZipEntries(generatedFileBuffer(storage, storageKey));
+  return entries
+    .filter((entry) => entry.name.startsWith('xl/drawings/') && entry.name.endsWith('.xml'))
+    .map((entry) => entry.data.toString('utf8'))
+    .join('\n');
+}
+
+function assertGeneratedXlsxMergeCell(storage, storageKey, mergeRef, expected = true) {
+  const sheetXml = generatedXlsxSheetXml(storage, storageKey);
+  const present = new RegExp(`<mergeCell\\b[^>]*\\bref="${mergeRef.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`).test(sheetXml);
+  assert.equal(present, expected, `Expected mergeCell ${mergeRef} present=${expected}`);
+}
+
+function assertGeneratedXlsxHasImageAnchorFrom(storage, storageKey, { column = null, minColumn = null, row }) {
+  const drawingXml = generatedXlsxDrawingXml(storage, storageKey).replace(/\s+/g, '');
+  const columnPattern = column === null || column === undefined
+    ? minColumn === null || minColumn === undefined
+      ? '\\d+'
+      : `(?:${Array.from({ length: 20 }, (_, index) => index + minColumn).join('|')})`
+    : String(column);
+  assert.match(
+    drawingXml,
+    new RegExp(`<xdr:from><xdr:col>${columnPattern}</xdr:col><xdr:colOff>\\d+</xdr:colOff><xdr:row>${row}</xdr:row>`),
+    `Expected image anchor from column ${column ?? `>=${minColumn ?? 0}`}, row ${row}`
+  );
+}
+
 function analysisFormPayload(overrides = {}) {
   return {
     formData: {
-      customerRequirements: '客户希望建设自动化产线',
-      solutionScope: '覆盖上料、装配、检测和数据采集',
-      technicalRisks: '节拍和视觉检测稳定性需验证',
+      workpieceDescription: '默认工件描述',
+      operationProcessDescription: '默认作业工艺',
+      projectTargetDescription: '默认目标说明',
       ...overrides
     }
   };
@@ -574,6 +657,34 @@ function buildSolutionDesignStageDocuments(projectId = 100) {
     revision_resubmitted_by_user_id: null,
     revision_resubmitted_at: null
   }));
+}
+
+function seedOnlineFormImage(connection, {
+  documentCode = 'C05',
+  fieldKey,
+  storageKey,
+  originalFileName = `${fieldKey}.png`,
+  uploadedByUserId = 12
+}) {
+  const document = connection.stageDocuments.find((candidate) => candidate.document_code === documentCode);
+  assert.ok(document, `Expected stage document ${documentCode}`);
+  const image = {
+    id: connection.nextFormImageId++,
+    project_id: document.project_id,
+    stage_document_id: document.id,
+    field_key: fieldKey,
+    original_file_name: originalFileName,
+    storage_key: storageKey,
+    mime_type: 'image/png',
+    file_size: tinyPngBuffer().length,
+    content_sha256: `hash-${fieldKey}`,
+    uploaded_by_user_id: uploadedByUserId,
+    uploaded_at: '2026-07-08 10:25:00',
+    deleted_at: null,
+    deleted_by_user_id: null
+  };
+  connection.formImages.push(image);
+  return image;
 }
 
 function useLegacySolutionDesignStageDocumentCodes(connection) {
@@ -1125,6 +1236,7 @@ class SolutionDesignWorkflowFakeConnection {
     this.uploadFiles = [];
     this.analysisForms = [];
     this.reviewForms = [];
+    this.formImages = [];
     this.quotationTenderFlow = null;
     this.stages = buildProjectStages(this.project.id, Number(this.project.current_stage_order ?? 2));
     this.stageDocuments = buildSolutionDesignStageDocuments(this.project.id);
@@ -1135,6 +1247,7 @@ class SolutionDesignWorkflowFakeConnection {
     this.nextUploadFileId = 1;
     this.nextAnalysisFormId = 1;
     this.nextReviewFormId = 1;
+    this.nextFormImageId = 1;
     this.committed = false;
     this.rolledBack = false;
   }
@@ -1269,8 +1382,27 @@ class SolutionDesignWorkflowFakeConnection {
       return [[this.projectContextRow()]];
     }
 
+    if (text.startsWith('SELECT p.id, s.stage_key AS current_stage_key')) {
+      return [[this.projectContextRow()]];
+    }
+
     if (text.startsWith('SELECT p.id FROM projects p WHERE p.id = ?')) {
       return [this.visible ? [{ id: params[0] }] : []];
+    }
+
+    if (
+      text.startsWith('SELECT p.project_manager_user_id') &&
+      text.includes('FROM projects p') &&
+      text.includes('LEFT JOIN project_solution_design_roles r')
+    ) {
+      return [[{
+        project_manager_user_id: this.project.project_manager_user_id,
+        technical_owner_user_id: this.rolesRow?.technical_owner_user_id ?? null,
+        business_owner_user_id: this.rolesRow?.business_owner_user_id ?? null,
+        procurement_owner_user_id: this.rolesRow?.procurement_owner_user_id ?? null,
+        finance_accountant_user_id: this.rolesRow?.finance_accountant_user_id ?? null,
+        finance_owner_user_id: this.rolesRow?.finance_owner_user_id ?? null
+      }]];
     }
 
     if (text.startsWith('SELECT * FROM project_solution_design_roles')) {
@@ -1298,6 +1430,15 @@ class SolutionDesignWorkflowFakeConnection {
           .filter((stage) => projectIds.has(Number(stage.project_id)))
           .sort((left, right) => left.project_id - right.project_id || left.stage_order - right.stage_order)
           .map((stage) => ({ ...stage }))
+      ];
+    }
+
+    if (text.startsWith('SELECT node_key, status FROM project_solution_design_nodes')) {
+      const [projectId, nodeKey] = params;
+      return [
+        this.nodes
+          .filter((node) => node.project_id === projectId && node.node_key === nodeKey)
+          .map((node) => ({ node_key: node.node_key, status: node.status }))
       ];
     }
 
@@ -1429,6 +1570,30 @@ class SolutionDesignWorkflowFakeConnection {
     }
 
     if (
+      text.startsWith('SELECT d.*, u.department AS responsible_department') &&
+      text.includes('FROM project_stage_documents d')
+    ) {
+      const [projectId, documentCodeOrId] = params;
+      const matchesDocumentId = text.includes('AND d.id = ?');
+      return [
+        this.stageDocuments
+          .filter((document) =>
+            document.project_id === projectId &&
+            (matchesDocumentId
+              ? Number(document.id) === Number(documentCodeOrId)
+              : document.document_code === documentCodeOrId)
+          )
+          .map((document) => ({
+            ...document,
+            responsible_department: BUSINESS_DEPARTMENT.RD_CENTER,
+            responsible_organization_role: ORGANIZATION_ROLE.EMPLOYEE,
+            responsible_role: '员工',
+            responsible_is_enabled: 1
+          }))
+      ];
+    }
+
+    if (
       text.startsWith('SELECT d.id, d.project_id') &&
       text.includes('FROM project_stage_documents d') &&
       text.includes('INNER JOIN projects p') &&
@@ -1470,6 +1635,119 @@ class SolutionDesignWorkflowFakeConnection {
           .sort((left, right) => left.document_order - right.document_order)
           .map((document) => ({ ...document }))
       ];
+    }
+
+    if (text.startsWith('SELECT i.*, u.account AS uploaded_by_account')) {
+      if (text.includes('WHERE i.id = ?')) {
+        const [imageId] = params;
+        const image = this.formImages.find((candidate) => candidate.id === imageId);
+        if (!image) {
+          return [[]];
+        }
+        const uploader = this.users.get(Number(image.uploaded_by_user_id));
+        return [[{
+          ...image,
+          uploaded_by_account: uploader?.account ?? null,
+          uploaded_by_display_name: uploader?.display_name ?? null
+        }]];
+      }
+
+      const [projectId, documentId] = params;
+      return [
+        this.formImages
+          .filter((image) => image.project_id === projectId && image.stage_document_id === documentId && !image.deleted_at)
+          .sort((left, right) => left.field_key.localeCompare(right.field_key) || String(left.uploaded_at).localeCompare(String(right.uploaded_at)) || left.id - right.id)
+          .map((image) => {
+            const uploader = this.users.get(Number(image.uploaded_by_user_id));
+            return {
+              ...image,
+              uploaded_by_account: uploader?.account ?? null,
+              uploaded_by_display_name: uploader?.display_name ?? null
+            };
+          })
+      ];
+    }
+
+    if (text.startsWith('SELECT * FROM project_stage_document_form_images') && text.includes('AND id = ?')) {
+      const [projectId, documentId, imageId] = params;
+      return [
+        this.formImages
+          .filter(
+            (image) =>
+              image.project_id === projectId &&
+              image.stage_document_id === documentId &&
+              image.id === imageId &&
+              !image.deleted_at
+          )
+          .map((image) => ({ ...image }))
+      ];
+    }
+
+    if (text.startsWith('SELECT * FROM project_stage_document_form_images')) {
+      const [projectId, documentId] = params;
+      return [
+        this.formImages
+          .filter((image) => image.project_id === projectId && image.stage_document_id === documentId && !image.deleted_at)
+          .sort((left, right) => left.field_key.localeCompare(right.field_key) || String(left.uploaded_at).localeCompare(String(right.uploaded_at)) || left.id - right.id)
+          .map((image) => ({ ...image }))
+      ];
+    }
+
+    if (text.startsWith('SELECT id FROM project_stage_document_form_images')) {
+      const [projectId, documentId, fieldKey] = params;
+      return [
+        this.formImages
+          .filter(
+            (image) =>
+              image.project_id === projectId &&
+              image.stage_document_id === documentId &&
+              image.field_key === fieldKey &&
+              !image.deleted_at
+          )
+          .sort((left, right) => String(left.uploaded_at).localeCompare(String(right.uploaded_at)) || left.id - right.id)
+          .map((image) => ({ id: image.id }))
+      ];
+    }
+
+    if (text.startsWith('INSERT INTO project_stage_document_form_images')) {
+      const [
+        projectId,
+        documentId,
+        fieldKey,
+        originalFileName,
+        storageKey,
+        mimeType,
+        fileSize,
+        contentHash,
+        uploadedByUserId
+      ] = params;
+      const image = {
+        id: this.nextFormImageId++,
+        project_id: projectId,
+        stage_document_id: documentId,
+        field_key: fieldKey,
+        original_file_name: originalFileName,
+        storage_key: storageKey,
+        mime_type: mimeType,
+        file_size: fileSize,
+        content_sha256: contentHash,
+        uploaded_by_user_id: uploadedByUserId,
+        uploaded_at: '2026-07-08 10:45:00',
+        deleted_at: null,
+        deleted_by_user_id: null
+      };
+      this.formImages.push(image);
+      return [{ affectedRows: 1, insertId: image.id }];
+    }
+
+    if (text.startsWith('UPDATE project_stage_document_form_images')) {
+      const [deletedByUserId, imageId] = params;
+      const image = this.formImages.find((candidate) => candidate.id === imageId && !candidate.deleted_at);
+      if (image) {
+        image.deleted_by_user_id = deletedByUserId;
+        image.deleted_at = '2026-07-08 10:46:00';
+      }
+      return [{ affectedRows: image ? 1 : 0 }];
     }
 
     if (text.startsWith('SELECT * FROM project_solution_design_upload_files')) {
@@ -1694,6 +1972,35 @@ class SolutionDesignWorkflowFakeConnection {
         form.updated_at = '2026-07-08 10:30:00';
       }
       return [{ affectedRows: form ? 1 : 0 }];
+    }
+
+    if (
+      text.startsWith('UPDATE project_solution_design_analysis_forms SET generated_file_status = ?') &&
+      text.includes('WHERE project_id = ? AND is_current = 1')
+    ) {
+      const [generatedFileStatus, templateName, updatedByUserId, projectId, excludedStatus] = params;
+      let affectedRows = 0;
+      for (const form of this.analysisForms) {
+        if (
+          form.project_id === projectId &&
+          form.is_current === 1 &&
+          form.generated_file_status !== excludedStatus
+        ) {
+          form.generated_file_status = generatedFileStatus;
+          form.generated_file_storage_key = null;
+          form.generated_file_name = null;
+          form.generated_file_mime_type = null;
+          form.generated_file_size = null;
+          form.generated_file_template_name = templateName;
+          form.generated_at = null;
+          form.generated_by_user_id = null;
+          form.generation_error_message = null;
+          form.updated_by_user_id = updatedByUserId;
+          form.updated_at = '2026-07-08 10:47:00';
+          affectedRows += 1;
+        }
+      }
+      return [{ affectedRows }];
     }
 
     if (text.startsWith('UPDATE project_solution_design_analysis_forms SET generated_file_status = ?')) {
@@ -2311,10 +2618,21 @@ function fakeDb(options = {}) {
   return {
     connection,
     generatedFileStorage: options.generatedFileStorage || fakeGeneratedFileStorage(),
+    onlineFormImageStorage: options.onlineFormImageStorage || fakeOnlineFormImageStorage(),
     async getConnection() {
       return connection;
     }
   };
+}
+
+async function withFakePoolConnection(connection, callback) {
+  const originalGetConnection = pool.getConnection;
+  pool.getConnection = async () => connection;
+  try {
+    return await callback();
+  } finally {
+    pool.getConnection = originalGetConnection;
+  }
 }
 
 test('visible project users can query workflow and lazy initialization is idempotent', async () => {
@@ -2865,22 +3183,59 @@ test('product function diagram requires active analysis node and can upload afte
 });
 
 test('technical owner can save and submit solution analysis form', async () => {
-  const db = fakeDb();
+  const db = fakeDb({
+    onlineFormImageStorage: fakeOnlineFormImageStorage({
+      'analysis/site.png': tinyPngBuffer(),
+      'analysis/workpiece.png': tinyPngBuffer(),
+      'analysis/process.png': tinyPngBuffer(),
+      'analysis/target.png': tinyPngBuffer()
+    })
+  });
   seedAssignedRoles(db.connection);
   const storage = fakeUploadStorage();
   const technicalOwner = authUser(db.connection.users.get(12));
 
   await activateAnalysisNode(db, storage);
+  seedOnlineFormImage(db.connection, {
+    fieldKey: 'siteConditionImages',
+    storageKey: 'analysis/site.png',
+    originalFileName: 'site.png'
+  });
+  seedOnlineFormImage(db.connection, {
+    fieldKey: 'workpieceImages',
+    storageKey: 'analysis/workpiece.png',
+    originalFileName: 'workpiece.png'
+  });
+  seedOnlineFormImage(db.connection, {
+    fieldKey: 'operationProcessImages',
+    storageKey: 'analysis/process.png',
+    originalFileName: 'process.png'
+  });
+  seedOnlineFormImage(db.connection, {
+    fieldKey: 'projectTargetImages',
+    storageKey: 'analysis/target.png',
+    originalFileName: 'target.png'
+  });
   const initial = await getSolutionDesignAnalysisForm({ projectId: 100, user: technicalOwner }, db);
   assert.equal(initial.nodeStatus, SOLUTION_DESIGN_NODE_STATUS.PENDING);
   assert.equal(initial.permissions.canEditForm, true);
   assert.equal(initial.permissions.canSubmitForm, true);
   assert.equal(initial.permissions.canSubmitNode, false);
+  assert.ok(initial.stageDocumentId);
+  assert.deepEqual(
+    initial.images.map((image) => image.fieldKey).sort(),
+    ['operationProcessImages', 'projectTargetImages', 'siteConditionImages', 'workpieceImages']
+  );
 
   const saved = await saveSolutionDesignAnalysisForm(
     {
       projectId: 100,
-      payload: analysisFormPayload({ solutionScope: '草稿方案范围' }),
+      payload: analysisFormPayload({
+        customerRequirements: '旧客户需求草稿',
+        technicalRisks: '旧技术风险草稿',
+        solutionScope: '旧方案范围草稿',
+        workpieceDescription: '草稿工件描述'
+      }),
       user: technicalOwner
     },
     db
@@ -2888,7 +3243,10 @@ test('technical owner can save and submit solution analysis form', async () => {
   assert.equal(saved.form.status, SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.DRAFT);
   assert.equal(saved.form.revision, 1);
   assert.equal(saved.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.NOT_STARTED);
-  assert.equal(saved.form.formData.solutionScope, '草稿方案范围');
+  assert.equal(saved.form.formData.workpieceDescription, '草稿工件描述');
+  assert.equal(Object.hasOwn(saved.form.formData, 'customerRequirements'), false);
+  assert.equal(Object.hasOwn(saved.form.formData, 'technicalRisks'), false);
+  assert.equal(Object.hasOwn(saved.form.formData, 'solutionScope'), false);
 
   const submitted = await submitSolutionDesignAnalysisForm(
     {
@@ -2896,7 +3254,28 @@ test('technical owner can save and submit solution analysis form', async () => {
       payload: analysisFormPayload({
         customerRequirements: '客户需求写入分析表模板',
         solutionScope: '提交版方案范围写入分析表模板',
-        technicalRisks: '技术风险写入分析表模板'
+        technicalRisks: '技术风险写入分析表模板',
+        workingTemperatureMin: '-10',
+        workingTemperatureMax: '45',
+        storageTemperatureMin: '-20',
+        storageTemperatureMax: '60',
+        workingHumidityMin: '20',
+        workingHumidityMax: '80',
+        storageHumidityMin: '10',
+        storageHumidityMax: '90',
+        noiseLimitValue: '75',
+        ipProtectionLevel: 'IP54',
+        antiCorrosionGrade: 'C3',
+        altitudeLimitValue: '1000',
+        explosionProofRequirement: '无',
+        siteConditionDescription: '现场预留 12m x 8m 区域',
+        powerSupply: 'AC380V',
+        airSupply: '0.6MPa',
+        hydraulicSource: '无',
+        liftingEquipment: '3t 行车',
+        workpieceDescription: '铝合金壳体，约 2kg',
+        operationProcessDescription: '上料后自动定位、装配并检测',
+        projectTargetDescription: '节拍 45 秒，良率不低于 99%'
       }),
       user: technicalOwner
     },
@@ -2910,26 +3289,77 @@ test('technical owner can save and submit solution analysis form', async () => {
   assert.equal(submitted.form.generatedFile.canDownload, true);
   assert.match(submitted.form.generatedFile.fileName, /^C05-项目方案分析表-/);
   assert.ok(submitted.form.generatedFile.fileSize > 0);
+  assert.equal(Object.hasOwn(submitted.form.formData, 'customerRequirements'), false);
+  assert.equal(Object.hasOwn(submitted.form.formData, 'technicalRisks'), false);
+  assert.equal(Object.hasOwn(submitted.form.formData, 'solutionScope'), false);
+  assert.equal(submitted.images.length, 4);
   assert.equal(submitted.permissions.canSubmitNode, false);
   assert.equal(db.generatedFileStorage.written.length, 1);
   const analysisGeneratedKey = submitted.form.generatedFile.storageKey ?? db.generatedFileStorage.written[0].storageKey;
-  assertGeneratedXlsxCellEquals(db.generatedFileStorage, analysisGeneratedKey, 'A2', '项目编号');
-  assertGeneratedXlsxCellEquals(db.generatedFileStorage, analysisGeneratedKey, 'C2', '项目名称');
+  assertGeneratedXlsxContainsImages(db.generatedFileStorage, analysisGeneratedKey);
+  assertGeneratedXlsxMergeCell(db.generatedFileStorage, analysisGeneratedKey, 'B8:E8', false);
+  assertGeneratedXlsxMergeCell(db.generatedFileStorage, analysisGeneratedKey, 'B9:E9', false);
+  assertGeneratedXlsxMergeCell(db.generatedFileStorage, analysisGeneratedKey, 'B10:E10', false);
+  assertGeneratedXlsxMergeCell(db.generatedFileStorage, analysisGeneratedKey, 'B8:C8');
+  assertGeneratedXlsxMergeCell(db.generatedFileStorage, analysisGeneratedKey, 'B9:C9');
+  assertGeneratedXlsxMergeCell(db.generatedFileStorage, analysisGeneratedKey, 'B10:C10');
+  assertGeneratedXlsxMergeCell(db.generatedFileStorage, analysisGeneratedKey, 'B12:E15', false);
+  assertGeneratedXlsxMergeCell(db.generatedFileStorage, analysisGeneratedKey, 'B12:E13');
+  assertGeneratedXlsxMergeCell(db.generatedFileStorage, analysisGeneratedKey, 'B17:E25', false);
+  assertGeneratedXlsxMergeCell(db.generatedFileStorage, analysisGeneratedKey, 'B17:E21');
+  assertGeneratedXlsxMergeCell(db.generatedFileStorage, analysisGeneratedKey, 'B27:E36', false);
+  assertGeneratedXlsxMergeCell(db.generatedFileStorage, analysisGeneratedKey, 'B27:E31');
+  assertGeneratedXlsxHasImageAnchorFrom(db.generatedFileStorage, analysisGeneratedKey, { minColumn: 3, row: 7 });
+  assertGeneratedXlsxHasImageAnchorFrom(db.generatedFileStorage, analysisGeneratedKey, { minColumn: 1, row: 13 });
+  assertGeneratedXlsxHasImageAnchorFrom(db.generatedFileStorage, analysisGeneratedKey, { minColumn: 1, row: 21 });
+  assertGeneratedXlsxHasImageAnchorFrom(db.generatedFileStorage, analysisGeneratedKey, { minColumn: 1, row: 31 });
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, analysisGeneratedKey, 'B2', 'SD-TEST-001');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, analysisGeneratedKey, 'E2', '方案设计流程测试项目');
+  assertGeneratedXlsxCellIncludes(db.generatedFileStorage, analysisGeneratedKey, 'B3', '工作温度：（-10）℃~（45）℃');
+  assertGeneratedXlsxCellIncludes(db.generatedFileStorage, analysisGeneratedKey, 'D3', '储存温度：（-20）℃~（60）℃');
+  assertGeneratedXlsxCellIncludes(db.generatedFileStorage, analysisGeneratedKey, 'B4', '工作湿度：（20）%~（80）%');
+  assertGeneratedXlsxCellIncludes(db.generatedFileStorage, analysisGeneratedKey, 'D4', '储存湿度：（10）%~（90）%');
+  assertGeneratedXlsxCellIncludes(db.generatedFileStorage, analysisGeneratedKey, 'B5', '噪音：≤（75）dB');
+  assertGeneratedXlsxCellIncludes(db.generatedFileStorage, analysisGeneratedKey, 'D5', 'IP防护等级：IP（54）');
+  assertGeneratedXlsxCellIncludes(db.generatedFileStorage, analysisGeneratedKey, 'B6', '防腐等级：（C3）');
+  assertGeneratedXlsxCellIncludes(db.generatedFileStorage, analysisGeneratedKey, 'D6', '海拔高度：≤（1000）m');
+  assertGeneratedXlsxCellIncludes(db.generatedFileStorage, analysisGeneratedKey, 'B7', '防爆要求：（无）');
+  assertGeneratedXlsxCellIncludes(db.generatedFileStorage, analysisGeneratedKey, 'B8', '现场预留 12m x 8m 区域');
+  assertGeneratedXlsxCellIncludes(db.generatedFileStorage, analysisGeneratedKey, 'B9', '电源：（AC380V）');
+  assertGeneratedXlsxCellIncludes(db.generatedFileStorage, analysisGeneratedKey, 'B9', '气源：（0.6MPa）');
+  assertGeneratedXlsxCellIncludes(db.generatedFileStorage, analysisGeneratedKey, 'B9', '液压源：（无）');
+  assertGeneratedXlsxCellIncludes(db.generatedFileStorage, analysisGeneratedKey, 'B10', '吊装设备：3t 行车');
   assertGeneratedXlsxCellIncludes(
     db.generatedFileStorage,
     analysisGeneratedKey,
     'B12',
-    '客户需求写入分析表模板'
+    '铝合金壳体，约 2kg'
   );
   assertGeneratedXlsxCellIncludes(
     db.generatedFileStorage,
     analysisGeneratedKey,
     'B17',
-    '技术风险写入分析表模板'
+    '上料后自动定位、装配并检测'
   );
   assertGeneratedXlsxCellIncludes(
+    db.generatedFileStorage,
+    analysisGeneratedKey,
+    'B27',
+    '节拍 45 秒，良率不低于 99%'
+  );
+  assertGeneratedXlsxCellNotIncludes(
+    db.generatedFileStorage,
+    analysisGeneratedKey,
+    'B12',
+    '客户需求写入分析表模板'
+  );
+  assertGeneratedXlsxCellNotIncludes(
+    db.generatedFileStorage,
+    analysisGeneratedKey,
+    'B17',
+    '技术风险写入分析表模板'
+  );
+  assertGeneratedXlsxCellNotIncludes(
     db.generatedFileStorage,
     analysisGeneratedKey,
     'B27',
@@ -2943,6 +3373,12 @@ test('technical owner can save and submit solution analysis form', async () => {
   assert.equal(download.fileName, submitted.form.generatedFile.fileName);
   assert.equal(download.mimeType, submitted.form.generatedFile.mimeType);
   assert.equal(download.filePath, db.generatedFileStorage.written[0].storageKey);
+  db.connection.currentAnalysisForm().generated_file_mime_type = null;
+  const fallbackMimeDownload = await getSolutionDesignAnalysisGeneratedFileDownload(
+    { projectId: 100, user: technicalOwner },
+    db
+  );
+  assert.equal(fallbackMimeDownload.mimeType, submitted.form.generatedFile.mimeType);
   db.connection.visible = false;
   const unrelatedUser = authUser(db.connection.users.get(31));
   await assert.rejects(
@@ -2957,6 +3393,188 @@ test('technical owner can save and submit solution analysis form', async () => {
   assert.equal(actionTypes.includes(OPERATION_ACTION_TYPE.SOLUTION_DESIGN_ANALYSIS_FORM_GENERATION_FAILED), false);
 });
 
+test('solution analysis images support legacy C05 anchors and invalidate generated files after changes', async () => {
+  const db = fakeDb({
+    onlineFormImageStorage: fakeOnlineFormImageStorage({
+      'analysis/legacy-site.png': tinyPngBuffer()
+    })
+  });
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const technicalOwner = authUser(db.connection.users.get(12));
+
+  await activateAnalysisNode(db, storage);
+  useLegacySolutionDesignStageDocumentCodes(db.connection);
+  const legacyDocument = db.connection.stageDocuments.find((document) => document.document_code === '2.2');
+  const seededImage = seedOnlineFormImage(db.connection, {
+    documentCode: '2.2',
+    fieldKey: 'siteConditionImages',
+    storageKey: 'analysis/legacy-site.png',
+    originalFileName: 'legacy-site.png'
+  });
+
+  const initial = await getSolutionDesignAnalysisForm({ projectId: 100, user: technicalOwner }, db);
+  assert.equal(initial.stageDocumentId, legacyDocument.id);
+  assert.equal(initial.images.length, 1);
+  assert.equal(initial.images[0].fieldKey, 'siteConditionImages');
+
+  const submitted = await submitSolutionDesignAnalysisForm(
+    {
+      projectId: 100,
+      payload: analysisFormPayload({
+        siteConditionDescription: 'legacy 现场条件',
+        workpieceDescription: 'legacy 工件描述',
+        operationProcessDescription: 'legacy 作业工艺',
+        projectTargetDescription: 'legacy 目标说明'
+      }),
+      user: technicalOwner
+    },
+    db
+  );
+  assert.equal(submitted.stageDocumentId, legacyDocument.id);
+  assert.equal(submitted.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED);
+  assert.ok(db.connection.currentAnalysisForm().generated_file_storage_key);
+
+  await withFakePoolConnection(db.connection, async () => {
+    await deleteStageDocumentOnlineFormImage({
+      projectId: 100,
+      documentId: legacyDocument.id,
+      imageId: seededImage.id,
+      user: technicalOwner
+    });
+  });
+
+  let currentForm = db.connection.currentAnalysisForm();
+  assert.equal(currentForm.form_status, SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.SUBMITTED);
+  assert.equal(currentForm.generated_file_status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.NOT_STARTED);
+  assert.equal(currentForm.generated_file_storage_key, null);
+  assert.equal(currentForm.generated_file_template_name, '项目方案分析表-模板.xlsx');
+
+  const regenerated = await submitSolutionDesignAnalysisForm(
+    {
+      projectId: 100,
+      payload: analysisFormPayload({
+        workpieceDescription: 'legacy 二次工件描述',
+        operationProcessDescription: 'legacy 二次作业工艺',
+        projectTargetDescription: 'legacy 二次目标说明'
+      }),
+      user: technicalOwner
+    },
+    db
+  );
+  assert.equal(regenerated.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED);
+
+  const uploaded = await withFakePoolConnection(db.connection, async () =>
+    uploadStageDocumentOnlineFormImage({
+      projectId: 100,
+      documentId: legacyDocument.id,
+      fieldKey: 'projectTargetImages',
+      user: technicalOwner,
+      file: {
+        originalFileName: 'target.png',
+        mimeType: 'image/png',
+        size: tinyPngBuffer().length,
+        buffer: tinyPngBuffer()
+      }
+    })
+  );
+  assert.equal(uploaded.fieldKey, 'projectTargetImages');
+
+  currentForm = db.connection.currentAnalysisForm();
+  assert.equal(currentForm.form_status, SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.SUBMITTED);
+  assert.equal(currentForm.generated_file_status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.NOT_STARTED);
+  assert.equal(currentForm.generated_file_storage_key, null);
+
+  await withFakePoolConnection(db.connection, async () => {
+    await deleteStageDocumentOnlineFormImage({
+      projectId: 100,
+      documentId: legacyDocument.id,
+      imageId: uploaded.id,
+      user: technicalOwner
+    });
+  });
+  assert.equal(db.connection.formImages.find((image) => image.id === uploaded.id)?.deleted_by_user_id, 12);
+});
+
+test('solution design role users can view C05 images while only technical owner can mutate them', async () => {
+  const db = fakeDb({
+    onlineFormImageStorage: fakeOnlineFormImageStorage({
+      'analysis/business-view.png': tinyPngBuffer()
+    })
+  });
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+
+  await activateAnalysisNode(db, storage);
+  const image = seedOnlineFormImage(db.connection, {
+    fieldKey: 'siteConditionImages',
+    storageKey: 'analysis/business-view.png',
+    originalFileName: 'business-view.png'
+  });
+  db.connection.visible = false;
+
+  const dto = await getSolutionDesignAnalysisForm({ projectId: 100, user: businessOwner }, db);
+  assert.equal(dto.images.length, 1);
+  assert.equal(dto.images[0].id, image.id);
+  assert.equal(dto.images[0].canDownload, true);
+  assert.equal(dto.images[0].canDelete, false);
+
+  await withFakePoolConnection(db.connection, async () => {
+    await assert.rejects(
+      () =>
+        deleteStageDocumentOnlineFormImage({
+          projectId: 100,
+          documentId: dto.stageDocumentId,
+          imageId: image.id,
+          user: businessOwner
+        }),
+      (error) => error.statusCode === 403 && error.details.includes('documentCode')
+    );
+  });
+  assert.equal(db.connection.formImages.find((candidate) => candidate.id === image.id)?.deleted_at, null);
+});
+
+test('online form image fields are scoped by document type', async () => {
+  const db = fakeDb();
+  const technicalOwner = authUser(db.connection.users.get(12));
+  const initiationDocument = {
+    ...db.connection.stageDocuments[0],
+    id: 900,
+    stage_order: 1,
+    document_order: 2,
+    document_code: INITIATION_REWORK_TARGET_DOCUMENT_CODE,
+    document_name: '项目需求表',
+    status: DOCUMENT_STATUS.NOT_SUBMITTED,
+    responsible_user_id: 12,
+    is_applicable: 1,
+    revision_required: 0
+  };
+  db.connection.stageDocuments.push(initiationDocument);
+
+  await withFakePoolConnection(db.connection, async () => {
+    await assert.rejects(
+      () =>
+        uploadStageDocumentOnlineFormImage({
+          projectId: 100,
+          documentId: initiationDocument.id,
+          fieldKey: 'projectTargetImages',
+          user: technicalOwner,
+          file: {
+            originalFileName: 'target.png',
+            mimeType: 'image/png',
+            size: tinyPngBuffer().length,
+            buffer: tinyPngBuffer()
+          }
+        }),
+      (error) =>
+        error.code === 'INVALID_ONLINE_FORM_IMAGE_FIELD' &&
+        error.details.includes('fieldKey') &&
+        error.details.includes('documentCode')
+    );
+  });
+});
+
 test('solution analysis generated file failure blocks node submit and cleans partial file', async () => {
   const generatedStorage = fakeGeneratedFileStorage({ failWrite: true });
   const db = fakeDb({ generatedFileStorage: generatedStorage });
@@ -2968,7 +3586,7 @@ test('solution analysis generated file failure blocks node submit and cleans par
   const submitted = await submitSolutionDesignAnalysisForm(
     {
       projectId: 100,
-      payload: analysisFormPayload({ solutionScope: '触发生成失败' }),
+      payload: analysisFormPayload({ projectTargetDescription: '触发生成失败' }),
       user: technicalOwner
     },
     db
@@ -3341,7 +3959,9 @@ test('RD manager returns solution analysis node and requires overall resubmissio
     {
       projectId: 100,
       payload: analysisFormPayload({
+        customerRequirements: '退回后旧客户需求',
         technicalRisks: '退回后重新评估节拍风险',
+        operationProcessDescription: '退回后重新评估作业工艺',
         solutionScope: '第二版方案范围'
       }),
       user: technicalOwner
@@ -3354,14 +3974,15 @@ test('RD manager returns solution analysis node and requires overall resubmissio
     db.generatedFileStorage,
     revisionTwoGeneratedKey,
     'B17',
-    '退回后重新评估节拍风险'
+    '退回后重新评估作业工艺'
   );
   assertGeneratedXlsxCellNotIncludes(
     db.generatedFileStorage,
     revisionTwoGeneratedKey,
     'B17',
-    '节拍和视觉检测稳定性需验证'
+    '退回后重新评估节拍风险'
   );
+  assert.equal(Object.hasOwn(JSON.parse(db.connection.currentAnalysisForm().form_data_json), 'technicalRisks'), false);
   await uploadSolutionDesignWorkflowFile(
     {
       projectId: 100,
@@ -3670,7 +4291,8 @@ test('technical owner can save and submit internal review form', async () => {
         technicalRisks: ['内部风险第一行', '内部风险第二行'],
         solutionSuggestions: ['内部方案建议第一行', '内部方案建议第二行'],
         reviewConclusion: '内部评审结论写入模板',
-        actionItems: ['内部实施计划第一行', '内部实施计划第二行']
+        actionItems: ['内部实施计划第一行', '内部实施计划第二行'],
+        recorder: '内部记录人'
       }),
       user: technicalOwner
     },
@@ -3695,14 +4317,18 @@ test('technical owner can save and submit internal review form', async () => {
   assertGeneratedXlsxCellEquals(db.generatedFileStorage, internalReviewGeneratedKey, 'A15', '项目风险评估');
   assertGeneratedXlsxCellEquals(db.generatedFileStorage, internalReviewGeneratedKey, 'A18', '项目方案建议');
   assertGeneratedXlsxCellEquals(db.generatedFileStorage, internalReviewGeneratedKey, 'A30', '项目实施计划');
-  assertGeneratedXlsxCellEquals(db.generatedFileStorage, internalReviewGeneratedKey, 'A42', '记录人：');
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, internalReviewGeneratedKey, 'A42', '记录人：内部记录人');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, internalReviewGeneratedKey, 'B2', '方案设计流程测试项目');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, internalReviewGeneratedKey, 'E2', '测试客户公司');
   assertGeneratedXlsxCellEquals(db.generatedFileStorage, internalReviewGeneratedKey, 'B3', '内部，第（1）次');
+  assertGeneratedXlsxCellUsesTextFont(db.generatedFileStorage, internalReviewGeneratedKey, 'B3', '宋体');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, internalReviewGeneratedKey, 'B5', '内部评审会议室');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, internalReviewGeneratedKey, 'G5', '2026-07-18');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, internalReviewGeneratedKey, 'B12', '内部目标第一行');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, internalReviewGeneratedKey, 'B13', '内部目标第二行');
+  assertGeneratedXlsxCellUsesTextFont(db.generatedFileStorage, internalReviewGeneratedKey, 'B12', '宋体');
+  assertGeneratedXlsxCellUsesTextFont(db.generatedFileStorage, internalReviewGeneratedKey, 'B13', '宋体');
+  assertGeneratedXlsxCellUsesTextFont(db.generatedFileStorage, internalReviewGeneratedKey, 'B14', '宋体');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, internalReviewGeneratedKey, 'B15', '内部风险第一行');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, internalReviewGeneratedKey, 'B16', '内部风险第二行');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, internalReviewGeneratedKey, 'B18', '内部方案建议第一行');
@@ -3720,7 +4346,7 @@ test('technical owner can save and submit internal review form', async () => {
     '内部实施计划第一行'
   );
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, internalReviewGeneratedKey, 'B31', '内部实施计划第二行');
-  assertGeneratedXlsxCellIncludes(db.generatedFileStorage, internalReviewGeneratedKey, 'B42', '技术负责人');
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, internalReviewGeneratedKey, 'B42', '');
 
   const download = await getSolutionDesignReviewGeneratedFileDownload(
     {
@@ -3744,6 +4370,33 @@ test('technical owner can save and submit internal review form', async () => {
     actionTypes.includes(OPERATION_ACTION_TYPE.SOLUTION_DESIGN_INTERNAL_REVIEW_FORM_GENERATION_FAILED),
     false
   );
+});
+
+test('review form generated file recorder falls back to submitter display name', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const technicalOwner = authUser(db.connection.users.get(12));
+
+  await submitSolutionDesignOutputs(db, storage);
+  const submitted = await submitSolutionDesignReviewForm(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
+      payload: reviewFormPayload({
+        recorder: '',
+        reviewConclusion: '记录人为空时回退提交人'
+      }),
+      user: technicalOwner
+    },
+    db
+  );
+
+  assert.equal(submitted.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED);
+  const generatedKey = submitted.form.generatedFile.storageKey ?? db.generatedFileStorage.written.at(-1).storageKey;
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, generatedKey, 'B3', '内部，第（1）次');
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, generatedKey, 'A42', '记录人：技术负责人');
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, generatedKey, 'B42', '');
 });
 
 test('technical owner can save and submit customer review form', async () => {
@@ -3778,7 +4431,8 @@ test('technical owner can save and submit customer review form', async () => {
         technicalRisks: ['客户风险第一行'],
         solutionSuggestions: ['客户方案建议第一行', '客户方案建议第二行'],
         reviewConclusion: '客户评审结论写入模板',
-        actionItems: ['客户实施计划第一行', '客户实施计划第二行']
+        actionItems: ['客户实施计划第一行', '客户实施计划第二行'],
+        recorder: '客户记录人'
       }),
       user: technicalOwner
     },
@@ -3819,12 +4473,16 @@ test('technical owner can save and submit customer review form', async () => {
   assertGeneratedXlsxCellEquals(db.generatedFileStorage, customerForm.generated_file_storage_key, 'A15', '项目风险评估');
   assertGeneratedXlsxCellEquals(db.generatedFileStorage, customerForm.generated_file_storage_key, 'A18', '项目方案建议');
   assertGeneratedXlsxCellEquals(db.generatedFileStorage, customerForm.generated_file_storage_key, 'A30', '项目实施计划');
-  assertGeneratedXlsxCellEquals(db.generatedFileStorage, customerForm.generated_file_storage_key, 'A42', '记录人：');
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, customerForm.generated_file_storage_key, 'A42', '记录人：客户记录人');
   assertGeneratedXlsxCellEquals(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B3', '甲方，第（1）次');
+  assertGeneratedXlsxCellUsesTextFont(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B3', '宋体');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B5', '客户评审会议室');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, customerForm.generated_file_storage_key, 'G5', '2026-07-19');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B12', '客户目标第一行');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B13', '客户目标第二行');
+  assertGeneratedXlsxCellUsesTextFont(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B12', '宋体');
+  assertGeneratedXlsxCellUsesTextFont(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B13', '宋体');
+  assertGeneratedXlsxCellUsesTextFont(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B14', '宋体');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B15', '客户风险第一行');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B18', '客户方案建议第一行');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B19', '客户方案建议第二行');
@@ -3841,7 +4499,6 @@ test('technical owner can save and submit customer review form', async () => {
     '客户实施计划第一行'
   );
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B31', '客户实施计划第二行');
-  assertGeneratedXlsxCellIncludes(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B42', '技术负责人');
   assertGeneratedXlsxCellNotIncludes(
     db.generatedFileStorage,
     internalForm.generated_file_storage_key,
@@ -3866,6 +4523,7 @@ test('technical owner can save and submit customer review form', async () => {
     'B3',
     '甲方'
   );
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B42', '');
 
   const download = await getSolutionDesignReviewGeneratedFileDownload(
     {

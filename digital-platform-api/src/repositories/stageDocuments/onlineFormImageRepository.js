@@ -6,6 +6,15 @@ import {
 import { PROJECT_STATUS } from '../../domain/projects.js';
 import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import {
+  SOLUTION_DESIGN_ANALYSIS_FORM_DEFINITION,
+  SOLUTION_DESIGN_GENERATED_FILE_STATUS,
+  SOLUTION_DESIGN_NODE_KEY,
+  SOLUTION_DESIGN_NODE_STATUS,
+  SOLUTION_DESIGN_ROLE_KEY,
+  SOLUTION_DESIGN_STAGE,
+  isSolutionDesignAnalysisFormDocumentCode
+} from '../../domain/solutionDesignWorkflow.js';
+import {
   OPERATION_ACTION_TYPE,
   OPERATION_TARGET_TYPE,
   insertOperationLog
@@ -25,7 +34,8 @@ import {
 export const ONLINE_FORM_IMAGE_FIELD = Object.freeze({
   SITE_CONDITION: 'siteConditionImages',
   WORKPIECE: 'workpieceImages',
-  OPERATION_PROCESS: 'operationProcessImages'
+  OPERATION_PROCESS: 'operationProcessImages',
+  PROJECT_TARGET: 'projectTargetImages'
 });
 
 export const STAGE_DOCUMENT_ONLINE_FORM_IMAGE_MAX_ACTIVE_PER_FIELD = 3;
@@ -42,6 +52,10 @@ export const ONLINE_FORM_IMAGE_FIELDS = Object.freeze({
   [ONLINE_FORM_IMAGE_FIELD.OPERATION_PROCESS]: Object.freeze({
     fieldKey: ONLINE_FORM_IMAGE_FIELD.OPERATION_PROCESS,
     label: '作业工艺图片'
+  }),
+  [ONLINE_FORM_IMAGE_FIELD.PROJECT_TARGET]: Object.freeze({
+    fieldKey: ONLINE_FORM_IMAGE_FIELD.PROJECT_TARGET,
+    label: '目标图片'
   })
 });
 
@@ -74,6 +88,17 @@ const IMAGE_MIME_TO_EXTENSION = Object.freeze({
 });
 
 const MAX_IMAGE_TEXT_FIELD_LENGTH = 255;
+const INITIATION_ONLINE_FORM_IMAGE_FIELD_KEYS = new Set([
+  ONLINE_FORM_IMAGE_FIELD.SITE_CONDITION,
+  ONLINE_FORM_IMAGE_FIELD.WORKPIECE,
+  ONLINE_FORM_IMAGE_FIELD.OPERATION_PROCESS
+]);
+const SOLUTION_DESIGN_ANALYSIS_IMAGE_FIELD_KEYS = new Set([
+  ONLINE_FORM_IMAGE_FIELD.SITE_CONDITION,
+  ONLINE_FORM_IMAGE_FIELD.WORKPIECE,
+  ONLINE_FORM_IMAGE_FIELD.OPERATION_PROCESS,
+  ONLINE_FORM_IMAGE_FIELD.PROJECT_TARGET
+]);
 
 function sanitizeOriginalFileName(filename) {
   return String(filename || '').replace(/\\/g, '/').split('/').pop().trim();
@@ -91,6 +116,32 @@ function normalizeFieldKey(fieldKey) {
   }
 
   return normalized;
+}
+
+function getDocumentCode(document) {
+  return String(document?.document_code ?? document?.documentCode ?? '').trim();
+}
+
+function isInitiationRequirementDocument(document) {
+  return getDocumentCode(document) === INITIATION_REWORK_TARGET_DOCUMENT_CODE;
+}
+
+function assertFieldAllowedForDocument(fieldKey, document) {
+  const documentCode = getDocumentCode(document);
+  const allowedFields = isSolutionDesignAnalysisFormDocumentCode(documentCode)
+    ? SOLUTION_DESIGN_ANALYSIS_IMAGE_FIELD_KEYS
+    : documentCode === INITIATION_REWORK_TARGET_DOCUMENT_CODE
+      ? INITIATION_ONLINE_FORM_IMAGE_FIELD_KEYS
+      : null;
+
+  if (!allowedFields?.has(fieldKey)) {
+    throw new StageDocumentOnlineFormImageError(
+      STAGE_DOCUMENT_ONLINE_FORM_IMAGE_ERROR.INVALID_FIELD_KEY,
+      'Online form image field is not allowed for this document',
+      400,
+      ['fieldKey', 'documentCode']
+    );
+  }
 }
 
 function fileExtensionFromName(filename) {
@@ -191,9 +242,62 @@ function isRequirementDocumentEditable(document) {
   return [DOCUMENT_STATUS.NOT_SUBMITTED, DOCUMENT_STATUS.RETURNED].includes(status) || revisionRequired;
 }
 
+function isSolutionDesignAnalysisDocument(document) {
+  return isSolutionDesignAnalysisFormDocumentCode(getDocumentCode(document));
+}
+
 function isCurrentResponsible(user, document) {
   const responsibleUserId = document?.responsible_user_id ?? document?.responsibleUserId ?? null;
   return Boolean(responsibleUserId) && String(responsibleUserId) === String(user?.id);
+}
+
+function isCurrentSolutionStage(project) {
+  return (
+    String(project?.current_stage_key ?? project?.currentStageKey ?? '') === SOLUTION_DESIGN_STAGE.STAGE_KEY ||
+    Number(project?.current_stage_order ?? project?.currentStageOrder ?? 0) === SOLUTION_DESIGN_STAGE.STAGE_ORDER
+  );
+}
+
+async function selectSolutionDesignImageMutationContext(executor, projectId) {
+  const [roleRows] = await executor.execute(
+    `SELECT
+      p.project_manager_user_id,
+      r.technical_owner_user_id,
+      r.business_owner_user_id,
+      r.procurement_owner_user_id,
+      r.finance_accountant_user_id,
+      r.finance_owner_user_id
+    FROM projects p
+    LEFT JOIN project_solution_design_roles r
+      ON r.project_id = p.id
+    WHERE p.id = ?
+    LIMIT 1`,
+    [projectId]
+  );
+  const [nodeRows] = await executor.execute(
+    `SELECT node_key, status
+    FROM project_solution_design_nodes
+    WHERE project_id = ?
+      AND node_key = ?
+    LIMIT 1`,
+    [projectId, SOLUTION_DESIGN_NODE_KEY.ANALYSIS]
+  );
+
+  return {
+    roles: roleRows[0] || null,
+    analysisNode: nodeRows[0] || null
+  };
+}
+
+function isSolutionDesignRoleUser(user, roles) {
+  return [
+    roles?.project_manager_user_id,
+    roles?.technical_owner_user_id,
+    roles?.business_owner_user_id,
+    roles?.procurement_owner_user_id,
+    roles?.finance_accountant_user_id,
+    roles?.finance_owner_user_id
+  ].some((userId) => Boolean(userId) && String(userId) === String(user?.id));
 }
 
 function throwForbiddenOnlineFormImageOperation(details = ['documentId']) {
@@ -208,15 +312,20 @@ function throwForbiddenOnlineFormImageOperation(details = ['documentId']) {
 async function selectProject(executor, projectId) {
   const [rows] = await executor.execute(
     `SELECT
-      id,
-      project_manager_user_id,
-      business_responsible_user_id,
-      technical_responsible_user_id,
-      created_by_user_id,
-      participating_departments,
-      status
-    FROM projects
-    WHERE id = ?
+      p.id,
+      s.stage_key AS current_stage_key,
+      s.stage_order AS current_stage_order,
+      p.project_manager_user_id,
+      p.business_responsible_user_id,
+      p.technical_responsible_user_id,
+      p.created_by_user_id,
+      p.participating_departments,
+      p.status
+    FROM projects p
+    LEFT JOIN project_stages s
+      ON s.project_id = p.id
+      AND s.is_current = 1
+    WHERE p.id = ?
     LIMIT 1`,
     [projectId]
   );
@@ -252,14 +361,47 @@ async function selectDocument(executor, projectId, documentId, { forUpdate = fal
   return rows[0];
 }
 
-function assertCanViewOnlineFormImages({ user, project, document }) {
-  if (!canViewStageDocumentItem(user, { project, document })) {
+async function canViewOnlineFormImages({ executor, user, project, document }) {
+  if (canViewStageDocumentItem(user, { project, document })) {
+    return true;
+  }
+
+  if (isSolutionDesignAnalysisDocument(document)) {
+    const context = await selectSolutionDesignImageMutationContext(executor, project.id);
+    return isSolutionDesignRoleUser(user, context.roles);
+  }
+
+  return false;
+}
+
+async function assertCanViewOnlineFormImages({ executor, user, project, document }) {
+  if (!(await canViewOnlineFormImages({ executor, user, project, document }))) {
     throwForbiddenOnlineFormImageOperation(['documentId']);
   }
 }
 
-function assertCanMutateOnlineFormImages({ user, project, document }) {
-  if (String(document.document_code ?? document.documentCode ?? '') !== INITIATION_REWORK_TARGET_DOCUMENT_CODE) {
+async function canMutateSolutionDesignAnalysisImages({ executor, user, project, document }) {
+  if (!isSolutionDesignAnalysisDocument(document)) {
+    return false;
+  }
+
+  if (document.is_applicable === 0 || document.is_applicable === false || isProjectEnded(project) || !isCurrentSolutionStage(project)) {
+    return false;
+  }
+
+  const context = await selectSolutionDesignImageMutationContext(executor, project.id);
+  return (
+    String(context.roles?.technical_owner_user_id ?? '') === String(user?.id ?? '') &&
+    context.analysisNode?.node_key === SOLUTION_DESIGN_NODE_KEY.ANALYSIS &&
+    [SOLUTION_DESIGN_NODE_STATUS.PENDING, SOLUTION_DESIGN_NODE_STATUS.RETURNED].includes(context.analysisNode.status)
+  );
+}
+
+async function assertCanMutateOnlineFormImages({ executor, user, project, document }) {
+  if (!isInitiationRequirementDocument(document)) {
+    if (await canMutateSolutionDesignAnalysisImages({ executor, user, project, document })) {
+      return;
+    }
     throwForbiddenOnlineFormImageOperation(['documentCode']);
   }
   if (document.is_applicable === 0 || document.is_applicable === false) {
@@ -281,22 +423,25 @@ function assertCanMutateOnlineFormImages({ user, project, document }) {
   }
 }
 
+async function buildImagePermissions({ executor, user, project, document }) {
+  const canDownload = await canViewOnlineFormImages({ executor, user, project, document });
+  const canDelete = isInitiationRequirementDocument(document)
+    ? !isProjectEnded(project) &&
+      isRequirementDocumentEditable(document) &&
+      isCurrentResponsible(user, document)
+    : await canMutateSolutionDesignAnalysisImages({ executor, user, project, document });
+
+  return {
+    canDownload,
+    canDelete
+  };
+}
+
 function mapUploadedByUser(row) {
   return {
     id: row.uploaded_by_user_id,
     account: row.uploaded_by_account,
     name: row.uploaded_by_display_name
-  };
-}
-
-function buildImagePermissions({ user, project, document }) {
-  return {
-    canDownload: canViewStageDocumentItem(user, { project, document }),
-    canDelete:
-      String(document.document_code ?? '') === INITIATION_REWORK_TARGET_DOCUMENT_CODE &&
-      !isProjectEnded(project) &&
-      isRequirementDocumentEditable(document) &&
-      isCurrentResponsible(user, document)
   };
 }
 
@@ -375,7 +520,12 @@ export async function listStageDocumentOnlineFormImagesForDocument({
   const queryExecutor = executor || pool;
   const selectedProject = project || (await selectProject(queryExecutor, projectId));
   const selectedDocument = document || (await selectDocument(queryExecutor, projectId, documentId));
-  assertCanViewOnlineFormImages({ user, project: selectedProject, document: selectedDocument });
+  await assertCanViewOnlineFormImages({
+    executor: queryExecutor,
+    user,
+    project: selectedProject,
+    document: selectedDocument
+  });
 
   const [rows] = await queryExecutor.execute(
     `SELECT
@@ -392,7 +542,12 @@ export async function listStageDocumentOnlineFormImagesForDocument({
     [projectId, documentId]
   );
 
-  const permissions = buildImagePermissions({ user, project: selectedProject, document: selectedDocument });
+  const permissions = await buildImagePermissions({
+    executor: queryExecutor,
+    user,
+    project: selectedProject,
+    document: selectedDocument
+  });
   return rows.map((row) => mapOnlineFormImage(row, permissions));
 }
 
@@ -432,6 +587,37 @@ function buildImageLogDetails(document, image) {
   };
 }
 
+async function invalidateSolutionDesignAnalysisGeneratedFileIfNeeded(executor, { projectId, document, actorUserId }) {
+  if (!isSolutionDesignAnalysisDocument(document)) {
+    return;
+  }
+
+  await executor.execute(
+    `UPDATE project_solution_design_analysis_forms
+    SET generated_file_status = ?,
+      generated_file_storage_key = NULL,
+      generated_file_name = NULL,
+      generated_file_mime_type = NULL,
+      generated_file_size = NULL,
+      generated_file_template_name = ?,
+      generated_at = NULL,
+      generated_by_user_id = NULL,
+      generation_error_message = NULL,
+      updated_by_user_id = ?,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE project_id = ?
+      AND is_current = 1
+      AND generated_file_status <> ?`,
+    [
+      SOLUTION_DESIGN_GENERATED_FILE_STATUS.NOT_STARTED,
+      SOLUTION_DESIGN_ANALYSIS_FORM_DEFINITION.templateName,
+      actorUserId,
+      projectId,
+      SOLUTION_DESIGN_GENERATED_FILE_STATUS.NOT_STARTED
+    ]
+  );
+}
+
 function throwImageLimitExceeded(fieldKey) {
   throw new StageDocumentOnlineFormImageError(
     STAGE_DOCUMENT_ONLINE_FORM_IMAGE_ERROR.IMAGE_LIMIT_EXCEEDED,
@@ -461,7 +647,8 @@ export async function uploadStageDocumentOnlineFormImage({ projectId, documentId
     await connection.beginTransaction();
     const project = await selectProject(connection, projectId);
     const document = await selectDocument(connection, projectId, documentId, { forUpdate: true });
-    assertCanMutateOnlineFormImages({ user, project, document });
+    await assertCanMutateOnlineFormImages({ executor: connection, user, project, document });
+    assertFieldAllowedForDocument(normalizedFieldKey, document);
 
     const [activeRows] = await connection.execute(
       `SELECT id
@@ -519,13 +706,18 @@ export async function uploadStageDocumentOnlineFormImage({ projectId, documentId
       summary: `上传在线表单图片：${document.document_name} / ${ONLINE_FORM_IMAGE_FIELDS[normalizedFieldKey].label}`,
       details: buildImageLogDetails(document, imageRow)
     });
+    await invalidateSolutionDesignAnalysisGeneratedFileIfNeeded(connection, {
+      projectId,
+      document,
+      actorUserId: user.id
+    });
 
     await connection.commit();
     committed = true;
 
     return mapOnlineFormImage(
       imageRow,
-      buildImagePermissions({ user, project, document })
+      await buildImagePermissions({ executor: connection, user, project, document })
     );
   } catch (error) {
     if (!committed) {
@@ -545,7 +737,7 @@ export async function uploadStageDocumentOnlineFormImage({ projectId, documentId
 export async function getStageDocumentOnlineFormImageDownload({ projectId, documentId, imageId, user }) {
   const project = await selectProject(pool, projectId);
   const document = await selectDocument(pool, projectId, documentId);
-  assertCanViewOnlineFormImages({ user, project, document });
+  await assertCanViewOnlineFormImages({ executor: pool, user, project, document });
   const image = await selectActiveImage(pool, projectId, documentId, imageId);
 
   try {
@@ -579,7 +771,7 @@ export async function deleteStageDocumentOnlineFormImage({ projectId, documentId
     await connection.beginTransaction();
     const project = await selectProject(connection, projectId);
     const document = await selectDocument(connection, projectId, documentId, { forUpdate: true });
-    assertCanMutateOnlineFormImages({ user, project, document });
+    await assertCanMutateOnlineFormImages({ executor: connection, user, project, document });
     const image = await selectActiveImage(connection, projectId, documentId, imageId, { forUpdate: true });
     storageKey = image.storage_key;
 
@@ -599,6 +791,11 @@ export async function deleteStageDocumentOnlineFormImage({ projectId, documentId
       targetId: documentId,
       summary: `删除在线表单图片：${document.document_name} / ${ONLINE_FORM_IMAGE_FIELDS[image.field_key]?.label ?? image.field_key}`,
       details: buildImageLogDetails(document, image)
+    });
+    await invalidateSolutionDesignAnalysisGeneratedFileIfNeeded(connection, {
+      projectId,
+      document,
+      actorUserId: user.id
     });
 
     await connection.commit();

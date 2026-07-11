@@ -1626,3 +1626,82 @@ TBD - created by archiving change define-technical-architecture. Update Purpose 
 - **THEN** 架构 SHALL NOT require legacy submit / approve / return / resubmit / history approval state for stage transition
 - **AND** 架构 MAY keep those APIs and repositories for compatibility or audit history
 
+### Requirement: 方案设计在线表单模板生成单元格级测试
+技术架构 MUST 要求 C05、C15、C16 生成文件具备单元格级、样式级和图片嵌入自动化测试，测试不得只断言文件存在或模板名称正确。
+
+#### Scenario: C05 关键字段单元格断言
+- **WHEN** 后端测试提交 C05 项目方案分析表并生成 Excel 文件
+- **THEN** 测试 MUST 读取生成文件目标单元格或模板映射区域
+- **AND** 测试 MUST 断言环境要求、场地情况、工件描述、作业工艺和项目目标说明已按提交内容写入
+- **AND** 测试 MUST 断言 C05 场地情况、工件描述、作业工艺或目标图片被写入 Excel media、drawing 和 anchor
+- **AND** 测试 MUST 断言 C05 图片区域的 merge adjustment 和 anchor 不覆盖文本区域
+- **AND** 测试 MUST 断言旧 C05 `customerRequirements`、`technicalRisks`、`solutionScope` 不进入新提交保存结果
+- **AND** 测试 MUST NOT 只断言生成状态为成功
+
+#### Scenario: C05 图片一致性回归断言
+- **WHEN** 后端测试在 C05 生成文件成功后上传或删除在线表单图片
+- **THEN** 测试 MUST 断言当前 C05 生成文件被置为未生成且不可下载
+- **AND** 测试 MUST 覆盖 legacy `2.2` 资料行仍可作为 C05 图片锚点
+- **AND** 测试 MUST 覆盖方案设计非技术负责人角色可查看 C05 图片但不可删除
+- **AND** 测试 MUST 覆盖通用在线表单图片 API 拒绝把 `projectTargetImages` 写入立项项目需求表
+
+#### Scenario: C15 C16 评审字段单元格断言
+- **WHEN** 后端测试分别提交 C15 内部方案评审和 C16 客户方案评审
+- **THEN** 测试 MUST 读取生成文件目标单元格或模板映射区域
+- **AND** 测试 MUST 断言 C15/C16 的评审类型、项目目标描述和记录人写入正确
+- **AND** 测试 MUST 断言 B3、B12:B14 写入内容不使用 Wingdings 2 样式
+- **AND** 测试 MUST 断言记录人写入 A42 合并单元格，且不依赖 B42
+- **AND** 测试 MUST 覆盖 C15/C16 独立生成且不串数据
+
+### Requirement: C05 字段 schema 和模板映射复用原则
+技术架构 MUST 优先复用或对齐立项阶段项目需求表既有字段 schema 和模板映射，避免为 C05 再造一套不兼容字段。
+
+#### Scenario: 复用已有字段命名
+- **WHEN** C05 需要环境要求、场地情况、工件描述、作业工艺或目标说明字段
+- **THEN** 字段 schema SHOULD 优先复用立项阶段项目需求表已有字段命名、分组和归一化逻辑
+- **AND** 若必须新增字段名，设计和实现 MUST 说明与立项阶段字段的映射关系
+
+#### Scenario: 模板 mapping 不靠字段名猜测
+- **WHEN** 后端生成 C05、C15 或 C16 Excel 文件
+- **THEN** 模板填充 MUST 通过 mapping manifest、registry 或等价显式映射定位目标单元格
+- **AND** 实现 MUST NOT 仅靠字段名猜测模板位置
+- **AND** 实现 MUST NOT 在前端维护 Excel 单元格映射
+
+#### Scenario: 图片能力复用既有基础设施
+- **WHEN** C05 需要在线表单图片上传和 Excel 嵌入
+- **THEN** 后端 SHOULD 复用现有 `project_stage_document_form_images` 存储和 OOXML 图片渲染能力
+- **AND** 权限判断 MUST 对 C05 增加方案设计技术负责人和 analysis 节点可编辑校验
+- **AND** 实现 MUST NOT 新增 migration 或图片专用表
+
+### Requirement: 方案设计 workflow 后端无行为变化拆分
+技术架构 MUST allow `solutionDesignWorkflowRepository.js` to be split into smaller backend modules only when the split preserves the existing solution design workflow behavior.
+
+#### Scenario: 拆分不改变外部行为
+- **WHEN** 后续实现拆分方案设计 workflow 后端仓储逻辑
+- **THEN** 实现 MUST 保持现有 repository 对外 export、API DTO、错误码、权限结果、blocking reasons、operation log、状态机、自动推进触发点和 generated file 行为不变
+- **AND** 实现 MUST NOT 修改数据库表结构、migration、8 大阶段数量或 71 项资料数量
+
+#### Scenario: 优先抽纯函数和独立 adapter
+- **WHEN** 后续拆分大型 repository 文件
+- **THEN** 实现 SHOULD 优先抽出模板生成 source builder、cell mapping、image mapping、payload normalize、DTO mapping、权限 helper 和查询 helper
+- **AND** 实现 SHOULD keep `solutionDesignWorkflowRepository.js` as the public facade and transaction coordinator during the first pass
+- **AND** 实现 SHOULD NOT start by rewriting node transition orchestration or creating a new workflow engine
+
+#### Scenario: 事务边界保持
+- **WHEN** 后续实现把查询 helper 或 generated file adapter 移出 repository 文件
+- **THEN** 实现 MUST preserve the current business transaction boundaries, lock timing and write ordering
+- **AND** helper modules MUST receive the existing executor/db context rather than opening separate transactions for the same business action
+- **AND** 自动推进调用 MUST remain in the same business action boundary as before
+
+#### Scenario: 以现有测试作为回归基线
+- **WHEN** 后续实现方案设计后端重构
+- **THEN** 实现 MUST keep `cmd /c npm.cmd run test:solution-design` passing as the primary regression baseline
+- **AND** 实现 MUST keep C05/C15/C16 generated file, image, permission, quotation/tender, derived completion and automatic advance tests at least as strict as before
+- **AND** 实现 MUST NOT relax tests merely because functions moved to new modules
+
+#### Scenario: 不引入新的全局权限或流程引擎
+- **WHEN** 后续拆分权限 helper 或节点编排 helper
+- **THEN** 实现 MUST NOT introduce a global stage workflow engine in this change
+- **AND** 实现 MUST NOT introduce a broad unified permission resolver rewrite in this change
+- **AND** implementation MAY leave existing high-risk orchestration in the facade for later separately planned changes
+

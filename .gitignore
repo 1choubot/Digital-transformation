@@ -20,6 +20,8 @@ npm-debug.log*
 # Local tool/agent metadata
 .codex/
 .agents/
+.spec-workflow/
+.tmp/
 
 # Local reference/output folders not committed by default
 digital-demo/
@@ -53,4 +55,4 @@ Thumbs.db
     
 
 #report export files
-daily_and_weekly_files/    
+daily_and_weekly_files/

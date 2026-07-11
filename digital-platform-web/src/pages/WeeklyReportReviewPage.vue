@@ -1,20 +1,12 @@
 <template>
   <section class="page-stack weekly-review-page animate-fadeIn">
     <!-- 加载状态 -->
-    <section v-if="loading" class="state-panel panel">
-      <div class="loading-spinner"></div>
-      <p>正在加载周报详情...</p>
+    <section v-if="loading" class="panel panel-body">
+      <el-skeleton :rows="8" animated />
     </section>
 
     <!-- 错误状态 -->
-    <section v-else-if="errorMessage" class="state-panel state-panel--error panel">
-      <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10" />
-        <line x1="12" y1="8" x2="12" y2="12" />
-        <line x1="12" y1="16" x2="12.01" y2="16" />
-      </svg>
-      <p>{{ errorMessage }}</p>
-    </section>
+    <el-alert v-else-if="errorMessage" :title="errorMessage" type="error" show-icon :closable="false" />
 
     <template v-else-if="report">
       <!-- 周报摘要信息（包含被考评人 + 操作按钮） -->
@@ -24,33 +16,20 @@
             <span class="evaluatee-name">被考评人：{{ targetUserName }}</span>
             <span class="divider">|</span>
             <strong class="toolbar-title">{{ report.weekStart }} 至 {{ report.weekEnd }}</strong>
-            <span class="status-badge" :class="approvalStatusClass(report.approvalStatus)">
+            <el-tag :type="approvalStatusTagType(report.approvalStatus)">
               {{ approvalStatusLabel(report.approvalStatus) }}
-            </span>
+            </el-tag>
             <span class="toolbar-subtitle">评分：{{ finalScoreText }}</span>
           </div>
           <div class="toolbar-actions">
-            <button type="button" class="ghost-button" @click="navigate(returnPath)">
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="19" y1="12" x2="5" y2="12" />
-                <polyline points="12 19 5 12 12 5" />
-              </svg>
-              返回列表
-            </button>
-            <button
+            <el-button @click="navigate(returnPath)">返回列表</el-button>
+            <el-button
               v-if="canExportOwnReport"
-              type="button"
-              class="ghost-button"
-              :disabled="exporting"
+              :loading="exporting"
               @click="downloadReportExcel"
             >
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              {{ exporting ? '正在导出' : '导出 Excel' }}
-            </button>
+              导出 Excel
+            </el-button>
           </div>
         </div>
         <div class="panel-body">
@@ -167,22 +146,14 @@
             <strong class="toolbar-title">周vs日对照表</strong>
             <span class="toolbar-subtitle">{{ comparisonRows.length ? `共 ${comparisonRows.length} 行` : '无对照数据' }}</span>
           </div>
-          <button type="button" class="ghost-button" :disabled="comparisonLoading" @click="loadComparisonTable">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9" />
-            </svg>
+          <el-button :loading="comparisonLoading" @click="loadComparisonTable">
             刷新对照
-          </button>
+          </el-button>
         </div>
 
-        <section v-if="comparisonError" class="state-panel state-panel--error panel state-panel--compact">
-          <p>{{ comparisonError }}</p>
-        </section>
+        <el-alert v-if="comparisonError" :title="comparisonError" type="error" show-icon :closable="false" />
 
-        <div v-if="comparisonLoading" class="state-panel panel">
-          <div class="loading-spinner"></div>
-          <p>正在加载对照表...</p>
-        </div>
+        <el-skeleton v-if="comparisonLoading" :rows="5" animated />
 
         <div v-else class="table-container">
           <div class="weekly-comparison-table">
@@ -227,26 +198,19 @@
             <strong class="toolbar-title">AI/规则参考评分</strong>
             <span class="toolbar-subtitle">{{ evaluationStatusText }}</span>
           </div>
-          <button
-            type="button"
-            class="primary-button"
-            :disabled="!canEvaluate || evaluating"
+          <el-button
+            type="primary"
+            :disabled="!canEvaluate"
+            :loading="evaluating"
             @click="evaluateReport(true)"
           >
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9" />
-            </svg>
-            {{ evaluating ? '评分中...' : score ? '重新评估' : '开始评分' }}
-          </button>
+            {{ score ? '重新评估' : '开始评分' }}
+          </el-button>
         </div>
 
-        <section v-if="evaluationError" class="state-panel state-panel--error panel state-panel--compact">
-          <p>{{ evaluationError }}</p>
-        </section>
+        <el-alert v-if="evaluationError" :title="evaluationError" type="error" show-icon :closable="false" />
 
-        <div v-if="!score" class="state-panel panel state-panel--empty">
-          <p>尚未评估。</p>
-        </div>
+        <el-empty v-if="!score" description="尚未评估" />
 
         <div v-else class="panel-body">
           <div class="weekly-score">
@@ -303,38 +267,41 @@
           <div class="weekly-final-review-form">
             <div class="form-field form-field--full">
               <span class="field-label">打回原因</span>
-              <textarea
+              <el-input
                 v-model="approvalForm.comment"
-                class="form-control form-textarea"
-                :readonly="!canReviewApproval"
+                type="textarea"
+                :rows="3"
+                :disabled="!canReviewApproval"
                 placeholder="打回时必须填写原因"
               />
             </div>
           </div>
           <div v-if="canReviewApproval" class="form-actions">
-            <button
-              type="button"
-              class="primary-button"
-              :disabled="savingApproval"
+            <el-button
+              type="primary"
+              :loading="savingApproval"
               @click="submitApproval('approve')"
             >
               通过审批
-            </button>
-            <button
-              type="button"
-              class="ghost-button ghost-button--danger"
+            </el-button>
+            <el-button
+              type="danger"
+              plain
               :disabled="savingApproval"
               @click="submitApproval('return')"
             >
               打回
-            </button>
+            </el-button>
           </div>
-          <section v-if="approvalMessage" class="state-panel state-panel--success state-panel--compact">
-            <p>{{ approvalMessage }}</p>
-          </section>
-          <section v-if="approvalError" class="state-panel state-panel--error state-panel--compact">
-            <p>{{ approvalError }}</p>
-          </section>
+          <el-alert
+            v-else
+            title="当前审批已锁定或当前账号无审批权限，仅可查看。"
+            type="info"
+            show-icon
+            :closable="false"
+          />
+          <el-alert v-if="approvalMessage" :title="approvalMessage" type="success" show-icon :closable="false" />
+          <el-alert v-if="approvalError" :title="approvalError" type="error" show-icon :closable="false" />
         </div>
       </section>
 
@@ -351,33 +318,29 @@
           <div class="weekly-final-review-form">
             <div class="form-field">
               <span class="field-label">分数</span>
-              <div class="input-wrapper">
-                <input
-                  v-model="finalReviewForm.finalScore"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  :readonly="!canEditFinalReview"
-                  placeholder="0-100"
-                />
-              </div>
+              <el-input-number
+                v-model="finalReviewForm.finalScore"
+                :min="0"
+                :max="100"
+                :step="0.01"
+                :precision="2"
+                :disabled="!canEditFinalReview"
+                controls-position="right"
+              />
             </div>
             <div class="form-field">
               <span class="field-label">等级</span>
-              <div class="input-wrapper">
-                <select v-model="finalReviewForm.finalGrade" :disabled="!canEditFinalReview">
-                  <option value="">请选择</option>
-                  <option v-for="grade in finalGradeOptions" :key="grade" :value="grade">{{ grade }}</option>
-                </select>
-              </div>
+              <el-select v-model="finalReviewForm.finalGrade" :disabled="!canEditFinalReview" clearable placeholder="请选择">
+                <el-option v-for="grade in finalGradeOptions" :key="grade" :label="grade" :value="grade" />
+              </el-select>
             </div>
             <div class="form-field form-field--full">
               <span class="field-label">评语</span>
-              <textarea
+              <el-input
                 v-model="finalReviewForm.finalComment"
-                class="form-control form-textarea"
-                :readonly="!canEditFinalReview"
+                type="textarea"
+                :rows="3"
+                :disabled="!canEditFinalReview"
                 placeholder="请输入评语..."
               />
             </div>
@@ -385,35 +348,27 @@
 
           <!-- 按钮放在表单底部 -->
           <div v-if="canEditFinalReview" class="form-actions">
-            <button
-              type="button"
-              class="primary-button"
-              :disabled="savingFinalReview"
+            <el-button
+              type="primary"
+              :loading="savingFinalReview"
               @click="saveFinalReview"
             >
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                <polyline points="17 21 17 13 7 13 7 21" />
-                <polyline points="7 3 7 8 15 8" />
-              </svg>
-              {{ savingFinalReview ? '正在保存' : '确认评分' }}
-            </button>
+              确认评分
+            </el-button>
           </div>
 
-          <section v-if="finalReviewMessage" class="state-panel state-panel--success state-panel--compact">
-            <p>{{ finalReviewMessage }}</p>
-          </section>
-          <section v-if="finalReviewError" class="state-panel state-panel--error state-panel--compact">
-            <p>{{ finalReviewError }}</p>
-          </section>
+          <el-alert v-if="finalReviewMessage" :title="finalReviewMessage" type="success" show-icon :closable="false" />
+          <el-alert v-if="finalReviewError" :title="finalReviewError" type="error" show-icon :closable="false" />
         </div>
       </section>
     </template>
+    <el-empty v-else description="周报不存在或暂无可查看内容" />
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
+import { ElMessageBox } from 'element-plus';
 import { OrganizationRole, ReportStatus, WeeklyApprovalStatus } from '../constants/reports.js';
 import {
   exportWeeklyReport,
@@ -467,7 +422,7 @@ const finalReviewError = ref('');
 const approvalMessage = ref('');
 const approvalError = ref('');
 const finalReviewForm = reactive({
-  finalScore: '',
+  finalScore: null,
   finalGrade: '',
   finalComment: ''
 });
@@ -556,6 +511,16 @@ function approvalStatusClass(status) {
   return classes[status] || classes[WeeklyApprovalStatus.NOT_SUBMITTED];
 }
 
+function approvalStatusTagType(status) {
+  const types = {
+    [WeeklyApprovalStatus.NOT_SUBMITTED]: 'info',
+    [WeeklyApprovalStatus.PENDING]: 'warning',
+    [WeeklyApprovalStatus.APPROVED]: 'success',
+    [WeeklyApprovalStatus.RETURNED]: 'danger'
+  };
+  return types[status] || 'info';
+}
+
 function completionStatusLabel(status) {
   const labels = {
     completed: '已完成',
@@ -628,7 +593,7 @@ function formatDateTime(value) {
 function applyReport(result) {
   report.value = result.report;
   targetUser.value = result.targetUser;
-  finalReviewForm.finalScore = result.report.finalScore ?? '';
+  finalReviewForm.finalScore = result.report.finalScore ?? null;
   finalReviewForm.finalGrade = result.report.finalGrade || '';
   finalReviewForm.finalComment = result.report.finalComment || '';
   approvalForm.comment = result.report.approvalComment || '';
@@ -693,6 +658,18 @@ async function saveFinalReview() {
 
 // Submit the center manager's approval decision and refresh the displayed report state.
 async function submitApproval(action) {
+  if (action === 'return') {
+    try {
+      await ElMessageBox.confirm('确认打回该周报吗？打回后提交人需要重新修改并提交。', '确认打回', {
+        type: 'warning',
+        confirmButtonText: '确认打回',
+        cancelButtonText: '取消'
+      });
+    } catch {
+      return;
+    }
+  }
+
   savingApproval.value = true;
   approvalMessage.value = '';
   approvalError.value = '';
@@ -803,135 +780,6 @@ onMounted(loadReport);
 .divider {
   color: #dcdfe6;
   font-weight: 300;
-}
-
-/* ===== 按钮基础 ===== */
-.ghost-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  background: #ffffff;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  color: #606266;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  height: 36px;
-  white-space: nowrap;
-}
-.ghost-button:hover:not(:disabled) {
-  border-color: #c6e2ff;
-  background: #ecf5ff;
-  color: #3e63dd;
-}
-.ghost-button--danger {
-  color: #f56c6c;
-  border-color: #fde2e2;
-}
-.ghost-button--danger:hover:not(:disabled) {
-  background: #fef0f0;
-  border-color: #fbc4c4;
-  color: #f56c6c;
-}
-.ghost-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.ghost-button.active {
-  border-color: #3e63dd;
-  background: #ecf5ff;
-  color: #3e63dd;
-}
-
-.primary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  background: #3e63dd;
-  color: #ffffff;
-  border: none;
-  font-weight: 500;
-  padding: 0.5rem 1.25rem;
-  border-radius: 4px;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  height: 36px;
-  white-space: nowrap;
-}
-.primary-button:hover:not(:disabled) {
-  background: #5275e7;
-}
-.primary-button:disabled {
-  opacity: 0.6;
-  background: #a0cfff;
-  cursor: not-allowed;
-}
-
-.btn-icon {
-  width: 16px;
-  height: 16px;
-  stroke: currentColor;
-  flex-shrink: 0;
-}
-
-/* ===== 状态面板 ===== */
-.state-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem 1.5rem;
-  text-align: center;
-  border-radius: 8px;
-}
-.state-panel--compact {
-  padding: 0.75rem 1.5rem;
-  margin: 0;
-}
-.state-panel--error {
-  background: #fef0f0;
-  color: #f56c6c;
-}
-.state-panel--error h3 {
-  margin: 0.5rem 0;
-  font-weight: 600;
-}
-.state-panel--empty {
-  color: #909399;
-}
-.state-panel p {
-  font-size: 0.9rem;
-  margin: 0;
-}
-.state-panel--success {
-  background: #f0f9eb;
-  color: #67c23a;
-}
-.error-icon {
-  width: 32px;
-  height: 32px;
-  stroke: #f56c6c;
-  margin-bottom: 0.75rem;
-}
-
-/* ===== 加载动画 ===== */
-.loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid #ebeef5;
-  border-top-color: #3e63dd;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin-bottom: 1rem;
-}
-@keyframes spin {
-  to { transform: rotate(360deg); }
 }
 
 /* ===== 状态标签 ===== */
@@ -1142,76 +990,9 @@ onMounted(loadReport);
   color: #606266;
 }
 
-.input-wrapper {
-  position: relative;
-  border-radius: 4px;
-  border: 1px solid #dcdfe6;
-  background: #ffffff;
-  transition: border-color 0.2s ease;
-  overflow: hidden;
-}
-.input-wrapper:focus-within {
-  border-color: #3e63dd;
-}
-.input-wrapper input,
-.input-wrapper select {
+.weekly-final-review-form :deep(.el-input-number),
+.weekly-final-review-form :deep(.el-select) {
   width: 100%;
-  padding: 0.5rem 1rem;
-  border: none;
-  background: transparent;
-  font-size: 0.9rem;
-  color: #303133;
-  outline: none;
-  height: 48px;
-  box-sizing: border-box;
-  font-family: inherit;
-}
-.input-wrapper input[readonly] {
-  background: #f5f7fa;
-  color: #606266;
-  cursor: not-allowed;
-}
-.input-wrapper select:disabled {
-  background: #f5f7fa;
-  color: #606266;
-  cursor: not-allowed;
-}
-.input-wrapper input::placeholder {
-  color: #c0c4cc;
-}
-.input-wrapper select {
-  appearance: auto;
-  cursor: pointer;
-}
-
-.form-control {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.9rem;
-  color: #303133;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  background: #ffffff;
-  transition: border-color 0.2s ease;
-  outline: none;
-  font-family: inherit;
-  box-sizing: border-box;
-}
-.form-control:focus {
-  border-color: #3e63dd;
-}
-.form-control[readonly] {
-  background: #f5f7fa;
-  color: #606266;
-  cursor: not-allowed;
-}
-
-.form-textarea {
-  height: 80px;
-  resize: vertical;
-  line-height: 1.5;
-  padding-top: 0.5rem;
-  padding-bottom: 0.5rem;
 }
 
 /* 表单操作按钮容器 */

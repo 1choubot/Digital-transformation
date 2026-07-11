@@ -19,17 +19,17 @@
       @delete-image="invoke('deleteOnlineFormImage', $event)"
     />
 
-    <section v-else-if="context.onlineFormErrorMessage" class="state-panel state-panel--inline state-panel--error">
-      <p>{{ context.onlineFormErrorMessage }}</p>
-    </section>
+    <el-alert
+      v-else-if="context.onlineFormErrorMessage"
+      :title="context.onlineFormErrorMessage"
+      type="error"
+      show-icon
+      :closable="false"
+    />
 
-    <section v-else-if="output?.formAvailable" class="state-panel state-panel--inline">
-      <p>{{ context.onlineFormLoading === true ? '在线表单加载中...' : '正在打开在线表单...' }}</p>
-    </section>
+    <el-skeleton v-else-if="output?.formAvailable" :rows="6" animated />
 
-    <section v-else class="state-panel state-panel--inline">
-      <p>{{ unavailableMessage }}</p>
-    </section>
+    <el-empty v-else :description="unavailableMessage" />
   </section>
 </template>
 

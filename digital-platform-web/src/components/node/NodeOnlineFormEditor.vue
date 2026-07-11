@@ -174,7 +174,7 @@
                 <dd>{{ item.evaluationStandard || '-' }}</dd>
               </div>
             </dl>
-            <div class="form-grid online-form-score-card__inputs">
+            <div class="online-form-score-card__inputs">
               <label>
                 <span>分值 0-5 *</span>
                 <el-select
@@ -187,17 +187,17 @@
                 </el-select>
               </label>
               <label>
-                <span>信息收集说明</span>
+                <span>信息收集说明（选填）</span>
                 <el-input
                   type="textarea"
-                  :rows="3"
+                  :rows="2"
                   :model-value="formData[`${item.key}InformationNotes`]"
                   :disabled="isOnlineFormPartDisabled(section.editablePart)"
                   @update:model-value="$emit('update-field', { key: `${item.key}InformationNotes`, value: $event })"
                 />
               </label>
               <label>
-                <span>责任人</span>
+                <span>责任人（选填）</span>
                 <el-input
                   :model-value="formData[`${item.key}ResponsiblePerson`]"
                   :disabled="isOnlineFormPartDisabled(section.editablePart)"

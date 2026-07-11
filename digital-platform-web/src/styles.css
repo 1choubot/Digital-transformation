@@ -2800,7 +2800,15 @@ p {
 }
 
 .online-form-score-card__inputs {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
   padding: 0;
+}
+
+.online-form-score-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
 }
 
 .online-form-notice-preview p {
@@ -4102,7 +4110,8 @@ p {
 
   .weekly-score__summary,
   .weekly-score__dimensions,
-  .weekly-readonly-grid {
+  .weekly-readonly-grid,
+  .online-form-score-list {
     grid-template-columns: 1fr;
   }
 }

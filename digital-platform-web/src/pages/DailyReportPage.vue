@@ -1,15 +1,7 @@
 <template>
   <section class="page-stack daily-report-page animate-fadeIn">
     <!-- 无权限警告 -->
-    <section v-if="!canUseDailyReport" class="state-panel state-panel--error panel">
-      <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10" />
-        <line x1="12" y1="8" x2="12" y2="12" />
-        <line x1="12" y1="16" x2="12.01" y2="16" />
-      </svg>
-      <h3>无日报填写权限</h3>
-      <p>当前账号不是员工（employee），不能创建或编辑个人日报。</p>
-    </section>
+    <el-alert v-if="!canUseDailyReport" title="无日报填写权限" description="当前账号不是员工（employee），不能创建或编辑个人日报。" type="error" show-icon :closable="false" />
 
     <!-- 主表单面板 -->
     <section v-else class="panel daily-form-panel">
@@ -20,38 +12,29 @@
           <span v-else class="toolbar-subtitle">默认填写业务当天</span>
         </div>
         <div class="toolbar-actions">
-          <button
+          <el-button
             v-if="savedReport"
-            type="button"
-            class="ghost-button"
-            :disabled="exporting"
+            :loading="exporting"
             @click="downloadReportExcel"
           >
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            {{ exporting ? '正在导出' : '导出 Excel' }}
-          </button>
-          <button
+            导出 Excel
+          </el-button>
+          <el-button
             v-if="savedReport"
-            type="button"
-            class="ghost-button"
             @click="props.navigate('/daily-reports')"
           >
             返回列表
-          </button>
+          </el-button>
         </div>
       </div>
 
-      <form class="daily-form" @submit.prevent="saveDraft">
+      <el-form class="daily-form" :model="form" @submit.prevent="saveDraft">
         <!-- 筛选栏 -->
         <div class="daily-filters">
           <div class="filter-group">
             <span class="filter-label">报告日期</span>
             <div class="input-wrapper">
-              <input v-model="form.reportDate" type="date" required />
+              <el-date-picker v-model="form.reportDate" type="date" value-format="YYYY-MM-DD" placeholder="选择报告日期" />
             </div>
           </div>
 
@@ -67,26 +50,15 @@
                   <circle cx="11" cy="11" r="8" />
                   <line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
-                <input
+                <el-input
                   ref="projectInput"
                   v-model="projectKeyword"
-                  type="search"
+                  clearable
                   placeholder="搜索并选择项目"
                   @input="onInputSearch"
+                  @clear="clearProjectSelection"
                   @focus="openDropdown"
                 />
-                <button
-                  v-if="projectKeyword"
-                  type="button"
-                  class="clear-search-btn"
-                  @mousedown.prevent="clearProjectSelection"
-                  aria-label="清空选择"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
               </div>
 
               <div v-show="showDropdown" class="project-dropdown">
@@ -111,13 +83,7 @@
         <section class="daily-section">
           <div class="daily-section__heading">
             <h3>今日完成情况</h3>
-            <button type="button" class="ghost-button" @click="addItem">
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              新增行
-            </button>
+            <el-button @click="addItem">新增行</el-button>
           </div>
 
           <div v-if="form.projectId && form.reportDate" class="daily-plan-suggestion">
@@ -148,71 +114,62 @@
               </div>
               <div v-for="(item, index) in form.items" :key="item.localId" class="daily-edit-table__row">
                 <!-- 任务来源 -->
-                <select
+                <el-select
                   v-model="item.sourceType"
-                  class="form-control"
                   :class="{ invalid: itemErrors[item.localId]?.sourceType }"
+                  placeholder="请选择来源"
                   @change="onItemSourceTypeChange(item)"
                 >
-                  <option value="">请选择来源</option>
-                  <option value="weekly_plan">周计划</option>
-                  <option value="ad_hoc">新增</option>
-                </select>
+                  <el-option label="周计划" value="weekly_plan" />
+                  <el-option label="新增" value="ad_hoc" />
+                </el-select>
                 <!-- 关联周计划 -->
-                <select
+                <el-select
                   v-model="item.sourcePlanTaskKey"
-                  class="form-control"
                   :disabled="item.sourceType !== 'weekly_plan'"
                   :class="{ invalid: itemErrors[item.localId]?.sourcePlanTaskKey }"
+                  placeholder="请选择计划"
                   @change="applySelectedPlanToItem(item)"
                 >
-                  <option value="">请选择计划</option>
-                  <option v-for="plan in planSuggestion.items" :key="plan.taskKey" :value="plan.taskKey">
-                    {{ plan.plannedDate }}｜{{ plan.workTarget }}
-                  </option>
-                </select>
+                  <el-option v-for="plan in planSuggestion.items" :key="plan.taskKey" :label="`${plan.plannedDate}｜${plan.workTarget}`" :value="plan.taskKey" />
+                </el-select>
                 <!-- 工作内容 -->
-                <textarea
+                <el-input
                   v-model="item.workContent"
-                  required
-                  class="form-control form-textarea"
+                  type="textarea"
                   :class="{ invalid: itemErrors[item.localId]?.workContent }"
                 />
                 <!-- 执行状态 -->
-                <select
+                <el-select
                   v-model="item.executionStatus"
-                  class="form-control"
                   :class="{ invalid: itemErrors[item.localId]?.executionStatus }"
+                  placeholder="请选择状态"
                   @change="onExecutionStatusChange(item)"
                 >
-                  <option value="">请选择状态</option>
-                  <option value="completed">已完成</option>
-                  <option value="in_progress">进行中</option>
-                  <option value="not_completed">未完成</option>
-                </select>
+                  <el-option label="已完成" value="completed" />
+                  <el-option label="进行中" value="in_progress" />
+                  <el-option label="未完成" value="not_completed" />
+                </el-select>
                 <!-- 完成进度 -->
-                <input
+                <el-input
                   v-model="item.completionProgress"
-                  required
                   placeholder="如 100%"
-                  class="form-control"
                   :class="{ invalid: itemErrors[item.localId]?.completionProgress }"
                 />
                 <!-- 完成时间 -->
-                <input
+                <el-time-picker
                   v-model="item.completedAt"
-                  type="time"
-                  class="form-control"
+                  value-format="HH:mm"
+                  format="HH:mm"
+                  placeholder="完成时间"
                   :class="{ invalid: itemErrors[item.localId]?.completedAt }"
                 />
                 <!-- 负责人 -->
-                <input v-model="item.responsiblePerson" class="form-control" />
+                <el-input v-model="item.responsiblePerson" />
                 <!-- 偏差与纠偏 -->
-                <textarea v-model="item.deviationAndCorrectiveAction" class="form-control form-textarea" />
+                <el-input v-model="item.deviationAndCorrectiveAction" type="textarea" />
                 <!-- 操作 -->
-                <button type="button" class="row-btn action-btn" :disabled="form.items.length === 1" @click="removeItem(index)">
-                  删除
-                </button>
+                <el-button link type="danger" :disabled="form.items.length === 1" @click="removeItem(index)">删除</el-button>
               </div>
             </div>
           </div>
@@ -222,24 +179,9 @@
         <section class="daily-section daily-attachments" @paste="handlePaste">
           <div class="daily-section__heading">
             <h3>进展照片</h3>
-            <label
-              class="ghost-button daily-upload-button"
-              :class="{ disabled: uploading || saving }"
-              :title="(uploading || saving) ? '上传中，请稍候' : '点击上传照片'"
-            >
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-              {{ uploading ? '上传中...' : '上传照片' }}
-              <input
-                type="file"
-                accept="image/*"
-                :disabled="uploading || saving"
-                @change="uploadAttachment"
-              />
-            </label>
+            <el-upload :show-file-list="false" accept="image/*" :disabled="uploading || saving" :http-request="uploadAttachment">
+              <el-button :loading="uploading" :disabled="saving">上传照片</el-button>
+            </el-upload>
           </div>
 
           <div v-if="savedReport">
@@ -263,8 +205,8 @@
                   <span class="attachment-name">{{ attachment.originalFileName }}</span>
                 </div>
                 <div class="attachment-actions">
-                  <button type="button" class="row-btn action-btn" @click="downloadAttachment(attachment)">下载</button>
-                  <button type="button" class="row-btn action-btn action-btn--danger" @click="removeAttachment(attachment)">删除</button>
+                  <el-button link type="primary" @click="downloadAttachment(attachment)">下载</el-button>
+                  <el-button link type="danger" @click="removeAttachment(attachment)">删除</el-button>
                 </div>
               </li>
             </ul>
@@ -277,13 +219,7 @@
         <section class="daily-section">
           <div class="daily-section__heading">
             <h3>明日工作计划</h3>
-            <button type="button" class="ghost-button" @click="addPlan">
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              新增行
-            </button>
+            <el-button @click="addPlan">新增行</el-button>
           </div>
 
           <div class="table-container">
@@ -297,46 +233,27 @@
                 <span class="text-right">操作</span>
               </div>
               <div v-for="(plan, index) in form.plans" :key="plan.localId" class="daily-edit-table__row">
-                <textarea v-model="plan.plannedWorkContent" class="form-control form-textarea" />
-                <input v-model="plan.responsiblePerson" class="form-control" />
-                <input v-model="plan.plannedCompleteAt" type="time" class="form-control" />
-                <input v-model="plan.collaboratingCenter" class="form-control" />
-                <textarea v-model="plan.collaborationItem" class="form-control form-textarea" />
-                <button type="button" class="row-btn action-btn" :disabled="form.plans.length === 1" @click="removePlan(index)">
-                  删除
-                </button>
+                <el-input v-model="plan.plannedWorkContent" type="textarea" />
+                <el-input v-model="plan.responsiblePerson" />
+                <el-time-picker v-model="plan.plannedCompleteAt" value-format="HH:mm" format="HH:mm" placeholder="完成时间" />
+                <el-input v-model="plan.collaboratingCenter" />
+                <el-input v-model="plan.collaborationItem" type="textarea" />
+                <el-button link type="danger" :disabled="form.plans.length === 1" @click="removePlan(index)">删除</el-button>
               </div>
             </div>
           </div>
         </section>
 
         <!-- 消息提示 -->
-        <section v-if="message" class="state-panel state-panel--success state-panel--compact">
-          <p>{{ message }}</p>
-        </section>
-        <section v-if="errorMessage" class="state-panel state-panel--error state-panel--compact">
-          <p>{{ errorMessage }}</p>
-        </section>
+        <el-alert v-if="message" :description="message" type="success" show-icon :closable="false" />
+        <el-alert v-if="errorMessage" :description="errorMessage" type="error" show-icon :closable="false" />
 
         <!-- 底部操作按钮 -->
         <div class="form-actions">
-          <button type="button" class="ghost-button" :disabled="saving" @click="saveDraft">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-              <polyline points="17 21 17 13 7 13 7 21" />
-              <polyline points="7 3 7 8 15 8" />
-            </svg>
-            {{ isSavedSubmitted ? '保存修改' : '暂存草稿' }}
-          </button>
-          <button v-if="!isSavedSubmitted" type="button" class="primary-button" :disabled="saving" @click="submitReport">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-              <polyline points="22 4 12 14.01 9 11.01" />
-            </svg>
-            正式提交
-          </button>
+          <el-button :loading="saving" @click="saveDraft">{{ isSavedSubmitted ? '保存修改' : '暂存草稿' }}</el-button>
+          <el-button v-if="!isSavedSubmitted" type="primary" :loading="saving" @click="submitReport">正式提交</el-button>
         </div>
-      </form>
+      </el-form>
     </section>
   </section>
 </template>
@@ -965,10 +882,8 @@ async function submitReport() {
   await saveReport(ReportStatus.SUBMITTED);
 }
 
-// 文件上传（来自 input）
-async function uploadAttachment(event) {
-  const file = event.target.files?.[0];
-  event.target.value = '';
+// el-upload 只负责选择文件，实际上传继续复用现有鉴权 API。
+async function uploadAttachment({ file }) {
   if (!file) return;
   await uploadFile(file);
 }
@@ -1158,76 +1073,6 @@ onBeforeUnmount(() => {
   height: 32px;
   stroke: #f56c6c;
   margin-bottom: 0.75rem;
-}
-
-/* ===== 按钮基础 ===== */
-.ghost-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  background: #ffffff;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  color: #606266;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  height: 36px;
-  white-space: nowrap;
-}
-.ghost-button:hover:not(:disabled) {
-  border-color: #c6e2ff;
-  background: #ecf5ff;
-  color: #3e63dd;
-}
-.ghost-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.ghost-button.active {
-  border-color: #3e63dd;
-  background: #ecf5ff;
-  color: #3e63dd;
-}
-.ghost-button.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-.btn-icon {
-  width: 16px;
-  height: 16px;
-  stroke: currentColor;
-  flex-shrink: 0;
-}
-
-.primary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  background: #3e63dd;
-  color: #ffffff;
-  border: none;
-  font-weight: 500;
-  padding: 0.5rem 1.25rem;
-  border-radius: 4px;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  height: 36px;
-  white-space: nowrap;
-}
-.primary-button:hover:not(:disabled) {
-  background: #5275e7;
-}
-.primary-button:disabled {
-  opacity: 0.6;
-  background: #a0cfff;
-  cursor: not-allowed;
 }
 
 /* ===== 表单筛选栏 ===== */
@@ -1480,77 +1325,24 @@ onBeforeUnmount(() => {
   background: #fdfdfe;
 }
 
-/* 表单控件（输入框 / 文本域）—— 高度 48px */
-.form-control {
+.daily-edit-table__row .el-input,
+.daily-edit-table__row .el-select,
+.daily-edit-table__row .el-date-editor {
   width: 100%;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.9rem;
-  color: #303133;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  background: #ffffff;
-  transition: border-color 0.2s ease;
-  outline: none;
-  font-family: inherit;
-  height: 48px;
-  box-sizing: border-box;
-  line-height: 1.4;
 }
-.form-control:focus {
-  border-color: #3e63dd;
+.daily-filters .el-date-editor,
+.daily-project-select .el-input {
+  width: 100%;
 }
 
-/* 文本域特殊处理 */
-.form-textarea {
-  height: 48px;
+.daily-edit-table__row :deep(.el-input__wrapper),
+.daily-edit-table__row :deep(.el-textarea__inner) {
   min-height: 48px;
-  resize: vertical;
-  overflow-y: auto;
-  line-height: 1.5;
-  padding-top: 0.5rem;
-  padding-bottom: 0.5rem;
 }
 
-/* 错误高亮 */
-.form-control.invalid {
-  border-color: #f56c6c;
-  background-color: #fef0f0;
-}
-.form-control.invalid:focus {
-  border-color: #f56c6c;
-  box-shadow: 0 0 0 2px rgba(245, 108, 108, 0.2);
-}
-
-.daily-edit-table__row .row-btn {
-  margin-top: 0.15rem;
-}
-
-/* 行内操作按钮 */
-.row-btn {
-  padding: 0.2rem 0.6rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  background: #ffffff;
-  border: 1px solid #dcdfe6;
-  color: #606266;
-  white-space: nowrap;
-}
-.row-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.action-btn:hover:not(:disabled) {
-  border-color: #a4b3ff;
-  color: #3e63dd;
-  background: #f0f3ff;
-}
-.action-btn--danger:hover:not(:disabled) {
-  border-color: #fbc4c4;
-  color: #f56c6c;
-  background: #fef0f0;
+.daily-edit-table__row .invalid :deep(.el-input__wrapper),
+.daily-edit-table__row .invalid :deep(.el-textarea__inner) {
+  box-shadow: 0 0 0 1px var(--app-color-danger) inset;
 }
 
 /* ===== 附件区域 ===== */
@@ -1690,7 +1482,7 @@ onBeforeUnmount(() => {
     border-radius: 4px;
     margin-bottom: 0.5rem;
   }
-  .daily-edit-table__row .row-btn {
+  .daily-edit-table__row .el-button {
     align-self: flex-start;
   }
   .panel-toolbar {

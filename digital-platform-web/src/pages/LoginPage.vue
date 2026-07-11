@@ -1,6 +1,6 @@
 <template>
   <main class="login-page">
-    <form class="login-panel" @submit.prevent="submitLogin">
+    <el-form class="login-panel" @submit.prevent="submitLogin">
       <div class="brand-header">
         <span class="section-eyebrow">数字化管理平台</span>
         <h1>欢迎登录</h1>
@@ -15,7 +15,7 @@
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
               <circle cx="12" cy="7" r="4" />
             </svg>
-            <input v-model.trim="account" type="text" autocomplete="username" placeholder="请输入账号" />
+            <el-input v-model.trim="account" autocomplete="username" placeholder="请输入账号" />
           </div>
         </label>
       </div>
@@ -28,49 +28,24 @@
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
-            <input v-model="password" type="password" autocomplete="current-password" placeholder="请输入密码" />
+            <el-input v-model="password" type="password" show-password autocomplete="current-password" placeholder="请输入密码" />
           </div>
         </label>
       </div>
 
-      <button type="submit" class="primary-button" :disabled="submitting">
-        <span v-if="submitting" class="spinner"></span>
-        {{ submitting ? '正在登录...' : '登 录' }}
-      </button>
+      <el-button type="primary" native-type="submit" :loading="submitting">登 录</el-button>
 
       <div class="footer-note">
         <span>© 2026 数字化管理平台</span>
       </div>
-    </form>
+    </el-form>
 
-    <!-- 统一样式的 Toast 消息弹出层 -->
-    <Transition name="toast">
-      <div v-if="toastVisible" class="toast" :class="{ 'toast--error': toastType === 'error', 'toast--success': toastType === 'success' }">
-        <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <template v-if="toastType === 'error'">
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="8" x2="12" y2="12" />
-            <line x1="12" y1="16" x2="12.01" y2="16" />
-          </template>
-          <template v-else>
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-            <polyline points="22 4 12 14.01 9 11.01" />
-          </template>
-        </svg>
-        <span>{{ toastMessage }}</span>
-        <button type="button" class="toast-close" @click="hideToast">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-      </div>
-    </Transition>
   </main>
 </template>
 
 <script setup>
-import { ref, watch, onUnmounted } from 'vue';
+import { ref, watch } from 'vue';
+import { ElMessage } from 'element-plus';
 import { login } from '../api/auth.js';
 import { toReadableApiError } from '../api/http.js';
 
@@ -88,48 +63,21 @@ const password = ref('');
 const message = ref(props.initialMessage);
 const submitting = ref(false);
 
-const toastVisible = ref(false);
-const toastMessage = ref('');
-const toastType = ref('error');
-let toastTimer = null;
-
 watch(
   () => props.initialMessage,
   (value) => {
     message.value = value;
     if (value) {
-      showToast(value, 'error');
+      ElMessage.error(value);
     }
   }
 );
-
-function showToast(msg, type = 'error') {
-  if (toastTimer) {
-    clearTimeout(toastTimer);
-    toastTimer = null;
-  }
-  toastMessage.value = msg;
-  toastType.value = type;
-  toastVisible.value = true;
-  toastTimer = setTimeout(() => {
-    toastVisible.value = false;
-    toastTimer = null;
-  }, 3000);
-}
-
-function hideToast() {
-  if (toastTimer) {
-    clearTimeout(toastTimer);
-    toastTimer = null;
-  }
-  toastVisible.value = false;
-}
 
 async function submitLogin() {
   message.value = '';
 
   if (!account.value || !password.value) {
-    showToast('请输入账号和密码。', 'error');
+    ElMessage.error('请输入账号和密码。');
     return;
   }
 
@@ -140,15 +88,12 @@ async function submitLogin() {
     emit('logged-in', result);
   } catch (error) {
     const errorMsg = toReadableApiError(error);
-    showToast(errorMsg, 'error');
+    ElMessage.error(errorMsg);
   } finally {
     submitting.value = false;
   }
 }
 
-onUnmounted(() => {
-  if (toastTimer) clearTimeout(toastTimer);
-});
 </script>
 
 <style scoped>
@@ -306,58 +251,21 @@ onUnmounted(() => {
   font-size: 0.9rem;
 }
 
-/* 按钮主色改为品牌蓝 */
-.primary-button {
-  width: 100%;
-  padding: 0.7rem 0;
-  margin-top: 0.5rem;
-  background: #3e63dd;
-  color: white;
-  font-size: 0.95rem;
-  font-weight: 500;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
-  box-shadow: 0 1px 3px rgba(62, 99, 221, 0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.6rem;
-  letter-spacing: 0.3px;
-  height: 44px;
+.input-wrapper .el-input {
+  flex: 1;
 }
 
-.primary-button:hover:not(:disabled) {
-  background: #5275e7;
-  box-shadow: 0 4px 12px rgba(62, 99, 221, 0.25);
-  transform: translateY(-1px);
-}
-
-.primary-button:active:not(:disabled) {
-  transform: scale(0.98);
-}
-
-.primary-button:disabled {
-  background: #a0cfff;
-  opacity: 1;
-  cursor: not-allowed;
+.input-wrapper :deep(.el-input__wrapper) {
+  min-height: 42px;
+  border-radius: 0 10px 10px 0;
   box-shadow: none;
-  transform: none;
 }
 
-.spinner {
-  display: inline-block;
-  width: 18px;
-  height: 18px;
-  border: 2.5px solid rgba(255, 255, 255, 0.25);
-  border-top: 2.5px solid white;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.login-panel > .el-button {
+  width: 100%;
+  height: 44px;
+  margin-top: 0.5rem;
+  border-radius: 10px;
 }
 
 .footer-note {
@@ -367,100 +275,6 @@ onUnmounted(() => {
   color: #94a3b8;
   letter-spacing: 0.3px;
   font-weight: 400;
-}
-
-/* 统一 Toast 弹窗基础样式 */
-.toast {
-  position: fixed;
-  top: 2rem;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.7rem 1rem 0.7rem 1.2rem;
-  border-radius: 10px;
-  background: #ffffff;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #0f172a;
-  z-index: 1000;
-  border: 1px solid #f1f5f9;
-  max-width: 90%;
-}
-
-.toast--error {
-  border-left: 4px solid #ef4444;
-}
-
-.toast--error .toast-icon {
-  stroke: #dc2626;
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-}
-
-.toast--success {
-  border-left: 4px solid #22c55e;
-}
-
-.toast--success .toast-icon {
-  stroke: #16a34a;
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-}
-
-.toast-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  padding: 0;
-  margin-left: 0.5rem;
-  flex-shrink: 0;
-  border-radius: 50%;
-  transition: background 0.2s;
-  color: #94a3b8;
-}
-
-.toast-close:hover {
-  background: #f1f5f9;
-}
-
-.toast-close svg {
-  width: 14px;
-  height: 14px;
-}
-
-.toast-enter-active,
-.toast-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.toast-enter-from {
-  opacity: 0;
-  transform: translateX(-50%) translateY(-20px) scale(0.95);
-}
-
-.toast-enter-to {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0) scale(1);
-}
-
-.toast-leave-from {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0) scale(1);
-}
-
-.toast-leave-to {
-  opacity: 0;
-  transform: translateX(-50%) translateY(-20px) scale(0.95);
 }
 
 @media (max-width: 480px) {
@@ -477,21 +291,5 @@ onUnmounted(() => {
     font-size: 0.9rem;
   }
 
-  .toast {
-    top: 1rem;
-    padding: 0.6rem 0.8rem 0.6rem 1rem;
-    font-size: 0.8rem;
-    max-width: 92%;
-  }
-
-  .toast-close {
-    width: 20px;
-    height: 20px;
-  }
-
-  .toast-close svg {
-    width: 12px;
-    height: 12px;
-  }
 }
 </style>

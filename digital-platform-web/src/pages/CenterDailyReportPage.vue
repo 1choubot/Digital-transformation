@@ -1,15 +1,7 @@
 <template>
   <section class="page-stack center-daily-report-page animate-fadeIn">
     <!-- 无权限警告 -->
-    <section v-if="!canUseCenterDailyReport" class="state-panel state-panel--error panel">
-      <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10" />
-        <line x1="12" y1="8" x2="12" y2="12" />
-        <line x1="12" y1="16" x2="12.01" y2="16" />
-      </svg>
-      <h3>无权访问中心日报</h3>
-      <p>当前账号不能查看中心日报。</p>
-    </section>
+    <el-alert v-if="!canUseCenterDailyReport" title="无权访问中心日报" description="当前账号不能查看中心日报。" type="error" show-icon :closable="false" />
 
     <template v-else>
       <!-- 筛选面板（含导出按钮） -->
@@ -20,56 +12,42 @@
             <div class="filter-group">
               <span class="filter-label">报告日期</span>
               <div class="input-wrapper">
-                <input v-model="filters.date" type="date" />
+                <el-date-picker v-model="filters.date" type="date" value-format="YYYY-MM-DD" placeholder="选择报告日期" />
               </div>
             </div>
             <!-- 中心 -->
             <div class="filter-group">
               <span class="filter-label">中心</span>
               <div class="input-wrapper">
-                <select v-model="filters.department" :disabled="isCenterManager">
-                  <option v-for="department in departments" :key="department" :value="department">
-                    {{ formatBusinessDepartment(department) }}
-                  </option>
-                </select>
+                <el-select v-model="filters.department" :disabled="isCenterManager">
+                  <el-option v-for="department in departments" :key="department" :label="formatBusinessDepartment(department)" :value="department" />
+                </el-select>
               </div>
             </div>
             <!-- 查询按钮（紧挨着中心） -->
             <div class="filter-query">
-              <button type="button" class="primary-button" :disabled="loading" @click="loadReport">
-                查询
-              </button>
+              <el-button type="primary" :loading="loading" @click="loadReport">查询</el-button>
             </div>
             <!-- 导出按钮（靠右） -->
             <div class="filter-export">
-              <button
-                type="button"
-                class="primary-button"
-                :disabled="loading || exporting"
+              <el-button
+                type="primary"
+                :loading="exporting"
+                :disabled="loading"
                 @click="handleExport"
               >
-                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-                {{ exporting ? '正在导出...' : '导出中心日报' }}
-              </button>
+                导出中心日报
+              </el-button>
             </div>
           </div>
         </div>
       </section>
 
       <!-- 错误信息 -->
-      <section v-if="errorMessage" class="state-panel state-panel--error panel state-panel--compact">
-        <p>{{ errorMessage }}</p>
-      </section>
+      <el-alert v-if="errorMessage" title="中心日报加载失败" :description="errorMessage" type="error" show-icon :closable="false" />
 
       <!-- 加载状态 -->
-      <section v-if="loading" class="state-panel panel">
-        <div class="loading-spinner"></div>
-        <p>正在加载中心日报...</p>
-      </section>
+      <el-skeleton v-if="loading" :rows="8" animated />
 
       <!-- 日报内容 -->
       <section v-else-if="report" class="panel report-content-panel">
@@ -453,39 +431,6 @@ onMounted(async () => {
   padding: 1.5rem;
 }
 
-/* ===== 按钮基础 ===== */
-.primary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  background: #3e63dd;
-  color: #ffffff;
-  border: none;
-  font-weight: 500;
-  padding: 0.5rem 1.25rem;
-  border-radius: 4px;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  height: 48px;          /* 与输入框等高 */
-  white-space: nowrap;
-}
-.primary-button:hover:not(:disabled) {
-  background: #5275e7;
-}
-.primary-button:disabled {
-  opacity: 0.6;
-  background: #a0cfff;
-  cursor: not-allowed;
-}
-.btn-icon {
-  width: 16px;
-  height: 16px;
-  stroke: currentColor;
-  flex-shrink: 0;
-}
-
 /* ===== 状态面板（错误、空、加载） ===== */
 .state-panel {
   display: flex;
@@ -543,6 +488,15 @@ onMounted(async () => {
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 1.5rem;
+}
+.filter-grid .el-date-editor,
+.filter-grid .el-select {
+  width: 100%;
+}
+
+.filter-query .el-button,
+.filter-export .el-button {
+  height: 48px;
 }
 
 .filter-group {

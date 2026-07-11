@@ -1,8 +1,5 @@
-# daily-weekly-reporting Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change integrate-daily-weekly-reporting-from-legacy-branch-v1. Update Purpose after archive.
-## Requirements
 ### Requirement: 日报填报与补录
 系统 MUST 支持用户按工作日填写、保存、提交、继续编辑和查看日报，并 MUST 支持有权限用户补录日报。日报无审批流，已提交日报仍可按日报编辑规则更新。
 
@@ -109,88 +106,6 @@ TBD - created by archiving change integrate-daily-weekly-reporting-from-legacy-b
 - **THEN** 系统 MUST 使用数字化平台后端受控调度逻辑
 - **AND** 系统 MUST 允许部署环境关闭或配置该调度能力
 - **AND** 前端 MUST 为有权限用户提供计划开关和时间保存入口
-
-### Requirement: 报表前端入口
-前端 MUST 在当前主线应用壳、路由和导航内接入日报、周报、周报审批和中心日报页面。
-
-#### Scenario: 报表页面接入当前路由
-- **WHEN** 用户访问日报、周报、周报审批或中心日报页面
-- **THEN** 前端 MUST 通过当前 `router` 和应用导航进入页面
-- **AND** 前端 MUST NOT 覆盖当前项目详情、立项工作区或生成文件入口
-- **AND** 页面内部程序化跳转 MUST 同步当前 hash-router 状态
-
-#### Scenario: 报表 API 使用当前 HTTP 客户端
-- **WHEN** 报表页面调用后端 API
-- **THEN** 前端 MUST 使用当前主线 HTTP 客户端、登录态和错误处理方式
-- **AND** 前端 MUST NOT 带回旧分支中与当前登录态冲突的拦截器逻辑
-
-### Requirement: 报表能力边界
-日报/周报能力 MUST 与项目阶段资料、立项模板文件生成和文件平台集成保持边界。
-
-#### Scenario: 不改变阶段资料数量
-- **WHEN** 系统实现日报、周报或中心日报能力
-- **THEN** 系统 MUST NOT 新增或删除 v20260629 / 71 项阶段资料项
-- **AND** 系统 MUST NOT 将日报或周报伪装为立项阶段资料项
-
-#### Scenario: 不回退立项流程
-- **WHEN** 系统接入日报/周报能力
-- **THEN** 系统 MUST NOT 回退 `1.1 / 1.2 / 1.3` 在线表单、模板文件生成、项目编号后置到 `1.3` 或新版 `1.2` 审批表流程
-
-#### Scenario: 导出和 AI 能力边界
-- **WHEN** 系统接入本切片导出、AI、评分或最终评审能力
-- **THEN** 系统 MUST NOT 调用文件管理平台
-- **AND** 系统 MUST NOT 生成 PDF
-- **AND** 系统 MUST NOT 改变阶段资料清单或立项阶段流程
-- **AND** AI 预填、AI 评分和最终评审 MUST 保留后续独立增强边界
-
-### Requirement: 报表 Excel 导出
-系统 MUST 支持在当前鉴权和权限边界内导出日报、周报和中心日报 Excel 文件。
-
-#### Scenario: 日报导出
-- **WHEN** 日报填写人请求导出自己有权查看的日报
-- **THEN** 后端 MUST 生成并返回 `.xlsx` 日报文件
-- **AND** 导出 MUST 包含日报主信息、完成项、计划项和可嵌入的日报图片附件
-- **AND** 导出 MUST NOT 调用文件管理平台或生成 PDF
-
-#### Scenario: 周报导出
-- **WHEN** 周报填写人请求导出自己有权查看的周报
-- **THEN** 后端 MUST 生成并返回 `.xlsx` 周报文件
-- **AND** 导出 MUST 包含周报周期、总结、计划、提交状态和必要的评分/评审信息
-- **AND** 导出 MUST NOT 绕过当前周报读取权限
-
-#### Scenario: 中心日报导出
-- **WHEN** 有中心日报权限的用户请求导出指定中心和日期的中心日报
-- **THEN** 后端 MUST 按当前中心可见范围生成并返回 `.xlsx` 中心日报文件
-- **AND** 中心负责人 MUST 只能导出自己中心范围
-- **AND** 总经理或具备全中心权限的用户 MAY 导出被授权中心范围
-
-#### Scenario: 导出失败
-- **WHEN** 模板缺失、数据不可读或导出生成失败
-- **THEN** 后端 MUST 返回明确业务错误
-- **AND** 系统 MUST NOT 泄露本地模板绝对路径
-- **AND** 系统 MUST NOT 将可预期导出失败落成未处理 500
-
-### Requirement: 周报 AI 预填整理
-系统 MUST 支持在 AI 已配置时对周报预填内容进行 AI 整理，并 MUST 在 AI 未配置时安全降级。
-
-#### Scenario: AI 已配置时整理预填草稿
-- **WHEN** 用户基于当前周报预填 basis 请求 AI 整理
-- **THEN** 后端 MUST 校验 basis 未变化
-- **AND** 后端 MUST 仅允许 AI 改写可编辑的草稿文本字段
-- **AND** AI 输出 MUST NOT 自动保存或提交周报
-- **AND** 响应 MUST 标明 AI 来源和生成时间
-
-#### Scenario: AI 未配置时不可用
-- **WHEN** AI 开关关闭、缺少 endpoint、model 或 key
-- **THEN** 后端 MUST 通过鉴权能力接口或 AI 请求返回明确不可用状态或降级信息
-- **AND** 前端 MUST 隐藏或禁用 AI 入口并展示可理解原因
-- **AND** 能力接口 MUST NOT 泄露 AI endpoint、model 或 key
-- **AND** 普通日报、周报保存、提交和确定性预填 MUST 不受影响
-
-#### Scenario: AI basis 变化
-- **WHEN** 用户请求 AI 整理时提交的 basisHash 与后端当前 basisHash 不一致
-- **THEN** 后端 MUST 拒绝使用过期 basis
-- **AND** 响应 SHOULD 返回最新确定性预填建议供用户重新确认
 
 ### Requirement: 周报评分与最终评审
 系统 MUST 支持周报 AI/规则评分和最终人工评分/评审，并 MUST 使用后端权限和状态门禁。

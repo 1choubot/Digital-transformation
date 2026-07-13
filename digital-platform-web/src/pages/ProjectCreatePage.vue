@@ -45,10 +45,6 @@
 
       <el-alert v-if="responsibilityCandidatesErrorMessage" class="form-grid__wide" :description="responsibilityCandidatesErrorMessage" type="error" show-icon :closable="false" />
 
-      <el-alert v-if="clientError || serverError" class="form-grid__wide" :description="clientError || serverError" type="error" show-icon :closable="false" />
-
-      <el-alert v-if="successMessage" class="form-grid__wide" :description="successMessage" type="success" show-icon :closable="false" />
-
       <div class="form-actions form-grid__wide">
         <el-button @click="navigate('/projects')">取消</el-button>
         <el-button type="primary" native-type="submit" :loading="submitting" :disabled="!canCreateProject">创建项目</el-button>
@@ -59,6 +55,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
+import { ElMessage } from 'element-plus';
 import { createProject, toReadableApiError } from '../api/projects.js';
 import { listResponsibilityCandidates } from '../api/users.js';
 import PageHeader from '../components/PageHeader.vue';
@@ -94,9 +91,6 @@ const submitting = ref(false);
 const responsibilityCandidatesLoading = ref(false);
 const responsibilityCandidatesErrorMessage = ref('');
 const responsibilityCandidates = ref([]);
-const clientError = ref('');
-const serverError = ref('');
-const successMessage = ref('');
 const canCreateProject = computed(() =>
   ['general_manager', 'center_manager'].includes(props.currentUser?.organizationRole)
 );
@@ -120,11 +114,10 @@ function validateForm() {
   if (!form.technicalResponsibleUserId) missing.push('技术负责人');
 
   if (missing.length > 0) {
-    clientError.value = `请补充：${missing.join('、')}`;
+    ElMessage.error(`请补充：${missing.join('、')}`);
     return false;
   }
 
-  clientError.value = '';
   return true;
 }
 
@@ -155,17 +148,14 @@ async function loadResponsibilityCandidates() {
 }
 
 async function submitProject() {
-  serverError.value = '';
-  successMessage.value = '';
-
   if (!canCreateProject.value) {
-    serverError.value = '当前账号无权创建项目。';
+    ElMessage.error('当前账号无权创建项目。');
     return;
   }
 
   if (!props.authToken) {
-    serverError.value = '请先登录后再创建项目。';
-    emit('auth-expired', serverError.value);
+    const message = '请先登录后再创建项目。';
+    emit('auth-expired', message);
     return;
   }
 
@@ -184,13 +174,15 @@ async function submitProject() {
       },
       props.authToken
     );
-    successMessage.value = '项目创建成功。';
+    ElMessage.success('项目创建成功。');
     props.navigate(`/projects/${created.project.id}`);
   } catch (error) {
-    serverError.value =
+    const message =
       error.code === 'FORBIDDEN_OPERATION' ? '当前账号无权创建项目。' : toReadableApiError(error);
     if (error.code === 'UNAUTHENTICATED') {
-      emit('auth-expired', serverError.value);
+      emit('auth-expired', message);
+    } else {
+      ElMessage.error(message);
     }
   } finally {
     submitting.value = false;

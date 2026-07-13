@@ -51,23 +51,6 @@
             />
           </el-card>
 
-          <section
-            v-if="actionMessage"
-            class="state-panel state-panel--inline state-panel--success"
-            role="status"
-            aria-live="polite"
-          >
-            <p>{{ actionMessage }}</p>
-          </section>
-
-          <section
-            v-if="actionErrorMessage"
-            class="state-panel state-panel--inline state-panel--error"
-            role="alert"
-          >
-            <p>{{ actionErrorMessage }}</p>
-          </section>
-
         </template>
       </el-main>
     </el-container>
@@ -76,6 +59,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { ElMessage } from 'element-plus';
 import {
   approveInitiationReviewNode,
   confirmStageDocument,
@@ -201,6 +185,8 @@ const responsibilityCandidates = ref([]);
 /* ── 工作区操作消息状态 ── */
 const actionMessage = ref('');
 const actionErrorMessage = ref('');
+watch(actionMessage, (value) => { if (value) ElMessage.success(value); });
+watch(actionErrorMessage, (value) => { if (value) ElMessage.error(value); });
 const pendingAction = ref('');
 
 /* ── 文档操作临时状态 ── */

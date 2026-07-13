@@ -8,7 +8,7 @@ import {
 } from '../../stageDocuments/onlineFormImageRepository.js';
 
 export const GENERATED_XLSX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-const SOLUTION_DESIGN_TEMPLATE_DIRECTORY_NAME = '智能制造项目管理文件模板v1';
+const SOLUTION_DESIGN_TEMPLATE_DIRECTORY_NAME = '智能制造项目管理文件模板';
 
 export const SOLUTION_DESIGN_FORM_GENERATED_FILE_TYPE = 'xlsx';
 

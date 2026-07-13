@@ -35,36 +35,11 @@
     </RouterView>
   </MainLayout>
 
-  <Transition name="toast">
-    <div
-      v-if="toastVisible"
-      class="toast"
-      :class="{ 'toast--error': toastType === 'error', 'toast--success': toastType === 'success' }"
-    >
-      <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <template v-if="toastType === 'error'">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="12" y1="8" x2="12" y2="12" />
-          <line x1="12" y1="16" x2="12.01" y2="16" />
-        </template>
-        <template v-else>
-          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-          <polyline points="22 4 12 14.01 9 11.01" />
-        </template>
-      </svg>
-      <span>{{ toastMessage }}</span>
-      <button type="button" class="toast-close" @click="hideToast">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <line x1="18" y1="6" x2="6" y2="18" />
-          <line x1="6" y1="6" x2="18" y2="18" />
-        </svg>
-      </button>
-    </div>
-  </Transition>
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
+import { ElMessage } from 'element-plus';
 import { RouterView, useRoute, useRouter } from 'vue-router';
 import { getCurrentUser, logout as logoutRequest } from './api/auth.js';
 import {
@@ -85,10 +60,6 @@ const loggingOut = ref(false);
 const authToken = ref('');
 const currentUser = ref(null);
 const authMessage = ref('');
-const toastVisible = ref(false);
-const toastMessage = ref('');
-const toastType = ref('error');
-let toastTimer = null;
 
 function navigate(path) {
   router.push(path);
@@ -123,6 +94,11 @@ function pageProps(targetRoute) {
           routeQuery(targetRoute.query?.nodeKey)
       };
     case 'daily-report':
+      return {
+        ...commonProps,
+        reportId: routeParam(targetRoute.params?.reportId),
+        initialReportDate: routeQuery(targetRoute.query?.date)
+      };
     case 'weekly-report':
       return {
         ...commonProps,
@@ -142,25 +118,7 @@ function pageProps(targetRoute) {
 }
 
 function showToast(message, type = 'error') {
-  if (toastTimer) {
-    clearTimeout(toastTimer);
-  }
-
-  toastMessage.value = message;
-  toastType.value = type;
-  toastVisible.value = true;
-  toastTimer = setTimeout(() => {
-    toastVisible.value = false;
-    toastTimer = null;
-  }, 3000);
-}
-
-function hideToast() {
-  if (toastTimer) {
-    clearTimeout(toastTimer);
-    toastTimer = null;
-  }
-  toastVisible.value = false;
+  ElMessage[type]?.(message);
 }
 
 function setAuth(token, user) {
@@ -225,12 +183,6 @@ function handleAuthExpired(message) {
   clearAuth(expiredMessage);
   showToast(expiredMessage, 'error');
 }
-
-onUnmounted(() => {
-  if (toastTimer) {
-    clearTimeout(toastTimer);
-  }
-});
 
 onMounted(restoreAuth);
 </script>

@@ -64,24 +64,9 @@
             <div v-if="prefillState.message" class="weekly-prefill-banner">
               {{ prefillState.message }}
             </div>
-            <div class="table-container">
-              <div class="weekly-edit-table weekly-edit-table--summaries">
-                <!-- 表头 -->
-                <div class="weekly-edit-table__head">
-                  <span>项目名称</span>
-                  <span>工作内容</span>
-                  <span>计划日期</span>
-                  <span>完成状态</span>
-                  <span>完成说明</span>
-                  <span>完成日期</span>
-                  <span class="text-right">操作</span>
-                </div>
-                <!-- 行 -->
-                <div
-                  v-for="(summary, index) in form.summaries"
-                  :key="summary.localId"
-                  class="weekly-edit-table__row"
-                >
+            <div class="table-container report-table-scroll">
+              <el-table :data="form.summaries" row-key="localId" class="report-data-table report-data-table--weekly-summaries">
+                <el-table-column label="项目名称" min-width="220"><template #default="{ row: summary, $index: index }">
                   <!-- 任务信息（含来源标签 + 项目选择） -->
                   <div class="form-field task-field">
                     <div class="source-chip-row">
@@ -105,8 +90,9 @@
                       {{ fieldErrors[`summaries.${index}.workTask`] }}
                     </small>
                   </div>
+                </template></el-table-column>
 
-                  <!-- 工作目标 -->
+                <el-table-column label="工作内容" min-width="200"><template #default="{ row: summary, $index: index }">
                   <div class="form-field">
                     <el-input
                       v-model="summary.workTarget"
@@ -118,8 +104,9 @@
                       {{ fieldErrors[`summaries.${index}.workTarget`] }}
                     </small>
                   </div>
+                </template></el-table-column>
 
-                  <!-- 计划日期 -->
+                <el-table-column label="计划日期" min-width="150"><template #default="{ row: summary, $index: index }">
                   <div class="form-field">
                     <el-date-picker
                       v-model="summary.plannedDate"
@@ -132,8 +119,9 @@
                       {{ fieldErrors[`summaries.${index}.plannedDate`] }}
                     </small>
                   </div>
+                </template></el-table-column>
 
-                  <!-- 完成状态 -->
+                <el-table-column label="完成状态" min-width="150"><template #default="{ row: summary, $index: index }">
                   <div class="form-field">
                     <el-select
                       v-model="summary.completionStatus"
@@ -147,8 +135,9 @@
                       {{ fieldErrors[`summaries.${index}.completionStatus`] }}
                     </small>
                   </div>
+                </template></el-table-column>
 
-                  <!-- 完成说明 -->
+                <el-table-column label="完成说明" min-width="200"><template #default="{ row: summary, $index: index }">
                   <div class="form-field">
                     <el-input
                       v-model="summary.completionDescription"
@@ -160,8 +149,9 @@
                       {{ fieldErrors[`summaries.${index}.completionDescription`] }}
                     </small>
                   </div>
+                </template></el-table-column>
 
-                  <!-- 完成日期 -->
+                <el-table-column label="完成日期" min-width="160"><template #default="{ row: summary, $index: index }">
                   <div class="form-field">
                     <el-date-picker
                       v-model="summary.completedDate"
@@ -178,8 +168,9 @@
                       {{ fieldErrors[`summaries.${index}.completedDate`] }}
                     </small>
                   </div>
+                </template></el-table-column>
 
-                  <!-- 操作 -->
+                <el-table-column label="操作" width="110" fixed="right" align="center"><template #default="{ row: summary, $index: index }">
                   <div class="row-actions">
                     <el-button
                       link
@@ -198,8 +189,8 @@
                       补日报
                     </el-button>
                   </div>
-                </div>
-              </div>
+                </template></el-table-column>
+              </el-table>
             </div>
           </section>
 
@@ -209,20 +200,9 @@
               <h3>下周工作计划</h3>
               <el-button :disabled="!canEditReport" @click="addPlan">新增行</el-button>
             </div>
-            <div class="table-container">
-              <div class="weekly-edit-table weekly-edit-table--plans">
-                <div class="weekly-edit-table__head">
-                  <span>项目名称</span>
-                  <span>工作目标</span>
-                  <span>计划日期</span>
-                  <span>责任人</span>
-                  <span class="text-right">操作</span>
-                </div>
-                <div
-                  v-for="(plan, index) in form.plans"
-                  :key="plan.localId"
-                  class="weekly-edit-table__row"
-                >
+            <div class="table-container report-table-scroll">
+              <el-table :data="form.plans" row-key="localId" class="report-data-table report-data-table--weekly-plans">
+                <el-table-column label="项目名称" min-width="230"><template #default="{ row: plan, $index: index }">
                   <div class="form-field">
                     <el-select
                       v-model="plan.projectId"
@@ -237,6 +217,8 @@
                       {{ fieldErrors[`plans.${index}.workTask`] }}
                     </small>
                   </div>
+                </template></el-table-column>
+                <el-table-column label="工作目标" min-width="230"><template #default="{ row: plan, $index: index }">
                   <div class="form-field">
                     <el-input
                       v-model="plan.workTarget"
@@ -248,6 +230,8 @@
                       {{ fieldErrors[`plans.${index}.workTarget`] }}
                     </small>
                   </div>
+                </template></el-table-column>
+                <el-table-column label="计划日期" min-width="170"><template #default="{ row: plan, $index: index }">
                   <div class="form-field">
                     <el-date-picker
                       v-model="plan.plannedDate"
@@ -260,12 +244,16 @@
                       {{ fieldErrors[`plans.${index}.plannedDate`] }}
                     </small>
                   </div>
+                </template></el-table-column>
+                <el-table-column label="责任人" min-width="180"><template #default="{ row: plan }">
                   <div class="form-field">
                     <el-input
                       v-model="plan.responsiblePerson"
                       placeholder="责任人"
                     />
                   </div>
+                </template></el-table-column>
+                <el-table-column label="操作" width="90" fixed="right" align="center"><template #default="{ $index: index }">
                   <el-button
                     link
                     type="danger"
@@ -274,14 +262,10 @@
                   >
                     删除
                   </el-button>
-                </div>
-              </div>
+                </template></el-table-column>
+              </el-table>
             </div>
           </section>
-
-          <!-- 消息提示 -->
-          <el-alert v-if="message" :description="message" type="success" show-icon :closable="false" />
-          <el-alert v-if="errorMessage" :description="errorMessage" type="error" show-icon :closable="false" />
 
           <!-- 底部操作按钮 -->
           <div class="form-actions">
@@ -296,7 +280,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { ElMessageBox } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { OrganizationRole, ReportStatus, WeeklyApprovalStatus } from '../constants/reports.js';
 import {
   createWeeklyReport,
@@ -339,6 +323,8 @@ const exporting = ref(false);
 const aiComposing = ref(false);
 const message = ref('');
 const errorMessage = ref('');
+watch(message, (value) => { if (value) ElMessage.success(value); });
+watch(errorMessage, (value) => { if (value) ElMessage.error(value); });
 const fieldErrors = reactive({});
 const projectOptions = ref([]);
 const prefillState = reactive({

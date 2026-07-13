@@ -1,6 +1,6 @@
 <template>
     <SolutionDesignNodeLayout :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
-        :error-message="context.solutionDesignErrorMessage" :message="localMessage" :local-error="localError">
+        :error-message="context.solutionDesignErrorMessage">
         <SolutionUploadSlots :slots="slots" :is-pending="isPending" @upload="handleUpload" @download="downloadUpload" />
         <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending"
             :return-reason="returnReasons[nodeKey] || ''" @update:return-reason="returnReasons[nodeKey] = $event"

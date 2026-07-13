@@ -74,21 +74,9 @@
             <span class="toolbar-subtitle">只读</span>
           </div>
         </div>
-        <div class="table-container">
-          <div class="weekly-readonly-table weekly-readonly-table--summaries">
-            <div class="weekly-readonly-table__head">
-              <span>项目</span>
-              <span>工作目标</span>
-              <span>计划日期</span>
-              <span>完成状态</span>
-              <span>完成说明</span>
-              <span>完成日期</span>
-            </div>
-            <div
-              v-for="summary in report.summaries"
-              :key="summary.id || summary.sortOrder"
-              class="weekly-readonly-table__row"
-            >
+        <div class="table-container report-table-scroll">
+          <el-table :data="report.summaries" :row-key="row => row.id || row.sortOrder" class="report-data-table report-data-table--review-summaries">
+            <el-table-column label="项目" min-width="220"><template #default="{ row: summary }">
               <div class="summary-project-cell">
                 <div class="source-chip-row source-chip-row--readonly">
                   <span class="source-chip" :class="sourceChipClass(summary)">
@@ -97,15 +85,17 @@
                 </div>
                 <strong>{{ summaryProjectLabel(summary) }}</strong>
               </div>
-              <span>{{ summary.workTarget }}</span>
-              <span>{{ summary.plannedDate }}</span>
+            </template></el-table-column>
+            <el-table-column prop="workTarget" label="工作目标" min-width="180" />
+            <el-table-column prop="plannedDate" label="计划日期" min-width="130" />
+            <el-table-column label="完成状态" min-width="130"><template #default="{ row: summary }">
               <span class="completion-status" :class="completionStatusClass(summary.completionStatus)">
                 {{ completionStatusLabel(summary.completionStatus) }}
               </span>
-              <span>{{ summary.completionDescription }}</span>
-              <span>{{ summary.completedDate || '-' }}</span>
-            </div>
-          </div>
+            </template></el-table-column>
+            <el-table-column prop="completionDescription" label="完成说明" min-width="200" />
+            <el-table-column label="完成日期" min-width="130"><template #default="{ row }">{{ row.completedDate || '-' }}</template></el-table-column>
+          </el-table>
         </div>
       </section>
 
@@ -117,25 +107,13 @@
             <span class="toolbar-subtitle">只读</span>
           </div>
         </div>
-        <div class="table-container">
-          <div class="weekly-readonly-table weekly-readonly-table--plans">
-            <div class="weekly-readonly-table__head">
-              <span>工作任务</span>
-              <span>工作目标</span>
-              <span>计划日期</span>
-              <span>责任人</span>
-            </div>
-            <div
-              v-for="plan in report.plans"
-              :key="plan.id || plan.sortOrder"
-              class="weekly-readonly-table__row"
-            >
-              <strong>{{ plan.workTask }}</strong>
-              <span>{{ plan.workTarget }}</span>
-              <span>{{ plan.plannedDate }}</span>
-              <span>{{ plan.responsiblePerson || '-' }}</span>
-            </div>
-          </div>
+        <div class="table-container report-table-scroll">
+          <el-table :data="report.plans" :row-key="row => row.id || row.sortOrder" class="report-data-table report-data-table--review-plans">
+            <el-table-column label="工作任务" min-width="260"><template #default="{ row }"><strong>{{ row.workTask }}</strong></template></el-table-column>
+            <el-table-column prop="workTarget" label="工作目标" min-width="240" />
+            <el-table-column prop="plannedDate" label="计划日期" min-width="160" />
+            <el-table-column label="责任人" min-width="180"><template #default="{ row }">{{ row.responsiblePerson || '-' }}</template></el-table-column>
+          </el-table>
         </div>
       </section>
 
@@ -155,39 +133,23 @@
 
         <el-skeleton v-if="comparisonLoading" :rows="5" animated />
 
-        <div v-else class="table-container">
-          <div class="weekly-comparison-table">
-            <div class="weekly-comparison-table__head">
-              <span>日期</span>
-              <span>星期</span>
-              <span>周报任务</span>
-              <span>周报总结</span>
-              <span>日报项目</span>
-              <span>日报实际工作</span>
-              <span>进度</span>
-              <span>日报日期</span>
-              <span>周报完成</span>
-              <span>匹配</span>
-            </div>
-            <div
-              v-for="row in comparisonRows"
-              :key="comparisonRowKey(row)"
-              class="weekly-comparison-table__row"
-            >
-              <span>{{ row.date || '-' }}</span>
-              <span>{{ row.weekday || '-' }}</span>
-              <span>{{ row.weeklyTask || '-' }}</span>
-              <span>{{ row.weeklySummaryText || '-' }}</span>
-              <span>{{ row.dailyProjectLabel || row.dailyProjectName || '-' }}</span>
-              <span>{{ row.dailyWorkContent || '-' }}</span>
-              <span>{{ row.dailyCompletionProgress || '-' }}</span>
-              <span>{{ row.dailyCompletedAt || '-' }}</span>
-              <span>{{ row.weeklyCompletedDate || '-' }}</span>
+        <div v-else class="table-container report-table-scroll">
+          <el-table :data="comparisonRows" :row-key="comparisonRowKey" class="report-data-table report-data-table--comparison">
+            <el-table-column label="日期" min-width="120"><template #default="{ row }">{{ row.date || '-' }}</template></el-table-column>
+            <el-table-column label="星期" min-width="90"><template #default="{ row }">{{ row.weekday || '-' }}</template></el-table-column>
+            <el-table-column label="周报任务" min-width="180"><template #default="{ row }">{{ row.weeklyTask || '-' }}</template></el-table-column>
+            <el-table-column label="周报总结" min-width="200"><template #default="{ row }">{{ row.weeklySummaryText || '-' }}</template></el-table-column>
+            <el-table-column label="日报项目" min-width="180"><template #default="{ row }">{{ row.dailyProjectLabel || row.dailyProjectName || '-' }}</template></el-table-column>
+            <el-table-column label="日报实际工作" min-width="220"><template #default="{ row }">{{ row.dailyWorkContent || '-' }}</template></el-table-column>
+            <el-table-column label="进度" min-width="100"><template #default="{ row }">{{ row.dailyCompletionProgress || '-' }}</template></el-table-column>
+            <el-table-column label="日报日期" min-width="120"><template #default="{ row }">{{ row.dailyCompletedAt || '-' }}</template></el-table-column>
+            <el-table-column label="周报完成" min-width="120"><template #default="{ row }">{{ row.weeklyCompletedDate || '-' }}</template></el-table-column>
+            <el-table-column label="匹配" min-width="100" fixed="right"><template #default="{ row }">
               <span class="match-status" :class="matchStatusClass(row.matchStatus)">
                 {{ matchStatusLabel(row.matchStatus) }}
               </span>
-            </div>
-          </div>
+            </template></el-table-column>
+          </el-table>
         </div>
       </section>
 
@@ -300,8 +262,6 @@
             show-icon
             :closable="false"
           />
-          <el-alert v-if="approvalMessage" :title="approvalMessage" type="success" show-icon :closable="false" />
-          <el-alert v-if="approvalError" :title="approvalError" type="error" show-icon :closable="false" />
         </div>
       </section>
 
@@ -357,8 +317,6 @@
             </el-button>
           </div>
 
-          <el-alert v-if="finalReviewMessage" :title="finalReviewMessage" type="success" show-icon :closable="false" />
-          <el-alert v-if="finalReviewError" :title="finalReviewError" type="error" show-icon :closable="false" />
         </div>
       </section>
     </template>
@@ -368,7 +326,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
-import { ElMessageBox } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { OrganizationRole, ReportStatus, WeeklyApprovalStatus } from '../constants/reports.js';
 import {
   exportWeeklyReport,
@@ -417,10 +375,6 @@ const savingApproval = ref(false);
 const report = ref(null);
 const targetUser = ref(null);
 const errorMessage = ref('');
-const finalReviewMessage = ref('');
-const finalReviewError = ref('');
-const approvalMessage = ref('');
-const approvalError = ref('');
 const finalReviewForm = reactive({
   finalScore: null,
   finalGrade: '',
@@ -634,9 +588,6 @@ async function loadReport() {
 
 async function saveFinalReview() {
   savingFinalReview.value = true;
-  finalReviewMessage.value = '';
-  finalReviewError.value = '';
-
   try {
     const result = await saveWeeklyReportFinalReview(
       props.reportId,
@@ -648,9 +599,9 @@ async function saveFinalReview() {
       props.authToken
     );
     report.value = result.report;
-    finalReviewMessage.value = '评分已保存。';
+    ElMessage.success('评分已保存。');
   } catch (error) {
-    finalReviewError.value = toReadableApiError(error);
+    ElMessage.error(toReadableApiError(error));
   } finally {
     savingFinalReview.value = false;
   }
@@ -671,9 +622,6 @@ async function submitApproval(action) {
   }
 
   savingApproval.value = true;
-  approvalMessage.value = '';
-  approvalError.value = '';
-
   try {
     const result = await reviewWeeklyReportApproval(
       props.reportId,
@@ -684,9 +632,9 @@ async function submitApproval(action) {
       props.authToken
     );
     report.value = result.report;
-    approvalMessage.value = action === 'approve' ? '审批已通过。' : '周报已打回。';
+    ElMessage.success(action === 'approve' ? '审批已通过。' : '周报已打回。');
   } catch (error) {
-    approvalError.value = toReadableApiError(error);
+    ElMessage.error(toReadableApiError(error));
   } finally {
     savingApproval.value = false;
   }

@@ -9,12 +9,12 @@
         <el-form class="daily-filters" @submit.prevent="loadReports">
           <span class="filter-text">查询从</span>
           <div class="filter-group filter-group--inline">
-            <el-date-picker v-model="filters.dateFrom" type="date" value-format="YYYY-MM-DD" placeholder="开始日期" />
+            <el-date-picker v-model="filters.dateFrom" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" placeholder="开始日期" />
           </div>
 
           <span class="filter-text">到</span>
           <div class="filter-group filter-group--inline">
-            <el-date-picker v-model="filters.dateTo" type="date" value-format="YYYY-MM-DD" placeholder="结束日期" />
+            <el-date-picker v-model="filters.dateTo" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" placeholder="结束日期" />
           </div>
 
           <span class="filter-text">状态</span>

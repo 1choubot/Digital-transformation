@@ -1,6 +1,6 @@
 <template>
     <SolutionDesignNodeLayout :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
-        :error-message="context.solutionDesignErrorMessage" :message="localMessage" :local-error="localError">
+        :error-message="context.solutionDesignErrorMessage">
         <section class="review-section">
             <h4>{{ nodeKey === 'internal_solution_review' ? 'C15 内部方案评审记录表' : 'C16 客户方案评审记录表' }}</h4>
             <SolutionFormFields :fields="fields" :model="reviewFormData"

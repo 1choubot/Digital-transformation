@@ -103,6 +103,68 @@ p {
  * Phase 1 intentionally uses theme variables only. Add narrowly scoped overrides here when later migrations require them.
  */
 
+/*
+ * Legacy page styles still target descendant `input` elements. Element Plus renders
+ * its own native input inside a bordered wrapper, so those rules must not create a
+ * second border, height or focus ring inside the component.
+ */
+.el-input .el-input__inner,
+.el-select .el-select__input {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
+.el-input .el-input__inner:focus,
+.el-select .el-select__input:focus {
+  border: 0;
+  box-shadow: none;
+  outline: none;
+}
+
+/* Shared editable/read-only report table contract. */
+.report-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.report-data-table {
+  --el-table-header-bg-color: var(--app-page-bg-soft);
+  --el-table-border-color: var(--app-border);
+  width: 100%;
+}
+
+.report-data-table--daily-items { min-width: 1360px; }
+.report-data-table--daily-plans { min-width: 1050px; }
+.report-data-table--weekly-summaries { min-width: 1200px; }
+.report-data-table--weekly-plans { min-width: 900px; }
+.report-data-table--review-summaries,
+.report-data-table--review-plans { min-width: 1000px; }
+.report-data-table--comparison { min-width: 1500px; }
+
+.report-data-table .el-table__cell { vertical-align: top; }
+.report-data-table .cell { overflow: visible; line-height: 1.4; }
+.report-data-table .el-input,
+.report-data-table .el-select,
+.report-data-table .el-date-editor,
+.report-data-table .el-time-picker { width: 100%; }
+.report-data-table .el-input__wrapper,
+.report-data-table .el-select__wrapper,
+.report-data-table .el-date-editor.el-input__wrapper { min-height: 40px; }
+.report-data-table .el-textarea__inner {
+  min-height: 72px !important;
+  resize: vertical;
+}
+.report-data-table .invalid .el-input__wrapper,
+.report-data-table .invalid .el-select__wrapper,
+.report-data-table .invalid .el-textarea__inner {
+  box-shadow: 0 0 0 1px var(--app-color-danger) inset;
+}
+
 /* 05. Application shell and top navigation */
 .app-header {
   padding: 0 32px;
@@ -1074,9 +1136,7 @@ p {
 
 .daily-form-grid input,
 .daily-filters input,
-.daily-filters select,
-.daily-edit-table input,
-.daily-edit-table textarea {
+.daily-filters select {
   width: 100%;
   min-width: 0;
   border: 1px solid #cfd9e4;
@@ -1088,23 +1148,14 @@ p {
 
 .daily-form-grid input,
 .daily-filters input,
-.daily-filters select,
-.daily-edit-table input {
+.daily-filters select {
   min-height: 40px;
   padding: 0 11px;
 }
 
-.daily-edit-table textarea {
-  min-height: 72px;
-  resize: vertical;
-  padding: 10px 11px;
-}
-
 .daily-form-grid input:focus,
 .daily-filters input:focus,
-.daily-filters select:focus,
-.daily-edit-table input:focus,
-.daily-edit-table textarea:focus {
+.daily-filters select:focus {
   border-color: #2f807b;
   box-shadow: 0 0 0 3px rgba(47, 128, 123, 0.14);
 }
@@ -1143,44 +1194,6 @@ p {
   font-size: 16px;
 }
 
-.daily-edit-table {
-  display: grid;
-  overflow-x: auto;
-  border: 1px solid #e1e8ef;
-  border-radius: 8px;
-}
-
-.daily-edit-table__head,
-.daily-edit-table__row {
-  display: grid;
-  gap: 10px;
-  align-items: start;
-  min-width: 1180px;
-  padding: 10px;
-}
-
-.daily-edit-table--items .daily-edit-table__head,
-.daily-edit-table--items .daily-edit-table__row,
-.daily-edit-table--plans .daily-edit-table__head,
-.daily-edit-table--plans .daily-edit-table__row {
-  grid-template-columns: minmax(240px, 1.2fr) 140px 120px 130px minmax(220px, 1fr) 88px;
-}
-
-.daily-edit-table__head {
-  border-bottom: 1px solid #e4eaf0;
-  background: #f8fafc;
-  color: #667789;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.daily-edit-table__row {
-  border-bottom: 1px solid #eef2f6;
-}
-
-.daily-edit-table__row:last-child {
-  border-bottom: 0;
-}
 
 .daily-upload-button {
   position: relative;
@@ -3031,16 +3044,6 @@ p {
 
 /* Weekly edit grids use fixed tracks so validation messages do not shift columns. */
 
-.daily-edit-table .invalid {
-  border-color: #c2410c;
-  box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.12);
-}
-
-.daily-edit-table small {
-  color: #c2410c;
-  font-size: 12px;
-}
-
 /* Weekly score panels show total score, source, and fallback dimensions at a glance. */
 
 /* Weekly list tables mirror the dense operational layout used by project tables. */
@@ -3873,91 +3876,6 @@ p {
   margin-bottom: 1.5rem;
   color: #909399;
   font-size: 0.9rem;
-}
-
-#app .toast {
-  position: fixed;
-  top: 2rem;
-  left: 50%;
-  z-index: 10000;
-  max-width: 90%;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  transform: translateX(-50%);
-  border: 1px solid #ebeef5;
-  border-radius: 4px;
-  background: #ffffff;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  color: #303133;
-  font-size: 0.85rem;
-  font-weight: 500;
-  padding: 0.7rem 1rem;
-}
-
-#app .toast--error {
-  border-left: 4px solid #f56c6c;
-}
-
-#app .toast--success {
-  border-left: 4px solid #67c23a;
-}
-
-#app .toast-icon {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-}
-
-#app .toast--error .toast-icon {
-  stroke: #f56c6c;
-}
-
-#app .toast--success .toast-icon {
-  stroke: #67c23a;
-}
-
-#app .toast-close {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-left: 0.5rem;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: #c0c4cc;
-  cursor: pointer;
-  padding: 0;
-  transition: background 0.2s;
-}
-
-#app .toast-close:hover {
-  background: #f4f4f5;
-}
-
-#app .toast-close svg {
-  width: 14px;
-  height: 14px;
-}
-
-#app .toast-enter-active,
-#app .toast-leave-active {
-  transition: all 0.3s ease;
-}
-
-#app .toast-enter-from,
-#app .toast-leave-to {
-  opacity: 0;
-  transform: translateX(-50%) translateY(-20px);
-}
-
-#app .toast-enter-to,
-#app .toast-leave-from {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
 }
 
 /* Migrated from digital-platform-web/src/components/project-workspace/solution-design/SolutionDesignNodeLayout.vue */
@@ -5024,6 +4942,11 @@ p {
 .daily-report-list-page .filter-group--inline .el-date-editor {
   width: 140px;
 }
+.daily-report-list-page .filter-group--inline .el-date-editor .el-input__wrapper {
+  height: 40px;
+  min-height: 40px;
+  box-sizing: border-box;
+}
 .daily-report-list-page .filter-group--inline .el-select {
   width: 110px;
 }
@@ -5458,68 +5381,25 @@ p {
   font-size: 0.85rem;
   line-height: 1.5;
 }
-.daily-report-page .daily-edit-table {
-  min-width: 1320px;
-  width: 100%;
-}
-.daily-report-page .daily-edit-table__head {
-  display: grid;
-  padding: 0.6rem 0.75rem;
-  background: #fafafa;
-  border-bottom: 1px solid #ebeef5;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: #909399;
-  gap: 0.75rem;
-}
-/* 调整后的列宽顺序（任务来源、关联周计划、工作内容、执行状态、完成进度、完成时间、负责人、偏差与纠偏、操作） */
-.daily-report-page .daily-edit-table--items .daily-edit-table__head {
-  grid-template-columns: 1.1fr 1.8fr 1.8fr 1.1fr 1fr 0.9fr 1fr 1.4fr 0.7fr;
-}
-.daily-report-page .daily-edit-table--plans .daily-edit-table__head {
-  grid-template-columns: 2fr 1fr 1fr 1.2fr 1.5fr 0.8fr;
-}
 .daily-report-page .text-right {
   text-align: right;
-}
-
-.daily-report-page .daily-edit-table__row {
-  display: grid;
-  padding: 0.6rem 0.75rem;
-  align-items: center;
-  border-bottom: 1px solid #f0f0f2;
-  gap: 0.75rem;
-  transition: background 0.2s ease;
-}
-/* 行内列宽与表头一致 */
-.daily-report-page .daily-edit-table--items .daily-edit-table__row {
-  grid-template-columns: 1.1fr 1.8fr 1.8fr 1.1fr 1fr 0.9fr 1fr 1.4fr 0.7fr;
-}
-.daily-report-page .daily-edit-table--plans .daily-edit-table__row {
-  grid-template-columns: 2fr 1fr 1fr 1.2fr 1.5fr 0.8fr;
-}
-.daily-report-page .daily-edit-table__row:hover {
-  background: #fdfdfe;
-}
-
-.daily-report-page .daily-edit-table__row .el-input,
-.daily-report-page .daily-edit-table__row .el-select,
-.daily-report-page .daily-edit-table__row .el-date-editor {
-  width: 100%;
 }
 .daily-report-page .daily-filters .el-date-editor,
 .daily-report-page .daily-project-select .el-input {
   width: 100%;
 }
 
-.daily-report-page .daily-edit-table__row .el-input__wrapper,
-.daily-report-page .daily-edit-table__row .el-textarea__inner {
-  min-height: 48px;
+/* Keep the project picker aligned with the default-height report date picker. */
+.daily-report-page .daily-project-select .el-input__wrapper {
+  height: 32px;
+  min-height: 32px;
+  box-sizing: border-box;
 }
 
-.daily-report-page .daily-edit-table__row .invalid .el-input__wrapper,
-.daily-report-page .daily-edit-table__row .invalid .el-textarea__inner {
-  box-shadow: 0 0 0 1px var(--app-color-danger) inset;
+.daily-report-page .daily-project-select .el-input__inner {
+  height: 30px;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 /* ===== 附件区域 ===== */
@@ -5644,23 +5524,6 @@ p {
   }
   .daily-report-page .daily-project-select {
     min-width: unset;
-  }
-  .daily-report-page .daily-edit-table__head,
-  .daily-report-page .daily-edit-table__row {
-    grid-template-columns: 1fr !important;
-    gap: 0.5rem;
-  }
-  .daily-report-page .daily-edit-table__head {
-    display: none;
-  }
-  .daily-report-page .daily-edit-table__row {
-    padding: 0.75rem;
-    border: 1px solid #ebeef5;
-    border-radius: 4px;
-    margin-bottom: 0.5rem;
-  }
-  .daily-report-page .daily-edit-table__row .el-button {
-    align-self: flex-start;
   }
   .daily-report-page .panel-toolbar {
     flex-direction: column;
@@ -6109,49 +5972,6 @@ p {
 .weekly-report-page .field-hint { color: var(--app-text-muted); }
 .weekly-report-page .field-error { color: var(--app-color-danger); }
 
-.weekly-report-page .weekly-edit-table {
-  min-width: 0;
-  overflow-x: auto;
-}
-
-.weekly-report-page .weekly-edit-table__head,
-.weekly-report-page .weekly-edit-table__row {
-  display: grid;
-  align-items: start;
-  gap: var(--app-space-3);
-  min-width: 920px;
-}
-
-.weekly-report-page .weekly-edit-table--summaries .weekly-edit-table__head,
-.weekly-report-page .weekly-edit-table--summaries .weekly-edit-table__row {
-  grid-template-columns: 1.3fr 1fr 1.5fr 1fr 1fr 1.2fr auto;
-}
-
-.weekly-report-page .weekly-edit-table--plans .weekly-edit-table__head,
-.weekly-report-page .weekly-edit-table--plans .weekly-edit-table__row {
-  grid-template-columns: 1.5fr 1fr 1fr 1fr 1.2fr 1.3fr auto;
-}
-
-.weekly-report-page .weekly-edit-table__head {
-  padding: var(--app-space-2) var(--app-space-3);
-  border-bottom: 1px solid var(--app-border);
-  background: var(--app-page-bg-soft);
-  color: var(--app-text-muted);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.weekly-report-page .weekly-edit-table__row {
-  padding: var(--app-space-3);
-  border-bottom: 1px solid var(--app-border);
-}
-
-.weekly-report-page .weekly-edit-table__row .el-input,
-.weekly-report-page .weekly-edit-table__row .el-select,
-.weekly-report-page .weekly-edit-table__row .el-date-editor {
-  width: 100%;
-}
-
 /* Weekly evaluation overview filter and table. */
 .weekly-report-page .weekly-overview-filters {
   display: flex;
@@ -6281,52 +6101,6 @@ p {
   background: var(--app-page-bg-soft);
 }
 
-.weekly-review-page .weekly-readonly-table,
-.weekly-review-page .weekly-comparison-table {
-  width: 100%;
-  overflow-x: auto;
-}
-
-.weekly-review-page .weekly-readonly-table__head,
-.weekly-review-page .weekly-readonly-table__row,
-.weekly-review-page .weekly-comparison-table__head,
-.weekly-review-page .weekly-comparison-table__row {
-  display: grid;
-  align-items: start;
-  gap: var(--app-space-3);
-  min-width: 820px;
-  padding: var(--app-space-3);
-}
-
-.weekly-review-page .weekly-readonly-table--summaries .weekly-readonly-table__head,
-.weekly-review-page .weekly-readonly-table--summaries .weekly-readonly-table__row {
-  grid-template-columns: 1.4fr 1fr 1.6fr 1fr 1fr 1.2fr;
-}
-
-.weekly-review-page .weekly-readonly-table--plans .weekly-readonly-table__head,
-.weekly-review-page .weekly-readonly-table--plans .weekly-readonly-table__row {
-  grid-template-columns: 1.5fr 1fr 1fr 1fr 1.2fr 1.4fr;
-}
-
-.weekly-review-page .weekly-comparison-table__head,
-.weekly-review-page .weekly-comparison-table__row {
-  grid-template-columns: repeat(6, minmax(120px, 1fr));
-}
-
-.weekly-review-page .weekly-readonly-table__head,
-.weekly-review-page .weekly-comparison-table__head {
-  border-bottom: 1px solid var(--app-border);
-  background: var(--app-page-bg-soft);
-  color: var(--app-text-muted);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.weekly-review-page .weekly-readonly-table__row,
-.weekly-review-page .weekly-comparison-table__row {
-  border-bottom: 1px solid var(--app-border);
-}
-
 .weekly-review-page .weekly-final-review-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -6360,20 +6134,14 @@ p {
     flex-basis: auto;
   }
 
-  .weekly-report-page .weekly-edit-table__head,
   .weekly-report-list-page .weekly-report-table__head,
-  .weekly-report-page .weekly-overview-table__head,
-  .weekly-review-page .weekly-readonly-table__head,
-  .weekly-review-page .weekly-comparison-table__head {
+  .weekly-report-page .weekly-overview-table__head {
     display: none;
   }
 
-  .weekly-report-page .weekly-edit-table__row,
   .weekly-report-list-page .weekly-report-table__row,
   .weekly-report-list-page .weekly-report-table--employee .weekly-report-table__row,
-  .weekly-report-page .weekly-overview-table__row,
-  .weekly-review-page .weekly-readonly-table__row,
-  .weekly-review-page .weekly-comparison-table__row {
+  .weekly-report-page .weekly-overview-table__row {
     grid-template-columns: 1fr;
     min-width: 0;
     margin-bottom: var(--app-space-3);

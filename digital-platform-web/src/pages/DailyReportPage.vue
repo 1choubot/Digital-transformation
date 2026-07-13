@@ -34,7 +34,7 @@
           <div class="filter-group">
             <span class="filter-label">报告日期</span>
             <div class="input-wrapper">
-              <el-date-picker v-model="form.reportDate" type="date" value-format="YYYY-MM-DD" placeholder="选择报告日期" />
+              <el-date-picker v-model="form.reportDate" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" placeholder="选择报告日期" />
             </div>
           </div>
 
@@ -98,22 +98,9 @@
             </div>
           </div>
 
-          <div class="table-container">
-            <div class="daily-edit-table daily-edit-table--items">
-              <!-- 调整后的表头顺序 -->
-              <div class="daily-edit-table__head">
-                <span>任务来源</span>
-                <span>关联周计划</span>
-                <span>工作内容</span>
-                <span>执行状态</span>
-                <span>完成进度</span>
-                <span>完成时间</span>
-                <span>负责人</span>
-                <span>偏差与纠偏</span>
-                <span class="text-right">操作</span>
-              </div>
-              <div v-for="(item, index) in form.items" :key="item.localId" class="daily-edit-table__row">
-                <!-- 任务来源 -->
+          <div class="table-container report-table-scroll">
+            <el-table :data="form.items" row-key="localId" class="report-data-table report-data-table--daily-items">
+              <el-table-column label="任务来源" min-width="130"><template #default="{ row: item, $index: index }">
                 <el-select
                   v-model="item.sourceType"
                   :class="{ invalid: itemErrors[item.localId]?.sourceType }"
@@ -123,7 +110,8 @@
                   <el-option label="周计划" value="weekly_plan" />
                   <el-option label="新增" value="ad_hoc" />
                 </el-select>
-                <!-- 关联周计划 -->
+              </template></el-table-column>
+              <el-table-column label="关联周计划" min-width="210"><template #default="{ row: item }">
                 <el-select
                   v-model="item.sourcePlanTaskKey"
                   :disabled="item.sourceType !== 'weekly_plan'"
@@ -133,13 +121,15 @@
                 >
                   <el-option v-for="plan in planSuggestion.items" :key="plan.taskKey" :label="`${plan.plannedDate}｜${plan.workTarget}`" :value="plan.taskKey" />
                 </el-select>
-                <!-- 工作内容 -->
+              </template></el-table-column>
+              <el-table-column label="工作内容" min-width="210"><template #default="{ row: item }">
                 <el-input
                   v-model="item.workContent"
                   type="textarea"
                   :class="{ invalid: itemErrors[item.localId]?.workContent }"
                 />
-                <!-- 执行状态 -->
+              </template></el-table-column>
+              <el-table-column label="执行状态" min-width="130"><template #default="{ row: item }">
                 <el-select
                   v-model="item.executionStatus"
                   :class="{ invalid: itemErrors[item.localId]?.executionStatus }"
@@ -150,13 +140,15 @@
                   <el-option label="进行中" value="in_progress" />
                   <el-option label="未完成" value="not_completed" />
                 </el-select>
-                <!-- 完成进度 -->
+              </template></el-table-column>
+              <el-table-column label="完成进度" min-width="120"><template #default="{ row: item }">
                 <el-input
                   v-model="item.completionProgress"
                   placeholder="如 100%"
                   :class="{ invalid: itemErrors[item.localId]?.completionProgress }"
                 />
-                <!-- 完成时间 -->
+              </template></el-table-column>
+              <el-table-column label="完成时间" min-width="130"><template #default="{ row: item }">
                 <el-time-picker
                   v-model="item.completedAt"
                   value-format="HH:mm"
@@ -164,14 +156,17 @@
                   placeholder="完成时间"
                   :class="{ invalid: itemErrors[item.localId]?.completedAt }"
                 />
-                <!-- 负责人 -->
+              </template></el-table-column>
+              <el-table-column label="负责人" min-width="130"><template #default="{ row: item }">
                 <el-input v-model="item.responsiblePerson" />
-                <!-- 偏差与纠偏 -->
+              </template></el-table-column>
+              <el-table-column label="偏差与纠偏" min-width="180"><template #default="{ row: item }">
                 <el-input v-model="item.deviationAndCorrectiveAction" type="textarea" />
-                <!-- 操作 -->
+              </template></el-table-column>
+              <el-table-column label="操作" width="80" fixed="right" align="center"><template #default="{ $index: index }">
                 <el-button link type="danger" :disabled="form.items.length === 1" @click="removeItem(index)">删除</el-button>
-              </div>
-            </div>
+              </template></el-table-column>
+            </el-table>
           </div>
         </section>
 
@@ -222,31 +217,29 @@
             <el-button @click="addPlan">新增行</el-button>
           </div>
 
-          <div class="table-container">
-            <div class="daily-edit-table daily-edit-table--plans">
-              <div class="daily-edit-table__head">
-                <span>计划内容</span>
-                <span>负责人</span>
-                <span>完成时间</span>
-                <span>协同中心</span>
-                <span>协同事项</span>
-                <span class="text-right">操作</span>
-              </div>
-              <div v-for="(plan, index) in form.plans" :key="plan.localId" class="daily-edit-table__row">
+          <div class="table-container report-table-scroll">
+            <el-table :data="form.plans" row-key="localId" class="report-data-table report-data-table--daily-plans">
+              <el-table-column label="计划内容" min-width="260"><template #default="{ row: plan }">
                 <el-input v-model="plan.plannedWorkContent" type="textarea" />
+              </template></el-table-column>
+              <el-table-column label="负责人" min-width="150"><template #default="{ row: plan }">
                 <el-input v-model="plan.responsiblePerson" />
+              </template></el-table-column>
+              <el-table-column label="完成时间" min-width="150"><template #default="{ row: plan }">
                 <el-time-picker v-model="plan.plannedCompleteAt" value-format="HH:mm" format="HH:mm" placeholder="完成时间" />
+              </template></el-table-column>
+              <el-table-column label="协同中心" min-width="180"><template #default="{ row: plan }">
                 <el-input v-model="plan.collaboratingCenter" />
+              </template></el-table-column>
+              <el-table-column label="协同事项" min-width="230"><template #default="{ row: plan }">
                 <el-input v-model="plan.collaborationItem" type="textarea" />
+              </template></el-table-column>
+              <el-table-column label="操作" width="80" fixed="right" align="center"><template #default="{ $index: index }">
                 <el-button link type="danger" :disabled="form.plans.length === 1" @click="removePlan(index)">删除</el-button>
-              </div>
-            </div>
+              </template></el-table-column>
+            </el-table>
           </div>
         </section>
-
-        <!-- 消息提示 -->
-        <el-alert v-if="message" :description="message" type="success" show-icon :closable="false" />
-        <el-alert v-if="errorMessage" :description="errorMessage" type="error" show-icon :closable="false" />
 
         <!-- 底部操作按钮 -->
         <div class="form-actions">
@@ -260,6 +253,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch, onBeforeUnmount } from 'vue';
+import { ElMessage } from 'element-plus';
 import { OrganizationRole, ReportStatus } from '../constants/reports.js';
 import {
   createDailyReport,
@@ -287,6 +281,10 @@ const props = defineProps({
     type: String,
     default: ''
   },
+  initialReportDate: {
+    type: String,
+    default: ''
+  },
   navigate: {
     type: Function,
     required: true
@@ -305,6 +303,21 @@ function getLocalIsoDate() {
 }
 
 const today = getLocalIsoDate();
+
+// Accept only a real calendar date in the route's YYYY-MM-DD contract.
+function normalizeInitialReportDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || '').trim());
+  if (!match) return '';
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  const isValid = date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+  return isValid ? match[0] : '';
+}
+
+const initialReportDate = props.reportId ? '' : normalizeInitialReportDate(props.initialReportDate);
 const projectKeyword = ref('');
 const projectOptions = ref([]);
 const projectSearchMessage = ref('');
@@ -314,6 +327,8 @@ const uploading = ref(false);
 const exporting = ref(false);
 const message = ref('');
 const errorMessage = ref('');
+watch(message, (value) => { if (value) ElMessage.success(value); });
+watch(errorMessage, (value) => { if (value) ElMessage.error(value); });
 const showDropdown = ref(false);
 const projectInput = ref(null);
 const itemErrors = ref({});
@@ -353,7 +368,7 @@ const currentUserDisplayName = computed(
 );
 
 const form = reactive({
-  reportDate: today,
+  reportDate: initialReportDate || today,
   projectId: '',
   items: [createEmptyItem()],
   plans: [createEmptyPlan()]
@@ -544,6 +559,7 @@ function clearInvalidPlanTaskKeys() {
   form.items.forEach((item) => {
     if (item.sourceType === 'weekly_plan' && item.sourcePlanTaskKey && !availableTaskKeys.has(item.sourcePlanTaskKey)) {
       item.sourcePlanTaskKey = '';
+      item.workContent = '';
     }
   });
 }
@@ -552,24 +568,23 @@ function clearAllPlanTaskKeysForScopeChange() {
   form.items.forEach((item) => {
     if (item.sourceType === 'weekly_plan') {
       item.sourcePlanTaskKey = '';
+      item.workContent = '';
     }
   });
 }
 
 function onItemSourceTypeChange(item) {
-  if (item.sourceType !== 'weekly_plan') {
-    item.sourcePlanTaskKey = '';
-  }
+  item.sourcePlanTaskKey = '';
+  item.workContent = '';
 }
 
 function applySelectedPlanToItem(item) {
   const plan = planSuggestion.items.find((candidate) => candidate.taskKey === item.sourcePlanTaskKey);
   if (!plan) {
+    item.workContent = '';
     return;
   }
-  if (!String(item.workContent || '').trim()) {
-    item.workContent = plan.workTarget || plan.workTask || '';
-  }
+  item.workContent = plan.workTarget || plan.workTask || '';
 }
 
 // ===== 执行状态变更时自动填充/清空完成进度 =====

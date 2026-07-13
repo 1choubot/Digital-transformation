@@ -133,10 +133,6 @@
         <el-checkbox v-model="form.isEnabled">启用用户</el-checkbox>
         <el-checkbox v-model="form.isPlatformAdmin" :disabled="form.organizationRole !== 'system_admin'">平台管理员</el-checkbox>
 
-        <el-alert v-if="clientError || operationError" class="form-grid__wide" :description="clientError || operationError" type="error" show-icon :closable="false" />
-
-        <el-alert v-if="successMessage" class="form-grid__wide" :description="successMessage" type="success" show-icon :closable="false" />
-
         <div class="form-actions form-grid__wide">
           <el-button @click="resetForm">清空</el-button>
           <el-button type="primary" native-type="submit" :loading="saving">{{ editingUser ? '保存修改' : '新增用户' }}</el-button>
@@ -148,7 +144,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
-import { ElMessageBox } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   createUser,
   disableUser,
@@ -185,9 +181,6 @@ const users = ref([]);
 const loading = ref(false);
 const saving = ref(false);
 const errorMessage = ref('');
-const operationError = ref('');
-const clientError = ref('');
-const successMessage = ref('');
 const editingUser = ref(null);
 const pendingAction = ref('');
 const resetPasswords = reactive({});
@@ -258,18 +251,12 @@ function isActionPending(userId, action) {
   return pendingAction.value === buildPendingKey(userId, action);
 }
 
-function clearMessages() {
-  clientError.value = '';
-  operationError.value = '';
-  successMessage.value = '';
-}
-
 function handleRequestError(error) {
   const message = toReadableApiError(error);
-  operationError.value = message;
-
   if (error.code === 'UNAUTHENTICATED') {
     emit('auth-expired', message);
+  } else {
+    ElMessage.error(message);
   }
 }
 
@@ -293,7 +280,7 @@ async function loadUsers() {
   }
 }
 
-function resetForm({ keepMessage = false } = {}) {
+function resetForm() {
   editingUser.value = null;
   form.account = '';
   form.displayName = '';
@@ -304,9 +291,6 @@ function resetForm({ keepMessage = false } = {}) {
   form.isEnabled = true;
   form.isPlatformAdmin = false;
   form.filePlatformUserId = '';
-  if (!keepMessage) {
-    clearMessages();
-  }
 }
 
 function startEdit(user) {
@@ -320,7 +304,6 @@ function startEdit(user) {
   form.isEnabled = Boolean(user.isEnabled);
   form.isPlatformAdmin = Boolean(user.isPlatformAdmin);
   form.filePlatformUserId = user.filePlatformUserId || '';
-  clearMessages();
 }
 
 function validateForm() {
@@ -333,21 +316,20 @@ function validateForm() {
   if (!editingUser.value && !form.password) missing.push('初始密码');
 
   if (missing.length > 0) {
-    clientError.value = `请补充：${missing.join('、')}`;
+    ElMessage.error(`请补充：${missing.join('、')}`);
     return false;
   }
 
   if (isGlobalOrganizationRole(form.organizationRole) && form.department) {
-    clientError.value = '总经理、系统管理员、总经理助理不隶属于四个业务部门。';
+    ElMessage.error('总经理、系统管理员、总经理助理不隶属于四个业务部门。');
     return false;
   }
 
   if (form.organizationRole === 'system_admin' && !form.isPlatformAdmin) {
-    clientError.value = '系统管理员必须同时具备平台管理员权限。';
+    ElMessage.error('系统管理员必须同时具备平台管理员权限。');
     return false;
   }
 
-  clientError.value = '';
   return true;
 }
 
@@ -364,7 +346,6 @@ function buildBasePayload() {
 }
 
 async function saveUser() {
-  clearMessages();
 
   if (!validateForm()) {
     return;
@@ -375,7 +356,7 @@ async function saveUser() {
   try {
     if (editingUser.value) {
       await updateUser(editingUser.value.id, buildBasePayload(), props.authToken);
-      successMessage.value = '用户基础信息已保存。';
+      ElMessage.success('用户基础信息已保存。');
     } else {
       await createUser(
         {
@@ -385,8 +366,8 @@ async function saveUser() {
         },
         props.authToken
       );
-      resetForm({ keepMessage: true });
-      successMessage.value = '用户已新增。';
+      resetForm();
+      ElMessage.success('用户已新增。');
     }
 
     await loadUsers();
@@ -398,7 +379,6 @@ async function saveUser() {
 }
 
 async function toggleEnabled(user) {
-  clearMessages();
   const action = user.isEnabled ? 'disable' : 'enable';
 
   try {
@@ -412,10 +392,10 @@ async function toggleEnabled(user) {
     pendingAction.value = buildPendingKey(user.id, action);
     if (user.isEnabled) {
       await disableUser(user.id, props.authToken);
-      successMessage.value = '用户已禁用。';
+      ElMessage.success('用户已禁用。');
     } else {
       await enableUser(user.id, props.authToken);
-      successMessage.value = '用户已启用。';
+      ElMessage.success('用户已启用。');
     }
 
     await loadUsers();
@@ -428,11 +408,10 @@ async function toggleEnabled(user) {
 }
 
 async function resetPassword(user) {
-  clearMessages();
   const password = String(resetPasswords[user.id] || '');
 
   if (!password) {
-    clientError.value = '请填写新密码。';
+    ElMessage.error('请填写新密码。');
     return;
   }
 
@@ -446,7 +425,7 @@ async function resetPassword(user) {
     });
     await resetUserPassword(user.id, password, props.authToken);
     resetPasswords[user.id] = '';
-    successMessage.value = `已重置 ${user.account} 的密码。`;
+    ElMessage.success(`已重置 ${user.account} 的密码。`);
   } catch (error) {
     if (error === 'cancel' || error === 'close') return;
     handleRequestError(error);

@@ -14,6 +14,7 @@
     "migrate-project-workspace-initiation-forms": "node scripts/migrate-project-workspace-initiation-forms.js",
     "reset-stage-documents-v20260624": "node scripts/reset-stage-documents-v20260624.js --confirm",
     "reset-stage-documents-v20260625": "node scripts/reset-stage-documents-v20260624.js --confirm",
+    "cleanup-business-data": "node scripts/cleanup-business-data.js --confirm",
     "test:reports": "node --test test/reports/reportWorkdays.test.js test/reports/reportPermissions.test.js test/reports/reportPayloads.test.js test/reports/weeklyComparisonRows.test.js test/reports/reportExportAndAi.test.js",
     "test:permissions": "node --test test/domain/organizationPermissions.test.js",
     "test:solution-design": "node --test test/projects/solutionDesignWorkflow.test.js",

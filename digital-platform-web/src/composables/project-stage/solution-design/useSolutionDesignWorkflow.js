@@ -1,4 +1,5 @@
-import { reactive, ref, toValue } from 'vue';
+import { reactive, ref, toValue, watch } from 'vue';
+import { ElMessage } from 'element-plus';
 import {
   approveSolutionDesignWorkflowNode,
   assignSolutionDesignRoles,
@@ -32,8 +33,11 @@ export function useSolutionDesignWorkflow({
 }) {
   const roleSelections = reactive({});
   const pendingAction = ref('');
+  // Kept as an internal bridge for the existing form composables; UI feedback is centralized in ElMessage.
   const localMessage = ref('');
   const localError = ref('');
+  watch(localMessage, (value) => { if (value) ElMessage.success(value); });
+  watch(localError, (value) => { if (value) ElMessage.error(value); });
   const returnReasons = reactive({});
   const quotationReturnReason = ref('');
   const quotationRejectAction = ref('return_to_rd_cost');
@@ -58,13 +62,13 @@ export function useSolutionDesignWorkflow({
     pendingAction.value = key;
     try {
       const result = await runner();
-      localMessage.value = successText;
+      if (successText) ElMessage.success(successText);
       if (notify) {
         notifyChanged?.();
       }
       return result;
     } catch (error) {
-      localError.value = toReadableApiError(error);
+      ElMessage.error(toReadableApiError(error));
       return null;
     } finally {
       if (pendingAction.value === key) {
@@ -91,7 +95,7 @@ export function useSolutionDesignWorkflow({
     for (const role of roleDefinitions) {
       const userId = normalizeRequiredUserId(roleSelections[role.payloadKey]);
       if (!userId) {
-        localError.value = `请选择${role.label}。`;
+        ElMessage.error(`请选择${role.label}。`);
         return;
       }
       payload[role.payloadKey] = userId;
@@ -104,7 +108,7 @@ export function useSolutionDesignWorkflow({
     event.target.value = '';
     if (!file) return;
     if (file.size <= 0 || file.size > 50 * 1024 * 1024) {
-      localError.value = '文件无效，请选择 1 字节到 50MB 以内的文件。';
+      ElMessage.error('文件无效，请选择 1 字节到 50MB 以内的文件。');
       return;
     }
     await runAction(
@@ -132,7 +136,7 @@ export function useSolutionDesignWorkflow({
   async function returnNode(nodeKey) {
     const reason = String(returnReasons[nodeKey] || '').trim();
     if (!reason) {
-      localError.value = '请填写退回原因。';
+      ElMessage.error('请填写退回原因。');
       return;
     }
     const result = await runAction(`return:${nodeKey}`, () => returnSolutionDesignWorkflowNode(id(), nodeKey, reason, token()), `${getNodeName(nodeKey)}已退回。`);
@@ -155,7 +159,7 @@ export function useSolutionDesignWorkflow({
   async function rejectQuotation() {
     const reason = String(quotationReturnReason.value || '').trim();
     if (!reason) {
-      localError.value = '请填写客户不接受报价后的处理原因。';
+      ElMessage.error('请填写客户不接受报价后的处理原因。');
       return;
     }
     const action = quotationRejectAction.value;

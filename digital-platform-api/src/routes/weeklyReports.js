@@ -249,6 +249,7 @@ weeklyReportsRouter.get(
     const scope = resolveWeeklyReviewOverviewScope(req.auth.user, filters.department);
     const reports = await listWeeklyComparisonOverview({
       weekStart: filters.weekStart,
+      weekEnd: filters.weekEnd,
       department: scope.department,
       subjectRole: scope.subjectRole
     });

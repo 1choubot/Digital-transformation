@@ -248,9 +248,7 @@ export function normalizeWeeklyReportPayload(payload = {}) {
 
 // Normalize comparison overview query values before authorization is applied.
 export function normalizeComparisonOverviewFilters(query = {}) {
-  const filters = {
-    weekStart: normalizeIsoDate(query.weekStart, 'weekStart')
-  };
+  const filters = normalizeWeeklyPeriod(query);
 
   if (query.department) {
     filters.department = String(query.department).trim();

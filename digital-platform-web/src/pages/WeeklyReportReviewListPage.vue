@@ -1,20 +1,33 @@
 <template>
-  <section class="page-stack weekly-review-list-page animate-fadeIn">
+  <section class="page-stack weekly-report-page animate-fadeIn">
     <!-- 删除了 page-header 区域 -->
 
     <!-- 筛选栏 -->
     <section class="panel overview-filter-panel">
       <div class="panel-toolbar">
         <el-form class="weekly-overview-filters" @submit.prevent="loadOverview">
-          <div class="filter-group">
-            <span class="filter-label">开始日期</span>
-            <div class="input-wrapper">
-              <el-date-picker
-                v-model="overviewFilters.weekStart"
-                type="date"
-                value-format="YYYY-MM-DD"
-                placeholder="选择周开始日期"
-              />
+          <div class="weekly-date-grid">
+            <div class="filter-group">
+              <span class="filter-label">开始日期</span>
+              <div class="input-wrapper">
+                <el-date-picker
+                  v-model="overviewFilters.weekStart"
+                  type="date"
+                  value-format="YYYY-MM-DD"
+                  placeholder="开始日期"
+                />
+              </div>
+            </div>
+            <div class="filter-group">
+              <span class="filter-label">结束日期</span>
+              <div class="input-wrapper">
+                <el-date-picker
+                  v-model="overviewFilters.weekEnd"
+                  type="date"
+                  value-format="YYYY-MM-DD"
+                  placeholder="结束日期"
+                />
+              </div>
             </div>
           </div>
           <div v-if="canReadAllCenters" class="filter-group">
@@ -68,12 +81,14 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
+import { ElMessage } from 'element-plus';
 import { OrganizationRole, WeeklyApprovalStatus } from '../constants/reports.js';
 import {
   listWeeklyComparisonOverview,
   toReadableApiError
 } from '../api/weeklyReports.js';
 import { formatBusinessDepartment } from '../utils/format.js';
+import { getPreviousWeekPeriod, isNaturalWeekPeriod } from '../utils/weekPeriod.js';
 
 const props = defineProps({
   authToken: {
@@ -95,8 +110,10 @@ const emit = defineEmits(['auth-expired']);
 const overviewLoading = ref(false);
 const overviewRows = ref([]);
 const overviewError = ref('');
+const defaultPeriod = getPreviousWeekPeriod();
 const overviewFilters = reactive({
-  weekStart: previousWeekStart(),
+  weekStart: defaultPeriod.weekStart,
+  weekEnd: defaultPeriod.weekEnd,
   department: ''
 });
 
@@ -106,19 +123,6 @@ const canReadAllCenters = computed(() =>
     OrganizationRole.GENERAL_MANAGER_ASSISTANT
   ].includes(props.currentUser.organizationRole)
 );
-
-function previousWeekStart() {
-  const now = new Date();
-  const day = now.getDay();
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  const currentMonday = new Date(now);
-  currentMonday.setDate(now.getDate() + mondayOffset);
-  currentMonday.setDate(currentMonday.getDate() - 7);
-  const year = currentMonday.getFullYear();
-  const month = String(currentMonday.getMonth() + 1).padStart(2, '0');
-  const date = String(currentMonday.getDate()).padStart(2, '0');
-  return `${year}-${month}-${date}`;
-}
 
 // Weekly overview rows surface approval progress for center-manager review.
 function approvalStatusLabel(status) {
@@ -163,6 +167,14 @@ function overviewReferenceScoreText(row) {
 
 async function loadOverview() {
   if (!props.currentUser) return;
+  if (!overviewFilters.weekStart || !overviewFilters.weekEnd) {
+    ElMessage.error('请选择开始日期和结束日期。');
+    return;
+  }
+  if (!isNaturalWeekPeriod(overviewFilters.weekStart, overviewFilters.weekEnd)) {
+    ElMessage.error('周报周期必须是周一至同周周日。');
+    return;
+  }
 
   overviewLoading.value = true;
   overviewError.value = '';
@@ -170,6 +182,7 @@ async function loadOverview() {
   try {
     const filters = {
       weekStart: overviewFilters.weekStart,
+      weekEnd: overviewFilters.weekEnd,
       department: canReadAllCenters.value ? overviewFilters.department : props.currentUser.department
     };
     const result = await listWeeklyComparisonOverview(filters, props.authToken);

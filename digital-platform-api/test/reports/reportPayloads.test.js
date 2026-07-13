@@ -16,10 +16,39 @@ import {
 import { BUSINESS_DEPARTMENT } from '../../src/domain/organization.js';
 import { ReportStatus } from '../../src/domain/reports.js';
 import {
+  normalizeComparisonOverviewFilters,
   normalizeWeeklyApprovalPayload,
   normalizeWeeklyReportPayload,
   WEEKLY_REPORT_ERROR
 } from '../../src/domain/weeklyReports.js';
+
+test('weekly comparison overview requires an exact natural week period', () => {
+  assert.deepEqual(
+    normalizeComparisonOverviewFilters({
+      weekStart: '2026-06-29',
+      weekEnd: '2026-07-05',
+      department: 'rd_center'
+    }),
+    {
+      weekStart: '2026-06-29',
+      weekEnd: '2026-07-05',
+      department: 'rd_center'
+    }
+  );
+
+  assert.throws(
+    () => normalizeComparisonOverviewFilters({ weekStart: '2026-06-29' }),
+    (error) => error.code === WEEKLY_REPORT_ERROR.INVALID_WEEK
+  );
+  assert.throws(
+    () => normalizeComparisonOverviewFilters({ weekStart: '2026-06-30', weekEnd: '2026-07-06' }),
+    (error) => error.code === WEEKLY_REPORT_ERROR.INVALID_WEEK
+  );
+  assert.throws(
+    () => normalizeComparisonOverviewFilters({ weekStart: '2026-06-29', weekEnd: '2026-07-04' }),
+    (error) => error.code === WEEKLY_REPORT_ERROR.INVALID_WEEK
+  );
+});
 
 function dailyPayload(overrides = {}) {
   return {

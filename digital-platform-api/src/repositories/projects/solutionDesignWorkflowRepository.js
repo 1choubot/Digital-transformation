@@ -4939,12 +4939,10 @@ export async function getSolutionDesignReviewForm({ projectId, nodeKey, user }, 
   });
 }
 
-function assertGeneratedFormFileReady({ formRow, nodeRow, detailKey }) {
+function assertGeneratedFormFileReady({ formRow, nodeRow, detailKey, isGeneratedForRevision }) {
+  const requiredRevision = Number(nodeRow?.current_revision ?? 1);
   if (
-    !formRow ||
-    Number(formRow.revision ?? 0) !== Number(nodeRow?.current_revision ?? 1) ||
-    formRow.generated_file_status !== SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED ||
-    !formRow.generated_file_storage_key
+    !isGeneratedForRevision(formRow, requiredRevision)
   ) {
     throw new SolutionDesignWorkflowError(
       SOLUTION_DESIGN_ERROR.GENERATED_FILE_NOT_FOUND,
@@ -4990,7 +4988,8 @@ export async function getSolutionDesignAnalysisGeneratedFileDownload(
     assertGeneratedFormFileReady({
       formRow,
       nodeRow: analysisNode,
-      detailKey: 'analysisFormGeneratedFile'
+      detailKey: 'analysisFormGeneratedFile',
+      isGeneratedForRevision: isAnalysisFormGeneratedForRevision
     });
     return buildGeneratedFormDownload({
       formRow,
@@ -5026,7 +5025,8 @@ export async function getSolutionDesignReviewGeneratedFileDownload(
     assertGeneratedFormFileReady({
       formRow,
       nodeRow: reviewNode,
-      detailKey: `${definition.reviewType}ReviewFormGeneratedFile`
+      detailKey: `${definition.reviewType}ReviewFormGeneratedFile`,
+      isGeneratedForRevision: isReviewFormGeneratedForRevision
     });
     return buildGeneratedFormDownload({
       formRow,

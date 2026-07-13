@@ -3464,6 +3464,17 @@ test('solution analysis images support legacy C05 anchors and invalidate generat
     db
   );
   assert.equal(regenerated.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED);
+  currentForm = db.connection.currentAnalysisForm();
+  assert.equal(currentForm.revision, 2);
+  assert.equal(
+    db.connection.nodes.find((node) => node.node_key === SOLUTION_DESIGN_NODE_KEY.ANALYSIS)?.current_revision,
+    1
+  );
+  const regeneratedDownload = await getSolutionDesignAnalysisGeneratedFileDownload(
+    { projectId: 100, user: technicalOwner },
+    db
+  );
+  assert.equal(regeneratedDownload.filePath, currentForm.generated_file_storage_key);
 
   const uploaded = await withFakePoolConnection(db.connection, async () =>
     uploadStageDocumentOnlineFormImage({
@@ -3495,6 +3506,65 @@ test('solution analysis images support legacy C05 anchors and invalidate generat
     });
   });
   assert.equal(db.connection.formImages.find((image) => image.id === uploaded.id)?.deleted_by_user_id, 12);
+});
+
+test('solution analysis generated file download enforces readiness without strict revision equality', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const technicalOwner = authUser(db.connection.users.get(12));
+
+  await activateAnalysisNode(db, storage);
+  await submitSolutionDesignAnalysisForm(
+    {
+      projectId: 100,
+      payload: analysisFormPayload({ projectTargetDescription: 'v1 下载规则' }),
+      user: technicalOwner
+    },
+    db
+  );
+
+  const currentForm = db.connection.currentAnalysisForm();
+  const analysisNode = db.connection.nodes.find((node) => node.node_key === SOLUTION_DESIGN_NODE_KEY.ANALYSIS);
+  assert.equal(currentForm.revision, 1);
+  assert.equal(analysisNode.current_revision, 1);
+  const download = await getSolutionDesignAnalysisGeneratedFileDownload(
+    { projectId: 100, user: technicalOwner },
+    db
+  );
+  assert.equal(download.filePath, currentForm.generated_file_storage_key);
+
+  analysisNode.current_revision = 2;
+  await assert.rejects(
+    () => getSolutionDesignAnalysisGeneratedFileDownload({ projectId: 100, user: technicalOwner }, db),
+    (error) =>
+      error.code === SOLUTION_DESIGN_ERROR.GENERATED_FILE_NOT_FOUND &&
+      error.details.includes('analysisFormGeneratedFile')
+  );
+
+  analysisNode.current_revision = 1;
+  currentForm.generated_file_status = SOLUTION_DESIGN_GENERATED_FILE_STATUS.NOT_STARTED;
+  await assert.rejects(
+    () => getSolutionDesignAnalysisGeneratedFileDownload({ projectId: 100, user: technicalOwner }, db),
+    (error) => error.code === SOLUTION_DESIGN_ERROR.GENERATED_FILE_NOT_FOUND
+  );
+
+  currentForm.generated_file_status = SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED;
+  const generatedStorageKey = currentForm.generated_file_storage_key;
+  currentForm.generated_file_storage_key = null;
+  await assert.rejects(
+    () => getSolutionDesignAnalysisGeneratedFileDownload({ projectId: 100, user: technicalOwner }, db),
+    (error) => error.code === SOLUTION_DESIGN_ERROR.GENERATED_FILE_NOT_FOUND
+  );
+
+  currentForm.generated_file_storage_key = generatedStorageKey;
+  db.generatedFileStorage.files.delete(generatedStorageKey);
+  await assert.rejects(
+    () => getSolutionDesignAnalysisGeneratedFileDownload({ projectId: 100, user: technicalOwner }, db),
+    (error) =>
+      error.code === SOLUTION_DESIGN_ERROR.GENERATED_FILE_MISSING &&
+      error.details.includes('analysisFormGeneratedFile')
+  );
 });
 
 test('solution design role users can view C05 images while only technical owner can mutate them', async () => {
@@ -4546,6 +4616,119 @@ test('technical owner can save and submit customer review form', async () => {
   assert.equal(
     actionTypes.includes(OPERATION_ACTION_TYPE.SOLUTION_DESIGN_CUSTOMER_REVIEW_FORM_GENERATION_FAILED),
     false
+  );
+});
+
+test('review generated file download accepts generated form revision above node revision', async () => {
+  const internalDb = fakeDb();
+  seedAssignedRoles(internalDb.connection);
+  const internalUploadStorage = fakeUploadStorage();
+  const technicalOwner = authUser(internalDb.connection.users.get(12));
+
+  await submitSolutionDesignOutputs(internalDb, internalUploadStorage);
+  await submitSolutionDesignReviewForm(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
+      payload: reviewFormPayload({ reviewConclusion: '内部评审第一版' }),
+      user: technicalOwner
+    },
+    internalDb
+  );
+  const internalSubmitted = await submitSolutionDesignReviewForm(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
+      payload: reviewFormPayload({ reviewConclusion: '内部评审第二版' }),
+      user: technicalOwner
+    },
+    internalDb
+  );
+  const internalForm = internalDb.connection.currentReviewForm(SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW);
+  const internalNode = internalDb.connection.nodes.find(
+    (node) => node.node_key === SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW
+  );
+  assert.equal(internalSubmitted.form.revision, 2);
+  assert.equal(internalForm.revision, 2);
+  assert.equal(internalNode.current_revision, 1);
+  const internalDownload = await getSolutionDesignReviewGeneratedFileDownload(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
+      user: technicalOwner
+    },
+    internalDb
+  );
+  assert.equal(internalDownload.filePath, internalForm.generated_file_storage_key);
+  internalForm.generated_file_status = SOLUTION_DESIGN_GENERATED_FILE_STATUS.NOT_STARTED;
+  await assert.rejects(
+    () =>
+      getSolutionDesignReviewGeneratedFileDownload(
+        {
+          projectId: 100,
+          nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
+          user: technicalOwner
+        },
+        internalDb
+      ),
+    (error) =>
+      error.code === SOLUTION_DESIGN_ERROR.GENERATED_FILE_NOT_FOUND &&
+      error.details.includes('internalReviewFormGeneratedFile')
+  );
+
+  const customerDb = fakeDb();
+  seedAssignedRoles(customerDb.connection);
+  const customerUploadStorage = fakeUploadStorage();
+  await activateCustomerReviewNode(customerDb, customerUploadStorage);
+  const customerTechnicalOwner = authUser(customerDb.connection.users.get(12));
+  await submitSolutionDesignReviewForm(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
+      payload: reviewFormPayload({ reviewConclusion: '客户评审第一版' }),
+      user: customerTechnicalOwner
+    },
+    customerDb
+  );
+  const customerSubmitted = await submitSolutionDesignReviewForm(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
+      payload: reviewFormPayload({ reviewConclusion: '客户评审第二版' }),
+      user: customerTechnicalOwner
+    },
+    customerDb
+  );
+  const customerForm = customerDb.connection.currentReviewForm(SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW);
+  const customerNode = customerDb.connection.nodes.find(
+    (node) => node.node_key === SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW
+  );
+  assert.equal(customerSubmitted.form.revision, 2);
+  assert.equal(customerForm.revision, 2);
+  assert.equal(customerNode.current_revision, 1);
+  const customerDownload = await getSolutionDesignReviewGeneratedFileDownload(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
+      user: customerTechnicalOwner
+    },
+    customerDb
+  );
+  assert.equal(customerDownload.filePath, customerForm.generated_file_storage_key);
+  customerForm.generated_file_storage_key = null;
+  await assert.rejects(
+    () =>
+      getSolutionDesignReviewGeneratedFileDownload(
+        {
+          projectId: 100,
+          nodeKey: SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
+          user: customerTechnicalOwner
+        },
+        customerDb
+      ),
+    (error) =>
+      error.code === SOLUTION_DESIGN_ERROR.GENERATED_FILE_NOT_FOUND &&
+      error.details.includes('customerReviewFormGeneratedFile')
   );
 });
 

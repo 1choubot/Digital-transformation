@@ -2827,3 +2827,59 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **WHEN** 后续迁移阶段资料提交/确认/退回、manual fallback API 阶段推进或相关工作台待办权限
 - **THEN** 系统 MUST 保持现有资料状态规则、中心负责人项目相关性规则、manual fallback API 权限和自动推进语义不变
 - **AND** 本 change MUST NOT 改变当前权限结果，只建立收敛计划和第一批迁移边界
+
+### Requirement: 方案设计在线表单生成文件下载 revision 规则
+项目核心能力 MUST 让 C05 项目方案分析表、C15 内部方案评审记录表和 C16 客户方案评审记录表生成文件下载使用与节点提交门禁一致的 revision 规则。
+
+#### Scenario: C05 高 revision 生成文件可下载
+- **WHEN** C05 项目方案分析表已提交
+- **AND** `form.revision >= solution_analysis.current_revision`
+- **AND** 生成文件状态为 `generated`
+- **AND** `generated_file_storage_key` 非空且存储文件可读
+- **THEN** 后端 MUST 允许下载 C05 项目方案分析表生成文件
+
+#### Scenario: C15 C16 高 revision 生成文件可下载
+- **WHEN** C15 内部方案评审记录表或 C16 客户方案评审记录表已提交
+- **AND** `form.revision >= 对应评审节点 current_revision`
+- **AND** 生成文件状态为 `generated`
+- **AND** `generated_file_storage_key` 非空且存储文件可读
+- **THEN** 后端 MUST 允许下载对应方案评审记录表生成文件
+
+#### Scenario: 生成文件下载拒绝未满足业务状态
+- **WHEN** 用户下载 C05、C15 或 C16 生成文件
+- **AND** 表单不存在、表单未提交、`form.revision < node.current_revision`、生成状态不是 `generated` 或 `generated_file_storage_key` 为空
+- **THEN** 后端 MUST 拒绝下载并返回生成文件不可用业务错误
+
+#### Scenario: 生成文件下载拒绝缺失存储文件
+- **WHEN** 用户下载 C05、C15 或 C16 生成文件
+- **AND** 表单状态和 revision 满足下载规则
+- **AND** 存储文件不可读或已丢失
+- **THEN** 后端 MUST 拒绝下载并返回存储文件缺失业务错误
+
+#### Scenario: 下载规则不改变方案设计流程边界
+- **WHEN** 实现本下载规则修复
+- **THEN** 系统 MUST NOT 改变方案设计状态机、节点版本递增规则、表单 revision 递增规则、模板生成内容、前端页面或数据库结构
+
+### Requirement: 项目流程模板旧版本清理边界
+项目核心能力 MUST 只使用当前有效项目流程/阶段资料模板创建新项目；清理旧模板版本 MUST NOT 改变标准 8 大阶段、`v20260629` 71 项资料数量、资料编码、既有项目资料状态或阶段推进结果。
+
+#### Scenario: 新项目只使用当前有效模板
+- **WHEN** 系统创建新项目并初始化项目阶段和阶段资料
+- **THEN** 系统 MUST 使用当前有效 `v20260629` 模板和 71 项资料集合
+- **AND** 系统 MUST NOT 使用 `v20260610`、`v20260624` 或其他已废弃模板版本创建新项目资料
+
+#### Scenario: 清理旧模板不改变阶段和资料数量
+- **WHEN** 团队删除已废弃模板版本、脚本引用或测试引用
+- **THEN** 系统 MUST 继续初始化标准 8 大阶段
+- **AND** `v20260629` 新项目资料数量 MUST 保持 71 项
+- **AND** `v20260629` 资料编码、阶段分布和 completionMode 统计 MUST 保持不变
+
+#### Scenario: 清理旧模板不迁移既有项目
+- **WHEN** 系统中存在按 legacy 模板创建的既有项目资料记录
+- **THEN** 清理旧模板实现 MUST NOT 删除、迁移、补初始化或改写既有项目资料记录
+- **AND** 既有项目 MUST 继续按其项目级资料记录判断资料状态、工作台待办和阶段推进门禁
+
+#### Scenario: 无运行引用的旧模板版本可移除
+- **WHEN** 某旧模板版本已无项目创建入口、初始化入口、兼容数据入口和测试依赖
+- **THEN** 系统 SHOULD 移除该旧模板版本的注册、脚本检查和测试引用
+- **AND** 移除 MUST NOT 改变当前有效模板和 legacy 项目的运行结果

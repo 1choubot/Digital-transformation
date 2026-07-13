@@ -11,29 +11,3 @@
 </template>
 <script
     setup>    import { computed } from 'vue'; import { formatFileSize, formatDateTime } from './solutionDesignFormatters.js'; const props = defineProps({ generatedFile: { type: Object, default: null }, pending: Boolean }); defineEmits(['download']); const statusText = computed(() => ({ not_started: '待生成', generating: '生成中', generated: '已生成', failed: '生成失败' }[props.generatedFile?.status] || props.generatedFile?.status || '待生成')); const tagType = computed(() => ({ generated: 'success', failed: 'danger', generating: 'warning' }[props.generatedFile?.status] || 'info'));</script>
-<style
-    scoped>
-    .generated-file-card {
-        display: flex;
-        justify-content: space-between;
-        gap: var(--space-4, 16px);
-        padding: var(--space-3, 12px);
-        border: 1px solid var(--color-border, #d8dde6);
-        border-radius: var(--radius-md, 8px)
-    }
-
-    .generated-file-card>div {
-        display: grid;
-        gap: var(--space-2, 8px)
-    }
-
-    .generated-file-card p {
-        margin: 0
-    }
-
-    @media(max-width:640px) {
-        .generated-file-card {
-            display: grid
-        }
-    }
-</style>

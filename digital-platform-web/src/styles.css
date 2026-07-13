@@ -29,8 +29,8 @@
   --app-page-max-width: 1280px;
 
   /* 03. Element Plus theme variables */
-  --el-color-primary: var(--app-color-primary);
-  --el-color-primary-light-3: #7890e8;
+  --el-color-white: #ffffff;
+  --el-color-primary: var(--app-color-primary);  --el-color-primary-light-3: #7890e8;
   --el-color-primary-light-5: #9fb0ee;
   --el-color-primary-light-7: #c5cff5;
   --el-color-primary-light-8: #d8dff8;
@@ -100,10 +100,6 @@ p {
 /* 04. Element Plus approved global overrides
  * Phase 1 intentionally uses theme variables only. Add narrowly scoped overrides here when later migrations require them.
  */
-
-.app-shell {
-  min-height: 100vh;
-}
 
 /* 05. Application shell and top navigation */
 .app-header {
@@ -181,9 +177,7 @@ p {
   overflow-wrap: anywhere;
 }
 
-.app-nav button,
-.ghost-button,
-.primary-button {
+.app-nav button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -206,8 +200,7 @@ p {
 }
 
 .app-nav button.active,
-.app-nav button:hover,
-.ghost-button:hover {
+.app-nav button:hover {
   border-color: #3c7d7a;
   color: #1d6663;
 }
@@ -222,13 +215,6 @@ p {
   width: min(520px, calc(100vw - 32px));
   margin: 18vh auto 0;
   text-align: center;
-}
-
-.login-page {
-  display: grid;
-  min-height: 100vh;
-  place-items: center;
-  padding: 24px;
 }
 
 .login-panel {
@@ -435,21 +421,6 @@ p {
   color: #6c7b8c;
   font-size: 13px;
   line-height: 1.6;
-}
-
-.primary-button {
-  background: #226d68;
-  color: #ffffff;
-}
-
-.primary-button:hover {
-  background: #1b5b56;
-}
-
-.ghost-button {
-  border-color: #d4dde7;
-  background: #ffffff;
-  color: #3b4a5a;
 }
 
 .state-panel {
@@ -1203,12 +1174,6 @@ p {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
-}
-
-.daily-project-options .ghost-button.active {
-  border-color: #2f807b;
-  background: #edf8f6;
-  color: #17635d;
 }
 
 .daily-project-options span,
@@ -3062,11 +3027,6 @@ p {
   max-width: 420px;
 }
 
-.stage-document-actions .ghost-button {
-  width: fit-content;
-  min-width: 76px;
-}
-
 .stage-document-actions__empty {
   color: #6c7b8c;
   font-size: 13px;
@@ -3163,12 +3123,12 @@ p {
 
 .weekly-edit-table--summaries .weekly-edit-table__head,
 .weekly-edit-table--summaries .weekly-edit-table__row {
-  grid-template-columns: 1.4fr 1.6fr 130px 120px 1.4fr 130px 76px;
+  grid-template-columns: 1.2fr 1.4fr 110px 100px 1.6fr 110px 76px;
 }
 
 .weekly-edit-table--plans .weekly-edit-table__head,
 .weekly-edit-table--plans .weekly-edit-table__row {
-  grid-template-columns: 1.5fr 1.7fr 130px 150px 76px;
+  grid-template-columns: 1.3fr 1.5fr 110px 130px 76px;
 }
 
 .weekly-edit-table__head {
@@ -3732,11 +3692,6 @@ p {
     text-align: left;
   }
 
-  .current-user .ghost-button {
-    flex: 0 1 auto;
-    min-width: 0;
-  }
-
   .department-checkbox-group {
     grid-template-columns: 1fr;
   }
@@ -3770,10 +3725,6 @@ p {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .overview-filters .primary-button {
-    width: fit-content;
-  }
-
   /* Daily report actions stack on tablet widths to keep buttons readable. */
   .daily-project-search {
     grid-column: auto;
@@ -3802,14 +3753,6 @@ p {
     align-items: start;
     min-height: 0;
     padding: 14px 18px;
-  }
-
-  .task-table__row .ghost-button {
-    width: fit-content;
-  }
-
-  .task-card__footer .primary-button {
-    width: fit-content;
   }
 
   .stage-document-completeness__summary {
@@ -3961,26 +3904,13 @@ p {
     justify-items: stretch;
   }
 
-  .current-user .ghost-button {
-    width: 100%;
-  }
-
-  .app-nav button,
-  .page-title-actions .ghost-button,
-  .page-title-actions .primary-button {
+  .app-nav button {
     min-height: 34px;
     padding: 0 10px;
   }
 
   .page-title-actions {
     justify-content: stretch;
-  }
-
-  .page-title-actions .ghost-button,
-  .page-title-actions .primary-button {
-    flex: 1 1 100%;
-    width: 100%;
-    min-width: 0;
   }
 
   .panel-toolbar,
@@ -4037,9 +3967,9 @@ p {
   .stage-document-missing li,
   .stage-document-meta,
   .stage-document-return,
-    .stage-document-applicability-action,
-    .stage-document-attachment-item,
-    .stage-document-responsibility-action__buttons,
+  .stage-document-applicability-action,
+  .stage-document-attachment-item,
+  .stage-document-responsibility-action__buttons,
   .user-password-reset,
   .stage-advance-summary,
   .stage-advance-missing li {
@@ -4054,17 +3984,8 @@ p {
     max-width: none;
   }
 
-  .stage-document-actions .ghost-button {
-    width: 100%;
-  }
-
   .stage-document-attachment-item__actions,
-  .stage-document-attachment-item__actions .ghost-button,
   .stage-document-attachment-upload__button {
-    width: 100%;
-  }
-
-  .task-table__row .ghost-button {
     width: 100%;
   }
 
@@ -4074,37 +3995,20 @@ p {
     flex-direction: column;
   }
 
-  .task-card__footer .primary-button {
-    width: 100%;
-  }
-
-  .overview-filters .primary-button,
-  .legacy-compatibility-section__toggle,
-  .overview-project__main .ghost-button {
+  .legacy-compatibility-section__toggle {
     width: 100%;
   }
 
   .user-row-actions,
-  .user-row-actions .ghost-button,
   .daily-page-actions,
-  .daily-page-actions .ghost-button,
-  .daily-page-actions .primary-button,
   .weekly-page-actions,
-  .weekly-page-actions .ghost-button,
-  .weekly-page-actions .primary-button,
   .weekly-tabs button,
   .weekly-overview-filters,
   .weekly-overview-filters label,
-  .weekly-overview-filters .primary-button,
   .daily-section__heading,
-  .daily-section__heading .ghost-button,
   .daily-report-table__actions,
-  .daily-report-table__actions .ghost-button,
   .weekly-report-table__actions,
-  .weekly-report-table__actions .ghost-button,
-  .daily-attachment-list div,
-  .daily-attachment-list .ghost-button,
-  .user-password-reset .ghost-button {
+  .daily-attachment-list div {
     width: 100%;
   }
 
@@ -4299,4 +4203,2940 @@ p {
     table-layout: auto;
     min-width: 640px;
   }
+}
+
+/* Migrated from digital-platform-web/src/App.vue */
+#app .app-loading-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f4f6f9;
+}
+
+#app .loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+#app .loading-wave {
+  display: flex;
+  gap: 6px;
+}
+
+#app .wave-bar {
+  width: 4px;
+  height: 24px;
+  border-radius: 4px;
+  background: #3e63dd;
+  animation: wave 1s ease-in-out infinite;
+}
+
+#app .wave-bar:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+#app .wave-bar:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes wave {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+#app .app-loading-screen p {
+  color: #909399;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+#app .state-panel {
+  margin: 1.5rem;
+  border: 0;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.04);
+  padding: 5rem 2rem;
+  text-align: center;
+}
+
+#app .state-panel h2 {
+  margin-bottom: 0.5rem;
+  color: #303133;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+#app .state-panel p {
+  margin-bottom: 1.5rem;
+  color: #909399;
+  font-size: 0.9rem;
+}
+
+#app .toast {
+  position: fixed;
+  top: 2rem;
+  left: 50%;
+  z-index: 10000;
+  max-width: 90%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  transform: translateX(-50%);
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  color: #303133;
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 0.7rem 1rem;
+}
+
+#app .toast--error {
+  border-left: 4px solid #f56c6c;
+}
+
+#app .toast--success {
+  border-left: 4px solid #67c23a;
+}
+
+#app .toast-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+#app .toast--error .toast-icon {
+  stroke: #f56c6c;
+}
+
+#app .toast--success .toast-icon {
+  stroke: #67c23a;
+}
+
+#app .toast-close {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: 0.5rem;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #c0c4cc;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s;
+}
+
+#app .toast-close:hover {
+  background: #f4f4f5;
+}
+
+#app .toast-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+#app .toast-enter-active,
+#app .toast-leave-active {
+  transition: all 0.3s ease;
+}
+
+#app .toast-enter-from,
+#app .toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-20px);
+}
+
+#app .toast-enter-to,
+#app .toast-leave-from {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Migrated from digital-platform-web/src/components/project-workspace/solution-design/SolutionDesignNodeLayout.vue */
+.solution-node-page {
+        min-height: 180px;
+        display: grid;
+        gap: var(--space-4, 16px)
+    }
+
+    .solution-node-page .solution-node-card {
+        display: grid;
+        gap: var(--space-4, 16px)
+    }
+
+    .solution-node-page .solution-node-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--space-3, 12px)
+    }
+
+    .solution-node-page .solution-node-header h3 {
+        margin: 0
+    }
+
+    @media(max-width:640px) {
+        .solution-node-page .solution-node-header {
+            display: grid
+        }
+    }
+
+/* Migrated from digital-platform-web/src/components/project-workspace/solution-design/SolutionFormFields.vue */
+.solution-form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 var(--space-4, 16px)
+    }
+
+    .solution-form-grid .solution-form-grid__wide {
+        grid-column: 1/-1
+    }
+
+    @media(max-width:768px) {
+        .solution-form-grid {
+            grid-template-columns: 1fr
+        }
+    }
+
+/* Migrated from digital-platform-web/src/components/project-workspace/solution-design/SolutionGeneratedFile.vue */
+.generated-file-card {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-4, 16px);
+        padding: var(--space-3, 12px);
+        border: 1px solid var(--color-border, #d8dde6);
+        border-radius: var(--radius-md, 8px)
+    }
+
+    .generated-file-card .generated-file-card>div {
+        display: grid;
+        gap: var(--space-2, 8px)
+    }
+
+    .generated-file-card p {
+        margin: 0
+    }
+
+    @media(max-width:640px) {
+        .generated-file-card {
+            display: grid
+        }
+    }
+
+/* Migrated from digital-platform-web/src/components/project-workspace/solution-design/SolutionNodeActions.vue */
+.solution-actions,
+    .solution-actions .return-box {
+        display: grid;
+        gap: var(--space-3, 12px)
+    }
+
+    .solution-actions .solution-actions>header,
+    .solution-actions .action-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3, 12px)
+    }
+
+    .solution-actions .action-row {
+        justify-content: flex-start;
+        flex-wrap: wrap
+    }
+
+    @media(max-width:640px) {
+        .solution-actions .solution-actions>header {
+            display: grid
+        }
+
+        .solution-actions .action-row>* {
+            width: 100%
+        }
+    }
+
+/* Migrated from digital-platform-web/src/components/project-workspace/solution-design/SolutionUploadSlots.vue */
+.solution-node-page .solution-section,
+    .solution-node-page .slot-list,
+    .solution-node-page .slot-card,
+    .solution-node-page .file-meta {
+        display: grid;
+        gap: var(--space-3, 12px)
+    }
+
+    .solution-node-page .solution-section>header,
+    .solution-node-page .slot-heading,
+    .solution-node-page .slot-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3, 12px)
+    }
+
+    .solution-node-page .slot-card {
+        padding: var(--space-3, 12px);
+        border: 1px solid var(--color-border, #d8dde6);
+        border-radius: var(--radius-md, 8px)
+    }
+
+    .solution-node-page .slot-heading>div,
+    .solution-node-page .slot-actions {
+        justify-content: flex-start;
+        flex-wrap: wrap
+    }
+
+    .solution-node-page .file-meta small {
+        color: var(--color-text-secondary, #667789)
+    }
+
+    @media(max-width:640px) {
+
+        .solution-node-page .solution-section>header,
+        .solution-node-page .slot-heading {
+            display: grid
+        }
+
+        .solution-node-page .slot-actions>* {
+            width: 100%
+        }
+    }
+
+/* Migrated from digital-platform-web/src/layouts/MainLayout.vue */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #f4f6f9;
+  color: #333333;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.app-shell .app-header {
+  min-height: 112px;
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-start;
+  flex-shrink: 0;
+  padding: 0;
+  border-bottom: 1px solid #ebeef5;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 21, 41, 0.04);
+  z-index: 100;
+}
+
+.app-shell .header-right {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  gap: 1rem;
+  flex-shrink: 0;
+}
+
+.app-shell .brand-logo-area {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 220px;
+  flex-shrink: 0;
+  padding: 0 24px;
+  border-right: 1px solid #e5eaf3;
+}
+
+.app-shell .logo-svg {
+  width: 28px;
+  height: 28px;
+  color: #3e63dd;
+}
+
+.app-shell .brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.app-shell .brand-title {
+  color: #303133;
+  font-size: 17px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.app-shell .brand-subtitle {
+  margin-top: 2px;
+  color: #909399;
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.app-shell .header-main {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  grid-template-rows: minmax(56px, 1fr) minmax(56px, 1fr);
+}
+
+/* 两段式布局：[导航菜单(flex:1,居中)] [右侧用户区/占位(flex-shrink:0)] */
+.app-shell .header-main__top,
+.app-shell .header-main__bottom {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.app-shell .header-main__bottom {
+  background: #f7faff;
+  border-top: 1px solid #edf2f7;
+}
+
+.app-shell .primary-nav,
+.app-shell .secondary-nav {
+  border-bottom: 0;
+  background: transparent;
+  flex: 1;
+  min-width: 0;
+  /* el-menu 渲染为 <ul>，直接在根元素上设置居中，让内部菜单项水平居中排列 */
+  display: flex !important;
+  justify-content: center !important;
+}
+
+.app-shell .primary-nav .el-menu-item {
+  height: 100%;
+  min-width: 112px;
+  justify-content: center;
+  border-bottom: 0;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.app-shell .primary-nav .el-menu-item:hover,
+.app-shell .primary-nav .el-menu-item.is-active {
+  background: #eaf4ff;
+  color: #2563eb;
+  border-bottom: 0;
+}
+
+.app-shell .secondary-nav {
+  height: 56px;
+  margin-left: 0;
+}
+
+.app-shell .secondary-nav .el-menu-item {
+  height: 56px;
+  min-width: 112px;
+  justify-content: center;
+  border-bottom: 0;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.app-shell .secondary-nav .el-menu-item:hover,
+.app-shell .secondary-nav .el-menu-item.is-active {
+  background: #eaf4ff;
+  color: #2563eb;
+  border-bottom: 0;
+}
+
+.app-shell .secondary-nav__state {
+  display: inline-flex;
+  align-items: center;
+  height: 56px;
+  margin-left: 28px;
+  color: #909399;
+  font-size: 15px;
+}
+
+.app-shell .secondary-nav__state--error {
+  color: #f56c6c;
+}
+
+/* 右侧占位容器：镜像上方 header-right 的结构（visibility:hidden），确保上下两层菜单中心对齐 */
+.app-shell .header-right-spacer {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  gap: 1rem;
+  flex-shrink: 0;
+  visibility: hidden;
+}
+
+.app-shell .current-user {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.app-shell .user-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #5b86e5 0%, #36d1dc 100%);
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-shell .user-info {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.app-shell .user-name {
+  color: #303133;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.app-shell .user-role-desc {
+  color: #909399;
+  font-size: 0.725rem;
+  font-weight: 500;
+}
+
+.app-shell .divider {
+  margin: 0 0.1rem;
+  color: #c0c4cc;
+}
+
+.app-shell .logout-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  background: transparent;
+  color: #606266;
+  cursor: pointer;
+  padding: 0.45rem;
+  transition: all 0.2s;
+}
+
+.app-shell .logout-button:hover:not(:disabled) {
+  border-color: #fbc4c4;
+  background: #fef0f0;
+  color: #f56c6c;
+}
+
+.app-shell .logout-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.app-shell .spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(245, 108, 108, 0.2);
+  border-top: 2px solid #f56c6c;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.app-shell .main-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-shell .page-breadcrumb-bar {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 0.5rem;
+  padding: 0.8rem 2rem;
+  border-bottom: 1px solid #ebeef5;
+  background: #ffffff;
+  color: #909399;
+  font-size: 0.85rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.01);
+}
+
+.app-shell .breadcrumb-separator {
+  margin: 0 0.25rem;
+  color: #c0c4cc;
+}
+
+.app-shell .breadcrumb-item--active {
+  color: #303133;
+  font-weight: 600;
+}
+
+.app-shell .app-main {
+  flex: 1;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: #f4f6f9;
+}
+
+.app-shell .app-main::-webkit-scrollbar {
+  width: 6px;
+}
+
+.app-shell .app-main::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-shell .app-main::-webkit-scrollbar-thumb {
+  background: #dcdfe6;
+  border-radius: 3px;
+}
+
+.app-shell .animate-content {
+  animation: contentFadeIn 0.35s ease-out;
+}
+
+@keyframes contentFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-shell .mobile-menu-toggle,
+.app-shell .mobile-sidebar,
+.app-shell .sidebar-overlay {
+  display: none;
+}
+
+@media (max-width: 1024px) {
+  .app-shell .app-header {
+    height: 64px;
+    min-height: 64px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1.5rem;
+  }
+
+  .app-shell .app-header .brand-logo-area {
+    width: auto;
+    border-right: 0;
+    padding: 0;
+  }
+
+  .app-shell .header-main {
+    display: flex;
+    flex: 1;
+    justify-content: flex-end;
+  }
+
+  .app-shell .header-main__top {
+    justify-content: space-between;
+    border-bottom: 1px solid #ebeef5;
+  }
+
+  .app-shell .header-main__bottom,
+  .app-shell .primary-nav,
+  .app-shell .secondary-nav,
+  .app-shell .secondary-nav__state {
+    display: none;
+  }
+
+  .app-shell .mobile-menu-toggle {
+    display: flex;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #606266;
+    cursor: pointer;
+    padding: 0.35rem;
+  }
+
+  .app-shell .mobile-menu-toggle svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .app-shell .page-breadcrumb-bar {
+    padding: 0.8rem 1.5rem;
+  }
+
+  .app-shell .mobile-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 110;
+    display: flex;
+    flex-direction: column;
+    width: 250px;
+    border-right: 1px solid #ebeef5;
+    background: #ffffff;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .app-shell .mobile-sidebar--open {
+    transform: translateX(0);
+  }
+
+  .app-shell .mobile-brand-area {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1.5rem;
+    border-bottom: 1px solid #ebeef5;
+  }
+
+  .app-shell .sidebar-nav {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    overflow-y: auto;
+    padding: 1.25rem 1rem;
+  }
+
+  .app-shell .mobile-nav-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-radius: 6px;
+    color: #303133;
+    cursor: pointer;
+    padding: 0.7rem 0.85rem;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  .app-shell .mobile-nav-header:hover,
+  .app-shell .mobile-nav-header.is-active {
+    color: #3e63dd;
+    background: #f4f6f9;
+  }
+
+  .app-shell .header-left-inner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .app-shell .header-left-inner span {
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  .app-shell .chevron-icon {
+    width: 16px;
+    height: 16px;
+    color: #909399;
+    transition: transform 0.3s;
+  }
+
+  .app-shell .chevron-icon.rotated {
+    transform: rotate(180deg);
+  }
+
+  .app-shell .mobile-nav-children {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .app-shell .mobile-nav-children.is-open {
+    grid-template-rows: 1fr;
+  }
+
+  .app-shell .nav-children-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    overflow: hidden;
+    margin-top: 0.25rem;
+    margin-left: 1.35rem;
+    padding-left: 1.15rem;
+    border-left: 1px solid #ebeef5;
+  }
+
+  .app-shell .nav-child-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #606266;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 0.6rem 0.85rem;
+    text-align: left;
+    transition: all 0.2s;
+  }
+
+  .app-shell .nav-child-item:hover,
+  .app-shell .nav-child-item.active {
+    background: #ecf5ff;
+    color: #3e63dd;
+    font-weight: 600;
+  }
+
+  .app-shell .nav-child-item--muted {
+    cursor: default;
+    color: #909399;
+  }
+
+  .app-shell .sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 105;
+    display: block;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(2px);
+  }
+}
+
+@media (max-width: 768px) {
+  .app-shell .app-header {
+    height: 60px;
+    padding: 0 1rem;
+  }
+
+  .app-shell .page-breadcrumb-bar {
+    padding: 0.8rem 1rem;
+  }
+
+  .app-shell .user-info,
+  .app-shell .brand-text {
+    display: none;
+  }
+
+  .app-shell .brand-logo-area {
+    padding-right: 0;
+  }
+}
+
+/* Migrated from digital-platform-web/src/pages/CenterDailyReportPage.vue */
+/* ===== 全局页面容器 ===== */
+.center-daily-report-page .page-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #333333;
+  background: transparent;
+}
+
+/* ===== 页面进入动画 ===== */
+.center-daily-report-page .animate-fadeIn {
+  animation: fadeIn 0.4s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== 面板 ===== */
+.center-daily-report-page .panel {
+  background: #ffffff;
+  border-radius: 8px;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.04);
+  overflow: hidden;
+}
+.center-daily-report-page .panel-body {
+  padding: 1.5rem;
+}
+
+/* ===== 状态面板（错误、空、加载） ===== */
+.center-daily-report-page .state-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  border-radius: 8px;
+}
+.center-daily-report-page .state-panel--compact {
+  padding: 0.75rem 1.5rem;
+  margin: 0;
+}
+.center-daily-report-page .state-panel--error {
+  background: #fef0f0;
+  color: #f56c6c;
+}
+.center-daily-report-page .state-panel--error h3 {
+  margin: 0.5rem 0;
+  font-weight: 600;
+}
+.center-daily-report-page .state-panel--success {
+  background: #f0f9eb;
+  color: #67c23a;
+}
+.center-daily-report-page .state-panel p {
+  font-size: 0.9rem;
+  margin: 0;
+}
+.center-daily-report-page .error-icon {
+  width: 32px;
+  height: 32px;
+  stroke: #f56c6c;
+  margin-bottom: 0.75rem;
+}
+
+/* ===== 加载动画 ===== */
+.center-daily-report-page .loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #ebeef5;
+  border-top-color: #3e63dd;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 1rem;
+}
+@keyframes spin {
+}
+
+/* ===== 筛选面板 ===== */
+.center-daily-report-page .filter-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1.5rem;
+}
+.center-daily-report-page .filter-grid .el-date-editor,
+.center-daily-report-page .filter-grid .el-select {
+  width: 100%;
+}
+
+.center-daily-report-page .filter-query .el-button,
+.center-daily-report-page .filter-export .el-button {
+  height: 48px;
+}
+
+.center-daily-report-page .filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.center-daily-report-page .filter-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #606266;
+}
+
+.center-daily-report-page .input-wrapper {
+  position: relative;
+  border-radius: 4px;
+  border: 1px solid #dcdfe6;
+  background: #ffffff;
+  transition: border-color 0.2s ease;
+  overflow: hidden;
+}
+.center-daily-report-page .input-wrapper:focus-within {
+  border-color: #3e63dd;
+}
+.center-daily-report-page .input-wrapper input,
+.center-daily-report-page .input-wrapper select {
+  width: 100%;
+  padding: 0.5rem 1rem;
+  border: none;
+  background: transparent;
+  font-size: 0.9rem;
+  color: #303133;
+  outline: none;
+  height: 48px;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+.center-daily-report-page .input-wrapper input[type="date"] {
+  cursor: pointer;
+}
+.center-daily-report-page .input-wrapper input::placeholder {
+  color: #c0c4cc;
+}
+.center-daily-report-page .input-wrapper select {
+  appearance: auto;
+  cursor: pointer;
+}
+.center-daily-report-page .input-wrapper select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 查询按钮（紧挨中心） */
+.center-daily-report-page .filter-query {
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 0;   /* 与输入框底部对齐 */
+}
+
+/* 导出按钮（靠右） */
+.center-daily-report-page .filter-export {
+  display: flex;
+  align-items: flex-end;
+  margin-left: auto;   /* 推到最右 */
+  padding-bottom: 0;
+}
+
+/* ===== 报告内容面板 ===== */
+.center-daily-report-page .report-content-panel {
+  padding: 1.5rem;
+}
+
+.center-daily-report-page .report-header-info {
+  display: flex;
+  gap: 2rem;
+  padding: 0.75rem 1rem;
+  background: #fafafa;
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  border: 1px solid #ebeef5;
+}
+.center-daily-report-page .report-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #606266;
+}
+.center-daily-report-page .meta-icon {
+  width: 16px;
+  height: 16px;
+  stroke: #909399;
+}
+
+/* ===== 区块（昨日 / 今日 / 明日） ===== */
+.center-daily-report-page .section-block {
+  margin-bottom: 2rem;
+}
+.center-daily-report-page .section-block:last-child {
+  margin-bottom: 0;
+}
+
+.center-daily-report-page .section-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 0.6rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+.center-daily-report-page .banner-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.center-daily-report-page .section-banner--yellow {
+  background: #fdf6ec;
+  color: #b88230;
+  border: 1px solid #faecd8;
+}
+.center-daily-report-page .section-banner--green {
+  background: #f0f9eb;
+  color: #529b2e;
+  border: 1px solid #e1f3d8;
+}
+.center-daily-report-page .section-banner--red {
+  background: #fef0f0;
+  color: #c45656;
+  border: 1px solid #fde2e2;
+}
+
+.center-daily-report-page .table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+}
+
+/* ===== 中心日报表格 ===== */
+.center-daily-report-page .center-report-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.center-daily-report-page .center-report-table td,
+.center-daily-report-page .center-report-table th {
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+.center-daily-report-page .center-report-table thead th {
+  padding: 0.6rem 0.75rem;
+  background: #fafafa;
+  border-bottom: 2px solid #ebeef5;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #909399;
+  text-align: left;
+  white-space: nowrap;
+}
+.center-daily-report-page .center-report-table tbody td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #f0f0f2;
+  vertical-align: middle;
+  line-height: 1.5;
+}
+.center-daily-report-page .center-report-table tbody tr:hover {
+  background: #fdfdfe;
+}
+
+/* 列宽定义 */
+.center-daily-report-page .col-seq {
+  width: 50px;
+  text-align: center;
+}
+.center-daily-report-page .col-project {
+  width: 140px;
+  font-weight: 500;
+  color: #303133;
+}
+.center-daily-report-page .col-content {
+  width: 200px;
+}
+.center-daily-report-page .col-person {
+  width: 80px;
+}
+.center-daily-report-page .col-progress {
+  width: 70px;
+  text-align: center;
+}
+.center-daily-report-page .col-deviation {
+  width: 130px;
+}
+.center-daily-report-page .col-collab-dept {
+  width: 80px;
+}
+.center-daily-report-page .col-collab-item {
+  width: 120px;
+}
+
+.center-daily-report-page .empty-section-note {
+  padding: 1.5rem;
+  text-align: center;
+  color: #909399;
+  font-size: 0.85rem;
+  background: #fafafa;
+  border-radius: 4px;
+  border: 1px dashed #dcdfe6;
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 900px) {
+  .center-daily-report-page .page-stack {
+    padding: 1rem;
+  }
+  .center-daily-report-page .filter-grid {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .center-daily-report-page .filter-export {
+    margin-left: 0;
+  }
+  .center-daily-report-page .report-header-info {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .center-daily-report-page .center-report-table {
+    font-size: 0.8rem;
+  }
+}
+
+/* Migrated from digital-platform-web/src/pages/DailyReportListPage.vue */
+/* ===== 全局容器 ===== */
+.daily-report-list-page .page-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  max-width: 1500px;
+  margin: 0 auto;
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #333333;
+  background: transparent;
+}
+
+/* ===== 页面进入动画 ===== */
+@keyframes fadeIn {
+}
+
+/* ===== 旋转动画 ===== */
+@keyframes spin {
+}
+@keyframes wave {
+  0%, 100% { transform: scaleY(0.4); }
+}
+
+/* ===== 面板 ===== */
+.daily-report-list-page .panel {
+  background: #ffffff;
+  border-radius: 8px;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.04);
+}
+
+/* ===== 筛选面板（新布局） ===== */
+.daily-report-list-page .daily-filter-panel {
+  padding: 0.75rem 1.5rem;
+}
+.daily-report-list-page .daily-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+.daily-report-list-page .filter-text {
+  font-size: 0.9rem;
+  color: #303133;
+  white-space: nowrap;
+}
+.daily-report-list-page .filter-group--inline {
+  display: inline-flex;
+  align-items: center;
+}
+.daily-report-list-page .filter-group--inline .el-date-editor {
+  width: 140px;
+}
+.daily-report-list-page .filter-group--inline .el-select {
+  width: 110px;
+}
+.daily-report-list-page .filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: 0.25rem;
+}
+.daily-report-list-page .apply-btn {
+  min-width: 90px;
+}
+
+/* ===== 状态面板 ===== */
+.daily-report-list-page .state-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  text-align: center;
+}
+.daily-report-list-page .state-panel--inline {
+  padding: 2rem 1.5rem;
+}
+.daily-report-list-page .state-panel--error {
+  background: #fef0f0;
+  border-radius: 8px;
+  color: #f56c6c;
+}
+.daily-report-list-page .state-panel--empty {
+  background: #fafafa;
+  border-radius: 8px;
+}
+.daily-report-list-page .state-panel p {
+  font-size: 0.9rem;
+  color: #909399;
+  margin-top: 0.5rem;
+}
+.daily-report-list-page .empty-icon {
+  width: 48px;
+  height: 48px;
+  stroke: #c0c4cc;
+  margin-bottom: 1rem;
+}
+.daily-report-list-page .inline-btn {
+  margin-top: 1rem;
+}
+.daily-report-list-page .loading-wave {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 1rem;
+}
+.daily-report-list-page .wave-bar {
+  width: 4px;
+  height: 20px;
+  background: #3e63dd;
+  border-radius: 4px;
+  animation: wave 1s ease-in-out infinite;
+}
+
+/* ===== 列表面板 ===== */
+.daily-report-list-page .panel-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #ebeef5;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.daily-report-list-page .toolbar-info {
+  display: flex;
+  flex-direction: column;
+}
+.daily-report-list-page .toolbar-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #303133;
+}
+.daily-report-list-page .toolbar-subtitle {
+  font-size: 0.8rem;
+  color: #909399;
+  margin-top: 0.2rem;
+}
+.daily-report-list-page .toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+/* ===== 表格 ===== */
+.daily-report-list-page .table-container {
+  overflow-x: auto;
+  width: 100%;
+}
+.daily-report-list-page .daily-table {
+  min-width: 700px;
+  width: 100%;
+}
+.daily-report-list-page .daily-table__head {
+  display: grid;
+  grid-template-columns: 0.8fr 2fr 0.8fr 1.2fr 1.6fr;
+  padding: 0.8rem 1.5rem;
+  background: #fafafa;
+  border-bottom: 1px solid #ebeef5;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #909399;
+  gap: 1rem;
+}
+.daily-report-list-page .daily-table__body {
+  display: flex;
+  flex-direction: column;
+}
+.daily-report-list-page .daily-table__row {
+  display: grid;
+  grid-template-columns: 0.8fr 2fr 0.8fr 1.2fr 1.6fr;
+  padding: 0.9rem 1.5rem;
+  align-items: center;
+  border-bottom: 1px solid #ebeef5;
+  transition: background 0.2s ease;
+  font-size: 0.9rem;
+  gap: 1rem;
+}
+.daily-report-list-page .daily-table__row:hover {
+  background: #fdfdfe;
+}
+.daily-report-list-page .daily-table__row:last-child {
+  border-bottom: none;
+}
+.daily-report-list-page .daily-table__cell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.daily-report-list-page .date-value {
+  font-weight: 500;
+  color: #303133;
+}
+.daily-report-list-page .daily-table__project {
+  gap: 0.2rem;
+}
+.daily-report-list-page .project-name {
+  font-weight: 600;
+  color: #303133;
+}
+.daily-report-list-page .project-code {
+  font-size: 0.75rem;
+  color: #909399;
+  font-family: Consolas, monospace;
+}
+.daily-report-list-page .update-time {
+  color: #606266;
+  font-size: 0.85rem;
+}
+.daily-report-list-page .text-right {
+  text-align: right;
+  justify-content: flex-end;
+}
+
+/* ===== 状态标签 ===== */
+.daily-report-list-page .status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  width: fit-content;
+  border: 1px solid transparent;
+}
+.daily-report-list-page .status-badge--done {
+  background: #f0f9eb;
+  color: #67c23a;
+  border-color: #e1f3d8;
+}
+.daily-report-list-page .status-badge--draft {
+  background: #fdf6ec;
+  color: #e6a23c;
+  border-color: #faecd8;
+}
+
+/* ===== 操作按钮 ===== */
+.daily-report-list-page .daily-table__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+/* ===== 响应式 ===== */
+@media (max-width: 900px) {
+  .daily-report-list-page .daily-filters {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+  .daily-report-list-page .filter-text {
+    display: none; /* 移动端隐藏文字，直接用标签占位 */
+  }
+  .daily-report-list-page .filter-group--inline {
+    width: 100%;
+  }
+  .daily-report-list-page .filter-group--inline .el-date-editor,
+  .daily-report-list-page .filter-group--inline .el-select {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .daily-report-list-page .filter-actions {
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+  .daily-report-list-page .daily-table__head {
+    display: none;
+  }
+  .daily-report-list-page .daily-table__row {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+    padding: 1rem 1.5rem;
+  }
+  .daily-report-list-page .daily-table__actions {
+    justify-content: flex-start;
+  }
+}
+
+/* Migrated from digital-platform-web/src/pages/DailyReportPage.vue */
+/* ===== 全局页面容器 ===== */
+
+/* ===== 页面进入动画 ===== */
+@keyframes fadeIn {
+}
+
+/* ===== 面板 ===== */
+.daily-report-page .toolbar-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.daily-report-page .toolbar-subtitle {
+  font-size: 0.8rem;
+  color: #909399;
+}
+
+/* ===== 状态标签 ===== */
+.daily-report-page .status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+
+/* ===== 状态面板（错误、空、加载） ===== */
+.daily-report-page .state-panel--compact {
+  padding: 0.75rem 1.5rem;
+  margin: 1rem 0 0;
+}
+
+/* ===== 表单筛选栏 ===== */
+.daily-report-page .daily-form {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.daily-report-page .daily-filters {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+/* 项目选择器（下拉） */
+.daily-report-page .daily-project-select {
+  flex: 1;
+  min-width: 280px;
+  position: relative;
+}
+.daily-report-page .project-select-wrapper {
+  position: relative;
+}
+.daily-report-page .project-select-wrapper .input-wrapper {
+  position: relative;
+}
+.daily-report-page .search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  stroke: #c0c4cc;
+  pointer-events: none;
+}
+.daily-report-page .project-select-wrapper .input-wrapper input {
+  padding-left: 2.2rem;
+  padding-right: 2.2rem;
+}
+.daily-report-page .input-wrapper input {
+  width: 100%;
+  padding: 0.5rem 1rem;
+  border: none;
+  background: transparent;
+  font-size: 0.9rem;
+  color: #303133;
+  outline: none;
+  height: 48px;
+  box-sizing: border-box;
+}
+.daily-report-page .input-wrapper input::placeholder {
+  color: #303133;  /* 与下拉选项文字颜色一致 */
+}
+
+/* 清空搜索按钮（自定义） */
+.daily-report-page .clear-search-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #909399;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background 0.2s ease;
+}
+.daily-report-page .clear-search-btn:hover {
+  background: #f0f0f0;
+  color: #606266;
+}
+.daily-report-page .clear-search-btn svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+}
+
+/* 隐藏浏览器默认的搜索清除按钮 */
+.daily-report-page .daily-project-select .input-wrapper input[type="search"]::-webkit-search-cancel-button,
+.daily-report-page .daily-project-select .input-wrapper input[type="search"]::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+.daily-report-page .daily-project-select .input-wrapper input[type="search"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* 下拉列表 */
+.daily-report-page .project-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  z-index: 1000;
+  padding: 4px 0;
+}
+.daily-report-page .project-dropdown-item {
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  color: #303133;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.daily-report-page .project-dropdown-item:hover {
+  background: #f5f7fa;
+}
+.daily-report-page .project-dropdown-item.active {
+  background: #ecf5ff;
+  color: #3e63dd;
+}
+.daily-report-page .project-dropdown-empty {
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  color: #909399;
+  text-align: center;
+}
+
+/* ===== 动态区块（今日完成情况 / 明日计划 / 照片） ===== */
+.daily-report-page .daily-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.daily-report-page .daily-section__heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.daily-report-page .daily-section__heading h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #303133;
+  margin: 0;
+}
+
+.daily-report-page .daily-plan-suggestion {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #d9ecff;
+  border-radius: 4px;
+  background: #f5faff;
+}
+.daily-report-page .daily-plan-suggestion__content {
+  min-width: 0;
+}
+.daily-report-page .daily-plan-suggestion__content strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #303133;
+  font-size: 0.9rem;
+}
+.daily-report-page .daily-plan-suggestion__content ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #606266;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.daily-report-page .daily-edit-table {
+  min-width: 1320px;
+  width: 100%;
+}
+.daily-report-page .daily-edit-table__head {
+  display: grid;
+  padding: 0.6rem 0.75rem;
+  background: #fafafa;
+  border-bottom: 1px solid #ebeef5;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #909399;
+  gap: 0.75rem;
+}
+/* 调整后的列宽顺序（任务来源、关联周计划、工作内容、执行状态、完成进度、完成时间、负责人、偏差与纠偏、操作） */
+.daily-report-page .daily-edit-table--items .daily-edit-table__head {
+  grid-template-columns: 1.1fr 1.8fr 1.8fr 1.1fr 1fr 0.9fr 1fr 1.4fr 0.7fr;
+}
+.daily-report-page .daily-edit-table--plans .daily-edit-table__head {
+  grid-template-columns: 2fr 1fr 1fr 1.2fr 1.5fr 0.8fr;
+}
+.daily-report-page .text-right {
+  text-align: right;
+}
+
+.daily-report-page .daily-edit-table__row {
+  display: grid;
+  padding: 0.6rem 0.75rem;
+  align-items: center;
+  border-bottom: 1px solid #f0f0f2;
+  gap: 0.75rem;
+  transition: background 0.2s ease;
+}
+/* 行内列宽与表头一致 */
+.daily-report-page .daily-edit-table--items .daily-edit-table__row {
+  grid-template-columns: 1.1fr 1.8fr 1.8fr 1.1fr 1fr 0.9fr 1fr 1.4fr 0.7fr;
+}
+.daily-report-page .daily-edit-table--plans .daily-edit-table__row {
+  grid-template-columns: 2fr 1fr 1fr 1.2fr 1.5fr 0.8fr;
+}
+.daily-report-page .daily-edit-table__row:hover {
+  background: #fdfdfe;
+}
+
+.daily-report-page .daily-edit-table__row .el-input,
+.daily-report-page .daily-edit-table__row .el-select,
+.daily-report-page .daily-edit-table__row .el-date-editor {
+  width: 100%;
+}
+.daily-report-page .daily-filters .el-date-editor,
+.daily-report-page .daily-project-select .el-input {
+  width: 100%;
+}
+
+.daily-report-page .daily-edit-table__row .el-input__wrapper,
+.daily-report-page .daily-edit-table__row .el-textarea__inner {
+  min-height: 48px;
+}
+
+.daily-report-page .daily-edit-table__row .invalid .el-input__wrapper,
+.daily-report-page .daily-edit-table__row .invalid .el-textarea__inner {
+  box-shadow: 0 0 0 1px var(--app-color-danger) inset;
+}
+
+/* ===== 附件区域 ===== */
+.daily-report-page .daily-attachments {
+  padding-top: 0.5rem;
+}
+.daily-report-page .daily-upload-button {
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+}
+.daily-report-page .daily-upload-button.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.daily-report-page .daily-upload-button input[type="file"] {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.daily-report-page .daily-upload-button.disabled input[type="file"] {
+  cursor: not-allowed;
+}
+
+/* ===== 附件列表与缩略图 ===== */
+.daily-report-page .daily-attachment-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.daily-report-page .daily-attachment-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background: #fafafa;
+  border-radius: 4px;
+  border: 1px solid #ebeef5;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.daily-report-page .attachment-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+}
+.daily-report-page .attachment-thumbnail {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #dcdfe6;
+  flex-shrink: 0;
+}
+.daily-report-page .attachment-thumbnail-placeholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+  border: 1px dashed #dcdfe6;
+  background: #f5f7fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.daily-report-page .attachment-thumbnail-placeholder svg {
+  width: 24px;
+  height: 24px;
+  stroke: #c0c4cc;
+}
+.daily-report-page .attachment-name {
+  font-size: 0.85rem;
+  color: #303133;
+  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.daily-report-page .attachment-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.daily-report-page .inline-muted {
+  font-size: 0.85rem;
+  color: #909399;
+  margin: 0.5rem 0;
+}
+.daily-report-page .inline-hint {
+  color: #909399;
+  font-style: italic;
+}
+
+/* ===== 底部操作按钮 ===== */
+.daily-report-page .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 1rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #ebeef5;
+  flex-wrap: wrap;
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 900px) {
+  .daily-report-page .daily-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .daily-report-page .daily-project-select {
+    min-width: unset;
+  }
+  .daily-report-page .daily-edit-table__head,
+  .daily-report-page .daily-edit-table__row {
+    grid-template-columns: 1fr !important;
+    gap: 0.5rem;
+  }
+  .daily-report-page .daily-edit-table__head {
+    display: none;
+  }
+  .daily-report-page .daily-edit-table__row {
+    padding: 0.75rem;
+    border: 1px solid #ebeef5;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+  }
+  .daily-report-page .daily-edit-table__row .el-button {
+    align-self: flex-start;
+  }
+  .daily-report-page .panel-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .daily-report-page .toolbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .daily-report-page .attachment-preview {
+    flex-wrap: wrap;
+  }
+  .daily-report-page .attachment-name {
+    white-space: normal;
+  }
+}
+
+/* Migrated from digital-platform-web/src/pages/LoginPage.vue */
+.login-page * {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background: #f8fafc;
+  padding: 1.5rem;
+  position: relative;
+}
+
+.login-page .login-panel {
+  width: 100%;
+  max-width: 420px;
+  padding: 2.5rem 2.2rem 2.2rem;
+  background: #ffffff;
+  border-radius: 1.25rem;
+  box-shadow: 0 20px 50px rgba(0, 20, 40, 0.08), 0 8px 20px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  transition: box-shadow 0.25s ease;
+}
+
+.login-page .login-panel:hover {
+  box-shadow: 0 28px 60px rgba(0, 20, 40, 0.16);
+}
+
+.login-page .brand-header {
+  margin-bottom: 2rem;
+}
+
+.login-page .section-eyebrow {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 0.2rem 0.8rem;
+  border-radius: 20px;
+  margin-bottom: 0.5rem;
+}
+
+.login-page .brand-header h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+  margin: 0.25rem 0 0.25rem 0;
+  line-height: 1.2;
+}
+
+.login-page .subtitle {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin: 0;
+  font-weight: 400;
+}
+
+.login-page .input-group {
+  margin-bottom: 1.5rem;
+}
+
+.login-page .input-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: 100%;
+}
+
+.login-page .label-text {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #475569;
+  letter-spacing: 0.02em;
+  margin-left: 0.25rem;
+}
+
+.login-page .input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: #ffffff;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  overflow: hidden;
+  padding-left: 0.5rem;
+}
+
+/* 聚焦时改为品牌蓝 */
+.login-page .input-wrapper:focus-within {
+  border-color: #3e63dd;
+  box-shadow: 0 0 0 3px rgba(62, 99, 221, 0.1);
+}
+
+.login-page .input-icon {
+  width: 20px;
+  height: 20px;
+  margin-left: 0.5rem;
+  margin-right: 0.3rem;
+  stroke: #94a3b8;
+  flex-shrink: 0;
+  transition: stroke 0.2s;
+  z-index: 1;
+}
+
+/* 聚焦图标改为品牌蓝 */
+.login-page .input-wrapper:focus-within .input-icon {
+  stroke: #3e63dd;
+}
+
+.login-page .input-wrapper input {
+  flex: 1;
+  padding: 0.7rem 1.2rem 0.7rem 0.5rem;
+  border: none;
+  background: transparent;
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: #0f172a;
+  outline: none;
+  font-family: inherit;
+  background-color: #ffffff;
+  box-shadow: none;
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 0 10px 10px 0;
+  margin-left: 0.3rem;
+  padding-left: 0.5rem;
+}
+
+.login-page .input-wrapper input:focus {
+  outline: none;
+  box-shadow: none;
+  border: none;
+}
+
+.login-page .input-wrapper input::selection {
+  background: rgba(62, 99, 221, 0.15);
+  color: #0f172a;
+}
+
+.login-page .input-wrapper input::placeholder {
+  color: #94a3b8;
+  font-weight: 400;
+  font-size: 0.9rem;
+}
+
+.login-page .input-wrapper .el-input {
+  flex: 1;
+}
+
+.login-page .input-wrapper .el-input__wrapper {
+  min-height: 42px;
+  border-radius: 0 10px 10px 0;
+  box-shadow: none;
+}
+
+.login-page .login-panel > .el-button {
+  width: 100%;
+  height: 44px;
+  margin-top: 0.5rem;
+  border-radius: 10px;
+}
+
+.login-page .footer-note {
+  text-align: center;
+  margin-top: 2rem;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  letter-spacing: 0.3px;
+  font-weight: 400;
+}
+
+@media (max-width: 480px) {
+  .login-page .login-panel {
+    padding: 1.5rem 1.25rem 1.5rem;
+  }
+
+  .login-page .brand-header h1 {
+    font-size: 1.5rem;
+  }
+
+  .login-page .input-wrapper input {
+    padding: 0.6rem 1rem 0.6rem 0.5rem;
+    font-size: 0.9rem;
+  }
+
+}
+
+/* Migrated from digital-platform-web/src/pages/MyStageDocumentTasksPage.vue */
+.stage-document-tasks-page .task-card {
+  cursor: pointer;
+}
+
+.stage-document-tasks-page .page-stack {
+  max-width: 1500px;
+  /* 最大宽度限制 */
+  margin: 0 auto;
+  /* 水平居中 */
+  padding: 1.5rem;
+  /* 内边距 */
+}
+
+/* Migrated from digital-platform-web/src/pages/ProjectCreatePage.vue */
+
+/* Migrated from digital-platform-web/src/pages/ProjectOverviewDashboardPage.vue */
+
+/* Migrated from digital-platform-web/src/pages/WeeklyReportListPage.vue */
+/* ===== 全局页面容器 ===== */
+
+/* ===== 页面进入动画 ===== */
+@keyframes fadeIn {
+}
+
+/* ===== 面板 ===== */
+.weekly-report-list-page .toolbar-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* ===== 状态面板 ===== */
+.weekly-report-list-page .state-panel--empty {
+  color: #909399;
+}
+
+/* ===== 加载动画 ===== */
+@keyframes spin {
+}
+
+/* ===== 表单控件 ===== */
+
+/* ===== 状态标签 ===== */
+.weekly-report-list-page .status-badge--pending {
+  background: #ecf5ff;
+  color: #3e63dd;
+  border-color: #d9ecff;
+}
+.weekly-report-list-page .status-badge--returned {
+  background: #fef0f0;
+  color: #f56c6c;
+  border-color: #fde2e2;
+}
+
+/* ===== 单双休设置面板 ===== */
+.weekly-report-list-page .rest-mode-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+.weekly-report-list-page .rest-mode-body--readonly {
+  justify-content: flex-start;
+}
+.weekly-report-list-page .rest-mode-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.weekly-report-list-page .rest-mode-label {
+  font-size: 0.85rem;
+  color: #606266;
+}
+.weekly-report-list-page .rest-mode-anchor-note {
+  font-size: 0.8rem;
+  color: #909399;
+}
+.weekly-report-list-page .rest-mode--single {
+  color: #e6a23c;
+}
+.weekly-report-list-page .rest-mode--double {
+  color: #67c23a;
+}
+.weekly-report-list-page .rest-mode-actions {
+  display: flex;
+  align-items: flex-end;   /* 添加此行：使下拉框与按钮底部对齐 */
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.weekly-report-list-page .rest-mode-actions .el-select {
+  width: 150px;
+}
+.weekly-report-list-page .rest-mode-actions .filter-group {
+  min-width: 140px;
+}
+.weekly-report-list-page .rest-mode-actions .el-button {
+  height: 48px;
+}
+
+/* ===== 表格容器 ===== */
+.weekly-report-list-page .table-container {
+  overflow-x: auto;
+  width: 100%;
+  padding: 0 0 0.5rem 0;
+}
+
+/* ===== 周报列表表格 ===== */
+.weekly-report-list-page .weekly-report-table {
+  min-width: 700px;
+  width: 100%;
+}
+.weekly-report-list-page .weekly-report-table__head {
+  display: grid;
+  padding: 0.6rem 0.75rem;
+  background: #fafafa;
+  border-bottom: 2px solid #ebeef5;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #909399;
+  gap: 0.75rem;
+  grid-template-columns: 1.8fr 0.7fr 0.9fr 0.9fr 1.2fr 0.8fr;
+}
+.weekly-report-list-page .weekly-report-table--employee .weekly-report-table__head {
+  grid-template-columns: 1.8fr 0.7fr 1.2fr 0.8fr;
+}
+
+.weekly-report-list-page .weekly-report-table__row {
+  display: grid;
+  padding: 0.6rem 0.75rem;
+  align-items: center;
+  border-bottom: 1px solid #f0f0f2;
+  gap: 0.75rem;
+  transition: background 0.2s ease;
+  grid-template-columns: 1.8fr 0.7fr 0.9fr 0.9fr 1.2fr 0.8fr;
+}
+.weekly-report-list-page .weekly-report-table--employee .weekly-report-table__row {
+  grid-template-columns: 1.8fr 0.7fr 1.2fr 0.8fr;
+}
+.weekly-report-list-page .weekly-report-table__row:hover {
+  background: #fdfdfe;
+}
+.weekly-report-list-page .weekly-report-table__row time {
+  font-size: 0.8rem;
+  color: #909399;
+}
+.weekly-report-list-page .weekly-report-table__actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+/* ===== 响应式 ===== */
+@media (max-width: 900px) {
+  .weekly-report-list-page .rest-mode-actions .filter-group {
+    flex: 1;
+    min-width: unset;
+  }
+  .weekly-report-list-page .weekly-report-table__head,
+  .weekly-report-list-page .weekly-report-table__row {
+    grid-template-columns: 1fr !important;
+    gap: 0.4rem;
+  }
+  .weekly-report-list-page .weekly-report-table--employee .weekly-report-table__head,
+  .weekly-report-list-page .weekly-report-table--employee .weekly-report-table__row {
+    grid-template-columns: 1fr !important;
+  }
+  .weekly-report-list-page .weekly-report-table__head {
+    display: none;
+  }
+  .weekly-report-list-page .weekly-report-table__row {
+    padding: 0.75rem;
+    border: 1px solid #ebeef5;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+  }
+  .weekly-report-list-page .weekly-report-table__row .weekly-report-table__actions {
+    justify-content: flex-start;
+  }
+}
+
+/* Migrated from digital-platform-web/src/pages/WeeklyReportPage.vue */
+/* ===== 全局页面容器 ===== */
+
+/* ===== 页面进入动画 ===== */
+@keyframes fadeIn {
+}
+
+/* ===== 面板 ===== */
+
+/* ===== 状态面板 ===== */
+
+/* ===== 状态标签 ===== */
+.weekly-report-page .weekly-return-reason,
+.weekly-report-page .weekly-pending-note {
+  align-items: flex-start;
+  text-align: left;
+}
+
+/* ===== 表单 ===== */
+.weekly-report-page .weekly-form {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* 日期选择 */
+.weekly-report-page .weekly-date-grid {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+.weekly-report-page .weekly-date-grid .filter-group {
+  min-width: 200px;
+  flex: 1;
+}
+
+/* 表单字段 */
+.weekly-report-page .input-wrapper--error {
+  border-color: #f56c6c;
+}
+.weekly-report-page .input-wrapper--error:focus-within {
+  border-color: #f56c6c;
+  box-shadow: 0 0 0 2px rgba(245, 108, 108, 0.2);
+}
+.weekly-report-page .input-wrapper input,
+.weekly-report-page .input-wrapper select {
+  width: 100%;
+  padding: 0.5rem 1.2rem;        /* 增宽 */
+  border: none;
+  background: transparent;
+  font-size: 0.95rem;            /* 增大字号 */
+  color: #303133;
+  outline: none;
+  height: 50px;                  /* 增高 */
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.weekly-report-page .field-error {
+  font-size: 0.75rem;
+  color: #f56c6c;
+  margin-top: 0.25rem;
+}
+
+/* ===== 周报区块 ===== */
+.weekly-report-page .weekly-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.weekly-report-page .weekly-section__heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.weekly-report-page .section-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.weekly-report-page .weekly-section__heading h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #303133;
+  margin: 0;
+}
+
+.weekly-report-page .weekly-prefill-banner {
+  padding: 0.75rem 1rem;
+  border: 1px solid #d9ecff;
+  border-radius: 4px;
+  background: #f5faff;
+  color: #303133;
+  font-size: 0.9rem;
+}
+
+.weekly-report-page .source-chip-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
+.weekly-report-page .source-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.6rem;            /* 略增高 */
+  padding: 0 0.45rem;
+  border-radius: 4px;
+  font-size: 0.8rem;             /* 增大字号 */
+  line-height: 1.4;
+  background: #eef2ff;
+  color: #334155;
+}
+
+.weekly-report-page .source-chip--plan {
+  background: #ecfdf3;
+  color: #166534;
+}
+
+.weekly-report-page .source-chip--adhoc {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.weekly-report-page .source-chip--legacy {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.weekly-report-page .source-chip--warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.weekly-report-page .field-hint {
+  display: block;
+  margin-top: 0.25rem;
+  color: #909399;
+  font-size: 0.75rem;
+}
+
+.weekly-report-page .link-button {
+  margin-left: 0.35rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #1d4ed8;
+  cursor: pointer;
+  font: inherit;
+}
+
+/* ===== 周报编辑表格 ===== */
+.weekly-report-page .weekly-edit-table {
+  min-width: 900px;
+  width: 100%;
+}
+.weekly-report-page .weekly-edit-table__head {
+  display: grid;
+  padding: 0.6rem 0.75rem;
+  background: #fafafa;
+  border-bottom: 2px solid #ebeef5;
+  font-size: 0.8rem;             /* 表头略大 */
+  font-weight: 600;
+  color: #909399;
+  gap: 0.75rem;
+}
+.weekly-report-page .weekly-edit-table--summaries .weekly-edit-table__head {
+  grid-template-columns: 1.6fr 1.8fr 0.8fr 0.9fr 1.6fr 0.8fr 0.5fr;
+}
+.weekly-report-page .weekly-edit-table--plans .weekly-edit-table__head {
+  grid-template-columns: 1.8fr 1.8fr 0.9fr 1.2fr 0.7fr;
+}
+
+.weekly-report-page .weekly-edit-table__row {
+  display: grid;
+  padding: 0.6rem 0.75rem;
+  align-items: center;
+  border-bottom: 1px solid #f0f0f2;
+  gap: 0.75rem;
+  transition: background 0.2s ease;
+}
+.weekly-report-page .weekly-edit-table--summaries .weekly-edit-table__row {
+  grid-template-columns: 1.6fr 1.8fr 0.8fr 0.9fr 1.6fr 0.8fr 0.5fr;
+}
+.weekly-report-page .weekly-edit-table--plans .weekly-edit-table__row {
+  grid-template-columns: 1.8fr 1.8fr 0.9fr 1.2fr 0.7fr;
+}
+.weekly-report-page .weekly-edit-table__row:hover {
+  background: #fdfdfe;
+}
+
+.weekly-report-page .weekly-edit-table__row .el-input,
+.weekly-report-page .weekly-edit-table__row .el-select,
+.weekly-report-page .weekly-edit-table__row .el-date-editor {
+  width: 100%;
+}
+.weekly-report-page .weekly-date-grid .el-date-editor {
+  width: 100%;
+}
+
+.weekly-report-page .weekly-edit-table__row .el-input__wrapper,
+.weekly-report-page .weekly-edit-table__row .el-textarea__inner {
+  min-height: 40px;
+}
+
+.weekly-report-page .weekly-edit-table__row .invalid .el-input__wrapper,
+.weekly-report-page .weekly-edit-table__row .invalid .el-textarea__inner {
+  box-shadow: 0 0 0 1px var(--app-color-danger) inset;
+}
+
+.weekly-report-page .form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.weekly-report-page .form-field .field-error {
+  font-size: 0.7rem;
+  color: #f56c6c;
+}
+
+/* 任务信息列（含来源标签）高度较大，用 align-items: center 自动垂直居中，无需补偿 */
+
+
+
+.weekly-report-page .row-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
+}
+
+.weekly-report-page .action-btn--link {
+  border-color: #d9ecff;
+  color: #1d4ed8;
+  background: #f5faff;
+}
+.weekly-report-page .action-btn--link:hover:not(:disabled) {
+  background: #ecf5ff;
+  border-color: #c6e2ff;
+}
+
+/* ===== 底部操作按钮 ===== */
+
+/* ===== 响应式 ===== */
+@media (max-width: 900px) {
+  .weekly-report-page .weekly-date-grid {
+    flex-direction: column;
+  }
+  .weekly-report-page .weekly-date-grid .filter-group {
+    min-width: unset;
+  }
+  .weekly-report-page .weekly-edit-table__head,
+  .weekly-report-page .weekly-edit-table__row {
+    grid-template-columns: 1fr !important;
+    gap: 0.5rem;
+  }
+  .weekly-report-page .weekly-edit-table__head {
+    display: none;
+  }
+  .weekly-report-page .weekly-edit-table__row {
+    padding: 0.75rem;
+    border: 1px solid #ebeef5;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+  }
+  .weekly-report-page .weekly-edit-table__row .el-button,
+  .weekly-report-page .weekly-edit-table__row .row-actions {
+    align-self: flex-start;
+  }
+  .weekly-report-page .row-actions {
+    flex-direction: row;
+    gap: 0.5rem;
+  }
+}
+
+/* Migrated from digital-platform-web/src/pages/WeeklyReportReviewListPage.vue */
+/* ===== 全局页面容器 ===== */
+
+/* ===== 页面进入动画 ===== */
+@keyframes fadeIn {
+}
+
+/* ===== 面板 ===== */
+
+/* ===== 状态面板 ===== */
+
+/* ===== 加载动画 ===== */
+@keyframes spin {
+}
+
+/* ===== 表单控件 ===== */
+.weekly-review-list-page .input-wrapper {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  background: #ffffff;
+  transition: border-color 0.2s ease;
+}
+.weekly-review-list-page .input-wrapper input {
+  width: 100%;
+  height: 50px;
+  padding: 0.5rem 1.2rem;
+  border: none;
+  background: transparent;
+  box-sizing: border-box;
+  color: #303133;
+  font-family: inherit;
+  font-size: 0.95rem;
+  outline: none;
+}
+/* ===== 状态标签 ===== */
+
+/* ===== 筛选栏 ===== */
+.weekly-review-list-page .weekly-overview-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  width: 100%;
+}
+.weekly-review-list-page .weekly-overview-filters .el-select {
+  width: 180px;
+}
+.weekly-review-list-page .weekly-overview-filters .filter-group {
+  min-width: 140px;
+}
+.weekly-review-list-page .weekly-overview-filters .filter-group:first-child {
+  flex: 1;
+  min-width: 360px;
+}
+.weekly-review-list-page .weekly-overview-filters .el-button {
+  height: 40px;
+  --el-button-bg-color: #3e63dd;
+  --el-button-border-color: #3e63dd;
+  --el-button-text-color: #ffffff;
+  --el-button-hover-bg-color: #3451c7;
+  --el-button-hover-border-color: #3451c7;
+  --el-button-hover-text-color: #ffffff;
+}
+
+/* ===== 中心周报表格 ===== */
+
+.weekly-review-list-page .weekly-overview-table {
+  min-width: 700px;
+  width: 100%;
+}
+.weekly-review-list-page .weekly-overview-table__head {
+  display: grid;
+  padding: 0.6rem 0.75rem;
+  background: #fafafa;
+  border-bottom: 2px solid #ebeef5;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #909399;
+  gap: 0.75rem;
+  grid-template-columns: 1fr 1fr 0.7fr 0.9fr 0.9fr 1fr 0.7fr;
+}
+
+.weekly-review-list-page .weekly-overview-table__row {
+  display: grid;
+  padding: 0.6rem 0.75rem;
+  align-items: center;
+  border-bottom: 1px solid #f0f0f2;
+  gap: 0.75rem;
+  transition: background 0.2s ease;
+  grid-template-columns: 1fr 1fr 0.7fr 0.9fr 0.9fr 1fr 0.7fr;
+}
+.weekly-review-list-page .weekly-overview-table__row:hover {
+  background: #fdfdfe;
+}
+.weekly-review-list-page .weekly-overview-table__row .el-button {
+  justify-self: flex-end;
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 900px) {
+  .weekly-review-list-page .weekly-overview-filters {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .weekly-review-list-page .weekly-overview-filters .filter-group {
+    min-width: unset;
+  }
+  .weekly-review-list-page .weekly-overview-filters .input-wrapper,
+  .weekly-review-list-page .weekly-overview-filters .el-select {
+    width: 100%;
+  }
+  .weekly-review-list-page .weekly-overview-table__head,
+  .weekly-review-list-page .weekly-overview-table__row {
+    grid-template-columns: 1fr !important;
+    gap: 0.4rem;
+  }
+  .weekly-review-list-page .weekly-overview-table__head {
+    display: none;
+  }
+  .weekly-review-list-page .weekly-overview-table__row {
+    padding: 0.75rem;
+    border: 1px solid #ebeef5;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+  }
+  .weekly-review-list-page .weekly-overview-table__row .el-button {
+    justify-self: flex-start;
+  }
+}
+
+/* Migrated from digital-platform-web/src/pages/WeeklyReportReviewPage.vue */
+/* ===== 全局页面容器 ===== */
+
+/* ===== 页面进入动画 ===== */
+@keyframes fadeIn {
+}
+
+/* ===== 面板 ===== */
+.weekly-review-page .evaluatee-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #303133;
+}
+.weekly-review-page .divider {
+  color: #dcdfe6;
+  font-weight: 300;
+}
+
+/* ===== 状态标签 ===== */
+
+/* ===== 周报摘要元信息 ===== */
+.weekly-review-page .weekly-review-meta {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+.weekly-review-page .meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.weekly-review-page .meta-label {
+  font-size: 0.75rem;
+  color: #909399;
+}
+.weekly-review-page .meta-value {
+  font-size: 0.95rem;
+  color: #303133;
+}
+.weekly-review-page .final-comment {
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #fafafa;
+  border-radius: 4px;
+  border-left: 3px solid #3e63dd;
+  font-size: 0.9rem;
+  color: #606266;
+}
+.weekly-review-page .final-comment--approval {
+  border-left-color: #f56c6c;
+  background: #fef0f0;
+  color: #9f3a38;
+}
+
+/* ===== 只读表格 ===== */
+
+.weekly-review-page .weekly-readonly-table {
+  min-width: 700px;
+  width: 100%;
+}
+.weekly-review-page .weekly-readonly-table__head {
+  display: grid;
+  padding: 0.6rem 0.75rem;
+  background: #fafafa;
+  border-bottom: 2px solid #ebeef5;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #909399;
+  gap: 0.75rem;
+}
+.weekly-review-page .weekly-readonly-table--summaries .weekly-readonly-table__head {
+  grid-template-columns: 1.5fr 1.5fr 0.9fr 0.9fr 1.5fr 0.9fr;
+}
+.weekly-review-page .weekly-readonly-table--plans .weekly-readonly-table__head {
+  grid-template-columns: 1.8fr 1.8fr 0.9fr 1.2fr;
+}
+
+.weekly-review-page .weekly-readonly-table__row {
+  display: grid;
+  padding: 0.6rem 0.75rem;
+  align-items: center;
+  border-bottom: 1px solid #f0f0f2;
+  gap: 0.75rem;
+  transition: background 0.2s ease;
+}
+.weekly-review-page .weekly-readonly-table--summaries .weekly-readonly-table__row {
+  grid-template-columns: 1.5fr 1.5fr 0.9fr 0.9fr 1.5fr 0.9fr;
+}
+.weekly-review-page .weekly-readonly-table--plans .weekly-readonly-table__row {
+  grid-template-columns: 1.8fr 1.8fr 0.9fr 1.2fr;
+}
+.weekly-review-page .weekly-readonly-table__row:hover {
+  background: #fdfdfe;
+}
+.weekly-review-page .weekly-readonly-table__row strong {
+  font-weight: 500;
+  color: #303133;
+}
+
+/* Read-only summary rows reuse the weekly edit page project/source layout. */
+.weekly-review-page .summary-project-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.weekly-review-page .summary-project-cell strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.weekly-review-page .source-chip-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.weekly-review-page .source-chip-row--readonly {
+  margin-bottom: 0;
+}
+.weekly-review-page .source-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.4rem;
+  padding: 0 0.45rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  background: #eef2ff;
+  color: #334155;
+}
+
+/* ===== 完成状态标签（核心修改） ===== */
+.weekly-review-page .completion-status {
+  display: inline-block;            /* 保持内联块 */
+  padding: 0.1rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;              /* 强制单行，不换行 */
+  width: fit-content;              /* 宽度完全由内容决定 */
+  max-width: 100%;                 /* 防止溢出父容器（但实际不会） */
+}
+.weekly-review-page .status--completed {
+  background: #f0f9eb;
+  color: #67c23a;
+}
+.weekly-review-page .status--in-progress {
+  background: #ecf5ff;
+  color: #3e63dd;
+}
+.weekly-review-page .status--not-completed {
+  background: #fef0f0;
+  color: #f56c6c;
+}
+.weekly-review-page .status--added {
+  background: #fdf6ec;
+  color: #e6a23c;
+}
+
+/* ===== 评分表单 ===== */
+.weekly-review-page .weekly-final-review-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem 1.5rem;
+}
+.weekly-review-page .form-field--full {
+  grid-column: 1 / -1;
+}
+.weekly-review-page .form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.weekly-review-page .field-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #606266;
+}
+
+.weekly-review-page .weekly-final-review-form .el-input-number,
+.weekly-review-page .weekly-final-review-form .el-select {
+  width: 100%;
+}
+
+/* 表单操作按钮容器 */
+.weekly-review-page .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #ebeef5;
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 900px) {
+  .weekly-review-page .weekly-review-meta {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .weekly-review-page .weekly-readonly-table__head,
+  .weekly-review-page .weekly-readonly-table__row {
+    grid-template-columns: 1fr !important;
+    gap: 0.4rem;
+  }
+  .weekly-review-page .weekly-readonly-table__head {
+    display: none;
+  }
+  .weekly-review-page .weekly-readonly-table__row {
+    padding: 0.75rem;
+    border: 1px solid #ebeef5;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+  }
+  .weekly-review-page .form-actions {
+    justify-content: center;
+  }
+}
+
+/* Migrated from digital-platform-web/src/pages/project-node/solution-design/SolutionAnalysisPage.vue */
+.solution-node-page .analysis-section,.solution-node-page .image-card{display:grid;gap:var(--space-4,16px)}.solution-node-page .image-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3,12px)}.solution-node-page .image-card{padding:var(--space-3,12px);border:1px solid var(--color-border,#d8dde6);border-radius:var(--radius-md,8px)}.solution-node-page .image-row,.solution-node-page .action-row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2,8px)}@media(max-width:768px){.solution-node-page .image-grid{grid-template-columns:1fr}}
+
+/* Migrated from digital-platform-web/src/pages/project-node/solution-design/SolutionPreparationPage.vue */
+.solution-node-page .solution-section{display:grid;gap:var(--space-4,16px)}
+
+/* Migrated from digital-platform-web/src/pages/project-node/solution-design/SolutionQuotationTenderPage.vue */
+.solution-node-page .quotation-section{display:grid;gap:var(--space-4,16px)}.solution-node-page .action-row{display:flex;flex-wrap:wrap;gap:var(--space-2,8px)}@media(max-width:640px){}
+
+/* ==========================================================================
+   Element Plus integration
+   Wrappers keep layout/error semantics; Element Plus owns control appearance.
+   ========================================================================== */
+.solution-node-page .input-wrapper:has(.el-input),
+.solution-node-page .input-wrapper:has(.el-select),
+.solution-node-page .input-wrapper:has(.el-date-editor) {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.solution-node-page .input-wrapper:has(.el-input):focus-within,
+.solution-node-page .input-wrapper:has(.el-select):focus-within,
+.solution-node-page .input-wrapper:has(.el-date-editor):focus-within {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.solution-node-page .input-wrapper > .el-input,
+.solution-node-page .input-wrapper > .el-select,
+.solution-node-page .input-wrapper > .el-date-editor {
+  width: 100%;
 }

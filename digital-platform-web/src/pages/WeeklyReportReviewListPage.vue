@@ -7,22 +7,25 @@
       <div class="panel-toolbar">
         <el-form class="weekly-overview-filters" @submit.prevent="loadOverview">
           <div class="filter-group">
-            <span class="filter-label">周开始</span>
+            <span class="filter-label">开始日期</span>
             <div class="input-wrapper">
-              <el-date-picker v-model="overviewFilters.weekStart" type="date" value-format="YYYY-MM-DD" placeholder="选择周开始日期" />
+              <el-date-picker
+                v-model="overviewFilters.weekStart"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="选择周开始日期"
+              />
             </div>
           </div>
           <div v-if="canReadAllCenters" class="filter-group">
             <span class="filter-label">中心</span>
-            <div class="input-wrapper">
-              <el-select v-model="overviewFilters.department" placeholder="全部中心">
-                <el-option label="全部中心" value="" />
-                <el-option label="运营中心" value="operations_center" />
-                <el-option label="营销中心" value="marketing_center" />
-                <el-option label="制造中心" value="manufacturing_center" />
-                <el-option label="研发中心" value="rd_center" />
-              </el-select>
-            </div>
+            <el-select v-model="overviewFilters.department" placeholder="全部中心">
+              <el-option label="全部中心" value="" />
+              <el-option label="运营中心" value="operations_center" />
+              <el-option label="营销中心" value="marketing_center" />
+              <el-option label="制造中心" value="manufacturing_center" />
+              <el-option label="研发中心" value="rd_center" />
+            </el-select>
           </div>
           <el-button type="primary" native-type="submit" :loading="overviewLoading">查询</el-button>
         </el-form>
@@ -186,260 +189,3 @@ onMounted(() => {
   loadOverview();
 });
 </script>
-
-<style scoped>
-/* ===== 全局页面容器 ===== */
-.page-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  padding: 1.5rem;
-  max-width: 1400px;
-  margin: 0 auto;
-  min-height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  color: #333333;
-  background: transparent;
-}
-
-/* ===== 页面进入动画 ===== */
-.animate-fadeIn {
-  animation: fadeIn 0.4s ease-out;
-}
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* ===== 面板 ===== */
-.panel {
-  background: #ffffff;
-  border-radius: 8px;
-  border: none;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.04);
-  overflow: hidden;
-}
-.panel-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid #ebeef5;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-
-/* ===== 状态面板 ===== */
-.state-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem 1.5rem;
-  text-align: center;
-  border-radius: 8px;
-}
-.state-panel--compact {
-  padding: 0.75rem 1.5rem;
-  margin: 0;
-}
-.state-panel--error {
-  background: #fef0f0;
-  color: #f56c6c;
-}
-.state-panel--empty {
-  color: #909399;
-}
-.state-panel p {
-  font-size: 0.9rem;
-  margin: 0;
-}
-
-/* ===== 加载动画 ===== */
-.loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid #ebeef5;
-  border-top-color: #3e63dd;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin-bottom: 1rem;
-}
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* ===== 表单控件 ===== */
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-.filter-label {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: #606266;
-}
-
-.input-wrapper {
-  position: relative;
-  border-radius: 4px;
-  border: 1px solid #dcdfe6;
-  background: #ffffff;
-  transition: border-color 0.2s ease;
-  overflow: hidden;
-}
-.input-wrapper:focus-within {
-  border-color: #3e63dd;
-}
-.input-wrapper input,
-.input-wrapper select {
-  width: 100%;
-  padding: 0.5rem 1rem;
-  border: none;
-  background: transparent;
-  font-size: 0.9rem;
-  color: #303133;
-  outline: none;
-  height: 48px;
-  box-sizing: border-box;
-  font-family: inherit;
-}
-.input-wrapper input[type="date"] {
-  cursor: pointer;
-}
-.input-wrapper input::placeholder {
-  color: #c0c4cc;
-}
-.input-wrapper select {
-  appearance: auto;
-  cursor: pointer;
-}
-
-/* ===== 状态标签 ===== */
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.15rem 0.6rem;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  border: 1px solid transparent;
-}
-.status-badge--draft {
-  background: #fdf6ec;
-  color: #e6a23c;
-  border-color: #faecd8;
-}
-.status-badge--done {
-  background: #f0f9eb;
-  color: #67c23a;
-  border-color: #e1f3d8;
-}
-.status-badge--pending {
-  background: #ecf5ff;
-  color: #3e63dd;
-  border-color: #d9ecff;
-}
-.status-badge--returned {
-  background: #fef0f0;
-  color: #f56c6c;
-  border-color: #fde2e2;
-}
-
-/* ===== 筛选栏 ===== */
-.weekly-overview-filters {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-.weekly-overview-filters .el-date-editor,
-.weekly-overview-filters .el-select {
-  width: 180px;
-}
-.weekly-overview-filters .filter-group {
-  min-width: 140px;
-}
-.weekly-overview-filters .filter-group .input-wrapper input,
-.weekly-overview-filters .filter-group .input-wrapper select {
-  height: 36px;
-}
-.weekly-overview-filters .el-button {
-  height: 36px;
-}
-
-/* ===== 中心周报表格 ===== */
-.table-container {
-  overflow-x: auto;
-  width: 100%;
-  padding: 0 0 0.5rem 0;
-}
-
-.weekly-overview-table {
-  min-width: 700px;
-  width: 100%;
-}
-.weekly-overview-table__head {
-  display: grid;
-  padding: 0.6rem 0.75rem;
-  background: #fafafa;
-  border-bottom: 2px solid #ebeef5;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #909399;
-  gap: 0.75rem;
-  grid-template-columns: 1fr 1fr 0.7fr 0.9fr 0.9fr 1fr 0.7fr;
-}
-.text-right {
-  text-align: right;
-}
-
-.weekly-overview-table__row {
-  display: grid;
-  padding: 0.6rem 0.75rem;
-  align-items: center;
-  border-bottom: 1px solid #f0f0f2;
-  gap: 0.75rem;
-  transition: background 0.2s ease;
-  grid-template-columns: 1fr 1fr 0.7fr 0.9fr 0.9fr 1fr 0.7fr;
-}
-.weekly-overview-table__row:hover {
-  background: #fdfdfe;
-}
-.weekly-overview-table__row .el-button {
-  justify-self: flex-end;
-}
-
-/* ===== 响应式 ===== */
-@media (max-width: 900px) {
-  .page-stack {
-    padding: 1rem;
-  }
-  .weekly-overview-filters {
-    width: 100%;
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .weekly-overview-filters .filter-group {
-    min-width: unset;
-  }
-  .weekly-overview-table__head,
-  .weekly-overview-table__row {
-    grid-template-columns: 1fr !important;
-    gap: 0.4rem;
-  }
-  .weekly-overview-table__head {
-    display: none;
-  }
-  .weekly-overview-table__row {
-    padding: 0.75rem;
-    border: 1px solid #ebeef5;
-    border-radius: 4px;
-    margin-bottom: 0.5rem;
-  }
-  .weekly-overview-table__row .el-button {
-    justify-self: flex-start;
-  }
-}
-</style>

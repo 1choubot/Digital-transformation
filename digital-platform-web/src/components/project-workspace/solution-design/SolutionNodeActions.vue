@@ -15,35 +15,3 @@
 </template>
 <script
     setup>    import { ElMessageBox } from 'element-plus'; const props = defineProps({ node: { type: Object, required: true }, isPending: { type: Function, required: true }, returnReason: { type: String, default: '' }, submitDisabled: Boolean }); const emit = defineEmits(['submit', 'approve', 'return', 'update:returnReason']); async function confirmReturn() { try { await ElMessageBox.confirm(`确认退回“${props.node.nodeName || '当前节点'}”吗？`, '退回确认', { type: 'warning', confirmButtonText: '确认退回', cancelButtonText: '取消' }); emit('return') } catch {/* 用户取消时不请求、不刷新 */ } }</script>
-<style
-    scoped>
-
-    .solution-actions,
-    .return-box {
-        display: grid;
-        gap: var(--space-3, 12px)
-    }
-
-    .solution-actions>header,
-    .action-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-3, 12px)
-    }
-
-    .action-row {
-        justify-content: flex-start;
-        flex-wrap: wrap
-    }
-
-    @media(max-width:640px) {
-        .solution-actions>header {
-            display: grid
-        }
-
-        .action-row>* {
-            width: 100%
-        }
-    }
-</style>

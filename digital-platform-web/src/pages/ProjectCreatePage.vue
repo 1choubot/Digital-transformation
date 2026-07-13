@@ -1,5 +1,5 @@
 <template>
-  <section class="page-stack">
+  <section class="page-stack project-create-page">
     <PageHeader
       eyebrow="项目主数据"
       title="新建项目"
@@ -199,14 +199,3 @@ async function submitProject() {
 
 onMounted(loadResponsibilityCandidates);
 </script>
-
-<style>
-.page-stack {
-  max-width: 1500px;
-  /* 最大宽度限制 */
-  margin: 0 auto;
-  /* 水平居中 */
-  padding: 1.5rem;
-  /* 内边距 */
-}
-</style>

@@ -9,15 +9,13 @@
           推进只改变当前阶段，不调用文件管理平台。
         </p>
       </div>
-      <button
-        v-if="currentStage && showAdvanceAction"
-        type="button"
-        class="primary-button"
+      <el-button
+        v-if="currentStage && showAdvanceAction" type="primary"
         :disabled="!canAdvanceCurrentStage || pending"
         @click="$emit('advance')"
       >
         {{ pending ? '推进中...' : '推进当前阶段' }}
-      </button>
+      </el-button>
     </div>
 
     <div class="stage-advance-content">

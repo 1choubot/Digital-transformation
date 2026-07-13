@@ -1,5 +1,5 @@
 <template>
-  <section class="page-stack">
+  <section class="page-stack project-overview-dashboard-page">
     <PageHeader eyebrow="跨项目入口" title="项目总览" :current-user="currentUser"
       subtitle="齐套率基于资料 completionMode、基础状态和适用性派生完成状态计算。">
       <template #actions>
@@ -326,11 +326,3 @@ async function loadDashboard() {
 
 onMounted(loadDashboard);
 </script>
-
-<style>
-.page-stack {
-  max-width: 1500px;
-  margin: 0 auto;
-  padding: 1.5rem;
-}
-</style>

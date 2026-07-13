@@ -37,33 +37,3 @@
 </template>
 <script
     setup>    import { computed } from 'vue'; import { nodeStatusText, formatDateTime } from './solutionDesignFormatters.js'; const props = defineProps({ workflow: Object, node: Object, loading: Boolean, errorMessage: String, message: String, localError: String }); const tagType = computed(() => ({ approved: 'success', pending_review: 'warning', pending_general_review: 'warning', returned: 'danger', not_started: 'info', ended: 'info' }[props.node?.status] || 'primary'));</script>
-<style
-    scoped>
-    .solution-node-page {
-        min-height: 180px;
-        display: grid;
-        gap: var(--space-4, 16px)
-    }
-
-    .solution-node-card {
-        display: grid;
-        gap: var(--space-4, 16px)
-    }
-
-    .solution-node-header {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: var(--space-3, 12px)
-    }
-
-    .solution-node-header h3 {
-        margin: 0
-    }
-
-    @media(max-width:640px) {
-        .solution-node-header {
-            display: grid
-        }
-    }
-</style>

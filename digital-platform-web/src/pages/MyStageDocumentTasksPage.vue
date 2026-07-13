@@ -1,5 +1,5 @@
 <template>
-  <section class="page-stack">
+  <section class="page-stack stage-document-tasks-page">
     <PageHeader
       eyebrow="我的待办"
       title="我的工作台"
@@ -64,6 +64,10 @@
           :key="itemKey(item)"
           class="task-card"
           :class="`task-card--${taskTone(item)}`"
+          tabindex="0"
+          role="button"
+          @click="handleCardClick($event, item)"
+          @keydown.enter.prevent="handleCardClick($event, item)"
         >
           <div class="task-card__header">
             <div class="task-cell task-cell--project">
@@ -110,7 +114,6 @@
               <span>入口动作</span>
               <strong>{{ formatActionText(item) }}</strong>
             </div>
-            <el-button type="primary" @click="openTodo(item)">进入项目工作区</el-button>
           </div>
         </article>
       </div>
@@ -282,7 +285,19 @@ function formatActionText(item) {
   return item.actionText || '-';
 }
 
-function openTodo(item) {
+function isInteractiveElement(element, cardElement) {
+  // 排除卡片自身（卡片 role="button" 是整卡可点击，不算交互子元素）
+  const interactiveChild = element?.closest?.(
+    'button, a, input, select, textarea, .el-select, .el-input, .el-collapse, .el-collapse-item__header'
+  );
+  // 如果找到的交互元素就是卡片本身，不算
+  return interactiveChild && interactiveChild !== cardElement;
+}
+
+function handleCardClick(event, item) {
+  if (isInteractiveElement(event.target, event.currentTarget)) {
+    return;
+  }
   props.navigate(item.targetRoute || `/projects/${item.projectId}`);
 }
 
@@ -308,14 +323,3 @@ async function loadWorkbench() {
 
 onMounted(loadWorkbench);
 </script>
-
-<style>
-.page-stack {
-  max-width: 1500px;
-  /* 最大宽度限制 */
-  margin: 0 auto;
-  /* 水平居中 */
-  padding: 1.5rem;
-  /* 内边距 */
-}
-</style>

@@ -8,7 +8,7 @@
     <section v-else-if="errorMessage" class="state-panel state-panel--error">
       <h3>{{ notFound ? '项目不存在' : '项目详情加载失败' }}</h3>
       <p>{{ errorMessage }}</p>
-      <button type="button" class="primary-button" @click="navigate('/projects')">返回项目总览</button>
+      <el-button type="primary" @click="navigate('/projects')">返回项目总览</el-button>
     </section>
 
     <el-container v-else-if="detail" class="project-workspace-shell">

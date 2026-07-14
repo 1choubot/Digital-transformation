@@ -2,25 +2,38 @@
   <section v-if="form" class="online-form-editor" aria-label="在线表单动作区">
     <div class="project-workspace__detail-heading">
       <div>
-        <span class="section-eyebrow">在线表单</span>
-        <h3>{{ form.documentCode }} {{ form.documentName }}</h3>
+        <!-- <span class="section-eyebrow">在线表单</span> -->
+        <h3>{{ form.documentName }}</h3>
       </div>
       <div class="online-form-editor__heading-actions">
         <el-button
+          class="form-download-button"
+          type="primary"
+          size="large"
           :loading="downloading"
           :disabled="downloadDisabled"
           @click="$emit('download-form')"
         >
           下载表单
         </el-button>
-        <el-tag type="info">{{ form.status }}</el-tag>
+        <!-- <el-tag :type="statusTagType(nodeStatus || form.status)">
+          {{ formatHeaderStatus(nodeStatus, form.status) }}
+        </el-tag> -->
       </div>
     </div>
+
+    <el-alert
+      v-if="blockingReasons.length"
+      :title="`阻塞原因：${blockingReasons.join('；')}`"
+      type="warning"
+      show-icon
+      :closable="false"
+    />
 
     <el-alert v-if="errorMessage" :description="errorMessage" type="error" show-icon :closable="false" />
 
 
-    <dl v-if="form.collaboration" class="stage-document-meta online-form-collaboration-status">
+    <!-- <dl v-if="form.collaboration" class="stage-document-meta online-form-collaboration-status">
       <div>
         <dt>商务部分</dt>
         <dd>{{ formatCollaborationPartStatus(form.collaboration.businessSubmitted) }}</dd>
@@ -33,7 +46,7 @@
         <dt>当前填写区域</dt>
         <dd>{{ formatEditablePart(form.permissions?.editablePart) }}</dd>
       </div>
-    </dl>
+    </dl> -->
 
     <el-form class="online-form-editor__form" :model="formData" @submit.prevent="$emit('submit')">
       <section v-if="form.schema?.noticeTemplate" class="online-form-notice-preview">
@@ -214,7 +227,9 @@
         <div class="online-form-review-opinions">
           <article v-for="opinion in form.reviewOpinions" :key="opinion.nodeKey" class="online-form-review-opinion">
             <strong>{{ opinion.nodeName }}</strong>
-            <el-tag type="info">{{ formatReviewOpinionStatus(opinion.nodeStatus) }}</el-tag>
+            <el-tag :type="statusTagType(opinion.nodeStatus)">
+              {{ formatReviewOpinionStatus(opinion.nodeStatus) }}
+            </el-tag>
             <p>{{ opinion.comment || opinion.returnReason || '暂无意见' }}</p>
             <small>
               {{ opinion.reviewedByName || opinion.reviewerName || '待处理' }}{{ opinion.reviewedAt ? ` · ${opinion.reviewedAt}` : '' }}
@@ -259,6 +274,14 @@ const props = defineProps({
   form: {
     type: Object,
     default: null
+  },
+  nodeStatus: {
+    type: String,
+    default: ''
+  },
+  blockingReasons: {
+    type: Array,
+    default: () => []
   },
   formData: {
     type: Object,
@@ -416,6 +439,39 @@ function getNoticeTableValue(column) {
   };
   const key = keyByColumn[column];
   return key ? props.formData[key] || '-' : '-';
+}
+
+function statusTagType(status) {
+  if (['completed', 'confirmed', 'approved'].includes(status)) return 'success';
+  if (['submitted', 'pending', 'pending_review', 'pending_general_review'].includes(status)) return 'warning';
+  if (['returned', 'blocked_by_rework', 'returned_for_rework', 'returned_blocked_by_rework', 'invalidated'].includes(status)) {
+    return 'danger';
+  }
+  if (['draft', 'not_started', 'not_submitted', 'not_configured', 'not_applicable', 'process_node', 'waiting_document_submission', 'waiting_prerequisite'].includes(status)) {
+    return 'info';
+  }
+  return 'primary';
+}
+
+function formatHeaderStatus(nodeStatus, formStatus) {
+  const status = nodeStatus || formStatus;
+  return {
+    completed: '已完成',
+    in_progress: '处理中',
+    waiting_submission: '待提交',
+    pending_review: '待审批',
+    pending_general_review: '待总经理审批',
+    blocked_by_rework: '返工阻塞',
+    returned_for_rework: '需重填',
+    process_node: '过程节点',
+    not_configured: '未配置',
+    not_applicable: '不适用',
+    draft: '草稿',
+    not_submitted: '未提交',
+    submitted: '已提交',
+    confirmed: '已完成',
+    returned: '已退回'
+  }[status] || status || '-';
 }
 
 function formatReviewOpinionStatus(status) {

@@ -1,12 +1,12 @@
 <template>
     <SolutionDesignNodeLayout :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
         :error-message="context.solutionDesignErrorMessage">
+        <SolutionGeneratedFile :generated-file="activeDto?.form?.generatedFile"
+            :pending="isPending(`review:${nodeKey}:download`)" @download="downloadReviewGeneratedFile(nodeKey)" />
         <section class="review-section">
             <h4>{{ nodeKey === 'internal_solution_review' ? 'C15 内部方案评审记录表' : 'C16 客户方案评审记录表' }}</h4>
             <SolutionFormFields :fields="fields" :model="reviewFormData"
                 :disabled="!activeDto?.permissions?.canEditReviewForm" @update="updateReviewFormField" />
-            <SolutionGeneratedFile :generated-file="activeDto?.form?.generatedFile"
-                :pending="isPending(`review:${nodeKey}:download`)" @download="downloadReviewGeneratedFile(nodeKey)" />
             <div class="action-row"><el-button :disabled="!activeDto?.permissions?.canEditReviewForm"
                     :loading="isPending(`review:${nodeKey}:save`)"
                     @click="saveReviewForm(nodeKey)">保存草稿</el-button><el-button type="primary"

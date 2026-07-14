@@ -2,10 +2,12 @@
   <section class="project-workspace__detail initiation-node-page">
     <div class="project-workspace__detail-heading">
       <div>
-        <span class="section-eyebrow">立项阶段</span>
+        <!-- <span class="section-eyebrow">立项阶段</span> -->
         <h3>项目输入</h3>
       </div>
-      <span class="stage-document-pill">{{ formatWorkspaceStatus(node?.nodeStatus) }}</span>
+      <!-- <el-tag :type="workspaceStatusTagType(node?.nodeStatus)">
+        {{ formatWorkspaceStatus(node?.nodeStatus) }}
+      </el-tag> -->
     </div>
 
     <dl class="stage-document-meta">
@@ -120,5 +122,13 @@ function formatWorkspaceStatus(status) {
     returned_for_rework: '需重填',
     process_node: '过程节点'
   }[status] || status || '-';
+}
+
+function workspaceStatusTagType(status) {
+  if (status === 'completed') return 'success';
+  if (status === 'pending_review') return 'warning';
+  if (['blocked_by_rework', 'returned_for_rework'].includes(status)) return 'danger';
+  if (['not_configured', 'not_applicable', 'process_node'].includes(status)) return 'info';
+  return 'primary';
 }
 </script>

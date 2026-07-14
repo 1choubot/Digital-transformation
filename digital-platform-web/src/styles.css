@@ -2307,15 +2307,6 @@ p {
   font-size: 13px;
 }
 
-.initiation-review-blockers {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-  padding-left: 18px;
-  color: #92400e;
-  font-size: 13px;
-}
-
 .initiation-review-nodes {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2670,6 +2661,11 @@ p {
   padding: 14px;
 }
 
+.online-form-review-opinions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+}
+
 .online-form-section h4,
 .online-form-notice-preview h4 {
   margin: 0;
@@ -2801,13 +2797,20 @@ p {
 
 .online-form-review-opinion {
   display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 6px;
 }
 
 .online-form-review-opinion p {
+  min-height: 0;
+  max-height: 96px;
   margin: 0;
   color: #253241;
+  line-height: 1.6;
+  overflow-y: auto;
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .online-form-review-opinion small {
@@ -2920,6 +2923,14 @@ p {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+
+/* Stage form downloads are primary page actions and must remain easy to spot. */
+.form-download-button.el-button {
+  min-width: 120px;
+  padding-inline: 22px;
+  font-weight: 600;
+  box-shadow: 0 4px 10px rgb(64 158 255 / 22%);
 }
 
 .stage-document-attachment-upload__button {
@@ -3278,6 +3289,10 @@ p {
 }
 
 @media (max-width: 900px) {
+  .online-form-review-opinions {
+    grid-template-columns: 1fr;
+  }
+
   .app-header__inner,
   .page-header,
   .page-title-row,
@@ -3949,8 +3964,10 @@ p {
         justify-content: space-between;
         gap: var(--space-4, 16px);
         padding: var(--space-3, 12px);
-        border: 1px solid var(--color-border, #d8dde6);
-        border-radius: var(--radius-md, 8px)
+        border: 1px solid #a8ccf5;
+        border-radius: var(--radius-md, 8px);
+        background: #f2f8ff;
+        align-items: center;
     }
 
     .generated-file-card .generated-file-card>div {

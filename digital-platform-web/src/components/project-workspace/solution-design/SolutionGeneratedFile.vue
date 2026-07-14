@@ -5,8 +5,8 @@
                 v-if="generatedFile.fileSize">{{ formatFileSize(generatedFile.fileSize) }} ·
                 {{ formatDateTime(generatedFile.generatedAt) }}</small><el-alert v-if="generatedFile.errorMessage"
                 :title="generatedFile.errorMessage" type="error" :closable="false" />
-        </div><el-button v-if="generatedFile.canDownload" :loading="pending"
-            @click="$emit('download')">下载生成文件</el-button>
+        </div><el-button v-if="generatedFile.canDownload" class="form-download-button" type="primary" size="large"
+            :loading="pending" @click="$emit('download')">下载表单</el-button>
     </section>
 </template>
 <script

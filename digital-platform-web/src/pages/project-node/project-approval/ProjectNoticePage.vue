@@ -3,6 +3,8 @@
     <NodeOnlineFormEditor
       v-if="activeForm"
       :form="activeForm"
+      :node-status="node?.nodeStatus || ''"
+      :blocking-reasons="node?.blockingReasons || []"
       :form-data="context.onlineFormData || emptyObject"
       :error-message="context.onlineFormErrorMessage || ''"
       :saving="context.onlineFormSaving === true"

@@ -3,6 +3,8 @@
     <NodeOnlineFormEditor
       v-if="activeForm"
       :form="activeForm"
+      :node-status="node?.nodeStatus || ''"
+      :blocking-reasons="node?.blockingReasons || []"
       :form-data="context.onlineFormData || emptyObject"
       :error-message="context.onlineFormErrorMessage || ''"
       :saving="context.onlineFormSaving === true"
@@ -33,10 +35,6 @@
         </div>
         <el-tag :type="approvalReview.isComplete ? 'success' : 'warning'">{{ approvalReview.isComplete ? '最终通过' : '未最终通过' }}</el-tag>
       </div>
-
-      <ul v-if="approvalBlockingReasons.length > 0" class="initiation-review-blockers">
-        <li v-for="reason in approvalBlockingReasons" :key="reason">{{ reason }}</li>
-      </ul>
 
       <div class="initiation-review-nodes">
         <article v-for="reviewNode in approvalReviewNodes" :key="reviewNode.nodeKey" class="initiation-review-node">
@@ -240,7 +238,6 @@ const approvalDocument = computed(() =>
 const approvalReview = computed(() => approvalDocument.value?.initiationReview || null);
 const approvalReviewNodes = computed(() => approvalReview.value?.nodes || []);
 const actionableReviewNodes = computed(() => approvalReviewNodes.value.filter((reviewNode) => reviewNode.canAct));
-const approvalBlockingReasons = computed(() => approvalReview.value?.blockingReasons || []);
 const approvalOverallText = computed(() => {
   if (approvalReview.value?.isComplete) {
     return '营销评价、研发评价均已完成，总经理已审批通过。';

@@ -1907,9 +1907,9 @@ async function saveOnlineForm(options = {}) {
   }
 }
 
-async function submitOnlineForm() {
+async function submitOnlineForm(options = {}) {
   if (!activeOnlineForm.value) {
-    return;
+    return false;
   }
 
   onlineFormSubmitting.value = true;
@@ -1925,9 +1925,13 @@ async function submitOnlineForm() {
     activeOnlineForm.value = response.form || response;
     syncOnlineFormData(activeOnlineForm.value);
     actionMessage.value = '在线表单已提交。';
-    await refreshProjectWorkspaceState({ preserveOnlineFormState: true });
+    if (options.refreshWorkspace !== false) {
+      await refreshProjectWorkspaceState({ preserveOnlineFormState: true });
+    }
+    return true;
   } catch (error) {
     onlineFormErrorMessage.value = toReadableApiError(error);
+    return false;
   } finally {
     onlineFormSubmitting.value = false;
   }

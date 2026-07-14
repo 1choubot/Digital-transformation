@@ -19,7 +19,7 @@
       @download="downloadUpload"
     />
 
-    <section class="analysis-section">
+    <section ref="analysisFormRoot" class="analysis-section">
       <h4>项目方案分析表</h4>
       <el-descriptions :column="3" border>
         <el-descriptions-item label="项目编号">
@@ -42,11 +42,17 @@
         <SolutionFormFields
           :fields="section.fields"
           :model="analysisFormData"
+          :invalid-field-keys="invalidFieldKeys"
           :disabled="!analysisFormDto?.permissions?.canEditForm"
           @update="updateAnalysisFormField"
         >
           <template #after-field="{ field }">
-            <div v-if="field.imageField" class="solution-form-field-images">
+            <div
+              v-if="field.imageField"
+              :data-field-key="field.imageField.key"
+              class="solution-form-field-images"
+              :class="{ 'online-form-field--invalid': isFieldInvalid(field.imageField.key) }"
+            >
               <div class="form-field-label">
                 <strong>{{ field.imageField.label }}</strong>
                 <small class="form-field-description">{{ field.imageField.description }}</small>
@@ -64,6 +70,9 @@
                   选择图片（{{ imagesFor(field.imageField).length }}/{{ field.imageField.maxImages }}）
                 </el-button>
               </el-upload>
+              <small v-if="isFieldInvalid(field.imageField.key)" class="form-field-error">
+                请上传{{ field.imageField.label }}
+              </small>
               <div
                 v-for="image in imagesFor(field.imageField)"
                 :key="image.id"
@@ -105,7 +114,7 @@
           type="primary"
           :disabled="!analysisFormDto?.permissions?.canSubmitForm"
           :loading="isPending('analysis:submit')"
-          @click="submitAnalysisForm"
+          @click="handleSubmitAnalysisForm"
         >
           提交表单
         </el-button>
@@ -127,8 +136,8 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, watch } from 'vue';
-import { ElMessageBox } from 'element-plus';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import SolutionDesignNodeLayout from '../../../components/project-workspace/solution-design/SolutionDesignNodeLayout.vue';
 import SolutionUploadSlots from '../../../components/project-workspace/solution-design/SolutionUploadSlots.vue';
 import SolutionNodeActions from '../../../components/project-workspace/solution-design/SolutionNodeActions.vue';
@@ -140,6 +149,7 @@ import {
   useSolutionDesignNodePage
 } from '../../../composables/project-stage/solution-design/useSolutionDesignNodePage.js';
 import { useSolutionAnalysisForm } from '../../../composables/project-stage/solution-design/useSolutionAnalysisForm.js';
+import { getMissingRequiredFields } from '../../../utils/formValidation.js';
 
 const emit = defineEmits(['business-state-changed']);
 const props = defineProps(solutionDesignNodePageProps);
@@ -185,6 +195,21 @@ const {
 } = analysis;
 
 const images = computed(() => analysisFormDto.value?.images || analysisFormDto.value?.form?.images || []);
+const analysisFormRoot = ref(null);
+const validationAttempted = ref(false);
+const validationFields = computed(() => analysisSections.flatMap((section) =>
+  section.fields.flatMap((field) => field.imageField
+    ? [field, { ...field.imageField, type: 'image' }]
+    : [field])
+));
+const missingRequiredFields = computed(() => getMissingRequiredFields(
+  validationFields.value,
+  analysisFormData,
+  { getImages: imagesFor }
+));
+const invalidFieldKeys = computed(() => validationAttempted.value
+  ? missingRequiredFields.value.map((field) => field.key)
+  : []);
 const generatedBlocksSubmit = computed(() => {
   const file = analysisFormDto.value?.form?.generatedFile;
   return Boolean(file) && (file.status !== 'generated' || file.canDownload !== true);
@@ -195,10 +220,35 @@ watch(workflow, (value) => {
   void loadAnalysisForm();
 }, { immediate: true });
 
+watch(nodeKey, () => {
+  validationAttempted.value = false;
+});
+
 onBeforeUnmount(invalidateRequests);
 
 function imagesFor(field) {
   return images.value.filter((item) => item.fieldKey === field.key);
+}
+
+function isFieldInvalid(fieldKey) {
+  return invalidFieldKeys.value.includes(fieldKey);
+}
+
+async function handleSubmitAnalysisForm() {
+  validationAttempted.value = true;
+  if (missingRequiredFields.value.length === 0) {
+    await submitAnalysisForm();
+    return;
+  }
+
+  ElMessage.warning(`请补充以下必填内容：${missingRequiredFields.value.map((field) => field.label).join('、')}`);
+  await nextTick();
+  const firstKey = missingRequiredFields.value[0]?.key;
+  const firstField = firstKey
+    ? analysisFormRoot.value?.querySelector(`[data-field-key="${firstKey}"]`)
+    : null;
+  firstField?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  firstField?.querySelector('input, textarea, [tabindex]')?.focus?.();
 }
 
 async function confirmDelete(image) {

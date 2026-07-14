@@ -36,6 +36,35 @@ const ANALYSIS_FORM_TEXT_FIELD_KEYS = Object.freeze([
   'projectTargetDescription'
 ]);
 
+function isFormValueEmpty(value) {
+  if (Array.isArray(value)) {
+    return value.every((item) => isFormValueEmpty(item));
+  }
+  if (value === null || value === undefined) {
+    return true;
+  }
+  if (typeof value === 'string') {
+    return value.trim() === '';
+  }
+  if (typeof value === 'number') {
+    return Number.isNaN(value);
+  }
+  return false;
+}
+
+// 提交校验必须在数据库事务和文件生成前执行，草稿保存不调用此函数。
+export function assertRequiredSolutionFormFields(formData, requiredFieldKeys = []) {
+  const missingFieldKeys = requiredFieldKeys.filter((fieldKey) => isFormValueEmpty(formData?.[fieldKey]));
+  if (missingFieldKeys.length > 0) {
+    throw new SolutionDesignWorkflowError(
+      SOLUTION_DESIGN_ERROR.FORM_REQUIRED_FIELDS_MISSING,
+      'Required solution design form fields are missing',
+      400,
+      missingFieldKeys
+    );
+  }
+}
+
 export function normalizeAnalysisFormPayload(payload = {}) {
   const sourceFormData = Object.hasOwn(payload, 'formData') ? payload.formData : payload;
   if (

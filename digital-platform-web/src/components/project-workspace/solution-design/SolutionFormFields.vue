@@ -3,6 +3,8 @@
     <el-form-item
       v-for="field in fields"
       :key="field.key"
+      :data-field-key="field.key"
+      :error="fieldError(field)"
       :class="{
         'solution-form-grid__wide': field.type === 'textarea',
         'solution-form-grid__with-image': Boolean(field.imageField)
@@ -38,7 +40,7 @@
 <script setup>
 const emit = defineEmits(['update']);
 
-defineProps({
+const props = defineProps({
   fields: {
     type: Array,
     default: () => []
@@ -47,8 +49,21 @@ defineProps({
     type: Object,
     required: true
   },
-  disabled: Boolean
+  disabled: Boolean,
+  invalidFieldKeys: {
+    type: Array,
+    default: () => []
+  }
 });
+
+function fieldError(field) {
+  if (!props.invalidFieldKeys.includes(field.key)) {
+    return '';
+  }
+  return field.type === 'date' || field.type === 'select'
+    ? `请选择${field.label}`
+    : `请填写${field.label}`;
+}
 
 function displayValue(value) {
   return Array.isArray(value) ? value.join('\n') : value ?? '';

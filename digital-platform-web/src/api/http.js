@@ -306,6 +306,10 @@ export function toReadableApiError(error) {
     return '请补充在线表单必填字段。';
   }
 
+  if (error.code === 'SOLUTION_DESIGN_FORM_REQUIRED_FIELDS_MISSING') {
+    return '请补充方案设计表单中标红的必填字段。';
+  }
+
   if (error.code === 'FORM_RESPONSIBLE_USER_REQUIRED') {
     return '请先分配资料责任人。';
   }

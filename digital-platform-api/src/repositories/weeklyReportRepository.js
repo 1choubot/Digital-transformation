@@ -20,6 +20,10 @@ import { buildProjectVisibilityCondition } from './projects/visibility.js';
 
 // MySQL can return DATE values as Date objects; the API always emits YYYY-MM-DD.
 function dateOnly(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
   if (value instanceof Date) {
     const year = value.getFullYear();
     const month = String(value.getMonth() + 1).padStart(2, '0');

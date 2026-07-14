@@ -115,6 +115,52 @@ function authUser(row, overrides = {}) {
   };
 }
 
+test('solution form submissions reject missing required fields before database writes', async () => {
+  let connectionRequests = 0;
+  const db = {
+    async getConnection() {
+      connectionRequests += 1;
+      throw new Error('database connection must not be requested for invalid form data');
+    }
+  };
+  const user = { id: 1 };
+
+  await assert.rejects(
+    submitSolutionDesignAnalysisForm(
+      { projectId: 1, payload: { formData: {} }, user },
+      db
+    ),
+    (error) => {
+      assert.equal(error.code, SOLUTION_DESIGN_ERROR.FORM_REQUIRED_FIELDS_MISSING);
+      assert.deepEqual(error.details, [
+        'workpieceDescription',
+        'operationProcessDescription',
+        'projectTargetDescription'
+      ]);
+      return true;
+    }
+  );
+
+  await assert.rejects(
+    submitSolutionDesignReviewForm(
+      {
+        projectId: 1,
+        nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
+        payload: { formData: { meetingDate: ' ', actionItems: [], reviewConclusion: '' } },
+        user
+      },
+      db
+    ),
+    (error) => {
+      assert.equal(error.code, SOLUTION_DESIGN_ERROR.FORM_REQUIRED_FIELDS_MISSING);
+      assert.deepEqual(error.details, ['meetingDate', 'actionItems', 'reviewConclusion']);
+      return true;
+    }
+  );
+
+  assert.equal(connectionRequests, 0);
+});
+
 function baseUsers() {
   return new Map(
     [

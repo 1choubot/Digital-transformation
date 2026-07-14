@@ -67,6 +67,7 @@ import {
   generateSolutionDesignFormFile
 } from './solutionDesignWorkflow/generatedFiles.js';
 import {
+  assertRequiredSolutionFormFields,
   normalizeAnalysisFormPayload,
   normalizeReviewFormPayload
 } from './solutionDesignWorkflow/formPayloads.js';
@@ -4790,6 +4791,12 @@ async function saveOrSubmitSolutionDesignAnalysisForm(
   generatedFileStorage = null
 ) {
   const normalized = normalizeAnalysisFormPayload(payload);
+  if (formStatus === SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.SUBMITTED) {
+    assertRequiredSolutionFormFields(
+      normalized.formData,
+      SOLUTION_DESIGN_ANALYSIS_FORM_DEFINITION.requiredFieldKeys
+    );
+  }
   const storage = resolveGeneratedFileStorage(db, generatedFileStorage);
   const readOnlineFormImage = resolveOnlineFormImageReader(db);
 
@@ -5051,6 +5058,9 @@ async function saveOrSubmitSolutionDesignReviewForm(
     );
   }
   const normalized = normalizeReviewFormPayload(payload);
+  if (formStatus === SOLUTION_DESIGN_REVIEW_FORM_STATUS.SUBMITTED) {
+    assertRequiredSolutionFormFields(normalized.formData, definition.requiredFieldKeys);
+  }
   const storage = resolveGeneratedFileStorage(db, generatedFileStorage);
 
   return withConnection(db, async (connection) => {

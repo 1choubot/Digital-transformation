@@ -592,13 +592,41 @@ function validateSubmitFields() {
   return Object.keys(fieldErrors).length === 0;
 }
 
+// Ignore untouched UI placeholders when saving a draft, while preserving any
+// row where the user changed a business value from its generated defaults.
+function isUntouchedSummaryPlaceholder(item) {
+  return !item.projectId &&
+    !String(item.sourcePlanTaskKey || '').trim() &&
+    !String(item.workTask || '').trim() &&
+    !String(item.workTarget || '').trim() &&
+    !String(item.completionDescription || '').trim() &&
+    (!item.plannedDate || item.plannedDate === form.weekStart) &&
+    (!item.completionStatus || item.completionStatus === 'completed') &&
+    (!item.completedDate || item.completedDate === form.weekEnd);
+}
+
+function isUntouchedPlanPlaceholder(item) {
+  return !item.projectId &&
+    !String(item.workTask || '').trim() &&
+    !String(item.workTarget || '').trim() &&
+    (!item.plannedDate || item.plannedDate === form.weekEnd) &&
+    (!String(item.responsiblePerson || '').trim() || item.responsiblePerson === currentUserDisplayName.value);
+}
+
 // Build the backend payload from editable rows.
 function buildPayload(status) {
+  const summaries = status === ReportStatus.DRAFT
+    ? form.summaries.filter((item) => !isUntouchedSummaryPlaceholder(item))
+    : form.summaries;
+  const plans = status === ReportStatus.DRAFT
+    ? form.plans.filter((item) => !isUntouchedPlanPlaceholder(item))
+    : form.plans;
+
   return {
     weekStart: form.weekStart,
     weekEnd: form.weekEnd,
     status,
-    summaries: form.summaries.map((item) => ({
+    summaries: summaries.map((item) => ({
       projectId: item.projectId || null,
       sourceType: item.sourceType || 'legacy_unknown',
       sourcePlanTaskKey: item.sourcePlanTaskKey || null,
@@ -607,9 +635,13 @@ function buildPayload(status) {
       plannedDate: item.plannedDate,
       completionStatus: item.completionStatus,
       completionDescription: item.completionDescription,
-      completedDate: item.completionStatus === 'completed' ? item.completedDate : null
+      completedDate: status === ReportStatus.DRAFT
+        ? item.completedDate || null
+        : item.completionStatus === 'completed'
+          ? item.completedDate
+          : null
     })),
-    plans: form.plans.map((item) => ({
+    plans: plans.map((item) => ({
       taskKey: item.taskKey || null,
       projectId: item.projectId || null,
       workTask: item.workTask,

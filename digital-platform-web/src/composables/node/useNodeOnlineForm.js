@@ -101,14 +101,20 @@ export function useNodeOnlineForm({ props, emit, documentCode, affectedNodeCodes
     });
   }
 
-  function saveOnlineForm() {
-    invoke('saveOnlineForm');
-    notifyFormChanged();
+  async function saveOnlineForm() {
+    const saved = await invoke('saveOnlineForm', { refreshWorkspace: false });
+    if (saved === true) {
+      notifyFormChanged();
+    }
+    return saved;
   }
 
-  function submitOnlineForm() {
-    invoke('submitOnlineForm');
-    notifyFormChanged();
+  async function submitOnlineForm() {
+    const submitted = await invoke('submitOnlineForm', { refreshWorkspace: false });
+    if (submitted === true) {
+      notifyFormChanged();
+    }
+    return submitted;
   }
 
   async function downloadOnlineFormFile() {

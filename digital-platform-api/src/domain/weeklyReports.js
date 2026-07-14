@@ -152,6 +152,18 @@ function normalizeRequiredText(value, fieldName, missing, maxLength = 5000) {
   return text.slice(0, maxLength);
 }
 
+// Draft rows may omit a date, but a supplied value must still be a valid ISO date.
+function normalizeDraftableDate(value, fieldName, missing, isSubmit) {
+  const text = String(value ?? '').trim();
+  if (!text) {
+    if (isSubmit) {
+      missing.push(fieldName);
+    }
+    return null;
+  }
+  return normalizeIsoDate(text, fieldName);
+}
+
 // Empty draft rows are ignored so drafts can be saved progressively.
 function isEmptyRow(row) {
   return Object.values(row || {}).every((value) => String(value ?? '').trim() === '');
@@ -168,14 +180,21 @@ function normalizeSummaryRow(row, index, isSubmit) {
     sourcePlanTaskKey: normalizeOptionalTaskKey(row?.sourcePlanTaskKey, `${prefix}.sourcePlanTaskKey`),
     workTask: normalizeRequiredText(row?.workTask, `${prefix}.workTask`, missing, 500),
     workTarget: normalizeRequiredText(row?.workTarget, `${prefix}.workTarget`, missing),
-    plannedDate: normalizeIsoDate(row?.plannedDate, `${prefix}.plannedDate`),
-    completionStatus: String(row?.completionStatus || '').trim(),
+    plannedDate: normalizeDraftableDate(row?.plannedDate, `${prefix}.plannedDate`, missing, isSubmit),
+    completionStatus: String(row?.completionStatus || '').trim() || null,
     completionDescription: normalizeRequiredText(row?.completionDescription, `${prefix}.completionDescription`, missing, 500),
     completedDate: row?.completedDate ? normalizeIsoDate(row.completedDate, `${prefix}.completedDate`) : null
   };
 
-  if (!WEEKLY_COMPLETION_STATUSES.has(normalized.completionStatus)) {
+  if (!normalized.completionStatus) {
     missing.push(`${prefix}.completionStatus`);
+  } else if (!WEEKLY_COMPLETION_STATUSES.has(normalized.completionStatus)) {
+    throw new WeeklyReportError(
+      WEEKLY_REPORT_ERROR.REQUIRED_FIELDS,
+      'Invalid weekly summary completion status',
+      400,
+      [`${prefix}.completionStatus`]
+    );
   }
 
   if (normalized.completionStatus === WeeklyCompletionStatus.COMPLETED && !normalized.completedDate) {
@@ -184,10 +203,6 @@ function normalizeSummaryRow(row, index, isSubmit) {
 
   if (isSubmit && missing.length > 0) {
     throw new WeeklyReportError(WEEKLY_REPORT_ERROR.REQUIRED_FIELDS, 'Missing weekly summary fields', 400, missing);
-  }
-
-  if (missing.length > 0) {
-    throw new WeeklyReportError(WEEKLY_REPORT_ERROR.REQUIRED_FIELDS, 'Incomplete weekly summary row', 400, missing);
   }
 
   return normalized;
@@ -203,16 +218,12 @@ function normalizePlanRow(row, index, isSubmit) {
     projectId: normalizeOptionalProjectId(row?.projectId, `${prefix}.projectId`),
     workTask: normalizeRequiredText(row?.workTask, `${prefix}.workTask`, missing, 500),
     workTarget: normalizeRequiredText(row?.workTarget, `${prefix}.workTarget`, missing),
-    plannedDate: normalizeIsoDate(row?.plannedDate, `${prefix}.plannedDate`),
+    plannedDate: normalizeDraftableDate(row?.plannedDate, `${prefix}.plannedDate`, missing, isSubmit),
     responsiblePerson: normalizeNullableText(row?.responsiblePerson, 128)
   };
 
   if (isSubmit && missing.length > 0) {
     throw new WeeklyReportError(WEEKLY_REPORT_ERROR.REQUIRED_FIELDS, 'Missing weekly plan fields', 400, missing);
-  }
-
-  if (missing.length > 0) {
-    throw new WeeklyReportError(WEEKLY_REPORT_ERROR.REQUIRED_FIELDS, 'Incomplete weekly plan row', 400, missing);
   }
 
   return normalized;

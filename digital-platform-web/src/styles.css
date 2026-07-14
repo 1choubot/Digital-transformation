@@ -2703,6 +2703,24 @@ p {
   color: #5d6c7a;
 }
 
+.form-field-error {
+  color: #f56c6c;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.online-form-field--invalid .el-input__wrapper,
+.online-form-field--invalid .el-select__wrapper,
+.online-form-field--invalid .el-textarea__inner,
+.online-form-field--invalid .el-date-editor.el-input__wrapper {
+  box-shadow: 0 0 0 1px #f56c6c inset !important;
+}
+
+.online-form-field--invalid .online-form-image-field__upload .el-button {
+  border-color: #f56c6c;
+}
+
 .online-form-collaboration-status {
   margin: 0;
 }

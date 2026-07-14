@@ -137,6 +137,20 @@ test('daily report draft permits blank completed time for attachment autosave', 
   assert.equal(normalized.status, ReportStatus.DRAFT);
   assert.equal(normalized.items[0].completedAt, null);
   assert.equal(normalized.items[0].sourceType, DailyTaskSourceType.LEGACY_UNKNOWN);
+  assert.equal(normalized.items[0].executionStatus, null);
+  assert.equal(normalized.items[0].workContent, '');
+  assert.equal(normalized.items[0].completionProgress, '');
+});
+
+test('daily report submit still rejects the same incomplete draft row', () => {
+  assert.throws(
+    () => normalizeDailyReportPayload(dailyPayload({
+      status: ReportStatus.SUBMITTED,
+      items: [{ workContent: '', completionProgress: '', completedAt: '' }],
+      plans: []
+    })),
+    (error) => error.code === DAILY_REPORT_ERROR.REQUIRED_FIELDS
+  );
 });
 
 test('submitted daily reports remain editable because daily reports have no approval flow', () => {
@@ -203,6 +217,77 @@ test('weekly report submit rejects non-Monday week starts', () => {
   assert.throws(
     () => normalizeWeeklyReportPayload(weeklyPayload({ weekStart: '2026-06-16' })),
     (error) => error.code === WEEKLY_REPORT_ERROR.INVALID_WEEK
+  );
+});
+
+test('weekly report draft preserves partially completed rows and nullable fields', () => {
+  const normalized = normalizeWeeklyReportPayload(weeklyPayload({
+    status: ReportStatus.DRAFT,
+    summaries: [{
+      projectId: 1,
+      sourceType: 'ad_hoc',
+      workTask: '已填写的部分任务',
+      workTarget: '',
+      plannedDate: '',
+      completionStatus: '',
+      completionDescription: '',
+      completedDate: ''
+    }],
+    plans: [{
+      projectId: 1,
+      workTask: '',
+      workTarget: '已填写的部分目标',
+      plannedDate: '',
+      responsiblePerson: 'Tester'
+    }]
+  }));
+
+  assert.equal(normalized.summaries[0].workTask, '已填写的部分任务');
+  assert.equal(normalized.summaries[0].plannedDate, null);
+  assert.equal(normalized.summaries[0].completionStatus, null);
+  assert.equal(normalized.plans[0].workTarget, '已填写的部分目标');
+  assert.equal(normalized.plans[0].plannedDate, null);
+});
+
+test('weekly report draft ignores fully empty rows', () => {
+  const normalized = normalizeWeeklyReportPayload(weeklyPayload({
+    status: ReportStatus.DRAFT,
+    summaries: [{}],
+    plans: [{}]
+  }));
+
+  assert.deepEqual(normalized.summaries, []);
+  assert.deepEqual(normalized.plans, []);
+});
+
+test('weekly report draft rejects supplied invalid dates and task keys', () => {
+  assert.throws(
+    () => normalizeWeeklyReportPayload(weeklyPayload({
+      status: ReportStatus.DRAFT,
+      summaries: [{ workTask: '部分任务', plannedDate: 'not-a-date' }],
+      plans: []
+    })),
+    (error) => error.code === WEEKLY_REPORT_ERROR.INVALID_WEEK
+  );
+
+  assert.throws(
+    () => normalizeWeeklyReportPayload(weeklyPayload({
+      status: ReportStatus.DRAFT,
+      summaries: [],
+      plans: [{ workTarget: '部分目标', taskKey: 'not-a-uuid' }]
+    })),
+    (error) => error.code === WEEKLY_REPORT_ERROR.REQUIRED_FIELDS
+  );
+});
+
+test('weekly report submit still rejects partially completed rows', () => {
+  assert.throws(
+    () => normalizeWeeklyReportPayload(weeklyPayload({
+      status: ReportStatus.SUBMITTED,
+      summaries: [{ workTask: '部分任务' }],
+      plans: [{ workTarget: '部分目标' }]
+    })),
+    (error) => error.code === WEEKLY_REPORT_ERROR.REQUIRED_FIELDS
   );
 });
 

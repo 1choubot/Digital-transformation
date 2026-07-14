@@ -1,5 +1,5 @@
 <template>
-  <section v-if="form" class="online-form-editor" aria-label="在线表单动作区">
+  <section v-if="form" ref="editorRoot" class="online-form-editor" aria-label="在线表单动作区">
     <div class="project-workspace__detail-heading">
       <div>
         <!-- <span class="section-eyebrow">在线表单</span> -->
@@ -31,7 +31,7 @@
     />
 
     <el-alert v-if="errorMessage" :description="errorMessage" type="error" show-icon :closable="false" />
-    <el-form class="online-form-editor__form" :model="formData" @submit.prevent="$emit('submit')">
+    <el-form class="online-form-editor__form" :model="formData" @submit.prevent="handleSubmit">
       <section v-if="form.schema?.noticeTemplate" class="online-form-notice-preview">
         <h4>{{ form.schema.noticeTemplate.title }}</h4>
         <p v-for="paragraph in form.schema.noticeTemplate.bodyParagraphs" :key="paragraph">
@@ -56,7 +56,12 @@
       <section v-for="section in getSchemaSections(form)" :key="section.key" class="online-form-section">
         <h4>{{ section.title }}</h4>
         <div class="form-grid">
-          <label v-for="field in section.fields || []" :key="field.key" :class="getFieldClass(field)">
+          <label
+            v-for="field in section.fields || []"
+            :key="field.key"
+            :data-field-key="field.key"
+            :class="getFieldClass(field)"
+          >
             <span class="form-field-label">
               <span>{{ field.label }}{{ field.required ? ' *' : '' }}</span>
               <small v-if="field.description" class="form-field-description">{{ field.description }}</small>
@@ -150,6 +155,9 @@
               :disabled="isOnlineFormFieldDisabled(field)"
               @update:model-value="$emit('update-field', { key: field.key, value: $event })"
             />
+            <small v-if="isFieldInvalid(field.key)" class="form-field-error">
+              {{ getFieldValidationMessage(field.key) }}
+            </small>
           </label>
         </div>
       </section>
@@ -161,7 +169,13 @@
       >
         <h4>{{ section.title }}</h4>
         <div class="online-form-score-list">
-          <article v-for="item in section.items || []" :key="item.key" class="online-form-score-card">
+          <article
+            v-for="item in section.items || []"
+            :key="item.key"
+            :data-field-key="`${item.key}Score`"
+            class="online-form-score-card"
+            :class="{ 'online-form-field--invalid': isFieldInvalid(`${item.key}Score`) }"
+          >
             <header>
               <strong>{{ item.itemName }}</strong>
             </header>
@@ -186,6 +200,9 @@
                 >
                   <el-option v-for="score in scoreOptions" :key="score" :label="String(score)" :value="String(score)" />
                 </el-select>
+                <small v-if="isFieldInvalid(`${item.key}Score`)" class="form-field-error">
+                  {{ getFieldValidationMessage(`${item.key}Score`) }}
+                </small>
               </label>
               <label>
                 <span>信息收集说明（选填）</span>
@@ -248,6 +265,10 @@
 </template>
 
 <script setup>
+import { computed, nextTick, ref, watch } from 'vue';
+import { ElMessage } from 'element-plus';
+import { getMissingRequiredFields } from '../../utils/formValidation.js';
+
 const emit = defineEmits([
   'save',
   'submit',
@@ -302,6 +323,27 @@ const props = defineProps({
 });
 
 const scoreOptions = [0, 1, 2, 3, 4, 5];
+const editorRoot = ref(null);
+const validationAttempted = ref(false);
+const schemaFields = computed(() => props.form?.schema?.fields || []);
+const missingRequiredFields = computed(() => getMissingRequiredFields(
+  schemaFields.value,
+  props.formData,
+  {
+    includeField: isFieldInSubmitScope,
+    getImages: (field) => getOnlineFormImages(field.key)
+  }
+));
+const invalidFieldKeys = computed(() => validationAttempted.value
+  ? missingRequiredFields.value.map((field) => field.key)
+  : []);
+
+watch(
+  () => props.form?.stageDocumentId || props.form?.documentCode || null,
+  () => {
+    validationAttempted.value = false;
+  }
+);
 
 function getSchemaSections(form) {
   if (Array.isArray(form?.schema?.sections) && form.schema.sections.length > 0) {
@@ -320,8 +362,39 @@ function getSchemaSections(form) {
 function getFieldClass(field) {
   return {
     'form-grid__wide': field.type === 'textarea' || field.type === 'image',
-    'online-form-field--readonly': field.readOnly
+    'online-form-field--readonly': field.readOnly,
+    'online-form-field--invalid': isFieldInvalid(field.key)
   };
+}
+
+function isFieldInSubmitScope(field) {
+  const editablePart = props.form?.permissions?.editablePart;
+  return !field.editablePart || !editablePart || field.editablePart === editablePart;
+}
+
+function isFieldInvalid(fieldKey) {
+  return invalidFieldKeys.value.includes(fieldKey);
+}
+
+function getFieldValidationMessage(fieldKey) {
+  return missingRequiredFields.value.find((field) => field.key === fieldKey)?.message || '请完成该必填项';
+}
+
+async function handleSubmit() {
+  validationAttempted.value = true;
+  if (missingRequiredFields.value.length === 0) {
+    emit('submit');
+    return;
+  }
+
+  ElMessage.warning(`请补充以下必填内容：${missingRequiredFields.value.map((field) => field.label).join('、')}`);
+  await nextTick();
+  const firstFieldKey = missingRequiredFields.value[0]?.key;
+  const firstField = firstFieldKey
+    ? editorRoot.value?.querySelector(`[data-field-key="${firstFieldKey}"]`)
+    : null;
+  firstField?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  firstField?.querySelector('input, textarea, [tabindex]')?.focus?.();
 }
 
 function getOnlineFormImages(fieldKey) {

@@ -44,6 +44,33 @@ async function ensureSolutionDesignGeneratedFileColumns(executor) {
   );
 }
 
+async function ensureSolutionDesignUploadSlotExemptionColumns(executor) {
+  await ensureSolutionDesignColumn(
+    executor,
+    'project_solution_design_upload_slots',
+    'is_upload_exempted',
+    'ALTER TABLE project_solution_design_upload_slots ADD COLUMN is_upload_exempted TINYINT(1) NOT NULL DEFAULT 0 AFTER status'
+  );
+  await ensureSolutionDesignColumn(
+    executor,
+    'project_solution_design_upload_slots',
+    'exemption_reason',
+    'ALTER TABLE project_solution_design_upload_slots ADD COLUMN exemption_reason VARCHAR(1000) NULL AFTER is_upload_exempted'
+  );
+  await ensureSolutionDesignColumn(
+    executor,
+    'project_solution_design_upload_slots',
+    'exempted_by_user_id',
+    'ALTER TABLE project_solution_design_upload_slots ADD COLUMN exempted_by_user_id BIGINT UNSIGNED NULL AFTER exemption_reason'
+  );
+  await ensureSolutionDesignColumn(
+    executor,
+    'project_solution_design_upload_slots',
+    'exempted_at',
+    'ALTER TABLE project_solution_design_upload_slots ADD COLUMN exempted_at DATETIME NULL AFTER exempted_by_user_id'
+  );
+}
+
 export async function ensureSolutionDesignWorkflowSchema(executor) {
   await executor.execute(
     `CREATE TABLE IF NOT EXISTS project_solution_design_roles (
@@ -213,6 +240,10 @@ export async function ensureSolutionDesignWorkflowSchema(executor) {
       is_required TINYINT(1) NOT NULL DEFAULT 1,
       revision INT UNSIGNED NOT NULL DEFAULT 1,
       status ENUM('pending', 'uploaded', 'submitted') NOT NULL DEFAULT 'pending',
+      is_upload_exempted TINYINT(1) NOT NULL DEFAULT 0,
+      exemption_reason VARCHAR(1000) NULL,
+      exempted_by_user_id BIGINT UNSIGNED NULL,
+      exempted_at DATETIME NULL,
       submitted_by_user_id BIGINT UNSIGNED NULL,
       submitted_at DATETIME NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -221,9 +252,13 @@ export async function ensureSolutionDesignWorkflowSchema(executor) {
       UNIQUE KEY uk_solution_design_upload_slots_project_slot (project_id, slot_key),
       KEY idx_solution_design_upload_slots_project_node (project_id, node_key, slot_order),
       KEY idx_solution_design_upload_slots_submitted_by (submitted_by_user_id),
+      KEY idx_solution_design_upload_slots_exempted_by (exempted_by_user_id),
       CONSTRAINT fk_solution_design_upload_slots_project
         FOREIGN KEY (project_id) REFERENCES projects (id)
         ON DELETE CASCADE,
+      CONSTRAINT fk_solution_design_upload_slots_exempted_by
+        FOREIGN KEY (exempted_by_user_id) REFERENCES users (id)
+        ON DELETE SET NULL,
       CONSTRAINT fk_solution_design_upload_slots_submitted_by
         FOREIGN KEY (submitted_by_user_id) REFERENCES users (id)
         ON DELETE SET NULL
@@ -477,4 +512,5 @@ export async function ensureSolutionDesignWorkflowSchema(executor) {
   );
 
   await ensureSolutionDesignGeneratedFileColumns(executor);
+  await ensureSolutionDesignUploadSlotExemptionColumns(executor);
 }

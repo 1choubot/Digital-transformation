@@ -39,6 +39,7 @@ export {
   getSolutionDesignUploadDownload,
   getSolutionDesignWorkflow,
   listSolutionDesignUploads,
+  markSolutionDesignUploadExemption,
   processSolutionDesignQuotationResult,
   returnSolutionDesignWorkflowNode,
   saveSolutionDesignAnalysisForm,
@@ -50,6 +51,7 @@ export {
   submitSolutionDesignQuotationForm,
   submitSolutionDesignReviewForm,
   submitSolutionDesignWorkflowNode,
+  cancelSolutionDesignUploadExemption,
   uploadSolutionDesignWorkflowFile
 } from './projects/solutionDesignWorkflowRepository.js';
 export {

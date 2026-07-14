@@ -90,12 +90,16 @@ export async function selectSolutionDesignUploadSlots(executor, projectId) {
       f.uploaded_by_user_id AS current_file_uploaded_by_user_id,
       f.uploaded_at AS current_file_uploaded_at,
       u.account AS current_file_uploaded_by_account,
-      u.display_name AS current_file_uploaded_by_display_name
+      u.display_name AS current_file_uploaded_by_display_name,
+      eu.account AS exempted_by_account,
+      eu.display_name AS exempted_by_display_name
     FROM project_solution_design_upload_slots s
     LEFT JOIN project_solution_design_upload_files f
       ON f.slot_id = s.id AND f.is_current = 1
     LEFT JOIN users u
       ON u.id = f.uploaded_by_user_id
+    LEFT JOIN users eu
+      ON eu.id = s.exempted_by_user_id
     WHERE s.project_id = ?
     ORDER BY s.slot_order ASC`,
     [projectId]

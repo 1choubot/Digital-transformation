@@ -54,6 +54,11 @@ export const OPERATION_ACTION_TYPE = {
   SOLUTION_DESIGN_ANALYSIS_APPROVED: 'solution_design.analysis_approved',
   SOLUTION_DESIGN_ANALYSIS_RETURNED: 'solution_design.analysis_returned',
   SOLUTION_DESIGN_DESIGN_OUTPUT_UPLOADED: 'solution_design.design_output_uploaded',
+  SOLUTION_DESIGN_DESIGN_OUTPUT_EXEMPTED: 'solution_design.design_output_exempted',
+  SOLUTION_DESIGN_DESIGN_OUTPUT_EXEMPTION_CANCELLED:
+    'solution_design.design_output_exemption_cancelled',
+  SOLUTION_DESIGN_DESIGN_OUTPUT_EXEMPTION_CANCELLED_BY_UPLOAD:
+    'solution_design.design_output_exemption_cancelled_by_upload',
   SOLUTION_DESIGN_DESIGN_OUTPUTS_SUBMITTED: 'solution_design.design_outputs_submitted',
   SOLUTION_DESIGN_INTERNAL_REVIEW_FORM_SAVED: 'solution_design.internal_review_form_saved',
   SOLUTION_DESIGN_INTERNAL_REVIEW_FORM_SUBMITTED: 'solution_design.internal_review_form_submitted',

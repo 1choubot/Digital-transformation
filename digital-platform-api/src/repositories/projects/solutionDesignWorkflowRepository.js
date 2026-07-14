@@ -34,6 +34,7 @@ import {
   getSolutionDesignUploadSlotDefinition,
   isProjectInSolutionDesignStage,
   isSolutionDesignGeneralManager,
+  isSolutionDesignOutputUploadSlot,
   isSolutionDesignProjectEnded,
   normalizeSolutionDesignRoleAssignmentPayload
 } from '../../domain/solutionDesignWorkflow.js';
@@ -102,16 +103,20 @@ import {
   canSubmitTender,
   buildUploadSlotPermissions,
   canViewFinanceCostUploadFile,
+  areSolutionDesignOutputsSatisfied,
   getCostUploadSlotKeyForNode,
+  isSolutionDesignOutputSatisfied,
   isAnalysisFormGeneratedForRevision,
   isAnalysisFormSubmittedForRevision,
+  isCostUploadSlotCurrent,
   isCostEstimationNode,
   isFinanceCostUploadSlot,
   isNodeProcessableStatus,
-  isProductFunctionDiagramUploadedForRevision,
+  isProductFunctionDiagramCurrent,
   isQuotationBranchCurrent,
   isQuotationFormGeneratedForRevision,
   isQuotationFormSubmittedForRevision,
+  isQuotationTenderFlowCurrentForNode,
   isQuotationTenderUploadSlot,
   isReviewFormGeneratedForRevision,
   isReviewFormSubmittedForRevision,
@@ -134,6 +139,7 @@ import {
 
 const DEFAULT_UPLOAD_MIME_TYPE = 'application/octet-stream';
 const MAX_UPLOAD_TEXT_FIELD_LENGTH = 255;
+const MAX_UPLOAD_EXEMPTION_REASON_LENGTH = 1000;
 
 const defaultSolutionDesignUploadStorage = {
   createStorageKey: createSolutionDesignUploadStorageKey,
@@ -289,6 +295,31 @@ function normalizeReturnReason(payload = {}) {
       'Solution analysis return reason is too long',
       400,
       ['returnReason']
+    );
+  }
+
+  return reason;
+}
+
+function normalizeUploadExemptionReason(payload = {}) {
+  const reason = String(
+    payload.exemptionReason ?? payload.exemption_reason ?? payload.reason ?? payload.remark ?? ''
+  ).trim();
+  if (!reason) {
+    throw new SolutionDesignWorkflowError(
+      SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
+      'Solution design upload exemption reason is required',
+      400,
+      ['exemptionReason']
+    );
+  }
+
+  if (reason.length > MAX_UPLOAD_EXEMPTION_REASON_LENGTH) {
+    throw new SolutionDesignWorkflowError(
+      SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
+      'Solution design upload exemption reason is too long',
+      400,
+      ['exemptionReason']
     );
   }
 
@@ -484,6 +515,12 @@ function buildVirtualUploadSlots() {
     is_required: 1,
     revision: 1,
     status: SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.PENDING,
+    is_upload_exempted: 0,
+    exemption_reason: null,
+    exempted_by_user_id: null,
+    exempted_at: null,
+    exempted_by_account: null,
+    exempted_by_display_name: null,
     submitted_by_user_id: null,
     submitted_at: null,
     current_file_id: null
@@ -795,7 +832,27 @@ function mapUploadedFile(row) {
 }
 
 function buildCurrentFileSlotKeySet(slots = []) {
-  return new Set(slots.filter((slot) => Boolean(slot.current_file_id)).map((slot) => slot.slot_key));
+  const readyStatuses = new Set([
+    SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.UPLOADED,
+    SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.SUBMITTED
+  ]);
+  return new Set(
+    slots
+      .filter((slot) => Boolean(slot.current_file_id) && readyStatuses.has(slot.status))
+      .map((slot) => slot.slot_key)
+  );
+}
+
+function isUploadSlotExempted(row) {
+  return isSolutionDesignOutputUploadSlot(row?.slot_key) && Boolean(row?.is_upload_exempted);
+}
+
+function buildExemptedUploadSlotKeySet(slots = []) {
+  return new Set(
+    slots
+      .filter((slot) => isUploadSlotExempted(slot))
+      .map((slot) => slot.slot_key)
+  );
 }
 
 function buildCurrentUploadSlotRevisionMap(slots = []) {
@@ -887,8 +944,27 @@ function mapUploadSlot(row, { roleState, user, projectEnded, inSolutionStage, no
     currentFile: mapCurrentUploadFile(row, { includeFileDetails }),
     confidential: isFinanceCostUploadSlot(slot.slotKey),
     currentFileHidden: Boolean(row.current_file_id) && !includeFileDetails,
+    exemption: {
+      isExempted: isUploadSlotExempted(row),
+      reason: isUploadSlotExempted(row) ? row.exemption_reason ?? null : null,
+      exemptedByUserId: isUploadSlotExempted(row) ? row.exempted_by_user_id ?? null : null,
+      exemptedByUser: isUploadSlotExempted(row)
+        ? {
+            id: row.exempted_by_user_id ?? null,
+            account: row.exempted_by_account ?? null,
+            name: row.exempted_by_display_name ?? null
+          }
+        : null,
+      exemptedAt: isUploadSlotExempted(row) ? row.exempted_at ?? null : null
+    },
+    satisfied: Boolean(row.current_file_id) || isUploadSlotExempted(row),
     permissions: {
       ...permissions,
+      canMarkExemption:
+        permissions.canMarkExemption === true &&
+        !Boolean(row.current_file_id) &&
+        !isUploadSlotExempted(row),
+      canCancelExemption: permissions.canCancelExemption === true && isUploadSlotExempted(row),
       canDownload
     }
   };
@@ -959,6 +1035,8 @@ function buildNodeBlockingReasons(
   row,
   roleState,
   {
+    currentFileSlotKeys = new Set(),
+    exemptedSlotKeys = new Set(),
     uploadSlotRevisionByKey = new Map(),
     analysisFormRow = null,
     reviewFormRowsByNodeKey = new Map(),
@@ -984,7 +1062,7 @@ function buildNodeBlockingReasons(
     if (generatedFileReason) {
       reasons.push(generatedFileReason);
     }
-    if (!isProductFunctionDiagramUploadedForRevision(uploadSlotRevisionByKey, row.current_revision)) {
+    if (!isProductFunctionDiagramCurrent(currentFileSlotKeys)) {
       reasons.push('等待技术负责人上传当前版本产品功能框图');
     }
     return reasons;
@@ -998,6 +1076,18 @@ function buildNodeBlockingReasons(
       requiredRevision: row.current_revision
     });
     return generatedFileReason ? [generatedFileReason] : [];
+  }
+
+  if (row.node_key === SOLUTION_DESIGN_NODE_KEY.DESIGN && isNodeProcessableStatus(row.status)) {
+    return areSolutionDesignOutputsSatisfied(currentFileSlotKeys, exemptedSlotKeys)
+      ? []
+      : ['等待技术负责人上传或标记无需上传方案设计 8 个产出'];
+  }
+
+  if (isCostEstimationNode(row.node_key) && isNodeProcessableStatus(row.status)) {
+    return isCostUploadSlotCurrent(currentFileSlotKeys, row.node_key)
+      ? []
+      : ['等待上传成本估算文件'];
   }
 
   if (row.node_key === SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER && isNodeProcessableStatus(row.status)) {
@@ -1035,6 +1125,7 @@ function mapNode(
     projectEnded,
     inSolutionStage,
     currentFileSlotKeys,
+    exemptedSlotKeys,
     uploadSlotRevisionByKey,
     analysisFormRow,
     reviewFormRowsByNodeKey,
@@ -1062,6 +1153,7 @@ function mapNode(
       projectEnded,
       inSolutionStage,
       currentFileSlotKeys,
+      exemptedSlotKeys,
       uploadSlotRevisionByKey,
       analysisFormRow,
       reviewFormRowsByNodeKey,
@@ -1189,6 +1281,8 @@ function mapNode(
     approvedAt: row.approved_at,
     returnedAt: row.returned_at,
     blockingReasons: buildNodeBlockingReasons(row, roleState, {
+      currentFileSlotKeys,
+      exemptedSlotKeys,
       uploadSlotRevisionByKey,
       analysisFormRow,
       reviewFormRowsByNodeKey,
@@ -1220,6 +1314,7 @@ function buildWorkflowDto({
     inSolutionStage;
   const materializedNodes = nodes.length > 0 ? nodes : buildVirtualNodes();
   const currentFileSlotKeys = buildCurrentFileSlotKeySet(uploadSlots);
+  const exemptedSlotKeys = buildExemptedUploadSlotKeySet(uploadSlots);
   const uploadSlotRevisionByKey = buildCurrentUploadSlotRevisionMap(uploadSlots);
   const reviewFormRowsByNodeKey = buildReviewFormRowByNodeKey(reviewFormRows);
   const quotationTenderNode = getNodeByKey(materializedNodes, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER);
@@ -1356,6 +1451,7 @@ function buildWorkflowDto({
         projectEnded,
         inSolutionStage,
         currentFileSlotKeys,
+        exemptedSlotKeys,
         uploadSlotRevisionByKey,
         analysisFormRow,
         reviewFormRowsByNodeKey,
@@ -1636,6 +1732,13 @@ export function buildSolutionDesignWorkbenchTodos({ projectRow = null, workflow,
 
   for (const slot of uploads?.slots || []) {
     if (slot?.permissions?.canUpload !== true) {
+      continue;
+    }
+
+    if (
+      isSolutionDesignOutputUploadSlot(slot.slotKey) &&
+      (slot.hasCurrentFile === true || slot.exemption?.isExempted === true)
+    ) {
       continue;
     }
 
@@ -2145,6 +2248,35 @@ async function insertUploadLog(executor, { projectId, actorUserId, slot, fileRow
       confidential,
       revision: fileRow.revision,
       uploadedByUserId: actorUserId
+    }
+  });
+}
+
+async function insertUploadExemptionLog(executor, {
+  projectId,
+  actorUserId,
+  slot,
+  reason = null,
+  actionType,
+  summary,
+  fileRow = null
+}) {
+  await insertOperationLog(executor, {
+    projectId,
+    actorUserId,
+    actionType,
+    targetType: OPERATION_TARGET_TYPE.SOLUTION_DESIGN_WORKFLOW,
+    targetId: projectId,
+    summary,
+    details: {
+      projectId,
+      nodeKey: slot.nodeKey,
+      slotKey: slot.slotKey,
+      slotName: slot.slotName,
+      reason,
+      fileId: fileRow?.id ?? null,
+      revision: fileRow?.revision ?? null,
+      actorUserId
     }
   });
 }
@@ -3449,6 +3581,10 @@ async function replaceCurrentSlotFile(executor, { projectId, slotRow, slot, uplo
     `UPDATE project_solution_design_upload_slots
     SET status = ?,
       revision = ?,
+      is_upload_exempted = 0,
+      exemption_reason = NULL,
+      exempted_by_user_id = NULL,
+      exempted_at = NULL,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?`,
     [SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.UPLOADED, nextRevision, slotRow.id]
@@ -3878,6 +4014,28 @@ async function upsertQuotationTenderBranchSelection(executor, {
       actorUserId
     ]
   );
+}
+
+async function insertQuotationTenderBranchSelectionLog(executor, {
+  projectId,
+  branchType,
+  nodeRevision,
+  actorUserId
+}) {
+  await insertQuotationTenderLog(executor, {
+    projectId,
+    actorUserId,
+    actionType: branchType === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION
+      ? OPERATION_ACTION_TYPE.SOLUTION_DESIGN_QUOTATION_BRANCH_SELECTED
+      : OPERATION_ACTION_TYPE.SOLUTION_DESIGN_TENDER_BRANCH_SELECTED,
+    summary: branchType === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION
+      ? '总经理选择报价流程'
+      : '总经理选择投标流程',
+    details: {
+      branchType,
+      revision: Number(nodeRevision ?? 1)
+    }
+  });
 }
 
 async function updateQuotationSubmitted(executor, { projectId, actorUserId }) {
@@ -4638,10 +4796,7 @@ async function assertSubmitNodeReady(executor, { projectId, nodeKey }) {
       missing.push('analysis_form_generated_file');
     }
 
-    if (
-      !productFunctionDiagram ||
-      Number(productFunctionDiagram.revision ?? 0) < requiredRevision
-    ) {
+    if (!productFunctionDiagram) {
       missing.push(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PRODUCT_FUNCTION_DIAGRAM);
     }
 
@@ -4657,19 +4812,16 @@ async function assertSubmitNodeReady(executor, { projectId, nodeKey }) {
   }
 
   if (nodeKey === SOLUTION_DESIGN_NODE_KEY.DESIGN) {
-    const nodeRow = await selectSolutionDesignNodeForUpdate(executor, projectId, nodeKey);
-    const requiredRevision = Number(nodeRow?.current_revision ?? 1);
-    const files = await selectCurrentUploadFiles(executor, projectId, SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS);
-    const uploadedRevisionBySlotKey = new Map(
-      files.map((file) => [file.slot_key, Number(file.revision ?? 0)])
-    );
+    const slots = await selectSolutionDesignUploadSlots(executor, projectId);
+    const currentFileSlotKeys = buildCurrentFileSlotKeySet(slots);
+    const exemptedSlotKeys = buildExemptedUploadSlotKeySet(slots);
     const missing = SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS.filter(
-      (slotKey) => Number(uploadedRevisionBySlotKey.get(slotKey) ?? 0) < requiredRevision
+      (slotKey) => !isSolutionDesignOutputSatisfied(currentFileSlotKeys, exemptedSlotKeys, slotKey)
     );
     if (missing.length > 0) {
       throw new SolutionDesignWorkflowError(
         SOLUTION_DESIGN_ERROR.NODE_BLOCKED,
-        'All solution design outputs are required before submitting solution design node',
+        'All solution design outputs must have a current file or upload exemption before submitting solution design node',
         409,
         missing
       );
@@ -4702,12 +4854,10 @@ async function assertSubmitNodeReady(executor, { projectId, nodeKey }) {
 
   if (isCostEstimationNode(nodeKey)) {
     const slotKey = getCostUploadSlotKeyForNode(nodeKey);
-    const nodeRow = await selectSolutionDesignNodeForUpdate(executor, projectId, nodeKey);
-    const requiredRevision = Number(nodeRow?.current_revision ?? 1);
     const files = await selectCurrentUploadFiles(executor, projectId, [slotKey]);
     const currentFile = files[0] || null;
 
-    if (!currentFile || Number(currentFile.revision ?? 0) < requiredRevision) {
+    if (!currentFile) {
       throw new SolutionDesignWorkflowError(
         SOLUTION_DESIGN_ERROR.NODE_BLOCKED,
         'Current cost estimation file is required before submitting cost estimation node',
@@ -4757,6 +4907,73 @@ function assertCanDownloadSolutionDesignUploadFile({ slot, roleState, user }) {
         : SOLUTION_DESIGN_ERROR.FORBIDDEN,
       'Current user cannot download this solution design upload file',
       403,
+      [slot.slotKey]
+    );
+  }
+}
+
+function assertSolutionDesignOutputExemptionSlot(slot) {
+  if (!slot || !isSolutionDesignOutputUploadSlot(slot.slotKey)) {
+    throw new SolutionDesignWorkflowError(
+      SOLUTION_DESIGN_ERROR.INVALID_UPLOAD_SLOT,
+      'Only C07-C14 solution design output upload slots can be exempted',
+      400,
+      ['slotKey']
+    );
+  }
+}
+
+function assertCanManageSolutionDesignOutputExemption({ projectRow, rolesRow, nodeRow, user }) {
+  assertProjectWriteAllowed(projectRow);
+  const roleState = buildRoleStateWithoutUserDetails(projectRow, rolesRow);
+  assertAllRolesAssigned(roleState);
+  assertProjectRoleActor(roleState, SOLUTION_DESIGN_ROLE_KEY.TECHNICAL_OWNER, user);
+  assertNodeProcessable(nodeRow, SOLUTION_DESIGN_NODE_KEY.DESIGN, 'processed');
+}
+
+async function markUploadSlotExempted(executor, { projectId, slot, reason, actorUserId }) {
+  const [result] = await executor.execute(
+    `UPDATE project_solution_design_upload_slots
+    SET is_upload_exempted = 1,
+      exemption_reason = ?,
+      exempted_by_user_id = ?,
+      exempted_at = CURRENT_TIMESTAMP,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE project_id = ?
+      AND slot_key = ?
+      AND is_upload_exempted = 0`,
+    [reason, actorUserId, projectId, slot.slotKey]
+  );
+
+  if (Number(result?.affectedRows ?? 0) !== 1) {
+    throw new SolutionDesignWorkflowError(
+      SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
+      'Solution design output upload exemption cannot be marked in its current state',
+      409,
+      [slot.slotKey]
+    );
+  }
+}
+
+async function cancelUploadSlotExemption(executor, { projectId, slot }) {
+  const [result] = await executor.execute(
+    `UPDATE project_solution_design_upload_slots
+    SET is_upload_exempted = 0,
+      exemption_reason = NULL,
+      exempted_by_user_id = NULL,
+      exempted_at = NULL,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE project_id = ?
+      AND slot_key = ?
+      AND is_upload_exempted = 1`,
+    [projectId, slot.slotKey]
+  );
+
+  if (Number(result?.affectedRows ?? 0) !== 1) {
+    throw new SolutionDesignWorkflowError(
+      SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
+      'Solution design output upload exemption cannot be cancelled in its current state',
+      409,
       [slot.slotKey]
     );
   }
@@ -4845,6 +5062,19 @@ export async function selectSolutionDesignQuotationTenderBranch({ projectId, pay
       SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER
     );
     const existingFlow = await selectQuotationTenderFlow(connection, projectId, { forUpdate: true });
+    if (isQuotationTenderFlowCurrentForNode(existingFlow, nodeRow)) {
+      throw new SolutionDesignWorkflowError(
+        SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
+        'Quotation/tender branch has already been selected during finance cost approval',
+        409,
+        {
+          nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+          branchType: existingFlow?.branch_type ?? null,
+          branchStatus: existingFlow?.branch_status ?? null,
+          nodeStatus: nodeRow?.status ?? null
+        }
+      );
+    }
     if (
       !canSelectQuotationTenderBranch({
         projectEnded: isSolutionDesignProjectEnded(projectRow),
@@ -4874,19 +5104,11 @@ export async function selectSolutionDesignQuotationTenderBranch({ projectId, pay
       actorUserId: user.id,
       existingFlow
     });
-    await insertQuotationTenderLog(connection, {
+    await insertQuotationTenderBranchSelectionLog(connection, {
       projectId,
-      actorUserId: user.id,
-      actionType: branchType === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION
-        ? OPERATION_ACTION_TYPE.SOLUTION_DESIGN_QUOTATION_BRANCH_SELECTED
-        : OPERATION_ACTION_TYPE.SOLUTION_DESIGN_TENDER_BRANCH_SELECTED,
-      summary: branchType === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION
-        ? '总经理选择报价流程'
-        : '总经理选择投标流程',
-      details: {
-        branchType,
-        revision: Number(nodeRow.current_revision ?? 1)
-      }
+      branchType,
+      nodeRevision: nodeRow.current_revision,
+      actorUserId: user.id
     });
 
     const refreshedProjectRow = await selectProjectContext(connection, projectId);
@@ -5285,6 +5507,113 @@ export async function listSolutionDesignUploads({ projectId, user }, db = pool) 
     const slots = await ensureSolutionDesignUploadSlots(connection, projectRow);
     const quotationTenderFlow = await selectQuotationTenderFlow(connection, projectId);
 
+    return buildUploadsDto({
+      projectRow,
+      slots,
+      nodes,
+      rolesRow,
+      quotationTenderFlow,
+      user
+    });
+  });
+}
+
+export async function markSolutionDesignUploadExemption({ projectId, slotKey, payload = {}, user }, db = pool) {
+  const slot = getSolutionDesignUploadSlotDefinition(slotKey);
+  assertSolutionDesignOutputExemptionSlot(slot);
+  const reason = normalizeUploadExemptionReason(payload);
+
+  return withConnection(db, async (connection) => {
+    const projectRow = await selectProjectContext(connection, projectId, { forUpdate: true });
+    await ensureSolutionDesignNodes(connection, projectRow);
+    await ensureSolutionDesignUploadSlots(connection, projectRow);
+    const rolesRow = await selectSolutionDesignRolesForUpdate(connection, projectId);
+    await assertWorkflowViewable(connection, projectId, user, { projectRow, rolesRow });
+    const designNode = await selectSolutionDesignNodeForUpdate(connection, projectId, SOLUTION_DESIGN_NODE_KEY.DESIGN);
+    assertCanManageSolutionDesignOutputExemption({ projectRow, rolesRow, nodeRow: designNode, user });
+    const slotRow = await selectUploadSlotForUpdate(connection, projectId, slot.slotKey);
+    if (!slotRow) {
+      throw new SolutionDesignWorkflowError(
+        SOLUTION_DESIGN_ERROR.INVALID_UPLOAD_SLOT,
+        'Solution design upload slot is not initialized',
+        409,
+        ['slotKey']
+      );
+    }
+    const currentFiles = await selectCurrentUploadFiles(connection, projectId, [slot.slotKey]);
+    if (currentFiles.length > 0) {
+      throw new SolutionDesignWorkflowError(
+        SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
+        'Solution design output already has a current file and cannot be exempted',
+        409,
+        [slot.slotKey]
+      );
+    }
+
+    await markUploadSlotExempted(connection, {
+      projectId,
+      slot,
+      reason,
+      actorUserId: user.id
+    });
+    await insertUploadExemptionLog(connection, {
+      projectId,
+      actorUserId: user.id,
+      slot,
+      reason,
+      actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_DESIGN_OUTPUT_EXEMPTED,
+      summary: `标记无需上传：${slot.slotName}`
+    });
+
+    const nodes = await selectSolutionDesignNodes(connection, projectId);
+    const slots = await selectSolutionDesignUploadSlots(connection, projectId);
+    const quotationTenderFlow = await selectQuotationTenderFlow(connection, projectId);
+    return buildUploadsDto({
+      projectRow,
+      slots,
+      nodes,
+      rolesRow,
+      quotationTenderFlow,
+      user
+    });
+  });
+}
+
+export async function cancelSolutionDesignUploadExemption({ projectId, slotKey, user }, db = pool) {
+  const slot = getSolutionDesignUploadSlotDefinition(slotKey);
+  assertSolutionDesignOutputExemptionSlot(slot);
+
+  return withConnection(db, async (connection) => {
+    const projectRow = await selectProjectContext(connection, projectId, { forUpdate: true });
+    await ensureSolutionDesignNodes(connection, projectRow);
+    await ensureSolutionDesignUploadSlots(connection, projectRow);
+    const rolesRow = await selectSolutionDesignRolesForUpdate(connection, projectId);
+    await assertWorkflowViewable(connection, projectId, user, { projectRow, rolesRow });
+    const designNode = await selectSolutionDesignNodeForUpdate(connection, projectId, SOLUTION_DESIGN_NODE_KEY.DESIGN);
+    assertCanManageSolutionDesignOutputExemption({ projectRow, rolesRow, nodeRow: designNode, user });
+    const slotRow = await selectUploadSlotForUpdate(connection, projectId, slot.slotKey);
+    if (!slotRow) {
+      throw new SolutionDesignWorkflowError(
+        SOLUTION_DESIGN_ERROR.INVALID_UPLOAD_SLOT,
+        'Solution design upload slot is not initialized',
+        409,
+        ['slotKey']
+      );
+    }
+    const reason = slotRow.exemption_reason ?? null;
+    await cancelUploadSlotExemption(connection, { projectId, slot });
+    await insertUploadExemptionLog(connection, {
+      projectId,
+      actorUserId: user.id,
+      slot,
+      reason,
+      actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_DESIGN_OUTPUT_EXEMPTION_CANCELLED,
+      summary: `取消无需上传：${slot.slotName}`
+    });
+
+    const nodes = await selectSolutionDesignNodes(connection, projectId);
+    const slots = await selectSolutionDesignUploadSlots(connection, projectId);
+    const quotationTenderFlow = await selectQuotationTenderFlow(connection, projectId);
     return buildUploadsDto({
       projectRow,
       slots,
@@ -5867,6 +6196,17 @@ export async function uploadSolutionDesignWorkflowFile(
       slot,
       fileRow
     });
+    if (isUploadSlotExempted(slotRow)) {
+      await insertUploadExemptionLog(connection, {
+        projectId,
+        actorUserId: user.id,
+        slot,
+        reason: slotRow.exemption_reason ?? null,
+        actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_DESIGN_OUTPUT_EXEMPTION_CANCELLED_BY_UPLOAD,
+        summary: `重新上传自动取消无需上传：${slot.slotName}`,
+        fileRow
+      });
+    }
 
     await connection.commit();
     committed = true;
@@ -5976,7 +6316,7 @@ export async function submitSolutionDesignWorkflowNode({ projectId, nodeKey, use
   });
 }
 
-export async function approveSolutionDesignWorkflowNode({ projectId, nodeKey, user }, db = pool) {
+export async function approveSolutionDesignWorkflowNode({ projectId, nodeKey, payload = {}, user }, db = pool) {
   const node = getSolutionDesignNodeDefinition(nodeKey);
   if (
     !node ||
@@ -6074,7 +6414,27 @@ export async function approveSolutionDesignWorkflowNode({ projectId, nodeKey, us
       if (nodeRow.status === SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW) {
         await approveFinanceCostByFinanceOwner(connection, { projectId });
       } else {
+        const branchType = normalizeQuotationTenderBranchType(payload);
         await approveFinanceCostByGeneralManager(connection, { projectId });
+        const quotationTenderNode = await selectSolutionDesignNodeForUpdate(
+          connection,
+          projectId,
+          SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER
+        );
+        const existingFlow = await selectQuotationTenderFlow(connection, projectId, { forUpdate: true });
+        await upsertQuotationTenderBranchSelection(connection, {
+          projectId,
+          branchType,
+          nodeRevision: Number(quotationTenderNode.current_revision ?? 1),
+          actorUserId: user.id,
+          existingFlow
+        });
+        await insertQuotationTenderBranchSelectionLog(connection, {
+          projectId,
+          branchType,
+          nodeRevision: quotationTenderNode.current_revision,
+          actorUserId: user.id
+        });
       }
       await insertCostApprovalLog(connection, {
         projectId,

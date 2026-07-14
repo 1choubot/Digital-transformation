@@ -22,6 +22,7 @@ import {
   getSolutionDesignUploadDownload,
   getSolutionDesignWorkflow,
   listSolutionDesignUploads,
+  markSolutionDesignUploadExemption,
   listStageApprovalHistory,
   listProjects,
   normalizeProjectOverviewDashboardFilters,
@@ -42,6 +43,7 @@ import {
   submitSolutionDesignReviewForm,
   submitSolutionDesignWorkflowNode,
   submitStageApproval,
+  cancelSolutionDesignUploadExemption,
   updateProjectCode,
   uploadSolutionDesignWorkflowFile
 } from '../repositories/projectRepository.js';
@@ -605,6 +607,33 @@ export async function uploadSolutionDesignWorkflowFileHandler(req, res) {
   });
 }
 
+export async function markSolutionDesignUploadExemptionHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const uploads = await markSolutionDesignUploadExemption({
+    projectId,
+    slotKey: req.params.slotKey,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: uploads
+  });
+}
+
+export async function cancelSolutionDesignUploadExemptionHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const uploads = await cancelSolutionDesignUploadExemption({
+    projectId,
+    slotKey: req.params.slotKey,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: uploads
+  });
+}
+
 export async function downloadSolutionDesignWorkflowFileHandler(req, res) {
   const projectId = parseProjectId(req.params.projectId);
   const download = await getSolutionDesignUploadDownload({
@@ -653,6 +682,7 @@ export async function approveSolutionDesignWorkflowNodeHandler(req, res) {
   const workflow = await approveSolutionDesignWorkflowNode({
     projectId,
     nodeKey: req.params.nodeKey,
+    payload: req.body || {},
     user: req.auth.user
   });
 

@@ -15,6 +15,7 @@ import {
   SOLUTION_DESIGN_QUOTATION_RESULT,
   SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS,
   SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE,
+  SOLUTION_DESIGN_COST_UPLOAD_SLOT_KEYS,
   SOLUTION_DESIGN_REVIEW_FORM_STATUS,
   SOLUTION_DESIGN_UPLOAD_SLOT_KEY,
   SOLUTION_DESIGN_UPLOAD_SLOT_STATUS
@@ -109,6 +110,9 @@ const SOLUTION_DESIGN_DESIGN_OUTPUT_DOCUMENT_SLOT_MAP = Object.freeze({
   C13: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.SOFTWARE_FUNCTION_DIAGRAM,
   C14: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.SOLUTION_PPT
 });
+const SOLUTION_DESIGN_EXEMPTABLE_OUTPUT_SLOT_KEYS = new Set(
+  Object.values(SOLUTION_DESIGN_DESIGN_OUTPUT_DOCUMENT_SLOT_MAP)
+);
 const SOLUTION_DESIGN_NODE_BY_DOCUMENT_CODE = Object.freeze({
   C04: SOLUTION_DESIGN_NODE_KEY.PREPARATION,
   C05: SOLUTION_DESIGN_NODE_KEY.ANALYSIS,
@@ -672,6 +676,7 @@ function hasSolutionDesignWorkflowActivity(context) {
   for (const slot of context.slotsByKey.values()) {
     if (
       slot.current_file_id ||
+      slot.is_upload_exempted ||
       [SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.UPLOADED, SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.SUBMITTED].includes(slot.status)
     ) {
       return true;
@@ -742,6 +747,21 @@ function hasCurrentRevisionUpload(context, slotKey, expectedRevision) {
   );
 }
 
+function hasCurrentUpload(context, slotKey) {
+  const slot = getContextSlot(context, slotKey);
+  return Boolean(slot?.current_file_id) &&
+    [SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.UPLOADED, SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.SUBMITTED].includes(slot.status);
+}
+
+function hasUploadExemption(context, slotKey) {
+  const slot = getContextSlot(context, slotKey);
+  return SOLUTION_DESIGN_EXEMPTABLE_OUTPUT_SLOT_KEYS.has(slotKey) && Boolean(slot?.is_upload_exempted);
+}
+
+function hasCurrentUploadOrExemption(context, slotKey) {
+  return hasCurrentUpload(context, slotKey) || hasUploadExemption(context, slotKey);
+}
+
 function isCurrentSubmittedGeneratedForm(form, expectedRevision) {
   return (
     Number(form?.revision ?? 0) === expectedRevision &&
@@ -806,12 +826,12 @@ function deriveNodeApprovedDocument(context, documentCode, nodeKey, blockingReas
   });
 }
 
-function deriveUploadDocument(context, documentCode, nodeKey, slotKey, blockingReason) {
+function deriveUploadDocument(context, documentCode, nodeKey, slotKey, blockingReason, { allowExemption = false } = {}) {
   const node = getContextNode(context, nodeKey);
   const revision = getNodeRevision(node);
   const complete =
     node?.status === SOLUTION_DESIGN_NODE_STATUS.APPROVED &&
-    hasCurrentRevisionUpload(context, slotKey, revision);
+    (allowExemption ? hasCurrentUploadOrExemption(context, slotKey) : hasCurrentUpload(context, slotKey));
 
   return buildDerivedCompletion({
     documentCode,
@@ -860,14 +880,16 @@ function deriveCostDocument(context) {
     SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST,
     SOLUTION_DESIGN_NODE_KEY.FINANCE_COST
   ];
-  const complete = nodeKeys.every((nodeKey) => isApprovedNode(context, nodeKey));
+  const complete =
+    nodeKeys.every((nodeKey) => isApprovedNode(context, nodeKey)) &&
+    SOLUTION_DESIGN_COST_UPLOAD_SLOT_KEYS.every((slotKey) => hasCurrentUpload(context, slotKey));
 
   return buildDerivedCompletion({
     documentCode: 'C17',
     nodeKey: SOLUTION_DESIGN_NODE_KEY.FINANCE_COST,
     revision: getNodeRevision(getContextNode(context, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST)),
     isComplete: complete,
-    blockingReasons: complete ? [] : ['研发、制造、财务三段成本估算尚未全部审批通过']
+    blockingReasons: complete ? [] : ['研发、制造、财务三段成本估算尚未全部审批通过，或成本估算 current 文件缺失']
   });
 }
 
@@ -987,7 +1009,7 @@ function deriveSolutionDesignDocumentCompletion(context, documentCode) {
       documentCode,
       SOLUTION_DESIGN_NODE_KEY.ANALYSIS,
       SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PRODUCT_FUNCTION_DIAGRAM,
-      '项目方案分析节点未审批通过，或当前 revision 产品功能框图未上传'
+      '项目方案分析节点未审批通过，或产品功能框图 current 文件缺失'
     );
   }
   if (SOLUTION_DESIGN_DESIGN_OUTPUT_DOCUMENT_SLOT_MAP[documentCode]) {
@@ -996,7 +1018,8 @@ function deriveSolutionDesignDocumentCompletion(context, documentCode) {
       documentCode,
       SOLUTION_DESIGN_NODE_KEY.DESIGN,
       SOLUTION_DESIGN_DESIGN_OUTPUT_DOCUMENT_SLOT_MAP[documentCode],
-      `${documentCode} 方案设计产出未审批通过，或当前 revision 上传槽未齐套`
+      `${documentCode} 方案设计产出未审批通过，或上传槽 current 文件/无需上传豁免缺失`,
+      { allowExemption: true }
     );
   }
   if (documentCode === 'C15') {

@@ -149,6 +149,9 @@
                       <span>{{ formatSlotStatus(slot.status) }} · v{{ slot.revision || 1 }}</span>
                     </div>
                     <span v-if="slot.confidential" class="stage-document-pill stage-document-pill--warning">保密</span>
+                    <span v-else-if="slot.exemption?.isExempted" class="stage-document-pill stage-document-pill--success">
+                      无需上传
+                    </span>
                   </div>
 
                   <div v-if="slot.currentFile" class="solution-design-workflow__file-line">
@@ -161,6 +164,14 @@
                   <div v-else-if="slot.currentFileHidden" class="solution-design-workflow__file-line">
                     <span>文件细节已按后端保密规则脱敏</span>
                     <small>仅显示节点状态和审批结果。</small>
+                  </div>
+                  <div v-else-if="slot.exemption?.isExempted" class="solution-design-workflow__file-line">
+                    <span>已标记无需上传</span>
+                    <small>
+                      {{ slot.exemption.reason || '未填写备注' }} ·
+                      {{ formatUser(slot.exemption.exemptedByUser) }} ·
+                      {{ formatDateTime(slot.exemption.exemptedAt) }}
+                    </small>
                   </div>
                   <div v-else class="solution-design-workflow__file-line">
                     <span>暂无当前有效文件</span>
@@ -192,6 +203,37 @@
                     <span v-if="!slot.permissions?.canUpload && !slot.permissions?.canDownload" class="inline-muted">
                       当前无文件操作权限
                     </span>
+                  </div>
+                  <div
+                    v-if="slot.permissions?.canMarkExemption || slot.permissions?.canCancelExemption"
+                    class="solution-design-workflow__exemption-actions"
+                  >
+                    <template v-if="slot.permissions?.canMarkExemption">
+                      <textarea
+                        v-model="uploadExemptionReasons[slot.slotKey]"
+                        rows="2"
+                        maxlength="1000"
+                        placeholder="填写无需上传原因或备注"
+                        :disabled="isPending(`exemption:mark:${slot.slotKey}`)"
+                      ></textarea>
+                      <button
+                        type="button"
+                        class="ghost-button"
+                        :disabled="isPending(`exemption:mark:${slot.slotKey}`)"
+                        @click="markUploadExemption(slot)"
+                      >
+                        {{ isPending(`exemption:mark:${slot.slotKey}`) ? '处理中...' : '无需上传' }}
+                      </button>
+                    </template>
+                    <button
+                      v-if="slot.permissions?.canCancelExemption"
+                      type="button"
+                      class="ghost-button"
+                      :disabled="isPending(`exemption:cancel:${slot.slotKey}`)"
+                      @click="cancelUploadExemption(slot)"
+                    >
+                      {{ isPending(`exemption:cancel:${slot.slotKey}`) ? '处理中...' : '取消无需上传' }}
+                    </button>
                   </div>
                 </article>
               </div>
@@ -260,6 +302,23 @@
                 <span class="section-eyebrow">节点动作</span>
                 <strong>提交、审批和退回</strong>
               </div>
+              <div
+                v-if="requiresFinanceApprovalBranch(selectedNode)"
+                class="solution-design-workflow__approval-branch"
+              >
+                <label>
+                  <span>审批通过后流程 *</span>
+                  <select
+                    v-model="financeApprovalBranchType"
+                    :disabled="isPending(`approve:${selectedNode.nodeKey}`)"
+                  >
+                    <option value="">请选择</option>
+                    <option value="quotation">报价流程</option>
+                    <option value="tender">投标流程</option>
+                  </select>
+                </label>
+                <p class="inline-muted">财务成本估算通过后将直接进入所选流程。</p>
+              </div>
               <div class="solution-design-workflow__action-row">
                 <button
                   v-if="isGenericSubmitNode(selectedNode)"
@@ -274,8 +333,11 @@
                   v-if="selectedNode.permissions?.canApprove"
                   type="button"
                   class="primary-button"
-                  :disabled="isPending(`approve:${selectedNode.nodeKey}`)"
-                  @click="approveNode(selectedNode.nodeKey)"
+                  :disabled="
+                    isPending(`approve:${selectedNode.nodeKey}`) ||
+                    (requiresFinanceApprovalBranch(selectedNode) && !financeApprovalBranchType)
+                  "
+                  @click="approveNode(selectedNode)"
                 >
                   {{ isPending(`approve:${selectedNode.nodeKey}`) ? '审批中...' : formatApproveNodeLabel(selectedNode) }}
                 </button>
@@ -332,6 +394,7 @@ import {
   getSolutionDesignAnalysisForm,
   getSolutionDesignQuotationForm,
   getSolutionDesignReviewForm,
+  markSolutionDesignUploadExemption,
   processSolutionDesignQuotationResult,
   saveSolutionDesignAnalysisForm,
   saveSolutionDesignQuotationForm,
@@ -345,6 +408,7 @@ import {
   submitSolutionDesignWorkflowNode,
   toReadableApiError,
   uploadStageDocumentOnlineFormImage,
+  cancelSolutionDesignUploadExemption,
   uploadSolutionDesignWorkflowFile
 } from '../../api/projects.js';
 
@@ -541,6 +605,8 @@ const pendingAction = ref('');
 const localMessage = ref('');
 const localError = ref('');
 const returnReasons = reactive({});
+const uploadExemptionReasons = reactive({});
+const financeApprovalBranchType = ref('');
 const quotationReturnReason = ref('');
 const quotationRejectAction = ref('return_to_rd_cost');
 const quotationFormDto = ref(null);
@@ -698,6 +764,9 @@ watch(
   () => selectedNode.value?.nodeKey,
   (nodeKey) => {
     localError.value = '';
+    if (nodeKey !== 'finance_cost_estimation') {
+      financeApprovalBranchType.value = '';
+    }
     if (nodeKey === 'solution_analysis') {
       void loadAnalysisForm();
     } else if (isReviewNode(nodeKey)) {
@@ -1021,6 +1090,31 @@ async function downloadUpload(slot) {
     },
     `${slot.slotName}已开始下载。`,
     { notifyChanged: false }
+  );
+}
+
+async function markUploadExemption(slot) {
+  const reason = String(uploadExemptionReasons[slot.slotKey] || '').trim();
+  if (!reason) {
+    localError.value = '请填写无需上传原因或备注。';
+    return;
+  }
+
+  const result = await runAction(
+    `exemption:mark:${slot.slotKey}`,
+    () => markSolutionDesignUploadExemption(props.projectId, slot.slotKey, reason, props.authToken),
+    `${slot.slotName}已标记无需上传。`
+  );
+  if (result) {
+    uploadExemptionReasons[slot.slotKey] = '';
+  }
+}
+
+async function cancelUploadExemption(slot) {
+  await runAction(
+    `exemption:cancel:${slot.slotKey}`,
+    () => cancelSolutionDesignUploadExemption(props.projectId, slot.slotKey, props.authToken),
+    `${slot.slotName}已取消无需上传。`
   );
 }
 
@@ -1429,14 +1523,37 @@ async function submitGenericNode(node) {
   await submitNode(node.nodeKey);
 }
 
-async function approveNode(nodeKey) {
+function requiresFinanceApprovalBranch(node) {
+  return (
+    node?.nodeKey === 'finance_cost_estimation' &&
+    node?.status === 'pending_general_review' &&
+    node?.permissions?.canApprove === true
+  );
+}
+
+async function approveNode(nodeOrKey) {
+  const node =
+    nodeOrKey && typeof nodeOrKey === 'object'
+      ? nodeOrKey
+      : sortedNodes.value.find((candidate) => candidate.nodeKey === nodeOrKey);
+  const nodeKey = node?.nodeKey || String(nodeOrKey || '');
+  const payload = {};
+  if (requiresFinanceApprovalBranch(node)) {
+    const branchType = String(financeApprovalBranchType.value || '').trim();
+    if (!branchType) {
+      localError.value = '请选择报价流程或投标流程。';
+      return;
+    }
+    payload.branchType = branchType;
+  }
+
   await runAction(
     `approve:${nodeKey}`,
     () =>
       approveSolutionDesignWorkflowNode(
         props.projectId,
         nodeKey,
-        '',
+        payload,
         props.authToken
       ),
     `${getNodeName(nodeKey)}审批已通过。`
@@ -2689,6 +2806,7 @@ const QuotationTenderSection = defineComponent({
 
 .solution-design-workflow__role-form label,
 .solution-design-workflow__approval-comment label,
+.solution-design-workflow__approval-branch label,
 .solution-design-workflow__return-box label {
   display: grid;
   gap: 6px;
@@ -2746,6 +2864,7 @@ const QuotationTenderSection = defineComponent({
 
 .solution-design-workflow__file-line,
 .solution-design-workflow__slot-actions,
+.solution-design-workflow__exemption-actions,
 .solution-design-workflow__action-row,
 .solution-design-workflow__form-actions,
 .solution-design-workflow__quotation-actions {
@@ -2775,6 +2894,16 @@ const QuotationTenderSection = defineComponent({
 .solution-design-workflow__file-button--disabled {
   opacity: 0.65;
   pointer-events: none;
+}
+
+.solution-design-workflow__exemption-actions {
+  align-items: flex-start;
+}
+
+.solution-design-workflow__exemption-actions textarea {
+  min-width: min(360px, 100%);
+  flex: 1 1 280px;
+  resize: vertical;
 }
 
 .solution-design-workflow__form-grid {
@@ -2929,6 +3058,7 @@ const QuotationTenderSection = defineComponent({
 }
 
 .solution-design-workflow__return-box,
+.solution-design-workflow__approval-branch,
 .solution-design-workflow__approval-comment {
   display: grid;
   gap: 10px;
@@ -2961,6 +3091,7 @@ const QuotationTenderSection = defineComponent({
 
   .solution-design-workflow__action-row > *,
   .solution-design-workflow__slot-actions > *,
+  .solution-design-workflow__exemption-actions > *,
   .solution-design-workflow__form-actions > *,
   .solution-design-workflow__quotation-actions > *,
   .solution-design-workflow__repeatable-row > * {

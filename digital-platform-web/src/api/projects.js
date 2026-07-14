@@ -93,6 +93,21 @@ export async function downloadSolutionDesignWorkflowFile(projectId, slotKey, aut
   });
 }
 
+export async function markSolutionDesignUploadExemption(projectId, slotKey, exemptionReason, authToken = '') {
+  return request(`/api/projects/${projectId}/solution-design-workflow/uploads/${slotKey}/exemption`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ exemptionReason })
+  });
+}
+
+export async function cancelSolutionDesignUploadExemption(projectId, slotKey, authToken = '') {
+  return request(`/api/projects/${projectId}/solution-design-workflow/uploads/${slotKey}/exemption`, {
+    method: 'DELETE',
+    authToken
+  });
+}
+
 export async function submitSolutionDesignWorkflowNode(projectId, nodeKey, authToken = '') {
   return request(`/api/projects/${projectId}/solution-design-workflow/nodes/${nodeKey}/submit`, {
     method: 'POST',
@@ -101,11 +116,15 @@ export async function submitSolutionDesignWorkflowNode(projectId, nodeKey, authT
   });
 }
 
-export async function approveSolutionDesignWorkflowNode(projectId, nodeKey, comment = '', authToken = '') {
+export async function approveSolutionDesignWorkflowNode(projectId, nodeKey, commentOrPayload = '', authToken = '') {
+  const payload =
+    commentOrPayload && typeof commentOrPayload === 'object'
+      ? commentOrPayload
+      : { comment: commentOrPayload };
   return request(`/api/projects/${projectId}/solution-design-workflow/nodes/${nodeKey}/approve`, {
     method: 'POST',
     authToken,
-    body: JSON.stringify({ comment })
+    body: JSON.stringify(payload)
   });
 }
 

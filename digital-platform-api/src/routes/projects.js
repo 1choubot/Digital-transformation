@@ -37,6 +37,7 @@ import {
   listMyActiveProjectsHandler,
   listStageDocumentAttachmentsHandler,
   markStageDocumentNotApplicableHandler,
+  markSolutionDesignUploadExemptionHandler,
   processSolutionDesignQuotationResultHandler,
   restoreStageDocumentApplicableHandler,
   returnStageApprovalHandler,
@@ -44,6 +45,7 @@ import {
   returnSolutionDesignWorkflowNodeHandler,
   returnStageDocumentHandler,
   resubmitStageApprovalHandler,
+  cancelSolutionDesignUploadExemptionHandler,
   saveStageDocumentOnlineFormHandler,
   saveSolutionDesignAnalysisFormHandler,
   saveSolutionDesignQuotationFormHandler,
@@ -224,6 +226,18 @@ projectsRouter.get(
   '/:projectId/solution-design-workflow/uploads/:slotKey/download',
   requireAuth,
   asyncHandler(downloadSolutionDesignWorkflowFileHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/solution-design-workflow/uploads/:slotKey/exemption',
+  requireAuth,
+  asyncHandler(markSolutionDesignUploadExemptionHandler)
+);
+
+projectsRouter.delete(
+  '/:projectId/solution-design-workflow/uploads/:slotKey/exemption',
+  requireAuth,
+  asyncHandler(cancelSolutionDesignUploadExemptionHandler)
 );
 
 projectsRouter.post(

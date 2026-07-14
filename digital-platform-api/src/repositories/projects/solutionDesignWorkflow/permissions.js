@@ -242,6 +242,26 @@ export function areTenderFilesUploadedForRevision(uploadSlotRevisionByKey, requi
   );
 }
 
+export function hasCurrentUploadSlotFile(currentFileSlotKeys, slotKey) {
+  return Boolean(slotKey) && currentFileSlotKeys instanceof Set && currentFileSlotKeys.has(slotKey);
+}
+
+export function hasActiveUploadSlotExemption(exemptedSlotKeys, slotKey) {
+  return (
+    Boolean(slotKey) &&
+    SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS.includes(slotKey) &&
+    exemptedSlotKeys instanceof Set &&
+    exemptedSlotKeys.has(slotKey)
+  );
+}
+
+export function isSolutionDesignOutputSatisfied(currentFileSlotKeys, exemptedSlotKeys, slotKey) {
+  return (
+    hasCurrentUploadSlotFile(currentFileSlotKeys, slotKey) ||
+    hasActiveUploadSlotExemption(exemptedSlotKeys, slotKey)
+  );
+}
+
 export function canSubmitTender({ projectEnded, inSolutionStage, roleState, user, nodeRow, flowRow, uploadSlotRevisionByKey }) {
   return (
     !projectEnded &&
@@ -321,10 +341,26 @@ export function isProductFunctionDiagramUploadedForRevision(uploadSlotRevisionBy
   );
 }
 
+export function isProductFunctionDiagramCurrent(currentFileSlotKeys) {
+  return hasCurrentUploadSlotFile(currentFileSlotKeys, SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PRODUCT_FUNCTION_DIAGRAM);
+}
+
 export function areSolutionDesignOutputsUploadedForRevision(uploadSlotRevisionByKey, requiredRevision) {
   const revision = Number(requiredRevision ?? 1);
   return SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS.every(
     (slotKey) => Number(uploadSlotRevisionByKey.get(slotKey) ?? 0) >= revision
+  );
+}
+
+export function areSolutionDesignOutputsCurrent(currentFileSlotKeys) {
+  return SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS.every((slotKey) =>
+    hasCurrentUploadSlotFile(currentFileSlotKeys, slotKey)
+  );
+}
+
+export function areSolutionDesignOutputsSatisfied(currentFileSlotKeys, exemptedSlotKeys) {
+  return SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS.every((slotKey) =>
+    isSolutionDesignOutputSatisfied(currentFileSlotKeys, exemptedSlotKeys, slotKey)
   );
 }
 
@@ -335,6 +371,10 @@ export function isCostUploadSlotUploadedForRevision(uploadSlotRevisionByKey, nod
   }
 
   return Number(uploadSlotRevisionByKey.get(slotKey) ?? 0) >= Number(requiredRevision ?? 1);
+}
+
+export function isCostUploadSlotCurrent(currentFileSlotKeys, nodeKey) {
+  return hasCurrentUploadSlotFile(currentFileSlotKeys, getCostUploadSlotKeyForNode(nodeKey));
 }
 
 function getSubmitNodeRoleKey(nodeKey) {
@@ -384,7 +424,15 @@ export function buildUploadSlotPermissions({ slot, roleState, user, projectEnded
     canUpload:
       canWrite &&
       Boolean(slot?.requiredRoleKey) &&
-      isSameId(roleState[slot.requiredRoleKey]?.userId, user?.id)
+      isSameId(roleState[slot.requiredRoleKey]?.userId, user?.id),
+    canMarkExemption:
+      canWrite &&
+      SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS.includes(slot?.slotKey) &&
+      isTechnicalOwner(roleState, user),
+    canCancelExemption:
+      canWrite &&
+      SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS.includes(slot?.slotKey) &&
+      isTechnicalOwner(roleState, user)
   };
 }
 
@@ -395,6 +443,7 @@ export function canSubmitNode({
   projectEnded,
   inSolutionStage,
   currentFileSlotKeys,
+  exemptedSlotKeys = new Set(),
   uploadSlotRevisionByKey,
   analysisFormRow,
   reviewFormRowsByNodeKey = new Map(),
@@ -421,12 +470,12 @@ export function canSubmitNode({
   if (nodeRow.node_key === SOLUTION_DESIGN_NODE_KEY.ANALYSIS) {
     return (
       isAnalysisFormGeneratedForRevision(analysisFormRow, nodeRow.current_revision) &&
-      isProductFunctionDiagramUploadedForRevision(uploadSlotRevisionByKey, nodeRow.current_revision)
+      isProductFunctionDiagramCurrent(currentFileSlotKeys)
     );
   }
 
   if (nodeRow.node_key === SOLUTION_DESIGN_NODE_KEY.DESIGN) {
-    return areSolutionDesignOutputsUploadedForRevision(uploadSlotRevisionByKey, nodeRow.current_revision);
+    return areSolutionDesignOutputsSatisfied(currentFileSlotKeys, exemptedSlotKeys);
   }
 
   if (getSolutionDesignReviewFormDefinition(nodeRow.node_key)) {
@@ -437,11 +486,7 @@ export function canSubmitNode({
   }
 
   if (isCostEstimationNode(nodeRow.node_key)) {
-    return isCostUploadSlotUploadedForRevision(
-      uploadSlotRevisionByKey,
-      nodeRow.node_key,
-      nodeRow.current_revision
-    );
+    return isCostUploadSlotCurrent(currentFileSlotKeys, nodeRow.node_key);
   }
 
   if (nodeRow.node_key === SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER) {

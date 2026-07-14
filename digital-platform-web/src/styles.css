@@ -1340,9 +1340,19 @@ p {
   font-weight: 700;
 }
 
-.online-form-field__description {
+.form-field-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.form-field-description,
+.form-grid label .form-field-description {
   color: #64748b;
   font-size: 12px;
+  font-weight: 400;
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -1391,6 +1401,20 @@ p {
 .online-form-image-field__upload {
   display: grid;
   gap: 6px;
+  min-width: 0;
+  justify-self: start;
+  width: fit-content;
+}
+
+.solution-form-image-upload {
+  justify-self: start;
+  width: fit-content;
+}
+
+.solution-form-grid__with-image .el-form-item__content {
+  display: grid;
+  align-items: start;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -5885,7 +5909,56 @@ p {
 /* ===== 响应式 ===== */
 
 /* Migrated from digital-platform-web/src/pages/project-node/solution-design/SolutionAnalysisPage.vue */
-.solution-node-page .analysis-section,.solution-node-page .image-card{display:grid;gap:var(--space-4,16px)}.solution-node-page .image-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-3,12px)}.solution-node-page .image-card{padding:var(--space-3,12px);border:1px solid var(--color-border,#d8dde6);border-radius:var(--radius-md,8px)}.solution-node-page .image-row,.solution-node-page .action-row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2,8px)}@media(max-width:768px){.solution-node-page .image-grid{grid-template-columns:1fr}}
+.solution-node-page .analysis-section {
+  display: grid;
+  gap: var(--space-4, 16px);
+}
+
+.solution-analysis-form-section {
+  display: grid;
+  gap: var(--space-3, 12px);
+  padding: 18px;
+  border: 1px solid #dbe3ec;
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.solution-analysis-form-section > h4 {
+  margin: 0;
+  color: #17212f;
+  font-size: 15px;
+}
+
+.solution-form-field-images {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.solution-node-page .image-row,
+.solution-node-page .action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+}
+
+.solution-node-page .image-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 768px) {
+  .solution-analysis-form-section {
+    padding: 14px;
+  }
+
+  .solution-node-page .image-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
 
 /* Migrated from digital-platform-web/src/pages/project-node/solution-design/SolutionPreparationPage.vue */
 .solution-node-page .solution-section{display:grid;gap:var(--space-4,16px)}

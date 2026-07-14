@@ -31,23 +31,6 @@
     />
 
     <el-alert v-if="errorMessage" :description="errorMessage" type="error" show-icon :closable="false" />
-
-
-    <!-- <dl v-if="form.collaboration" class="stage-document-meta online-form-collaboration-status">
-      <div>
-        <dt>商务部分</dt>
-        <dd>{{ formatCollaborationPartStatus(form.collaboration.businessSubmitted) }}</dd>
-      </div>
-      <div>
-        <dt>技术部分</dt>
-        <dd>{{ formatCollaborationPartStatus(form.collaboration.technicalSubmitted) }}</dd>
-      </div>
-      <div>
-        <dt>当前填写区域</dt>
-        <dd>{{ formatEditablePart(form.permissions?.editablePart) }}</dd>
-      </div>
-    </dl> -->
-
     <el-form class="online-form-editor__form" :model="formData" @submit.prevent="$emit('submit')">
       <section v-if="form.schema?.noticeTemplate" class="online-form-notice-preview">
         <h4>{{ form.schema.noticeTemplate.title }}</h4>
@@ -74,7 +57,10 @@
         <h4>{{ section.title }}</h4>
         <div class="form-grid">
           <label v-for="field in section.fields || []" :key="field.key" :class="getFieldClass(field)">
-            <span>{{ field.label }}{{ field.required ? ' *' : '' }}</span>
+            <span class="form-field-label">
+              <span>{{ field.label }}{{ field.required ? ' *' : '' }}</span>
+              <small v-if="field.description" class="form-field-description">{{ field.description }}</small>
+            </span>
             <el-select
               v-if="field.type === 'select'"
               :model-value="formData[field.key]"
@@ -138,10 +124,15 @@
                 :show-file-list="false"
                 accept="image/png,image/jpeg"
                 :disabled="isOnlineFormFieldDisabled(field) || isImageUploadPending(field) || isImageLimitReached(field)"
-                :http-request="(request) => handleImageUpload(field, request)"
+              :http-request="(request) => handleImageUpload(field, request)"
+            >
+              <el-button
+                :loading="isImageUploadPending(field)"
+                :disabled="isOnlineFormFieldDisabled(field) || isImageLimitReached(field)"
               >
-                <el-button :loading="isImageUploadPending(field)" :disabled="isImageLimitReached(field)">{{ getImageUploadText(field) }}</el-button>
-              </el-upload>
+                {{ getImageUploadText(field) }}
+              </el-button>
+            </el-upload>
             </div>
             <el-date-picker
               v-else-if="field.type === 'date'"
@@ -159,9 +150,6 @@
               :disabled="isOnlineFormFieldDisabled(field)"
               @update:model-value="$emit('update-field', { key: field.key, value: $event })"
             />
-            <small v-if="field.description" class="online-form-field__description">
-              {{ field.description }}
-            </small>
           </label>
         </div>
       </section>

@@ -5,28 +5,11 @@
             <section class="solution-node-card">
                 <header class="solution-node-header">
                     <div>
-                        <!-- <span class="section-eyebrow">方案设计阶段</span> -->
                         <h3>{{ node.nodeName }}</h3>
-                    </div><!-- <el-tag :type="tagType">{{ nodeStatusText[node.status] || node.status }}</el-tag> -->
+                    </div>
+                    <el-tag :type="tagType">{{ nodeStatusText[node.status] || node.status }}</el-tag>
                 </header>
-                <!-- <dl class="stage-document-meta">
-                    <div>
-                        <dt>当前版本</dt>
-                        <dd>v{{ node.currentRevision || 1 }}</dd>
-                    </div>
-                    <div>
-                        <dt>激活时间</dt>
-                        <dd>{{ formatDateTime(node.activatedAt) }}</dd>
-                    </div>
-                    <div>
-                        <dt>提交时间</dt>
-                        <dd>{{ formatDateTime(node.submittedAt) }}</dd>
-                    </div>
-                    <div>
-                        <dt>通过时间</dt>
-                        <dd>{{ formatDateTime(node.approvedAt) }}</dd>
-                    </div>
-                </dl> -->
+
                 <el-alert v-if="node.returnReason" :title="`退回原因：${node.returnReason}`" type="warning" show-icon
                     :closable="false" /><el-alert v-if="node.blockingReasons?.length"
                     :title="`阻塞原因：${node.blockingReasons.join('；')}`" type="warning" show-icon :closable="false" />

@@ -6488,7 +6488,7 @@ test('manual fallback advances completed solution workflow projects that missed 
   assert.equal(details.completenessSummary.incompleteRequiredCount, 0);
 });
 
-test('completed solution design workflow does not inflate overview pending stage document tasks', async () => {
+test('overview uses pending project summary without marking completed workflow project', async () => {
   const db = fakeDb();
   seedAssignedRoles(db.connection);
   const storage = fakeUploadStorage();
@@ -6512,16 +6512,18 @@ test('completed solution design workflow does not inflate overview pending stage
   const overview = await getProjectOverviewDashboard(
     projectManager,
     { status: null, currentStageOrder: null, keyword: '' },
-    db.connection
+    db.connection,
+    async () => ({ total: 0, projectIds: [] })
   );
 
-  assert.equal(overview.summary.myPendingStageDocumentTasks, 0);
+  assert.equal(overview.summary.myPendingTasks, 0);
   assert.equal(overview.projects[0].currentStageOrder, 3);
   assert.equal(overview.projects[0].currentStageName, '合同签订阶段');
   assert.equal(overview.projects[0].currentStageCompletenessSummary, null);
+  assert.equal(overview.projects[0].hasMyPendingTasks, false);
 });
 
-test('incomplete solution design workflow overview pending count follows derived document status', async () => {
+test('overview uses pending project summary total and deduplicated project ids', async () => {
   const db = fakeDb();
   seedAssignedRoles(db.connection);
   const technicalOwner = authUser(db.connection.users.get(12));
@@ -6531,10 +6533,12 @@ test('incomplete solution design workflow overview pending count follows derived
   const overview = await getProjectOverviewDashboard(
     technicalOwner,
     { status: null, currentStageOrder: null, keyword: '' },
-    db.connection
+    db.connection,
+    async () => ({ total: 2, projectIds: ['100'] })
   );
 
-  assert.equal(overview.summary.myPendingStageDocumentTasks, 1);
+  assert.equal(overview.summary.myPendingTasks, 2);
+  assert.equal(overview.projects[0].hasMyPendingTasks, true);
 });
 
 test('non-applicable solution design output stays not_applicable and does not block stage advance', async () => {

@@ -28,7 +28,10 @@ import {
   approveInitiationReviewNode,
   returnInitiationReviewNode
 } from '../../src/repositories/stageDocuments/initiationReviewRepository.js';
-import { getMyWorkbench } from '../../src/repositories/stageDocuments/workbenchRepository.js';
+import {
+  getMyPendingProjectSummary,
+  getMyWorkbench
+} from '../../src/repositories/stageDocuments/workbenchRepository.js';
 import { OPERATION_ACTION_TYPE } from '../../src/repositories/operationLogRepository.js';
 
 const PROJECT_ID = 9001;
@@ -1339,6 +1342,15 @@ function assertWorkbenchHas(workbench, predicate, message) {
   assertNoStageAdvanceTodos(workbench);
 }
 
+async function assertPendingProjectSummaryMatchesWorkbench(currentUser, workbench) {
+  const pendingProjectSummary = await getMyPendingProjectSummary(currentUser);
+  assert.equal(pendingProjectSummary.total, workbench.summary.total);
+  assert.deepEqual(
+    [...pendingProjectSummary.projectIds].sort(),
+    [...new Set(workbench.items.map((item) => String(item.projectId)))].sort()
+  );
+}
+
 test('1.1 requirement online form submits, completes the document and unlocks 1.2 collaboration', async () => {
   const db = fakeDb();
 
@@ -1520,6 +1532,7 @@ test('workbench initiation todos cover key handlers without ordinary stage advan
 
   await withFakePool(db, async () => {
     const requirementOwnerWorkbench = await getMyWorkbench(user(db, 11));
+    await assertPendingProjectSummaryMatchesWorkbench(user(db, 11), requirementOwnerWorkbench);
     assertWorkbenchHas(
       requirementOwnerWorkbench,
       (item) => item.type === 'document_responsibility' && item.documentCode === '1.1',
@@ -1529,6 +1542,7 @@ test('workbench initiation todos cover key handlers without ordinary stage advan
     await submitRequirement(db);
 
     const businessWorkbench = await getMyWorkbench(user(db, 12));
+    await assertPendingProjectSummaryMatchesWorkbench(user(db, 12), businessWorkbench);
     assertWorkbenchHas(
       businessWorkbench,
       (item) =>
@@ -1551,6 +1565,7 @@ test('workbench initiation todos cover key handlers without ordinary stage advan
     await submitApprovalForm(db);
 
     const marketingReviewWorkbench = await getMyWorkbench(user(db, 1));
+    await assertPendingProjectSummaryMatchesWorkbench(user(db, 1), marketingReviewWorkbench);
     assertWorkbenchHas(
       marketingReviewWorkbench,
       (item) => item.type === 'initiation_review' && item.nodeKey === INITIATION_REVIEW_NODE_KEY.BUSINESS,
@@ -1568,6 +1583,7 @@ test('workbench initiation todos cover key handlers without ordinary stage advan
     await approveTechnicalReview(db);
 
     const generalWorkbench = await getMyWorkbench(user(db, 3));
+    await assertPendingProjectSummaryMatchesWorkbench(user(db, 3), generalWorkbench);
     assertWorkbenchHas(
       generalWorkbench,
       (item) => item.type === 'initiation_review' && item.nodeKey === INITIATION_REVIEW_NODE_KEY.GENERAL,

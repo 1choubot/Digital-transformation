@@ -838,11 +838,14 @@ p {
 .overview-list {
   display: grid;
   gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 2px;
 }
 
 .overview-project.el-card {
   display: grid;
   gap: 12px;
+  min-width: 1160px;
   border-radius: 8px;
   cursor: pointer;
   transition:
@@ -895,7 +898,9 @@ p {
   min-width: 0;
   color: #17212f;
   font-weight: 700;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .overview-project__meta {
@@ -920,6 +925,20 @@ p {
 .overview-project__dates {
   flex: 0 0 auto;
   min-width: 100px;
+  white-space: nowrap;
+}
+
+.overview-project__main > .el-tag {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.overview-project__pending-star {
+  flex: 0 0 auto;
+  color: #f5a623;
+  font-size: 22px;
+  line-height: 1;
+  text-shadow: 0 1px 1px rgb(146 91 0 / 18%);
   white-space: nowrap;
 }
 

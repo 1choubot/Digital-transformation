@@ -32,13 +32,13 @@
         <el-card class="overview-metric-card overview-metric-card--button" shadow="never" role="button" tabindex="0"
           @click="navigate('/my-stage-document-tasks')" @keydown.enter.prevent="navigate('/my-stage-document-tasks')"
           @keydown.space.prevent="navigate('/my-stage-document-tasks')">
-          <el-statistic title="我的待办资料" :value="summary.myPendingStageDocumentTasks" />
+          <el-statistic title="我的待办" :value="summary.myPendingTasks" />
         </el-card>
       </el-col>
     </el-row>
 
     <p class="manual-status-note">
-      “我的待办资料”为当前登录用户全局待处理资料数量，不随项目状态、当前阶段或关键字筛选变化。
+      “我的待办”为当前登录用户工作台中的全局待办数量，不随项目状态、当前阶段或关键字筛选变化。
     </p>
 
     <el-card class="overview-filter-card" shadow="never">
@@ -91,12 +91,12 @@
 
             <div class="overview-project__identity">
               <span class="mono">{{ formatProjectCode(project.projectCode) }}</span>
-              <strong>{{ project.projectName }}</strong>
+              <strong :title="project.projectName">{{ project.projectName }}</strong>
             </div>
 
             <div class="overview-project__dates">
               <span>客户名称</span>
-              <strong>{{ project.customerName || '-' }}</strong>
+              <strong :title="project.customerName || '-'">{{ project.customerName || '-' }}</strong>
             </div>
 
             <div class="overview-project__dates">
@@ -118,7 +118,7 @@
 
             <div class="overview-project__stage">
               <span>当前阶段</span>
-              <strong>{{ formatCurrentStage(project) }}</strong>
+              <strong :title="formatCurrentStage(project)">{{ formatCurrentStage(project) }}</strong>
               <small v-if="project.currentStageIssue">{{ formatStageIssue(project.currentStageIssue) }}</small>
               <small v-else-if="project.status === 'ended'">结束原因：{{ project.endedReason || '-' }}</small>
             </div>
@@ -127,6 +127,14 @@
               <span>立项日期</span>
               <strong>{{ project.initiationDate ? formatDate(project.initiationDate) : '-' }}</strong>
             </div>
+
+            <span
+              v-if="project.hasMyPendingTasks"
+              class="overview-project__pending-star"
+              role="img"
+              aria-label="当前项目存在待填写资料或待处理事项"
+              title="当前项目存在待填写资料或待处理事项"
+            >★</span>
           </div>
 
         </el-card>
@@ -166,7 +174,7 @@ const emptySummary = {
   activeProjects: 0,
   completedProjects: 0,
   riskProjects: 0,
-  myPendingStageDocumentTasks: 0
+  myPendingTasks: 0
 };
 
 const statusOptions = [

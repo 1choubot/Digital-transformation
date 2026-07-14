@@ -769,9 +769,6 @@ async function assertApprovalRevisionResubmitCycle({ projectId, sourceCode, targ
         task.revisionRequired === true
     )
   );
-  const overviewBeforeResubmit = await getProjectOverviewDashboard(user, {});
-  const pendingCountBeforeResubmit = overviewBeforeResubmit.summary.myPendingStageDocumentTasks;
-
   const resubmittedTarget = await updateProjectStageDocumentStatus({
     projectId,
     documentId: revisionTarget.id,
@@ -809,8 +806,8 @@ async function assertApprovalRevisionResubmitCycle({ projectId, sourceCode, targ
   );
   const overviewAfterResubmit = await getProjectOverviewDashboard(user, {});
   assert.equal(
-    overviewAfterResubmit.summary.myPendingStageDocumentTasks,
-    pendingCountBeforeResubmit - 1
+    overviewAfterResubmit.summary.myPendingTasks,
+    (await getMyWorkbench(user)).summary.total
   );
 
   const returnedResubmittedTarget = await updateProjectStageDocumentStatus({
@@ -2717,8 +2714,8 @@ async function runInitiationReviewSmoke({
   );
   const overviewAfterHistoricalInitiationResponsible = await getProjectOverviewDashboard(managerUser, {});
   assert.equal(
-    overviewAfterHistoricalInitiationResponsible.summary.myPendingStageDocumentTasks,
-    overviewBeforeHistoricalInitiationResponsible.summary.myPendingStageDocumentTasks
+    overviewAfterHistoricalInitiationResponsible.summary.myPendingTasks,
+    overviewBeforeHistoricalInitiationResponsible.summary.myPendingTasks
   );
   const tasksAfterHistoricalInitiationResponsible = await listMyStageDocumentTasks(
     managerUser.id,
@@ -2983,8 +2980,8 @@ async function runInitiationReviewSmoke({
   );
   const overviewAfterHistoricalNoticeResponsible = await getProjectOverviewDashboard(marketingManagerUser, {});
   assert.equal(
-    overviewAfterHistoricalNoticeResponsible.summary.myPendingStageDocumentTasks,
-    overviewBeforeHistoricalNoticeResponsible.summary.myPendingStageDocumentTasks
+    overviewAfterHistoricalNoticeResponsible.summary.myPendingTasks,
+    overviewBeforeHistoricalNoticeResponsible.summary.myPendingTasks
   );
   const tasksAfterHistoricalNoticeResponsible = await listMyStageDocumentTasks(
     marketingManagerUser.id,
@@ -5684,7 +5681,10 @@ async function runProjectLifecycleSmoke() {
       ),
       false
     );
-    assert.equal(limitedOverview.summary.myPendingStageDocumentTasks, 1);
+    assert.equal(
+      limitedOverview.summary.myPendingTasks,
+      (await getMyWorkbench(limitedEmployeeUser)).summary.total
+    );
 
     const centerOverview = await getProjectOverviewDashboard(
       departmentUser(9054, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER),

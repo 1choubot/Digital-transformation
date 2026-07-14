@@ -170,6 +170,33 @@ export async function downloadSolutionDesignReviewGeneratedFile(projectId, nodeK
   );
 }
 
+export async function getSolutionDesignQuotationForm(projectId, authToken = '') {
+  return request(`/api/projects/${projectId}/solution-design-workflow/quotation-tender/quotation-form`, { authToken });
+}
+
+export async function saveSolutionDesignQuotationForm(projectId, formData, authToken = '') {
+  return request(`/api/projects/${projectId}/solution-design-workflow/quotation-tender/quotation-form`, {
+    method: 'PUT',
+    authToken,
+    body: JSON.stringify({ formData })
+  });
+}
+
+export async function submitSolutionDesignQuotationForm(projectId, formData, authToken = '') {
+  return request(`/api/projects/${projectId}/solution-design-workflow/quotation-tender/quotation-form/submit`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ formData })
+  });
+}
+
+export async function downloadSolutionDesignQuotationGeneratedFile(projectId, authToken = '') {
+  return requestBlob(
+    `/api/projects/${projectId}/solution-design-workflow/quotation-tender/quotation-form/generated-file/download`,
+    { authToken }
+  );
+}
+
 export async function selectSolutionDesignQuotationTenderBranch(projectId, branchType, authToken = '') {
   return request(`/api/projects/${projectId}/solution-design-workflow/quotation-tender/select`, {
     method: 'POST',

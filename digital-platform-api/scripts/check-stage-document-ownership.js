@@ -7,6 +7,7 @@ import {
   ensureProjectWorkspaceSchema,
   inspectProjectWorkspaceSchema
 } from '../src/db/projectWorkspaceSchema.js';
+import { ensureSolutionDesignWorkflowSchema } from '../src/db/solutionDesignWorkflowSchema.js';
 import { ensureStageDocumentSchema } from '../src/db/stageDocumentSchema.js';
 import {
   BUSINESS_DEPARTMENT,
@@ -6487,6 +6488,7 @@ assert.deepEqual(projectWorkspaceSchemaStatus, {
   projectStageDocumentFormsTable: true
 });
 await ensureStageDocumentSchema(pool);
+await ensureSolutionDesignWorkflowSchema(pool);
 await upsertStageDocumentTemplates(pool, items);
 await initializeInitiationReviewNodesForExistingProjects(pool);
 

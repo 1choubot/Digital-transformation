@@ -11,6 +11,7 @@ import {
   completeStageDocumentRevisionHandler,
   createProjectHandler,
   downloadSolutionDesignAnalysisGeneratedFileHandler,
+  downloadSolutionDesignQuotationGeneratedFileHandler,
   downloadSolutionDesignReviewGeneratedFileHandler,
   deleteStageDocumentAttachmentHandler,
   deleteStageDocumentOnlineFormImageHandler,
@@ -23,6 +24,7 @@ import {
   getProjectOverviewDashboardHandler,
   getProjectWorkspaceHandler,
   getSolutionDesignAnalysisFormHandler,
+  getSolutionDesignQuotationFormHandler,
   getSolutionDesignReviewFormHandler,
   getSolutionDesignWorkflowHandler,
   getStageDocumentOnlineFormHandler,
@@ -44,9 +46,11 @@ import {
   resubmitStageApprovalHandler,
   saveStageDocumentOnlineFormHandler,
   saveSolutionDesignAnalysisFormHandler,
+  saveSolutionDesignQuotationFormHandler,
   saveSolutionDesignReviewFormHandler,
   selectSolutionDesignQuotationTenderBranchHandler,
   submitSolutionDesignAnalysisFormHandler,
+  submitSolutionDesignQuotationFormHandler,
   submitSolutionDesignQuotationHandler,
   submitSolutionDesignReviewFormHandler,
   submitSolutionDesignWorkflowNodeHandler,
@@ -136,6 +140,30 @@ projectsRouter.post(
   '/:projectId/solution-design-workflow/quotation-tender/quotation/result',
   requireAuth,
   asyncHandler(processSolutionDesignQuotationResultHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/solution-design-workflow/quotation-tender/quotation-form',
+  requireAuth,
+  asyncHandler(getSolutionDesignQuotationFormHandler)
+);
+
+projectsRouter.put(
+  '/:projectId/solution-design-workflow/quotation-tender/quotation-form',
+  requireAuth,
+  asyncHandler(saveSolutionDesignQuotationFormHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/solution-design-workflow/quotation-tender/quotation-form/submit',
+  requireAuth,
+  asyncHandler(submitSolutionDesignQuotationFormHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/solution-design-workflow/quotation-tender/quotation-form/generated-file/download',
+  requireAuth,
+  asyncHandler(downloadSolutionDesignQuotationGeneratedFileHandler)
 );
 
 projectsRouter.get(

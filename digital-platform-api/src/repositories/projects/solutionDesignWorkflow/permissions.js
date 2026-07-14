@@ -6,6 +6,7 @@ import {
   SOLUTION_DESIGN_GENERATED_FILE_STATUS,
   SOLUTION_DESIGN_NODE_KEY,
   SOLUTION_DESIGN_NODE_STATUS,
+  SOLUTION_DESIGN_QUOTATION_FORM_STATUS,
   SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS,
   SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE,
   SOLUTION_DESIGN_REVIEW_FORM_STATUS,
@@ -131,10 +132,7 @@ export function canUploadQuotationTenderSlot({ slot, nodeRow, flowRow }) {
   }
 
   if (slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE) {
-    return (
-      isQuotationBranchCurrent(flowRow, nodeRow) &&
-      flowRow.branch_status === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED
-    );
+    return false;
   }
 
   return (
@@ -148,6 +146,25 @@ export function canUploadQuotationTenderSlot({ slot, nodeRow, flowRow }) {
 
 export function assertQuotationTenderSlotProcessable({ slot, nodeRow, flowRow }) {
   if (!canUploadQuotationTenderSlot({ slot, nodeRow, flowRow })) {
+    if (
+      slot?.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE &&
+      isQuotationBranchCurrent(flowRow, nodeRow)
+    ) {
+      throw new SolutionDesignWorkflowError(
+        SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
+        'Quotation file upload is not accepted after quotation branch selection; submit the quotation online form instead',
+        409,
+        {
+          nodeKey: slot?.nodeKey ?? SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+          slotKey: slot?.slotKey ?? null,
+          branchType: flowRow?.branch_type ?? null,
+          branchStatus: flowRow?.branch_status ?? null,
+          branchRevision: flowRow?.revision ?? null,
+          nodeRevision: nodeRow?.current_revision ?? null
+        }
+      );
+    }
+
     throw new SolutionDesignWorkflowError(
       SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
       'Quotation/tender upload slot cannot be processed in its current branch status',
@@ -165,7 +182,7 @@ export function assertQuotationTenderSlotProcessable({ slot, nodeRow, flowRow })
   }
 }
 
-export function canSubmitQuotation({ projectEnded, inSolutionStage, roleState, user, nodeRow, flowRow, uploadSlotRevisionByKey }) {
+export function canProcessQuotationForm({ projectEnded, inSolutionStage, roleState, user, nodeRow, flowRow }) {
   return (
     !projectEnded &&
     inSolutionStage &&
@@ -173,9 +190,36 @@ export function canSubmitQuotation({ projectEnded, inSolutionStage, roleState, u
     isSameId(roleState[SOLUTION_DESIGN_ROLE_KEY.BUSINESS_OWNER]?.userId, user?.id) &&
     isNodeProcessableStatus(nodeRow?.status) &&
     isQuotationBranchCurrent(flowRow, nodeRow) &&
-    flowRow.branch_status === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED &&
-    Number(uploadSlotRevisionByKey.get(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE) ?? 0) >=
-      Number(nodeRow.current_revision ?? 1)
+    flowRow.branch_status === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED
+  );
+}
+
+export function isQuotationFormSubmittedForRevision(quotationFormRow, requiredRevision) {
+  return (
+    quotationFormRow?.form_status === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED &&
+    Number(quotationFormRow.revision ?? 0) >= Number(requiredRevision ?? 1)
+  );
+}
+
+export function isQuotationFormGeneratedForRevision(quotationFormRow, requiredRevision) {
+  return (
+    isQuotationFormSubmittedForRevision(quotationFormRow, requiredRevision) &&
+    quotationFormRow.generated_file_status === SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED &&
+    Boolean(quotationFormRow.generated_file_storage_key)
+  );
+}
+
+export function canSubmitQuotation({ projectEnded, inSolutionStage, roleState, user, nodeRow, flowRow, quotationFormRow }) {
+  return (
+    canProcessQuotationForm({
+      projectEnded,
+      inSolutionStage,
+      roleState,
+      user,
+      nodeRow,
+      flowRow
+    }) &&
+    isQuotationFormGeneratedForRevision(quotationFormRow, nodeRow?.current_revision)
   );
 }
 

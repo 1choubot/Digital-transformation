@@ -232,10 +232,21 @@
             <QuotationTenderSection
               v-if="selectedNode.nodeKey === 'quotation_or_tender'"
               :workflow="workflow"
+              :quotation-form-dto="quotationFormDto"
+              :quotation-form-data="quotationFormData"
+              :quotation-form-loading="quotationFormLoading"
               :pending-action="pendingAction"
               :return-reason="quotationReturnReason"
               :reject-action="quotationRejectAction"
               @select-branch="selectBranch"
+              @load-quotation-form="loadQuotationForm"
+              @update-quotation-form="updateQuotationFormField"
+              @update-quotation-item="updateQuotationItemField"
+              @add-quotation-item="addQuotationItem"
+              @remove-quotation-item="removeQuotationItem"
+              @save-quotation-form="saveQuotationForm"
+              @submit-quotation-form="submitQuotationForm"
+              @download-quotation-form="downloadQuotationGeneratedFile"
               @submit-quotation="submitQuotation"
               @submit-tender="submitNode('quotation_or_tender')"
               @accept-quotation="acceptQuotation"
@@ -313,19 +324,23 @@ import {
   approveSolutionDesignWorkflowNode,
   assignSolutionDesignRoles,
   downloadSolutionDesignAnalysisGeneratedFile,
+  downloadSolutionDesignQuotationGeneratedFile,
   downloadSolutionDesignReviewGeneratedFile,
   downloadSolutionDesignWorkflowFile,
   deleteStageDocumentOnlineFormImage,
   downloadStageDocumentOnlineFormImage,
   getSolutionDesignAnalysisForm,
+  getSolutionDesignQuotationForm,
   getSolutionDesignReviewForm,
   processSolutionDesignQuotationResult,
   saveSolutionDesignAnalysisForm,
+  saveSolutionDesignQuotationForm,
   saveSolutionDesignReviewForm,
   selectSolutionDesignQuotationTenderBranch,
   returnSolutionDesignWorkflowNode,
   submitSolutionDesignAnalysisForm,
   submitSolutionDesignQuotation,
+  submitSolutionDesignQuotationForm,
   submitSolutionDesignReviewForm,
   submitSolutionDesignWorkflowNode,
   toReadableApiError,
@@ -528,6 +543,16 @@ const localError = ref('');
 const returnReasons = reactive({});
 const quotationReturnReason = ref('');
 const quotationRejectAction = ref('return_to_rd_cost');
+const quotationFormDto = ref(null);
+const quotationFormData = reactive({
+  recipientName: '',
+  recipientTitle: '',
+  contactName: '',
+  contactPhone: '',
+  quotationDate: '',
+  items: []
+});
+const quotationFormLoading = ref(false);
 const analysisFormDto = ref(null);
 const analysisFormData = reactive({});
 const analysisFormLoading = ref(false);
@@ -557,6 +582,12 @@ const selectedNode = computed(() => {
 const selectedNodeSlots = computed(() =>
   [...(props.uploads?.slots || [])]
     .filter((slot) => slot.nodeKey === selectedNode.value?.nodeKey)
+    .filter((slot) => {
+      if (slot.slotKey !== 'quotation_file') {
+        return true;
+      }
+      return props.workflow?.quotationTender?.branchType !== 'quotation';
+    })
     .sort((left, right) => Number(left.slotOrder || 0) - Number(right.slotOrder || 0))
 );
 
@@ -671,6 +702,8 @@ watch(
       void loadAnalysisForm();
     } else if (isReviewNode(nodeKey)) {
       void loadReviewForm(nodeKey);
+    } else if (nodeKey === 'quotation_or_tender') {
+      void loadQuotationForm();
     }
   },
   { immediate: true }
@@ -741,6 +774,50 @@ function buildReviewFormPayload() {
   return payload;
 }
 
+function normalizeQuotationItemsForUi(items) {
+  const rows = Array.isArray(items) ? items : [];
+  const normalized = rows.map((item) => ({
+    name: String(item?.name ?? ''),
+    unit: String(item?.unit ?? ''),
+    quantity: String(item?.quantity ?? ''),
+    unitPrice: String(item?.unitPrice ?? ''),
+    amount: String(item?.amount ?? '0.00'),
+    remark: String(item?.remark ?? '')
+  }));
+  return normalized.length
+    ? normalized
+    : [
+        {
+          name: '',
+          unit: '',
+          quantity: '',
+          unitPrice: '',
+          amount: '0.00',
+          remark: ''
+        }
+      ];
+}
+
+function syncQuotationFormData(source = {}) {
+  quotationFormData.recipientName = String(source?.recipientName ?? '');
+  quotationFormData.recipientTitle = String(source?.recipientTitle ?? '');
+  quotationFormData.contactName = String(source?.contactName ?? '');
+  quotationFormData.contactPhone = String(source?.contactPhone ?? '');
+  quotationFormData.quotationDate = String(source?.quotationDate ?? '');
+  quotationFormData.items = normalizeQuotationItemsForUi(source?.items);
+}
+
+function buildQuotationFormPayload() {
+  return {
+    recipientName: quotationFormData.recipientName,
+    recipientTitle: quotationFormData.recipientTitle,
+    contactName: quotationFormData.contactName,
+    contactPhone: quotationFormData.contactPhone,
+    quotationDate: quotationFormData.quotationDate,
+    items: normalizeQuotationItemsForUi(quotationFormData.items)
+  };
+}
+
 function buildAnalysisFormDtoFromWorkflow(workflow) {
   if (!workflow) {
     return null;
@@ -778,6 +855,33 @@ function buildReviewFormDtoFromWorkflow(workflow, nodeKey) {
   };
 }
 
+function buildQuotationFormDtoFromWorkflow(workflow) {
+  if (!workflow) {
+    return null;
+  }
+
+  const quotationNode = (workflow.nodes || []).find((node) => node.nodeKey === 'quotation_or_tender');
+  const flow = workflow.quotationTender || {};
+  return {
+    projectId: workflow.projectId,
+    nodeKey: 'quotation_or_tender',
+    nodeStatus: quotationNode?.status,
+    nodeRevision: quotationNode?.currentRevision || flow.nodeRevision || 1,
+    branchType: flow.branchType,
+    branchStatus: flow.branchStatus,
+    branchRevision: flow.revision,
+    form: flow.quotationForm || null,
+    defaultFormData: null,
+    permissions: {
+      canViewQuotationForm: true,
+      canEditQuotationForm: flow.permissions?.canEditQuotationForm === true,
+      canSubmitQuotationForm: flow.permissions?.canSubmitQuotationForm === true,
+      canDownloadGeneratedFile: flow.permissions?.canDownloadQuotationForm === true
+    },
+    isProjectEnded: workflow.isProjectEnded === true
+  };
+}
+
 function syncFormsFromWorkflow(workflow) {
   analysisFormDto.value = buildAnalysisFormDtoFromWorkflow(workflow);
   if (selectedNode.value?.nodeKey === 'solution_analysis') {
@@ -796,6 +900,11 @@ function syncFormsFromWorkflow(workflow) {
   if (isReviewNode(selectedNode.value?.nodeKey)) {
     syncObject(reviewFormData, normalizeReviewFormForUi(reviewFormDtos[selectedNode.value.nodeKey]?.form?.formData));
   }
+
+  quotationFormDto.value = buildQuotationFormDtoFromWorkflow(workflow);
+  if (selectedNode.value?.nodeKey === 'quotation_or_tender') {
+    syncQuotationFormData(quotationFormDto.value?.form?.formData || quotationFormDto.value?.defaultFormData);
+  }
 }
 
 async function reloadSelectedFormFromServer() {
@@ -809,6 +918,8 @@ async function reloadSelectedFormFromServer() {
     await loadAnalysisForm({ sequence });
   } else if (isReviewNode(nodeKey)) {
     await loadReviewForm(nodeKey, { sequence });
+  } else if (nodeKey === 'quotation_or_tender') {
+    await loadQuotationForm({ sequence });
   }
 }
 
@@ -1201,6 +1312,103 @@ async function downloadReviewGeneratedFile(nodeKey) {
       saveBlob(download, dto?.form?.generatedFile?.fileName || '方案评审记录表.xlsx');
     },
     '方案评审记录表生成文件已开始下载。',
+    { notifyChanged: false }
+  );
+}
+
+async function loadQuotationForm({ sequence = ++formReloadSequence } = {}) {
+  if (!props.projectId || isPending('quotation-form:load')) {
+    return;
+  }
+  quotationFormLoading.value = true;
+  localError.value = '';
+  try {
+    const dto = await getSolutionDesignQuotationForm(props.projectId, props.authToken);
+    if (sequence !== formReloadSequence) {
+      return;
+    }
+    quotationFormDto.value = dto;
+    syncQuotationFormData(dto.form?.formData || dto.defaultFormData);
+  } catch (error) {
+    if (sequence === formReloadSequence) {
+      localError.value = toReadableApiError(error);
+    }
+  } finally {
+    if (sequence === formReloadSequence) {
+      quotationFormLoading.value = false;
+    }
+  }
+}
+
+function updateQuotationFormField({ key, value }) {
+  quotationFormData[key] = value;
+}
+
+function updateQuotationItemField({ index, key, value }) {
+  if (!quotationFormData.items[index]) {
+    return;
+  }
+  quotationFormData.items[index] = {
+    ...quotationFormData.items[index],
+    [key]: value
+  };
+}
+
+function addQuotationItem() {
+  quotationFormData.items = [
+    ...normalizeQuotationItemsForUi(quotationFormData.items),
+    {
+      name: '',
+      unit: '',
+      quantity: '',
+      unitPrice: '',
+      amount: '0.00',
+      remark: ''
+    }
+  ];
+}
+
+function removeQuotationItem(index) {
+  const rows = normalizeQuotationItemsForUi(quotationFormData.items);
+  if (rows.length <= 1) {
+    quotationFormData.items = normalizeQuotationItemsForUi([]);
+    return;
+  }
+  quotationFormData.items = rows.filter((_item, itemIndex) => itemIndex !== index);
+}
+
+async function saveQuotationForm() {
+  const dto = await runAction(
+    'quotation-form:save',
+    () => saveSolutionDesignQuotationForm(props.projectId, buildQuotationFormPayload(), props.authToken),
+    '报价单草稿已保存。'
+  );
+  if (dto) {
+    quotationFormDto.value = dto;
+    syncQuotationFormData(dto.form?.formData || dto.defaultFormData);
+  }
+}
+
+async function submitQuotationForm() {
+  const dto = await runAction(
+    'quotation-form:submit',
+    () => submitSolutionDesignQuotationForm(props.projectId, buildQuotationFormPayload(), props.authToken),
+    '报价单已提交并生成 Word 文件。'
+  );
+  if (dto) {
+    quotationFormDto.value = dto;
+    syncQuotationFormData(dto.form?.formData || dto.defaultFormData);
+  }
+}
+
+async function downloadQuotationGeneratedFile() {
+  await runAction(
+    'quotation-form:download',
+    async () => {
+      const download = await downloadSolutionDesignQuotationGeneratedFile(props.projectId, props.authToken);
+      saveBlob(download, quotationFormDto.value?.form?.generatedFile?.fileName || '报价单.docx');
+    },
+    '报价单生成文件已开始下载。',
     { notifyChanged: false }
   );
 }
@@ -2019,6 +2227,18 @@ const QuotationTenderSection = defineComponent({
       type: Object,
       required: true
     },
+    quotationFormDto: {
+      type: Object,
+      default: null
+    },
+    quotationFormData: {
+      type: Object,
+      required: true
+    },
+    quotationFormLoading: {
+      type: Boolean,
+      default: false
+    },
     pendingAction: {
       type: String,
       default: ''
@@ -2034,6 +2254,14 @@ const QuotationTenderSection = defineComponent({
   },
   emits: [
     'select-branch',
+    'load-quotation-form',
+    'update-quotation-form',
+    'update-quotation-item',
+    'add-quotation-item',
+    'remove-quotation-item',
+    'save-quotation-form',
+    'submit-quotation-form',
+    'download-quotation-form',
     'submit-quotation',
     'submit-tender',
     'accept-quotation',
@@ -2042,6 +2270,235 @@ const QuotationTenderSection = defineComponent({
     'reject-quotation'
   ],
   setup(componentProps, { emit: componentEmit }) {
+    function renderQuotationForm() {
+      const dto = componentProps.quotationFormDto;
+      const form = dto?.form || {};
+      const generatedFile = form.generatedFile || null;
+      const canEdit = dto?.permissions?.canEditQuotationForm === true;
+      const canSubmit = dto?.permissions?.canSubmitQuotationForm === true;
+      const rows = normalizeQuotationItemsForUi(componentProps.quotationFormData.items);
+
+      return h('section', { class: 'solution-design-workflow__quotation-form' }, [
+        h('div', { class: 'solution-design-workflow__subheading' }, [
+          h('span', { class: 'section-eyebrow' }, '在线表单'),
+          h('strong', 'C18 报价单')
+        ]),
+        componentProps.quotationFormLoading
+          ? h('section', { class: 'state-panel state-panel--inline' }, [h('p', '正在加载报价单...')])
+          : null,
+        !dto && !componentProps.quotationFormLoading
+          ? h(
+              'button',
+              { type: 'button', class: 'ghost-button', onClick: () => componentEmit('load-quotation-form') },
+              '加载报价单'
+            )
+          : null,
+        dto
+          ? [
+              h('div', { class: 'form-grid solution-design-workflow__form-grid' }, [
+                h('label', [
+                  h('span', 'TO *'),
+                  h('input', {
+                    value: componentProps.quotationFormData.recipientName,
+                    disabled: !canEdit,
+                    onInput: (event) =>
+                      componentEmit('update-quotation-form', { key: 'recipientName', value: event.target.value })
+                  })
+                ]),
+                h('label', [
+                  h('span', '称谓'),
+                  h(
+                    'select',
+                    {
+                      value: componentProps.quotationFormData.recipientTitle,
+                      disabled: !canEdit,
+                      onChange: (event) =>
+                        componentEmit('update-quotation-form', { key: 'recipientTitle', value: event.target.value })
+                    },
+                    [
+                      h('option', { value: '' }, '先生/女士'),
+                      h('option', { value: '先生' }, '先生'),
+                      h('option', { value: '女士' }, '女士')
+                    ]
+                  )
+                ]),
+                h('label', [
+                  h('span', '联系人 *'),
+                  h('input', {
+                    value: componentProps.quotationFormData.contactName,
+                    disabled: !canEdit,
+                    onInput: (event) =>
+                      componentEmit('update-quotation-form', { key: 'contactName', value: event.target.value })
+                  })
+                ]),
+                h('label', [
+                  h('span', '电话 *'),
+                  h('input', {
+                    value: componentProps.quotationFormData.contactPhone,
+                    disabled: !canEdit,
+                    onInput: (event) =>
+                      componentEmit('update-quotation-form', { key: 'contactPhone', value: event.target.value })
+                  })
+                ]),
+                h('label', [
+                  h('span', '报价日期'),
+                  h('input', {
+                    type: 'date',
+                    value: componentProps.quotationFormData.quotationDate,
+                    disabled: !canEdit,
+                    onInput: (event) =>
+                      componentEmit('update-quotation-form', { key: 'quotationDate', value: event.target.value })
+                  })
+                ])
+              ]),
+              h('div', { class: 'solution-design-workflow__quotation-table-wrap' }, [
+                h('table', { class: 'solution-design-workflow__quotation-table' }, [
+                  h('thead', [
+                    h('tr', [
+                      h('th', '序号'),
+                      h('th', '项目'),
+                      h('th', '单位'),
+                      h('th', '数量'),
+                      h('th', '单价'),
+                      h('th', '金额'),
+                      h('th', '备注'),
+                      h('th', '操作')
+                    ])
+                  ]),
+                  h(
+                    'tbody',
+                    rows.map((row, index) =>
+                      h('tr', { key: `quotation-item-${index}` }, [
+                        h('td', { class: 'solution-design-workflow__quotation-sequence' }, String(index + 1)),
+                        h('td', [
+                          h('input', {
+                            value: row.name,
+                            disabled: !canEdit,
+                            onInput: (event) =>
+                              componentEmit('update-quotation-item', { index, key: 'name', value: event.target.value })
+                          })
+                        ]),
+                        h('td', [
+                          h('input', {
+                            value: row.unit,
+                            disabled: !canEdit,
+                            onInput: (event) =>
+                              componentEmit('update-quotation-item', { index, key: 'unit', value: event.target.value })
+                          })
+                        ]),
+                        h('td', [
+                          h('input', {
+                            value: row.quantity,
+                            inputmode: 'decimal',
+                            disabled: !canEdit,
+                            onInput: (event) =>
+                              componentEmit('update-quotation-item', {
+                                index,
+                                key: 'quantity',
+                                value: event.target.value
+                              })
+                          })
+                        ]),
+                        h('td', [
+                          h('input', {
+                            value: row.unitPrice,
+                            inputmode: 'decimal',
+                            disabled: !canEdit,
+                            onInput: (event) =>
+                              componentEmit('update-quotation-item', {
+                                index,
+                                key: 'unitPrice',
+                                value: event.target.value
+                              })
+                          })
+                        ]),
+                        h('td', { class: 'solution-design-workflow__quotation-amount' }, row.amount || '后端计算'),
+                        h('td', [
+                          h('input', {
+                            value: row.remark,
+                            disabled: !canEdit,
+                            onInput: (event) =>
+                              componentEmit('update-quotation-item', { index, key: 'remark', value: event.target.value })
+                          })
+                        ]),
+                        h('td', { class: 'solution-design-workflow__quotation-row-action' }, [
+                          h(
+                            'button',
+                            {
+                              type: 'button',
+                              class: 'ghost-button solution-design-workflow__quotation-delete-button',
+                              disabled: !canEdit || rows.length <= 1,
+                              onClick: () => componentEmit('remove-quotation-item', index)
+                            },
+                            '删除'
+                          )
+                        ])
+                      ])
+                    )
+                  ),
+                  h('tfoot', [
+                    h('tr', [
+                      h('td', { colspan: 5 }, '合计'),
+                      h(
+                        'td',
+                        { class: 'solution-design-workflow__quotation-amount' },
+                        form.formData?.totalAmount || '后端计算'
+                      ),
+                      h('td', { colspan: 2 }, [
+                        h(
+                          'span',
+                          { class: 'solution-design-workflow__quotation-uppercase' },
+                          `大写：${form.formData?.totalAmountUppercase || '后端计算'}`
+                        )
+                      ])
+                    ])
+                  ])
+                ])
+              ]),
+              canEdit
+                ? h(
+                    'button',
+                    { type: 'button', class: 'ghost-button', onClick: () => componentEmit('add-quotation-item') },
+                    '新增明细行'
+                  )
+                : null,
+              generatedFile
+                ? h(GeneratedFilePanel, {
+                    generatedFile,
+                    pending: componentProps.pendingAction === 'quotation-form:download',
+                    onDownload: () => componentEmit('download-quotation-form')
+                  })
+                : null,
+              dto.form?.generatedFile?.status === 'failed'
+                ? h('p', { class: 'inline-muted' }, dto.form.generatedFile.errorMessage || '报价单生成失败')
+                : null,
+              h('div', { class: 'form-actions solution-design-workflow__form-actions' }, [
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    class: 'ghost-button',
+                    disabled: !canEdit || componentProps.pendingAction === 'quotation-form:save',
+                    onClick: () => componentEmit('save-quotation-form')
+                  },
+                  componentProps.pendingAction === 'quotation-form:save' ? '保存中...' : '保存草稿'
+                ),
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    class: 'primary-button',
+                    disabled: !canSubmit || componentProps.pendingAction === 'quotation-form:submit',
+                    onClick: () => componentEmit('submit-quotation-form')
+                  },
+                  componentProps.pendingAction === 'quotation-form:submit' ? '提交中...' : '提交并生成 Word'
+                )
+              ])
+            ]
+          : null
+      ]);
+    }
+
     return () => {
       const flow = componentProps.workflow.quotationTender || {};
       const permissions = flow.permissions || {};
@@ -2075,7 +2532,9 @@ const QuotationTenderSection = defineComponent({
             ])
           : null,
         flow.branchType === 'quotation'
-          ? h('div', { class: 'solution-design-workflow__quotation-actions' }, [
+          ? [
+              renderQuotationForm(),
+              h('div', { class: 'solution-design-workflow__quotation-actions' }, [
               h(
                 'button',
                 {
@@ -2129,10 +2588,11 @@ const QuotationTenderSection = defineComponent({
                       componentProps.pendingAction.startsWith('quotation:reject'),
                     onClick: () => componentEmit('reject-quotation')
                   },
-                  componentProps.pendingAction.startsWith('quotation:reject') ? '处理中...' : '客户不接受并处理'
-                )
+                componentProps.pendingAction.startsWith('quotation:reject') ? '处理中...' : '客户不接受并处理'
+              )
               ])
             ])
+            ]
           : null,
         flow.branchType === 'tender'
           ? h('div', { class: 'solution-design-workflow__action-row' }, [
@@ -2323,6 +2783,102 @@ const QuotationTenderSection = defineComponent({
 
 .solution-design-workflow__form-note {
   margin: 8px 0 0;
+}
+
+.solution-design-workflow__quotation-table-wrap {
+  max-width: 100%;
+  margin-top: 12px;
+  overflow-x: auto;
+  border: 1px solid #d8dde6;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.solution-design-workflow__quotation-table {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.92rem;
+}
+
+.solution-design-workflow__quotation-table th,
+.solution-design-workflow__quotation-table td {
+  padding: 8px;
+  border-bottom: 1px solid #e6ebf2;
+  vertical-align: middle;
+}
+
+.solution-design-workflow__quotation-table th {
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.solution-design-workflow__quotation-table th:nth-child(1),
+.solution-design-workflow__quotation-table td:nth-child(1) {
+  width: 52px;
+}
+
+.solution-design-workflow__quotation-table th:nth-child(2),
+.solution-design-workflow__quotation-table td:nth-child(2) {
+  width: 210px;
+}
+
+.solution-design-workflow__quotation-table th:nth-child(3),
+.solution-design-workflow__quotation-table td:nth-child(3) {
+  width: 92px;
+}
+
+.solution-design-workflow__quotation-table th:nth-child(4),
+.solution-design-workflow__quotation-table td:nth-child(4),
+.solution-design-workflow__quotation-table th:nth-child(5),
+.solution-design-workflow__quotation-table td:nth-child(5),
+.solution-design-workflow__quotation-table th:nth-child(6),
+.solution-design-workflow__quotation-table td:nth-child(6) {
+  width: 118px;
+}
+
+.solution-design-workflow__quotation-table th:nth-child(8),
+.solution-design-workflow__quotation-table td:nth-child(8) {
+  width: 82px;
+}
+
+.solution-design-workflow__quotation-table input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.solution-design-workflow__quotation-table tfoot td {
+  border-bottom: 0;
+  background: #f8fafc;
+  font-weight: 600;
+}
+
+.solution-design-workflow__quotation-sequence,
+.solution-design-workflow__quotation-row-action {
+  text-align: center;
+}
+
+.solution-design-workflow__quotation-amount {
+  color: #334155;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.solution-design-workflow__quotation-uppercase {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.solution-design-workflow__quotation-delete-button {
+  width: 58px;
+  min-width: 58px;
+  padding-inline: 0;
 }
 
 .solution-design-workflow__repeatable-field {

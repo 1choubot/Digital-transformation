@@ -214,6 +214,32 @@ export async function selectCurrentReviewForms(executor, projectId) {
   return rows;
 }
 
+export async function selectCurrentQuotationForm(executor, projectId, { forUpdate = false } = {}) {
+  const [rows] = await executor.execute(
+    `SELECT
+      f.*,
+      submitter.account AS submitted_by_account,
+      submitter.display_name AS submitted_by_display_name,
+      creator.account AS created_by_account,
+      creator.display_name AS created_by_display_name,
+      updater.account AS updated_by_account,
+      updater.display_name AS updated_by_display_name
+    FROM project_solution_design_quotation_forms f
+    LEFT JOIN users submitter
+      ON submitter.id = f.submitted_by_user_id
+    LEFT JOIN users creator
+      ON creator.id = f.created_by_user_id
+    LEFT JOIN users updater
+      ON updater.id = f.updated_by_user_id
+    WHERE f.project_id = ?
+      AND f.is_current = 1
+    LIMIT 1${forUpdate ? ' FOR UPDATE' : ''}`,
+    [projectId]
+  );
+
+  return rows[0] || null;
+}
+
 export async function selectQuotationTenderFlow(executor, projectId, { forUpdate = false } = {}) {
   const [rows] = await executor.execute(
     `SELECT *

@@ -15,6 +15,8 @@ import {
   getProjectWorkspace,
   getSolutionDesignAnalysisGeneratedFileDownload,
   getSolutionDesignAnalysisForm,
+  getSolutionDesignQuotationForm,
+  getSolutionDesignQuotationGeneratedFileDownload,
   getSolutionDesignReviewGeneratedFileDownload,
   getSolutionDesignReviewForm,
   getSolutionDesignUploadDownload,
@@ -31,10 +33,12 @@ import {
   returnSolutionDesignWorkflowNode,
   returnStageApproval,
   saveSolutionDesignAnalysisForm,
+  saveSolutionDesignQuotationForm,
   saveSolutionDesignReviewForm,
   selectSolutionDesignQuotationTenderBranch,
   submitSolutionDesignAnalysisForm,
   submitSolutionDesignQuotation,
+  submitSolutionDesignQuotationForm,
   submitSolutionDesignReviewForm,
   submitSolutionDesignWorkflowNode,
   submitStageApproval,
@@ -364,6 +368,73 @@ export async function processSolutionDesignQuotationResultHandler(req, res) {
 
   res.json({
     data: workflow
+  });
+}
+
+export async function getSolutionDesignQuotationFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const quotationForm = await getSolutionDesignQuotationForm({
+    projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: quotationForm
+  });
+}
+
+export async function saveSolutionDesignQuotationFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const quotationForm = await saveSolutionDesignQuotationForm({
+    projectId,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: quotationForm
+  });
+}
+
+export async function submitSolutionDesignQuotationFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const quotationForm = await submitSolutionDesignQuotationForm({
+    projectId,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: quotationForm
+  });
+}
+
+export async function downloadSolutionDesignQuotationGeneratedFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const download = await getSolutionDesignQuotationGeneratedFileDownload({
+    projectId,
+    user: req.auth.user
+  });
+
+  await new Promise((resolve, reject) => {
+    res.download(
+      download.filePath,
+      download.fileName,
+      {
+        headers: {
+          'Content-Type': download.mimeType,
+          'Content-Length': String(download.fileSize)
+        }
+      },
+      (error) => {
+        if (error && !res.headersSent) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      }
+    );
   });
 }
 

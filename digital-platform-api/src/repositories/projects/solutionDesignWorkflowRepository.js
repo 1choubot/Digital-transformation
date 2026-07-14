@@ -10,6 +10,8 @@ import {
   SOLUTION_DESIGN_NODE_STATUS,
   SOLUTION_DESIGN_NODES,
   SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS,
+  SOLUTION_DESIGN_QUOTATION_FORM_DEFINITION,
+  SOLUTION_DESIGN_QUOTATION_FORM_STATUS,
   SOLUTION_DESIGN_QUOTATION_REJECTED_ACTION,
   SOLUTION_DESIGN_QUOTATION_RESULT,
   SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS,
@@ -62,6 +64,7 @@ import { ProjectAuthorizationError } from './shared.js';
 import { tryAutoAdvanceProjectStage } from './stageAdvanceRepository.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
 import {
+  GENERATED_DOCX_MIME_TYPE,
   GENERATED_XLSX_MIME_TYPE,
   SOLUTION_DESIGN_FORM_GENERATED_FILE_TYPE,
   generateSolutionDesignFormFile
@@ -70,6 +73,12 @@ import {
   normalizeAnalysisFormPayload,
   normalizeReviewFormPayload
 } from './solutionDesignWorkflow/formPayloads.js';
+import {
+  buildQuotationFormDto,
+  generateSolutionDesignQuotationFormFile,
+  mapQuotationForm,
+  normalizeQuotationFormPayload
+} from './solutionDesignWorkflow/quotationForms.js';
 import {
   buildAnalysisFormDto,
   buildReviewFormDto,
@@ -83,6 +92,7 @@ import {
   canActAsReviewerForSolutionDesignNode,
   canDownloadUploadFile,
   canProcessAnalysisForm,
+  canProcessQuotationForm,
   canProcessQuotationResult,
   canProcessReviewForm,
   canReviewSolutionDesignNode,
@@ -100,6 +110,8 @@ import {
   isNodeProcessableStatus,
   isProductFunctionDiagramUploadedForRevision,
   isQuotationBranchCurrent,
+  isQuotationFormGeneratedForRevision,
+  isQuotationFormSubmittedForRevision,
   isQuotationTenderUploadSlot,
   isReviewFormGeneratedForRevision,
   isReviewFormSubmittedForRevision,
@@ -107,6 +119,7 @@ import {
 } from './solutionDesignWorkflow/permissions.js';
 import {
   selectCurrentAnalysisForm,
+  selectCurrentQuotationForm,
   selectCurrentReviewForm,
   selectCurrentReviewForms,
   selectProjectContext,
@@ -130,12 +143,12 @@ const defaultSolutionDesignUploadStorage = {
 };
 
 const defaultSolutionDesignGeneratedFileStorage = {
-  createStorageKey: ({ projectId, documentCode, revision }) =>
+  createStorageKey: ({ projectId, documentCode, revision, fileType = SOLUTION_DESIGN_FORM_GENERATED_FILE_TYPE }) =>
     createStageDocumentGeneratedFileStorageKey({
       projectId,
       documentId: `solution-design-${documentCode}`,
       version: revision,
-      fileType: SOLUTION_DESIGN_FORM_GENERATED_FILE_TYPE
+      fileType
     }),
   writeFile: writeStageDocumentGeneratedFile,
   assertFileReadable: assertStageDocumentGeneratedFileReadable,
@@ -573,6 +586,17 @@ async function selectMaxReviewFormRevision(executor, projectId, nodeKey) {
   return Number(rows[0]?.max_revision ?? 0);
 }
 
+async function selectMaxQuotationFormRevision(executor, projectId) {
+  const [rows] = await executor.execute(
+    `SELECT COALESCE(MAX(revision), 0) AS max_revision
+    FROM project_solution_design_quotation_forms
+    WHERE project_id = ?`,
+    [projectId]
+  );
+
+  return Number(rows[0]?.max_revision ?? 0);
+}
+
 function buildVirtualNodes() {
   return buildInitialSolutionDesignNodes().map((node) => ({
     id: null,
@@ -877,12 +901,16 @@ function buildUploadsDto({ projectRow, slots, nodes, rolesRow, user, quotationTe
   const materializedSlots = slots.length > 0 ? slots : buildVirtualUploadSlots();
   const materializedNodes = nodes.length > 0 ? nodes : buildVirtualNodes();
   const nodeRowByKey = new Map(materializedNodes.map((node) => [node.node_key, node]));
+  const quotationTenderNode = nodeRowByKey.get(SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER);
+  const visibleSlots = isQuotationBranchCurrent(quotationTenderFlow, quotationTenderNode)
+    ? materializedSlots.filter((slot) => slot.slot_key !== SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE)
+    : materializedSlots;
 
   return {
     projectId: projectRow.id,
     stageKey: SOLUTION_DESIGN_STAGE.STAGE_KEY,
     stageOrder: SOLUTION_DESIGN_STAGE.STAGE_ORDER,
-    slots: materializedSlots.map((slot) =>
+    slots: visibleSlots.map((slot) =>
       mapUploadSlot(slot, {
         roleState,
         user,
@@ -905,7 +933,8 @@ function buildGeneratedFileBlockingReason({ row, label, requiredRevision }) {
   }
 
   if (row.form_status !== SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.SUBMITTED &&
-      row.form_status !== SOLUTION_DESIGN_REVIEW_FORM_STATUS.SUBMITTED) {
+      row.form_status !== SOLUTION_DESIGN_REVIEW_FORM_STATUS.SUBMITTED &&
+      row.form_status !== SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED) {
     return `等待技术负责人提交${label}`;
   }
 
@@ -932,7 +961,9 @@ function buildNodeBlockingReasons(
   {
     uploadSlotRevisionByKey = new Map(),
     analysisFormRow = null,
-    reviewFormRowsByNodeKey = new Map()
+    reviewFormRowsByNodeKey = new Map(),
+    quotationTenderFlow = null,
+    quotationFormRow = null
   } = {}
 ) {
   if (row.node_key === SOLUTION_DESIGN_NODE_KEY.PREPARATION && row.status === SOLUTION_DESIGN_NODE_STATUS.PENDING) {
@@ -969,6 +1000,20 @@ function buildNodeBlockingReasons(
     return generatedFileReason ? [generatedFileReason] : [];
   }
 
+  if (row.node_key === SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER && isNodeProcessableStatus(row.status)) {
+    if (
+      isQuotationBranchCurrent(quotationTenderFlow, row) &&
+      quotationTenderFlow.branch_status === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED
+    ) {
+      const generatedFileReason = buildGeneratedFileBlockingReason({
+        row: quotationFormRow,
+        label: '报价单',
+        requiredRevision: row.current_revision
+      });
+      return generatedFileReason ? [generatedFileReason.replace('技术负责人', '商务负责人')] : [];
+    }
+  }
+
   if (row.status === SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED && row.node_order > 1) {
     const previousNode = SOLUTION_DESIGN_NODES[row.node_order - 2];
     return [`等待前置节点完成：${previousNode.nodeName}`];
@@ -993,7 +1038,8 @@ function mapNode(
     uploadSlotRevisionByKey,
     analysisFormRow,
     reviewFormRowsByNodeKey,
-    quotationTenderFlow
+    quotationTenderFlow,
+    quotationFormRow
   }
 ) {
   const canReview = canReviewSolutionDesignNode({ nodeRow: row, user, roleState, projectEnded, inSolutionStage });
@@ -1019,7 +1065,8 @@ function mapNode(
       uploadSlotRevisionByKey,
       analysisFormRow,
       reviewFormRowsByNodeKey,
-      quotationTenderFlow
+      quotationTenderFlow,
+      quotationFormRow
     }),
     canApprove: canReview,
     canReturn: canReview,
@@ -1065,8 +1112,28 @@ function mapNode(
       user,
       nodeRow: row,
       flowRow: quotationTenderFlow,
-      uploadSlotRevisionByKey
+      quotationFormRow
     });
+    permissions.canEditQuotationForm = canProcessQuotationForm({
+      projectEnded,
+      inSolutionStage,
+      roleState,
+      user,
+      nodeRow: row,
+      flowRow: quotationTenderFlow
+    });
+    permissions.canSubmitQuotationForm = canProcessQuotationForm({
+      projectEnded,
+      inSolutionStage,
+      roleState,
+      user,
+      nodeRow: row,
+      flowRow: quotationTenderFlow
+    });
+    permissions.canDownloadQuotationForm = isQuotationFormGeneratedForRevision(
+      quotationFormRow,
+      row.current_revision
+    );
     const canProcessQuoteResult = canProcessQuotationResult({
       projectEnded,
       inSolutionStage,
@@ -1124,7 +1191,9 @@ function mapNode(
     blockingReasons: buildNodeBlockingReasons(row, roleState, {
       uploadSlotRevisionByKey,
       analysisFormRow,
-      reviewFormRowsByNodeKey
+      reviewFormRowsByNodeKey,
+      quotationTenderFlow,
+      quotationFormRow
     }),
     permissions
   };
@@ -1137,6 +1206,7 @@ function buildWorkflowDto({
   analysisFormRow,
   reviewFormRows,
   quotationTenderFlow,
+  quotationFormRow,
   rolesRow,
   usersById,
   user
@@ -1195,8 +1265,28 @@ function buildWorkflowDto({
       user,
       nodeRow: quotationTenderNode,
       flowRow: quotationTenderFlow,
-      uploadSlotRevisionByKey
+      quotationFormRow
     }),
+    canEditQuotationForm: canProcessQuotationForm({
+      projectEnded,
+      inSolutionStage,
+      roleState,
+      user,
+      nodeRow: quotationTenderNode,
+      flowRow: quotationTenderFlow
+    }),
+    canSubmitQuotationForm: canProcessQuotationForm({
+      projectEnded,
+      inSolutionStage,
+      roleState,
+      user,
+      nodeRow: quotationTenderNode,
+      flowRow: quotationTenderFlow
+    }),
+    canDownloadQuotationForm: isQuotationFormGeneratedForRevision(
+      quotationFormRow,
+      quotationTenderNode?.current_revision
+    ),
     canAcceptQuotation: canProcessQuotationResult({
       projectEnded,
       inSolutionStage,
@@ -1269,7 +1359,8 @@ function buildWorkflowDto({
         uploadSlotRevisionByKey,
         analysisFormRow,
         reviewFormRowsByNodeKey,
-        quotationTenderFlow
+        quotationTenderFlow,
+        quotationFormRow
       })
     ),
     analysisForm: mapAnalysisForm(analysisFormRow),
@@ -1284,6 +1375,7 @@ function buildWorkflowDto({
       nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
       nodeStatus: quotationTenderNode?.status ?? SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED,
       nodeRevision: quotationTenderNode?.current_revision ?? 1,
+      quotationForm: mapQuotationForm(quotationFormRow),
       permissions: quotationTenderPermissions
     },
     roles: roleState,
@@ -1293,6 +1385,39 @@ function buildWorkflowDto({
       canAdvanceToContract: quotationTenderPermissions.canAdvanceToContract
     },
     isProjectEnded: projectEnded
+  };
+}
+
+function buildQuotationFormPermissions({ projectRow, quotationNode, rolesRow, user, quotationTenderFlow, quotationFormRow }) {
+  const projectEnded = isSolutionDesignProjectEnded(projectRow);
+  const inSolutionStage = isProjectInSolutionDesignStage(projectRow);
+  const roleState = buildRoleStateWithoutUserDetails(projectRow, rolesRow);
+  const canProcessForm = canProcessQuotationForm({
+    projectEnded,
+    inSolutionStage,
+    roleState,
+    user,
+    nodeRow: quotationNode,
+    flowRow: quotationTenderFlow
+  });
+
+  return {
+    canViewQuotationForm: true,
+    canEditQuotationForm: canProcessForm,
+    canSubmitQuotationForm: canProcessForm,
+    canSubmitQuotation: canSubmitQuotation({
+      projectEnded,
+      inSolutionStage,
+      roleState,
+      user,
+      nodeRow: quotationNode,
+      flowRow: quotationTenderFlow,
+      quotationFormRow
+    }),
+    canDownloadGeneratedFile: isQuotationFormGeneratedForRevision(
+      quotationFormRow,
+      quotationNode?.current_revision
+    )
   };
 }
 
@@ -1578,6 +1703,18 @@ export function buildSolutionDesignWorkbenchTodos({ projectRow = null, workflow,
     });
   }
 
+  if (
+    (quotationTenderPermissions.canEditQuotationForm === true ||
+      quotationTenderPermissions.canSubmitQuotationForm === true) &&
+    !isGeneratedFormDtoCurrent(workflow.quotationTender?.quotationForm, quotationTenderNode?.currentRevision)
+  ) {
+    addTodo({
+      node: quotationTenderNode,
+      actionText: '填写/提交报价单在线表单',
+      actionKey: 'quotation_form'
+    });
+  }
+
   if (quotationTenderPermissions.canSubmitQuotation === true) {
     addTodo({
       node: quotationTenderNode,
@@ -1681,6 +1818,7 @@ export async function selectSolutionDesignWorkbenchTodos(user, db = pool) {
         const analysisFormRow = await selectCurrentAnalysisForm(connection, projectRow.id);
         const reviewFormRows = await selectCurrentReviewForms(connection, projectRow.id);
         const quotationTenderFlow = await selectQuotationTenderFlow(connection, projectRow.id);
+        const quotationFormRow = await selectCurrentQuotationForm(connection, projectRow.id);
         const usersById = await selectUsersByIds(connection, collectRoleUserIds(projectRow, rolesRow));
         const workflow = buildWorkflowDto({
           projectRow,
@@ -1689,6 +1827,7 @@ export async function selectSolutionDesignWorkbenchTodos(user, db = pool) {
           analysisFormRow,
           reviewFormRows,
           quotationTenderFlow,
+          quotationFormRow,
           rolesRow,
           usersById,
           user
@@ -1723,6 +1862,7 @@ async function buildWorkflowDtoForProject(executor, { projectRow, user }) {
   const analysisFormRow = await selectCurrentAnalysisForm(executor, projectRow.id);
   const reviewFormRows = await selectCurrentReviewForms(executor, projectRow.id);
   const quotationTenderFlow = await selectQuotationTenderFlow(executor, projectRow.id);
+  const quotationFormRow = await selectCurrentQuotationForm(executor, projectRow.id);
   const usersById = await selectUsersByIds(executor, collectRoleUserIds(projectRow, rolesRow));
   return buildWorkflowDto({
     projectRow,
@@ -1731,6 +1871,7 @@ async function buildWorkflowDtoForProject(executor, { projectRow, user }) {
     analysisFormRow,
     reviewFormRows,
     quotationTenderFlow,
+    quotationFormRow,
     rolesRow,
     usersById,
     user
@@ -2764,6 +2905,163 @@ async function saveReviewFormVersion(executor, {
   });
 }
 
+async function deactivateCurrentQuotationForm(executor, projectId) {
+  await executor.execute(
+    `UPDATE project_solution_design_quotation_forms
+    SET is_current = 0,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE project_id = ?
+      AND is_current = 1`,
+    [projectId]
+  );
+}
+
+async function insertQuotationForm(executor, {
+  projectId,
+  revision,
+  formStatus,
+  formDataJson,
+  actorUserId,
+  generatedFileStatus,
+  generatedFileTemplateName = null,
+  generatedByUserId = null,
+  generationErrorMessage = null
+}) {
+  await executor.execute(
+    `INSERT INTO project_solution_design_quotation_forms (
+      project_id,
+      revision,
+      form_status,
+      form_data_json,
+      is_current,
+      submitted_by_user_id,
+      submitted_at,
+      generated_file_status,
+      generated_file_storage_key,
+      generated_file_name,
+      generated_file_mime_type,
+      generated_file_size,
+      generated_file_template_name,
+      generated_at,
+      generated_by_user_id,
+      generation_error_message,
+      created_by_user_id,
+      updated_by_user_id
+    ) VALUES (?, ?, ?, ?, 1, ?, ${
+      formStatus === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED ? 'CURRENT_TIMESTAMP' : 'NULL'
+    }, ?, NULL, NULL, NULL, NULL, ?, NULL, ?, ?, ?, ?)`,
+    [
+      projectId,
+      revision,
+      formStatus,
+      formDataJson,
+      formStatus === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED ? actorUserId : null,
+      generatedFileStatus,
+      generatedFileTemplateName,
+      generatedByUserId,
+      generationErrorMessage,
+      actorUserId,
+      actorUserId
+    ]
+  );
+
+  return selectCurrentQuotationForm(executor, projectId);
+}
+
+async function updateQuotationForm(executor, {
+  formId,
+  projectId,
+  formStatus,
+  formDataJson,
+  actorUserId,
+  generatedFileStatus,
+  generatedFileTemplateName = null,
+  generatedByUserId = null,
+  generationErrorMessage = null
+}) {
+  await executor.execute(
+    `UPDATE project_solution_design_quotation_forms
+    SET form_status = ?,
+      form_data_json = ?,
+      submitted_by_user_id = ?,
+      submitted_at = ${formStatus === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED ? 'CURRENT_TIMESTAMP' : 'NULL'},
+      generated_file_status = ?,
+      generated_file_storage_key = NULL,
+      generated_file_name = NULL,
+      generated_file_mime_type = NULL,
+      generated_file_size = NULL,
+      generated_file_template_name = ?,
+      generated_at = NULL,
+      generated_by_user_id = ?,
+      generation_error_message = ?,
+      updated_by_user_id = ?,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?`,
+    [
+      formStatus,
+      formDataJson,
+      formStatus === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED ? actorUserId : null,
+      generatedFileStatus,
+      generatedFileTemplateName,
+      generatedByUserId,
+      generationErrorMessage,
+      actorUserId,
+      formId
+    ]
+  );
+
+  return selectCurrentQuotationForm(executor, projectId);
+}
+
+async function saveQuotationFormVersion(executor, {
+  projectId,
+  nodeRevision,
+  currentFormRow,
+  formStatus,
+  formDataJson,
+  actorUserId
+}) {
+  const isSubmit = formStatus === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED;
+  const generatedFileStatus = isSubmit
+    ? SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATING
+    : SOLUTION_DESIGN_GENERATED_FILE_STATUS.NOT_STARTED;
+  const generatedFileTemplateName = isSubmit ? SOLUTION_DESIGN_QUOTATION_FORM_DEFINITION.templateName : null;
+  const generatedByUserId = isSubmit ? actorUserId : null;
+  const generationErrorMessage = null;
+  const canUpdateCurrentDraft =
+    currentFormRow?.form_status === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.DRAFT &&
+    Number(currentFormRow.revision ?? 0) >= Number(nodeRevision ?? 1);
+
+  if (canUpdateCurrentDraft) {
+    return updateQuotationForm(executor, {
+      formId: currentFormRow.id,
+      projectId,
+      formStatus,
+      formDataJson,
+      actorUserId,
+      generatedFileStatus,
+      generatedFileTemplateName,
+      generatedByUserId,
+      generationErrorMessage
+    });
+  }
+
+  await deactivateCurrentQuotationForm(executor, projectId);
+  const maxRevision = await selectMaxQuotationFormRevision(executor, projectId);
+  const nextRevision = Math.max(maxRevision + 1, Number(nodeRevision ?? 1));
+  return insertQuotationForm(executor, {
+    projectId,
+    revision: nextRevision,
+    formStatus,
+    formDataJson,
+    actorUserId,
+    generatedFileStatus,
+    generatedFileTemplateName,
+    generatedByUserId,
+    generationErrorMessage
+  });
+}
+
 async function markAnalysisFormGenerated(executor, {
   formId,
   storageKey,
@@ -2900,6 +3198,78 @@ async function markReviewFormGenerationFailed(executor, {
   );
 }
 
+async function markQuotationFormGenerated(executor, {
+  formId,
+  storageKey,
+  fileName,
+  mimeType,
+  fileSize,
+  templateName,
+  generatedByUserId
+}) {
+  await executor.execute(
+    `UPDATE project_solution_design_quotation_forms
+    SET generated_file_status = ?,
+      generated_file_storage_key = ?,
+      generated_file_name = ?,
+      generated_file_mime_type = ?,
+      generated_file_size = ?,
+      generated_file_template_name = ?,
+      generated_at = CURRENT_TIMESTAMP,
+      generated_by_user_id = ?,
+      generation_error_message = NULL,
+      updated_by_user_id = ?,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?`,
+    [
+      SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED,
+      storageKey,
+      fileName,
+      mimeType,
+      fileSize,
+      templateName,
+      generatedByUserId,
+      generatedByUserId,
+      formId
+    ]
+  );
+}
+
+async function markQuotationFormGenerationFailed(executor, {
+  formId,
+  templateName,
+  generatedByUserId,
+  errorMessage
+}) {
+  await executor.execute(
+    `UPDATE project_solution_design_quotation_forms
+    SET generated_file_status = ?,
+      form_status = ?,
+      submitted_by_user_id = NULL,
+      submitted_at = NULL,
+      generated_file_storage_key = NULL,
+      generated_file_name = NULL,
+      generated_file_mime_type = NULL,
+      generated_file_size = NULL,
+      generated_file_template_name = ?,
+      generated_at = CURRENT_TIMESTAMP,
+      generated_by_user_id = ?,
+      generation_error_message = ?,
+      updated_by_user_id = ?,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?`,
+    [
+      SOLUTION_DESIGN_GENERATED_FILE_STATUS.FAILED,
+      SOLUTION_DESIGN_QUOTATION_FORM_STATUS.DRAFT,
+      templateName,
+      generatedByUserId,
+      String(errorMessage || 'Solution design quotation file generation failed').slice(0, 1000),
+      generatedByUserId,
+      formId
+    ]
+  );
+}
+
 async function generateAndPersistAnalysisFormFile(executor, {
   projectRow,
   formRow,
@@ -2995,6 +3365,40 @@ async function generateAndPersistReviewFormFile(executor, {
     success: generation.success
   });
   return refreshed;
+}
+
+async function generateAndPersistQuotationFormFile(executor, {
+  projectRow,
+  formRow,
+  actorUserId,
+  storage
+}) {
+  const generation = await generateSolutionDesignQuotationFormFile({
+    projectRow,
+    formRow,
+    storage
+  });
+
+  if (generation.success) {
+    await markQuotationFormGenerated(executor, {
+      formId: formRow.id,
+      storageKey: generation.storageKey,
+      fileName: generation.fileName,
+      mimeType: generation.mimeType,
+      fileSize: generation.fileSize,
+      templateName: generation.templateName,
+      generatedByUserId: actorUserId
+    });
+  } else {
+    await markQuotationFormGenerationFailed(executor, {
+      formId: formRow.id,
+      templateName: generation.templateName,
+      generatedByUserId: actorUserId,
+      errorMessage: generation.errorMessage
+    });
+  }
+
+  return selectCurrentQuotationForm(executor, projectRow.id);
 }
 
 async function replaceCurrentSlotFile(executor, { projectId, slotRow, slot, uploadFile, storageKey, userId }) {
@@ -3608,7 +4012,8 @@ async function getNextQuotationTenderNodeRevisionAfterReturn(executor, projectId
     (max, file) => Math.max(max, Number(file.revision ?? 0)),
     0
   );
-  return Math.max(Number(nodeRow?.current_revision ?? 1), maxFileRevision) + 1;
+  const maxQuotationFormRevision = await selectMaxQuotationFormRevision(executor, projectId);
+  return Math.max(Number(nodeRow?.current_revision ?? 1), maxFileRevision, maxQuotationFormRevision) + 1;
 }
 
 async function returnQuotationTenderNode(executor, { projectId, returnReason, expectedStatus }) {
@@ -4489,6 +4894,190 @@ export async function selectSolutionDesignQuotationTenderBranch({ projectId, pay
   });
 }
 
+export async function getSolutionDesignQuotationForm({ projectId, user }, db = pool) {
+  return withConnection(db, async (connection) => {
+    const projectRow = await selectProjectContext(connection, projectId);
+    const rolesRow = await selectSolutionDesignRoles(connection, projectId);
+    await assertWorkflowViewable(connection, projectId, user, { projectRow, rolesRow });
+    const nodes = await ensureSolutionDesignNodes(connection, projectRow);
+    await ensureSolutionDesignUploadSlots(connection, projectRow);
+    const quotationNode = getNodeByKey(nodes, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER);
+    const quotationTenderFlow = await selectQuotationTenderFlow(connection, projectId);
+    const quotationFormRow = await selectCurrentQuotationForm(connection, projectId);
+
+    return buildQuotationFormDto({
+      projectRow,
+      quotationNode,
+      quotationTenderFlow,
+      quotationFormRow,
+      permissions: buildQuotationFormPermissions({
+        projectRow,
+        quotationNode,
+        rolesRow,
+        user,
+        quotationTenderFlow,
+        quotationFormRow
+      }),
+      isProjectEnded: isSolutionDesignProjectEnded(projectRow)
+    });
+  });
+}
+
+async function saveOrSubmitSolutionDesignQuotationForm(
+  { projectId, payload, user, formStatus },
+  db = pool,
+  generatedFileStorage = null
+) {
+  const isSubmit = formStatus === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED;
+  const normalized = normalizeQuotationFormPayload(payload, { requireComplete: isSubmit });
+  const storage = resolveGeneratedFileStorage(db, generatedFileStorage);
+
+  const outcome = await withConnection(db, async (connection) => {
+    const projectRow = await selectProjectContext(connection, projectId, { forUpdate: true });
+    assertProjectWriteAllowed(projectRow);
+    await ensureSolutionDesignNodes(connection, projectRow);
+    await ensureSolutionDesignUploadSlots(connection, projectRow);
+
+    const rolesRow = await selectSolutionDesignRolesForUpdate(connection, projectId);
+    await assertWorkflowViewable(connection, projectId, user, { projectRow, rolesRow });
+    const roleState = buildRoleStateWithoutUserDetails(projectRow, rolesRow);
+    assertAllRolesAssigned(roleState);
+    assertProjectRoleActor(roleState, SOLUTION_DESIGN_ROLE_KEY.BUSINESS_OWNER, user);
+
+    const quotationNode = await selectSolutionDesignNodeForUpdate(
+      connection,
+      projectId,
+      SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER
+    );
+    assertNodeProcessable(quotationNode, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER, 'processed');
+    const quotationTenderFlow = await selectQuotationTenderFlow(connection, projectId, { forUpdate: true });
+    if (!canProcessQuotationForm({
+      projectEnded: isSolutionDesignProjectEnded(projectRow),
+      inSolutionStage: isProjectInSolutionDesignStage(projectRow),
+      roleState,
+      user,
+      nodeRow: quotationNode,
+      flowRow: quotationTenderFlow
+    })) {
+      throw new SolutionDesignWorkflowError(
+        SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
+        'Quotation online form cannot be processed in current branch status',
+        409,
+        {
+          nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+          branchType: quotationTenderFlow?.branch_type ?? null,
+          branchStatus: quotationTenderFlow?.branch_status ?? null,
+          nodeStatus: quotationNode?.status ?? null
+        }
+      );
+    }
+
+    const currentFormRow = await selectCurrentQuotationForm(connection, projectId, { forUpdate: true });
+    let savedFormRow = await saveQuotationFormVersion(connection, {
+      projectId,
+      nodeRevision: quotationNode.current_revision,
+      currentFormRow,
+      formStatus,
+      formDataJson: normalized.formDataJson,
+      actorUserId: user.id
+    });
+    let generationFailureError = null;
+
+    if (isSubmit) {
+      savedFormRow = await generateAndPersistQuotationFormFile(connection, {
+        projectRow,
+        formRow: savedFormRow,
+        actorUserId: user.id,
+        storage
+      });
+
+      if (isQuotationFormGeneratedForRevision(savedFormRow, quotationNode.current_revision)) {
+        await updateQuotationSubmitted(connection, { projectId, actorUserId: user.id });
+        await insertQuotationTenderLog(connection, {
+          projectId,
+          actorUserId: user.id,
+          actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_QUOTATION_SUBMITTED,
+          summary: '商务负责人提交报价单',
+          details: {
+            branchType: SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION,
+            revision: Number(savedFormRow.revision ?? 1),
+            formId: savedFormRow.id,
+            documentCode: SOLUTION_DESIGN_QUOTATION_FORM_DEFINITION.documentCode,
+            generatedFileName: savedFormRow.generated_file_name
+          }
+        });
+      } else {
+        const failureMessage = savedFormRow?.generation_error_message ||
+          'Solution design quotation file generation failed';
+        generationFailureError = new SolutionDesignWorkflowError(
+          SOLUTION_DESIGN_ERROR.GENERATED_FILE_GENERATION_FAILED,
+          `Solution design quotation file generation failed: ${failureMessage}`,
+          500,
+          {
+            nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+            formId: savedFormRow?.id ?? null,
+            generatedFileStatus: savedFormRow?.generated_file_status ?? null
+          }
+        );
+      }
+    }
+
+    const refreshedFlow = await selectQuotationTenderFlow(connection, projectId);
+    const dto = buildQuotationFormDto({
+      projectRow,
+      quotationNode,
+      quotationTenderFlow: refreshedFlow,
+      quotationFormRow: savedFormRow,
+      permissions: buildQuotationFormPermissions({
+        projectRow,
+        quotationNode,
+        rolesRow,
+        user,
+        quotationTenderFlow: refreshedFlow,
+        quotationFormRow: savedFormRow
+      }),
+      isProjectEnded: isSolutionDesignProjectEnded(projectRow)
+    });
+
+    return { dto, generationFailureError };
+  });
+
+  if (outcome.generationFailureError) {
+    throw outcome.generationFailureError;
+  }
+
+  return outcome.dto;
+}
+
+export async function saveSolutionDesignQuotationForm({ projectId, payload, user }, db = pool) {
+  return saveOrSubmitSolutionDesignQuotationForm(
+    {
+      projectId,
+      payload,
+      user,
+      formStatus: SOLUTION_DESIGN_QUOTATION_FORM_STATUS.DRAFT
+    },
+    db
+  );
+}
+
+export async function submitSolutionDesignQuotationForm(
+  { projectId, payload, user },
+  db = pool,
+  generatedFileStorage = null
+) {
+  return saveOrSubmitSolutionDesignQuotationForm(
+    {
+      projectId,
+      payload,
+      user,
+      formStatus: SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED
+    },
+    db,
+    generatedFileStorage
+  );
+}
+
 export async function submitSolutionDesignQuotation({ projectId, user }, db = pool) {
   return withConnection(db, async (connection) => {
     const projectRow = await selectProjectContext(connection, projectId, { forUpdate: true });
@@ -4509,34 +5098,41 @@ export async function submitSolutionDesignQuotation({ projectId, user }, db = po
     );
     assertNodeProcessable(nodeRow, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER, 'submitted');
     const flowRow = await selectQuotationTenderFlow(connection, projectId, { forUpdate: true });
-    const files = await selectCurrentUploadFiles(connection, projectId, [SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE]);
-    const currentFile = files[0] || null;
+    const quotationFormRow = await selectCurrentQuotationForm(connection, projectId, { forUpdate: true });
     if (
       !isQuotationBranchCurrent(flowRow, nodeRow) ||
-      !currentFile ||
-      Number(currentFile.revision ?? 0) < Number(nodeRow.current_revision ?? 1)
+      ![
+        SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED,
+        SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SUBMITTED
+      ].includes(flowRow.branch_status) ||
+      !isQuotationFormGeneratedForRevision(quotationFormRow, nodeRow.current_revision)
     ) {
       throw new SolutionDesignWorkflowError(
         SOLUTION_DESIGN_ERROR.NODE_BLOCKED,
-        'Quotation file and quotation branch selection are required before submitting quotation',
+        'Current quotation online form generated file is required before submitting quotation',
         409,
-        [SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE]
+        ['quotation_form_generated_file']
       );
     }
 
+    const shouldLogSubmission =
+      flowRow.branch_status !== SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SUBMITTED;
     await updateQuotationSubmitted(connection, { projectId, actorUserId: user.id });
-    await markQuotationSlotSubmitted(connection, { projectId, userId: user.id });
-    await insertQuotationTenderLog(connection, {
-      projectId,
-      actorUserId: user.id,
-      actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_QUOTATION_SUBMITTED,
-      summary: '商务负责人提交报价单',
-      details: {
-        branchType: SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION,
-        revision: Number(nodeRow.current_revision ?? 1),
-        slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE
-      }
-    });
+    if (shouldLogSubmission) {
+      await insertQuotationTenderLog(connection, {
+        projectId,
+        actorUserId: user.id,
+        actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_QUOTATION_SUBMITTED,
+        summary: '商务负责人提交报价单',
+        details: {
+          branchType: SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION,
+          revision: Number(quotationFormRow.revision ?? 1),
+          formId: quotationFormRow.id,
+          documentCode: SOLUTION_DESIGN_QUOTATION_FORM_DEFINITION.documentCode,
+          generatedFileName: quotationFormRow.generated_file_name
+        }
+      });
+    }
 
     const refreshedProjectRow = await selectProjectContext(connection, projectId);
     return buildWorkflowDtoForProject(connection, { projectRow: refreshedProjectRow, user });
@@ -4565,6 +5161,7 @@ export async function processSolutionDesignQuotationResult({ projectId, payload,
     );
     assertNodeProcessable(nodeRow, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER, 'processed');
     const flowRow = await selectQuotationTenderFlow(connection, projectId, { forUpdate: true });
+    const quotationFormRow = await selectCurrentQuotationForm(connection, projectId, { forUpdate: true });
     if (!canProcessQuotationResult({
       projectEnded: isSolutionDesignProjectEnded(projectRow),
       inSolutionStage: isProjectInSolutionDesignStage(projectRow),
@@ -4578,6 +5175,14 @@ export async function processSolutionDesignQuotationResult({ projectId, payload,
         'Quotation result cannot be processed before quotation is submitted',
         409,
         ['quotation']
+      );
+    }
+    if (!isQuotationFormGeneratedForRevision(quotationFormRow, nodeRow.current_revision)) {
+      throw new SolutionDesignWorkflowError(
+        SOLUTION_DESIGN_ERROR.NODE_BLOCKED,
+        'Current quotation online form generated file is required before processing quotation result',
+        409,
+        ['quotation_form_generated_file']
       );
     }
 
@@ -4712,6 +5317,19 @@ export async function getSolutionDesignUploadDownload(
     await assertWorkflowViewable(connection, projectId, user, { projectRow, rolesRow });
     const roleState = buildRoleStateWithoutUserDetails(projectRow, rolesRow);
     assertCanDownloadSolutionDesignUploadFile({ slot, roleState, user });
+    if (slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE) {
+      const nodes = await ensureSolutionDesignNodes(connection, projectRow);
+      const quotationNode = getNodeByKey(nodes, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER);
+      const quotationTenderFlow = await selectQuotationTenderFlow(connection, projectId);
+      if (isQuotationBranchCurrent(quotationTenderFlow, quotationNode)) {
+        throw new SolutionDesignWorkflowError(
+          SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
+          'Quotation file upload download is disabled after quotation branch selection; download the generated quotation form instead',
+          409,
+          [slot.slotKey]
+        );
+      }
+    }
 
     const fileRow = await selectCurrentUploadFileForDownload(connection, projectId, slot.slotKey);
     if (!fileRow) {
@@ -4953,13 +5571,13 @@ function assertGeneratedFormFileReady({ formRow, nodeRow, detailKey, isGenerated
   }
 }
 
-async function buildGeneratedFormDownload({ formRow, storage, detailKey }) {
+async function buildGeneratedFormDownload({ formRow, storage, detailKey, fallbackMimeType = GENERATED_XLSX_MIME_TYPE }) {
   try {
     const filePath = await storage.assertFileReadable(formRow.generated_file_storage_key);
     return {
       filePath,
       fileName: formRow.generated_file_name,
-      mimeType: formRow.generated_file_mime_type || GENERATED_XLSX_MIME_TYPE,
+      mimeType: formRow.generated_file_mime_type || fallbackMimeType,
       fileSize: Number(formRow.generated_file_size || 0)
     };
   } catch {
@@ -5032,6 +5650,34 @@ export async function getSolutionDesignReviewGeneratedFileDownload(
       formRow,
       storage: generatedFileStorage,
       detailKey: `${definition.reviewType}ReviewFormGeneratedFile`
+    });
+  });
+}
+
+export async function getSolutionDesignQuotationGeneratedFileDownload(
+  { projectId, user },
+  db = pool,
+  storage = null
+) {
+  const generatedFileStorage = resolveGeneratedFileStorage(db, storage);
+  return withConnection(db, async (connection) => {
+    const projectRow = await selectProjectContext(connection, projectId);
+    const rolesRow = await selectSolutionDesignRoles(connection, projectId);
+    await assertWorkflowViewable(connection, projectId, user, { projectRow, rolesRow });
+    const nodes = await ensureSolutionDesignNodes(connection, projectRow);
+    const quotationNode = getNodeByKey(nodes, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER);
+    const formRow = await selectCurrentQuotationForm(connection, projectId);
+    assertGeneratedFormFileReady({
+      formRow,
+      nodeRow: quotationNode,
+      detailKey: 'quotationFormGeneratedFile',
+      isGeneratedForRevision: isQuotationFormGeneratedForRevision
+    });
+    return buildGeneratedFormDownload({
+      formRow,
+      storage: generatedFileStorage,
+      detailKey: 'quotationFormGeneratedFile',
+      fallbackMimeType: GENERATED_DOCX_MIME_TYPE
     });
   });
 }

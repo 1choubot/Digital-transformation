@@ -11,6 +11,7 @@ import {
   SOLUTION_DESIGN_GENERATED_FILE_STATUS,
   SOLUTION_DESIGN_NODE_KEY,
   SOLUTION_DESIGN_NODE_STATUS,
+  SOLUTION_DESIGN_QUOTATION_FORM_STATUS,
   SOLUTION_DESIGN_QUOTATION_RESULT,
   SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS,
   SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE,
@@ -757,6 +758,15 @@ function isCurrentSubmittedGeneratedReviewForm(form, expectedRevision) {
   );
 }
 
+function isCurrentSubmittedGeneratedQuotationForm(form, expectedRevision) {
+  return (
+    Number(form?.revision ?? 0) >= expectedRevision &&
+    form?.form_status === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED &&
+    form?.generated_file_status === SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED &&
+    Boolean(form?.generated_file_storage_key)
+  );
+}
+
 function buildDerivedCompletion({
   documentCode,
   nodeKey = null,
@@ -877,7 +887,7 @@ function isQuotationPathComplete(context) {
     flow?.branch_type === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION &&
     flow?.branch_status === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.ACCEPTED &&
     flow?.quotation_result === SOLUTION_DESIGN_QUOTATION_RESULT.ACCEPTED &&
-    hasCurrentRevisionUpload(context, SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE, revision)
+    isCurrentSubmittedGeneratedQuotationForm(context.quotationForm, revision)
   );
 }
 
@@ -1064,6 +1074,13 @@ async function selectSolutionDesignDerivedContexts(executor, projectIds) {
     WHERE project_id IN (${placeholders})`,
     projectIds
   );
+  const [quotationFormRows] = await executor.execute(
+    `SELECT *
+    FROM project_solution_design_quotation_forms
+    WHERE project_id IN (${placeholders})
+      AND is_current = 1`,
+    projectIds
+  );
 
   const nodesByProject = mapRowsByProjectAndKey(nodeRows, 'node_key');
   const slotsByProject = mapRowsByProjectAndKey(slotRows, 'slot_key');
@@ -1072,6 +1089,9 @@ async function selectSolutionDesignDerivedContexts(executor, projectIds) {
   );
   const reviewFormsByProject = mapRowsByProjectAndKey(reviewFormRows, 'node_key');
   const quotationTenderFlowsByProject = mapQuotationTenderFlows(quotationTenderFlowRows);
+  const quotationFormsByProject = new Map(
+    quotationFormRows.map((row) => [Number(row.project_id), row])
+  );
 
   return new Map(projectIds.map((projectId) => [
     projectId,
@@ -1080,7 +1100,8 @@ async function selectSolutionDesignDerivedContexts(executor, projectIds) {
       slotsByKey: slotsByProject.get(projectId) || new Map(),
       analysisForm: analysisFormsByProject.get(projectId) || null,
       reviewFormsByNodeKey: reviewFormsByProject.get(projectId) || new Map(),
-      quotationTenderFlow: quotationTenderFlowsByProject.get(projectId) || null
+      quotationTenderFlow: quotationTenderFlowsByProject.get(projectId) || null,
+      quotationForm: quotationFormsByProject.get(projectId) || null
     }
   ]));
 }

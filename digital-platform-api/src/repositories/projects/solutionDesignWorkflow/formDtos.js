@@ -4,6 +4,7 @@ import {
   SOLUTION_DESIGN_GENERATED_FILE_STATUS,
   SOLUTION_DESIGN_NODE_KEY,
   SOLUTION_DESIGN_NODE_STATUS,
+  SOLUTION_DESIGN_QUOTATION_FORM_STATUS,
   SOLUTION_DESIGN_REVIEW_FORM_STATUS,
   SOLUTION_DESIGN_ROLE_DEFINITIONS,
   SOLUTION_DESIGN_ROLE_KEY,
@@ -324,7 +325,8 @@ export function buildReviewFormDto({ projectRow, nodes, rolesRow, reviewFormRow,
 export function isGeneratedFormDtoCurrent(formDto, requiredRevision) {
   return (
     formDto?.status === SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.SUBMITTED ||
-    formDto?.status === SOLUTION_DESIGN_REVIEW_FORM_STATUS.SUBMITTED
+    formDto?.status === SOLUTION_DESIGN_REVIEW_FORM_STATUS.SUBMITTED ||
+    formDto?.status === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED
   ) &&
     Number(formDto?.revision ?? 0) >= Number(requiredRevision ?? 1) &&
     formDto?.generatedFile?.status === SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED &&

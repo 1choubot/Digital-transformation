@@ -13,6 +13,7 @@ import {
   SOLUTION_DESIGN_NODE_KEY,
   SOLUTION_DESIGN_NODE_STATUS,
   SOLUTION_DESIGN_NODES,
+  SOLUTION_DESIGN_QUOTATION_FORM_STATUS,
   SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS,
   SOLUTION_DESIGN_QUOTATION_REJECTED_ACTION,
   SOLUTION_DESIGN_QUOTATION_RESULT,
@@ -34,6 +35,8 @@ import {
   buildSolutionDesignWorkbenchTodos,
   getSolutionDesignAnalysisGeneratedFileDownload,
   getSolutionDesignAnalysisForm,
+  getSolutionDesignQuotationForm,
+  getSolutionDesignQuotationGeneratedFileDownload,
   getSolutionDesignReviewGeneratedFileDownload,
   getSolutionDesignReviewForm,
   getSolutionDesignUploadDownload,
@@ -42,10 +45,12 @@ import {
   processSolutionDesignQuotationResult,
   returnSolutionDesignWorkflowNode,
   saveSolutionDesignAnalysisForm,
+  saveSolutionDesignQuotationForm,
   saveSolutionDesignReviewForm,
   selectSolutionDesignQuotationTenderBranch,
   submitSolutionDesignAnalysisForm,
   submitSolutionDesignQuotation,
+  submitSolutionDesignQuotationForm,
   submitSolutionDesignReviewForm,
   submitSolutionDesignWorkflowNode,
   uploadSolutionDesignWorkflowFile
@@ -346,8 +351,8 @@ function fakeGeneratedFileStorage({ failWrite = false } = {}) {
     written,
     cleaned,
     files,
-    createStorageKey({ projectId, documentCode, revision }) {
-      return `${projectId}/generated/${documentCode}/v${revision}-${written.length + cleaned.length + 1}.xlsx`;
+    createStorageKey({ projectId, documentCode, revision, fileType = 'xlsx' }) {
+      return `${projectId}/generated/${documentCode}/v${revision}-${written.length + cleaned.length + 1}.${fileType}`;
     },
     async writeFile(storageKey, buffer) {
       if (failWrite) {
@@ -533,6 +538,72 @@ function assertGeneratedXlsxHasImageAnchorFrom(storage, storageKey, { column = n
   );
 }
 
+function generatedDocxDocumentXml(storage, storageKey) {
+  const entries = readZipEntries(generatedFileBuffer(storage, storageKey));
+  return entries.find((entry) => entry.name === 'word/document.xml')?.data.toString('utf8') || '';
+}
+
+function extractDocxText(xml) {
+  return decodeXmlText(
+    [...String(xml || '').matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)]
+      .map((match) => match[1])
+      .join('')
+  );
+}
+
+function extractDocxTableRows(storage, storageKey) {
+  const documentXml = generatedDocxDocumentXml(storage, storageKey);
+  const tableMatch = documentXml.match(/<w:tbl[\s\S]*?<\/w:tbl>/);
+  assert.ok(tableMatch, 'Expected generated docx table');
+  return [...tableMatch[0].matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)].map((rowMatch) =>
+    [...rowMatch[0].matchAll(/<w:tc\b[\s\S]*?<\/w:tc>/g)].map((cellMatch) => extractDocxText(cellMatch[0]))
+  );
+}
+
+function extractDocxParagraphXmls(xml) {
+  return [...String(xml || '').matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)].map((match) => match[0]);
+}
+
+function extractDocxRunTexts(xml) {
+  return [...String(xml || '').matchAll(/<w:r\b[\s\S]*?<\/w:r>/g)].map((match) => extractDocxText(match[0]));
+}
+
+function extractDocxTableCellXmls(storage, storageKey, rowIndex) {
+  const documentXml = generatedDocxDocumentXml(storage, storageKey);
+  const tableMatch = documentXml.match(/<w:tbl[\s\S]*?<\/w:tbl>/);
+  assert.ok(tableMatch, 'Expected generated docx table');
+  const rowXml = [...tableMatch[0].matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)][rowIndex]?.[0];
+  assert.ok(rowXml, `Expected generated docx table row ${rowIndex}`);
+  return [...rowXml.matchAll(/<w:tc\b[\s\S]*?<\/w:tc>/g)].map((match) => match[0]);
+}
+
+function assertGeneratedDocxCellSingleParagraph(cellXml, expectedText) {
+  const paragraphs = extractDocxParagraphXmls(cellXml);
+  assert.equal(paragraphs.length, 1, `Expected one Word paragraph in cell containing ${expectedText}`);
+  assert.equal(extractDocxText(paragraphs[0]), expectedText);
+}
+
+function assertQuotationContactLineUsesPhoneUnderlineRun(storage, storageKey) {
+  const documentXml = generatedDocxDocumentXml(storage, storageKey);
+  const contactParagraph = extractDocxParagraphXmls(documentXml)
+    .find((paragraphXml) => extractDocxText(paragraphXml).includes('联系人：'));
+  assert.ok(contactParagraph, 'Expected quotation contact paragraph');
+  const runTexts = extractDocxRunTexts(contactParagraph);
+  const contactLabelIndex = runTexts.findIndex((text) => text === '联系人：');
+  const phoneLabelIndex = runTexts.findIndex((text) => text === '电话');
+  assert.ok(contactLabelIndex >= 0, 'Expected contact label run');
+  assert.ok(phoneLabelIndex > contactLabelIndex, 'Expected phone label run after contact label');
+  assert.match(runTexts[contactLabelIndex + 1] || '', /商务负责人/);
+  assert.equal(runTexts[phoneLabelIndex], '电话');
+  assert.doesNotMatch(runTexts[phoneLabelIndex], /023-12345678/);
+  assert.match(runTexts[phoneLabelIndex + 1] || '', /023-12345678/);
+}
+
+function assertGeneratedDocxTextIncludes(storage, storageKey, expected) {
+  const text = extractDocxText(generatedDocxDocumentXml(storage, storageKey));
+  assert.match(text, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}
+
 function analysisFormPayload(overrides = {}) {
   return {
     formData: {
@@ -556,6 +627,53 @@ function reviewFormPayload(overrides = {}) {
       ...overrides
     }
   };
+}
+
+function quotationFormPayload(overrides = {}) {
+  const defaultItems = [
+    {
+      name: '机器人工作站',
+      unit: '套',
+      quantity: '2.125',
+      unitPrice: '1000.12',
+      amount: '999999.99',
+      remark: '含安装调试'
+    },
+    {
+      name: '视觉检测系统',
+      unit: '套',
+      quantity: '1',
+      unitPrice: '3456.78',
+      totalAmount: '1.00',
+      totalAmountUppercase: '前端篡改大写金额',
+      remark: ''
+    }
+  ];
+
+  return {
+    formData: {
+      recipientName: '王客户',
+      recipientTitle: '先生',
+      contactName: '商务负责人',
+      contactPhone: '023-12345678',
+      quotationDate: '2026-07-13',
+      items: defaultItems,
+      ...overrides
+    }
+  };
+}
+
+function quotationFormPayloadWithItemCount(count) {
+  return quotationFormPayload({
+    items: Array.from({ length: count }, (_unused, index) => ({
+      name: `动态明细${index + 1}`,
+      unit: '项',
+      quantity: index === 9 ? '1.2345' : '1',
+      unitPrice: index === 9 ? '10.01' : `${100 + index}.00`,
+      amount: '0.01',
+      remark: `备注${index + 1}`
+    }))
+  });
 }
 
 const SOLUTION_DESIGN_STAGE_DOCUMENTS = Object.freeze([
@@ -1014,19 +1132,10 @@ async function submitQuotation(db, storage = fakeUploadStorage()) {
   const businessOwner = authUser(db.connection.users.get(13));
   await activateQuotationOrTenderNode(db, storage);
   await selectQuotationBranch(db);
-  await uploadSolutionDesignWorkflowFile(
+  return submitSolutionDesignQuotationForm(
     {
       projectId: 100,
-      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE,
-      file: testUploadFile('报价单.xlsx'),
-      user: businessOwner
-    },
-    db,
-    storage
-  );
-  return submitSolutionDesignQuotation(
-    {
-      projectId: 100,
+      payload: quotationFormPayload(),
       user: businessOwner
     },
     db
@@ -1227,16 +1336,24 @@ function fakeDedicatedStageDocumentStatusConnection({ documentCode = 'C15', stat
 }
 
 class SolutionDesignWorkflowFakeConnection {
-  constructor({ project = baseProject(), users = baseUsers(), visible = true } = {}) {
+  constructor(options = {}) {
+    const {
+      project = baseProject(),
+      users = baseUsers(),
+      visible = true,
+      quotationSubmittedAt = '2026-07-08 10:40:00'
+    } = options;
     this.project = { ...project };
     this.users = users;
     this.visible = visible;
+    this.quotationSubmittedAt = quotationSubmittedAt;
     this.rolesRow = null;
     this.nodes = [];
     this.uploadSlots = [];
     this.uploadFiles = [];
     this.analysisForms = [];
     this.reviewForms = [];
+    this.quotationForms = [];
     this.formImages = [];
     this.quotationTenderFlow = null;
     this.stages = buildProjectStages(this.project.id, Number(this.project.current_stage_order ?? 2));
@@ -1248,6 +1365,7 @@ class SolutionDesignWorkflowFakeConnection {
     this.nextUploadFileId = 1;
     this.nextAnalysisFormId = 1;
     this.nextReviewFormId = 1;
+    this.nextQuotationFormId = 1;
     this.nextFormImageId = 1;
     this.committed = false;
     this.rolledBack = false;
@@ -1308,6 +1426,10 @@ class SolutionDesignWorkflowFakeConnection {
       .sort((left, right) => left.node_key.localeCompare(right.node_key));
   }
 
+  currentQuotationForm() {
+    return this.quotationForms.find((form) => form.is_current === 1) || null;
+  }
+
   analysisFormRowWithUsers(form) {
     if (!form) {
       return null;
@@ -1328,6 +1450,25 @@ class SolutionDesignWorkflowFakeConnection {
   }
 
   reviewFormRowWithUsers(form) {
+    if (!form) {
+      return null;
+    }
+
+    const submitter = form.submitted_by_user_id ? this.users.get(Number(form.submitted_by_user_id)) : null;
+    const creator = this.users.get(Number(form.created_by_user_id)) || null;
+    const updater = this.users.get(Number(form.updated_by_user_id)) || null;
+    return {
+      ...form,
+      submitted_by_account: submitter?.account ?? null,
+      submitted_by_display_name: submitter?.display_name ?? null,
+      created_by_account: creator?.account ?? null,
+      created_by_display_name: creator?.display_name ?? null,
+      updated_by_account: updater?.account ?? null,
+      updated_by_display_name: updater?.display_name ?? null
+    };
+  }
+
+  quotationFormRowWithUsers(form) {
     if (!form) {
       return null;
     }
@@ -1499,6 +1640,23 @@ class SolutionDesignWorkflowFakeConnection {
       ];
     }
 
+    if (text.startsWith('SELECT * FROM project_solution_design_quotation_forms')) {
+      if (text.includes('WHERE project_id IN')) {
+        const projectIds = new Set(params.map(Number));
+        return [
+          this.quotationForms
+            .filter((form) => projectIds.has(Number(form.project_id)) && form.is_current === 1)
+            .map((form) => ({ ...form }))
+        ];
+      }
+
+      return [
+        this.quotationForms
+          .filter((form) => form.is_current === 1)
+          .map((form) => ({ ...form }))
+      ];
+    }
+
     if (
       text.startsWith('SELECT f.*, submitter.account AS submitted_by_account') &&
       text.includes('FROM project_solution_design_review_forms')
@@ -1510,6 +1668,14 @@ class SolutionDesignWorkflowFakeConnection {
       }
 
       return [this.currentReviewForms().map((form) => this.reviewFormRowWithUsers(form))];
+    }
+
+    if (
+      text.startsWith('SELECT f.*, submitter.account AS submitted_by_account') &&
+      text.includes('FROM project_solution_design_quotation_forms')
+    ) {
+      const currentForm = this.currentQuotationForm();
+      return [currentForm ? [this.quotationFormRowWithUsers(currentForm)] : []];
     }
 
     if (text.startsWith('SELECT f.*, submitter.account AS submitted_by_account')) {
@@ -1524,6 +1690,17 @@ class SolutionDesignWorkflowFakeConnection {
       const [projectId, nodeKey] = params;
       const maxRevision = this.reviewForms
         .filter((form) => form.project_id === projectId && form.node_key === nodeKey)
+        .reduce((max, form) => Math.max(max, Number(form.revision ?? 0)), 0);
+      return [[{ max_revision: maxRevision }]];
+    }
+
+    if (
+      text.startsWith('SELECT COALESCE(MAX(revision), 0) AS max_revision') &&
+      text.includes('FROM project_solution_design_quotation_forms')
+    ) {
+      const [projectId] = params;
+      const maxRevision = this.quotationForms
+        .filter((form) => form.project_id === projectId)
         .reduce((max, form) => Math.max(max, Number(form.revision ?? 0)), 0);
       return [[{ max_revision: maxRevision }]];
     }
@@ -2177,6 +2354,169 @@ class SolutionDesignWorkflowFakeConnection {
           form.updated_by_user_id = fileSizeOrUpdatedByUserId;
         }
         form.updated_at = '2026-07-08 10:36:00';
+      }
+      return [{ affectedRows: form ? 1 : 0 }];
+    }
+
+    if (text.startsWith('UPDATE project_solution_design_quotation_forms SET is_current = 0')) {
+      const [projectId] = params;
+      for (const form of this.quotationForms) {
+        if (form.project_id === projectId && form.is_current === 1) {
+          form.is_current = 0;
+          form.updated_at = '2026-07-08 10:40:00';
+        }
+      }
+      return [{ affectedRows: 1 }];
+    }
+
+    if (text.startsWith('INSERT INTO project_solution_design_quotation_forms')) {
+      const [
+        projectId,
+        revision,
+        formStatus,
+        formDataJson,
+        submittedByUserId,
+        generatedFileStatus,
+        generatedFileTemplateName,
+        generatedByUserId,
+        generationErrorMessage,
+        createdByUserId,
+        updatedByUserId
+      ] = params;
+      const form = {
+        id: this.nextQuotationFormId++,
+        project_id: projectId,
+        node_key: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+        revision,
+        form_status: formStatus,
+        form_data_json: formDataJson,
+        is_current: 1,
+        submitted_by_user_id: submittedByUserId,
+        submitted_at: text.includes('CURRENT_TIMESTAMP') ? this.quotationSubmittedAt : null,
+        generated_file_status: generatedFileStatus,
+        generated_file_storage_key: null,
+        generated_file_name: null,
+        generated_file_mime_type: null,
+        generated_file_size: null,
+        generated_file_template_name: generatedFileTemplateName,
+        generated_at: null,
+        generated_by_user_id: generatedByUserId,
+        generation_error_message: generationErrorMessage,
+        created_by_user_id: createdByUserId,
+        updated_by_user_id: updatedByUserId,
+        created_at: '2026-07-08 10:40:00',
+        updated_at: '2026-07-08 10:40:00'
+      };
+      this.quotationForms.push(form);
+      return [{ affectedRows: 1, insertId: form.id }];
+    }
+
+    if (text.startsWith('UPDATE project_solution_design_quotation_forms SET form_status = ?')) {
+      const [
+        formStatus,
+        formDataJson,
+        submittedByUserId,
+        generatedFileStatus,
+        generatedFileTemplateName,
+        generatedByUserId,
+        generationErrorMessage,
+        updatedByUserId,
+        formId
+      ] = params;
+      const form = this.quotationForms.find((candidate) => candidate.id === formId);
+      if (form) {
+        form.form_status = formStatus;
+        form.form_data_json = formDataJson;
+        form.submitted_by_user_id = submittedByUserId;
+        form.submitted_at = text.includes('CURRENT_TIMESTAMP') ? this.quotationSubmittedAt : null;
+        form.generated_file_status = generatedFileStatus;
+        form.generated_file_storage_key = null;
+        form.generated_file_name = null;
+        form.generated_file_mime_type = null;
+        form.generated_file_size = null;
+        form.generated_file_template_name = generatedFileTemplateName;
+        form.generated_at = null;
+        form.generated_by_user_id = generatedByUserId;
+        form.generation_error_message = generationErrorMessage;
+        form.updated_by_user_id = updatedByUserId;
+        form.updated_at = '2026-07-08 10:40:00';
+      }
+      return [{ affectedRows: form ? 1 : 0 }];
+    }
+
+    if (text.startsWith('UPDATE project_solution_design_quotation_forms SET generated_file_status = ?')) {
+      const isGenerated = text.includes('generated_file_storage_key = ?');
+      const hasFailedFormStatus = !isGenerated && text.includes('form_status = ?');
+      const resolvedFormId = isGenerated
+        ? params[8]
+        : hasFailedFormStatus
+          ? params[6]
+          : params[5];
+      const form = this.quotationForms.find((candidate) => candidate.id === resolvedFormId);
+      if (form) {
+        if (isGenerated) {
+          const [
+            generatedFileStatus,
+            storageKey,
+            fileName,
+            mimeType,
+            fileSize,
+            templateName,
+            generatedByUserId,
+            updatedByUserId
+          ] = params;
+          form.generated_file_status = generatedFileStatus;
+          form.generated_file_storage_key = storageKey;
+          form.generated_file_name = fileName;
+          form.generated_file_mime_type = mimeType;
+          form.generated_file_size = fileSize;
+          form.generated_file_template_name = templateName;
+          form.generated_at = '2026-07-08 10:41:00';
+          form.generated_by_user_id = generatedByUserId;
+          form.generation_error_message = null;
+          form.updated_by_user_id = updatedByUserId;
+        } else if (hasFailedFormStatus) {
+          const [
+            generatedFileStatus,
+            formStatus,
+            templateName,
+            generatedByUserId,
+            errorMessage,
+            updatedByUserId
+          ] = params;
+          form.form_status = formStatus;
+          form.submitted_by_user_id = null;
+          form.submitted_at = null;
+          form.generated_file_status = generatedFileStatus;
+          form.generated_file_storage_key = null;
+          form.generated_file_name = null;
+          form.generated_file_mime_type = null;
+          form.generated_file_size = null;
+          form.generated_file_template_name = templateName;
+          form.generated_at = '2026-07-08 10:41:00';
+          form.generated_by_user_id = generatedByUserId;
+          form.generation_error_message = errorMessage;
+          form.updated_by_user_id = updatedByUserId;
+        } else {
+          const [
+            generatedFileStatus,
+            templateName,
+            generatedByUserId,
+            errorMessage,
+            updatedByUserId
+          ] = params;
+          form.generated_file_status = generatedFileStatus;
+          form.generated_file_storage_key = null;
+          form.generated_file_name = null;
+          form.generated_file_mime_type = null;
+          form.generated_file_size = null;
+          form.generated_file_template_name = templateName;
+          form.generated_at = '2026-07-08 10:41:00';
+          form.generated_by_user_id = generatedByUserId;
+          form.generation_error_message = errorMessage;
+          form.updated_by_user_id = updatedByUserId;
+        }
+        form.updated_at = '2026-07-08 10:41:00';
       }
       return [{ affectedRows: form ? 1 : 0 }];
     }
@@ -5852,7 +6192,7 @@ test('general manager selects quotation or tender branch and duplicate or non-GM
   assert.equal(db.connection.operationLogs.length, logCountBeforeFailures);
 });
 
-test('business owner uploads and submits quotation, accepted quotation approves node and auto advances to contract stage', async () => {
+test('business owner saves and submits quotation form, accepted quotation approves node and auto advances to contract stage', async () => {
   const db = fakeDb();
   seedAssignedRoles(db.connection);
   const storage = fakeUploadStorage();
@@ -5860,38 +6200,89 @@ test('business owner uploads and submits quotation, accepted quotation approves 
 
   await activateQuotationOrTenderNode(db, storage);
   await selectQuotationBranch(db);
-  const uploadsBeforeFile = await listSolutionDesignUploads({ projectId: 100, user: businessOwner }, db);
+  const uploadsAfterBranch = await listSolutionDesignUploads({ projectId: 100, user: businessOwner }, db);
   assert.equal(
-    findUploadSlot(uploadsBeforeFile, SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE).permissions.canUpload,
-    true
-  );
-
-  await uploadSolutionDesignWorkflowFile(
-    {
-      projectId: 100,
-      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE,
-      file: testUploadFile('报价单.xlsx'),
-      user: businessOwner
-    },
-    db,
-    storage
-  );
-  const readyToSubmit = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, db);
-  assert.equal(readyToSubmit.quotationTender.permissions.canSubmitQuotation, true);
-  assert.equal(readyToSubmit.quotationTender.permissions.canAcceptQuotation, false);
-
-  const submitted = await submitSolutionDesignQuotation({ projectId: 100, user: businessOwner }, db);
-  assert.equal(submitted.quotationTender.branchStatus, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SUBMITTED);
-  assert.equal(submitted.quotationTender.permissions.canUploadQuotation, false);
-  assert.equal(submitted.quotationTender.permissions.canSubmitQuotation, false);
-  assert.equal(submitted.quotationTender.permissions.canAcceptQuotation, true);
-  assert.equal(
-    findWorkflowNode(submitted, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER).permissions.canUploadQuotation,
+    uploadsAfterBranch.slots.some((slot) => slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE),
     false
   );
-  const uploadsAfterSubmit = await listSolutionDesignUploads({ projectId: 100, user: businessOwner }, db);
+
+  const initialForm = await getSolutionDesignQuotationForm({ projectId: 100, user: businessOwner }, db);
+  assert.equal(initialForm.permissions.canEditQuotationForm, true);
+  assert.equal(initialForm.permissions.canSubmitQuotationForm, true);
+  assert.equal(initialForm.form, null);
+
+  const saved = await saveSolutionDesignQuotationForm(
+    {
+      projectId: 100,
+      payload: quotationFormPayload({
+        recipientName: '保存草稿客户',
+        items: [
+          {
+            name: '草稿设备',
+            unit: '套',
+            quantity: '1',
+            unitPrice: '100.00',
+            remark: ''
+          }
+        ]
+      }),
+      user: businessOwner
+    },
+    db
+  );
+  assert.equal(saved.form.status, SOLUTION_DESIGN_QUOTATION_FORM_STATUS.DRAFT);
+  assert.equal(saved.form.formData.totalAmount, '100.00');
+  assert.equal(saved.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.NOT_STARTED);
+
+  const submittedForm = await submitSolutionDesignQuotationForm(
+    {
+      projectId: 100,
+      payload: quotationFormPayload(),
+      user: businessOwner
+    },
+    db
+  );
+  assert.equal(submittedForm.branchStatus, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SUBMITTED);
+  assert.equal(submittedForm.form.status, SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED);
+  assert.equal(submittedForm.form.formData.items[0].amount, '2125.26');
+  assert.equal(submittedForm.form.formData.totalAmount, '5582.04');
+  assert.equal(submittedForm.form.formData.totalAmountUppercase, '伍仟伍佰捌拾贰元零肆分');
+  assert.equal(submittedForm.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED);
+  assert.equal(submittedForm.form.generatedFile.mimeType, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+
+  const quotationForm = db.connection.currentQuotationForm();
+  const quotationGeneratedKey = quotationForm.generated_file_storage_key;
+  assert.equal(db.generatedFileStorage.written.at(-1).storageKey, quotationGeneratedKey);
+  assertGeneratedDocxTextIncludes(db.generatedFileStorage, quotationGeneratedKey, '王客户');
+  assertGeneratedDocxTextIncludes(db.generatedFileStorage, quotationGeneratedKey, '先生');
+  assertGeneratedDocxTextIncludes(db.generatedFileStorage, quotationGeneratedKey, '商务负责人');
+  assertGeneratedDocxTextIncludes(db.generatedFileStorage, quotationGeneratedKey, '023-12345678');
+  assertGeneratedDocxTextIncludes(db.generatedFileStorage, quotationGeneratedKey, '重庆凯尔夫智能测控技术有限责任公司');
+  assertGeneratedDocxTextIncludes(db.generatedFileStorage, quotationGeneratedKey, '2026年7月13日');
+  assertQuotationContactLineUsesPhoneUnderlineRun(db.generatedFileStorage, quotationGeneratedKey);
+  const quotationRows = extractDocxTableRows(db.generatedFileStorage, quotationGeneratedKey);
+  assert.deepEqual(quotationRows[1].slice(0, 7), ['1', '机器人工作站', '套', '2.125', '1000.12', '2125.26', '含安装调试']);
+  assert.deepEqual(quotationRows[2].slice(0, 7), ['2', '视觉检测系统', '套', '1', '3456.78', '3456.78', '']);
+  const firstItemCells = extractDocxTableCellXmls(db.generatedFileStorage, quotationGeneratedKey, 1);
+  ['1', '机器人工作站', '套', '2.125', '1000.12', '2125.26', '含安装调试'].forEach((expectedText, index) => {
+    assertGeneratedDocxCellSingleParagraph(firstItemCells[index], expectedText);
+  });
+  assert.ok(quotationRows.some((row) => row.includes('伍仟伍佰捌拾贰元零肆分') && row.includes('5582.04')));
+
+  const download = await getSolutionDesignQuotationGeneratedFileDownload(
+    { projectId: 100, user: businessOwner },
+    db
+  );
+  assert.equal(download.filePath, quotationGeneratedKey);
+  assert.equal(download.mimeType, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+
+  const submittedWorkflow = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, db);
+  assert.equal(submittedWorkflow.quotationTender.branchStatus, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SUBMITTED);
+  assert.equal(submittedWorkflow.quotationTender.permissions.canUploadQuotation, false);
+  assert.equal(submittedWorkflow.quotationTender.permissions.canSubmitQuotation, false);
+  assert.equal(submittedWorkflow.quotationTender.permissions.canAcceptQuotation, true);
   assert.equal(
-    findUploadSlot(uploadsAfterSubmit, SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE).permissions.canUpload,
+    findWorkflowNode(submittedWorkflow, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER).permissions.canUploadQuotation,
     false
   );
 
@@ -5953,6 +6344,290 @@ test('business owner uploads and submits quotation, accepted quotation approves 
   assert.equal(details.fromStageKey, 'solution');
   assert.equal(details.toStageKey, 'contract');
   assert.equal(details.completenessSummary.completionPercent, 100);
+});
+
+test('quotation form supports dynamic docx rows and keeps total row, company and date after 10 items', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+
+  await activateQuotationOrTenderNode(db, storage);
+  await selectQuotationBranch(db);
+  const submitted = await submitSolutionDesignQuotationForm(
+    {
+      projectId: 100,
+      payload: quotationFormPayloadWithItemCount(10),
+      user: businessOwner
+    },
+    db
+  );
+
+  assert.equal(submitted.form.formData.items.length, 10);
+  assert.equal(submitted.form.formData.items[9].amount, '12.36');
+  assert.equal(submitted.form.formData.totalAmount, '948.36');
+  const generatedKey = db.connection.currentQuotationForm().generated_file_storage_key;
+  const rows = extractDocxTableRows(db.generatedFileStorage, generatedKey);
+  assert.deepEqual(rows[10].slice(0, 7), ['10', '动态明细10', '项', '1.2345', '10.01', '12.36', '备注10']);
+  const tenthItemCells = extractDocxTableCellXmls(db.generatedFileStorage, generatedKey, 10);
+  ['10', '动态明细10', '项', '1.2345', '10.01', '12.36', '备注10'].forEach((expectedText, index) => {
+    assertGeneratedDocxCellSingleParagraph(tenthItemCells[index], expectedText);
+  });
+  assert.ok(rows[11].includes(submitted.form.formData.totalAmountUppercase));
+  assert.ok(rows[11].includes('948.36'));
+  assertGeneratedDocxTextIncludes(db.generatedFileStorage, generatedKey, '重庆凯尔夫智能测控技术有限责任公司');
+  assertGeneratedDocxTextIncludes(db.generatedFileStorage, generatedKey, '2026年7月13日');
+});
+
+test('quotation form defaults blank quotation date from submitted_at Date object in generated docx', async () => {
+  const db = fakeDb({ quotationSubmittedAt: new Date(2026, 6, 15, 8, 30, 0) });
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+
+  await activateQuotationOrTenderNode(db, storage);
+  await selectQuotationBranch(db);
+  const submitted = await submitSolutionDesignQuotationForm(
+    {
+      projectId: 100,
+      payload: quotationFormPayload({ quotationDate: '' }),
+      user: businessOwner
+    },
+    db
+  );
+
+  assert.equal(submitted.form.formData.quotationDate, '');
+  const generatedKey = db.connection.currentQuotationForm().generated_file_storage_key;
+  const generatedText = extractDocxText(generatedDocxDocumentXml(db.generatedFileStorage, generatedKey));
+  assert.match(generatedText, /2026年7月15日/);
+  assert.doesNotMatch(generatedText, /Mon Jul/);
+});
+
+test('quotation form draft allows partial item rows but submit requires complete item data', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+  const partialPayload = quotationFormPayload({
+    items: [
+      {
+        name: '半填设备',
+        unit: '套',
+        quantity: '',
+        unitPrice: '',
+        remark: '待补报价'
+      }
+    ]
+  });
+
+  await activateQuotationOrTenderNode(db, storage);
+  await selectQuotationBranch(db);
+  const saved = await saveSolutionDesignQuotationForm(
+    {
+      projectId: 100,
+      payload: partialPayload,
+      user: businessOwner
+    },
+    db
+  );
+
+  assert.equal(saved.form.status, SOLUTION_DESIGN_QUOTATION_FORM_STATUS.DRAFT);
+  assert.equal(saved.form.formData.items[0].name, '半填设备');
+  assert.equal(saved.form.formData.items[0].quantity, '');
+  assert.equal(saved.form.formData.items[0].unitPrice, '');
+  assert.equal(saved.form.formData.items[0].amount, '0.00');
+  assert.equal(saved.form.formData.totalAmount, '0.00');
+
+  await assert.rejects(
+    () =>
+      saveSolutionDesignQuotationForm(
+        {
+          projectId: 100,
+          payload: quotationFormPayload({
+            items: [
+              {
+                name: '非法数字草稿',
+                unit: '套',
+                quantity: '1.23456',
+                unitPrice: '',
+                remark: ''
+              }
+            ]
+          }),
+          user: businessOwner
+        },
+        db
+      ),
+    (error) =>
+      error.code === SOLUTION_DESIGN_ERROR.INVALID_QUOTATION_FORM &&
+      error.statusCode === 400 &&
+      /formData\.items\[0\]\.quantity/.test(error.message)
+  );
+  await assert.rejects(
+    () =>
+      submitSolutionDesignQuotationForm(
+        {
+          projectId: 100,
+          payload: partialPayload,
+          user: businessOwner
+        },
+        db
+      ),
+    (error) =>
+      error.code === SOLUTION_DESIGN_ERROR.INVALID_QUOTATION_FORM &&
+      error.statusCode === 400 &&
+      /formData\.items\[0\]\.quantity is required/.test(error.message)
+  );
+});
+
+test('quotation form generation failure blocks branch submission, result processing and C18 completion', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const failingGeneratedStorage = fakeGeneratedFileStorage({ failWrite: true });
+  const businessOwner = authUser(db.connection.users.get(13));
+
+  await activateQuotationOrTenderNode(db, storage);
+  await selectQuotationBranch(db);
+  await assert.rejects(
+    () =>
+      submitSolutionDesignQuotationForm(
+        {
+          projectId: 100,
+          payload: quotationFormPayload(),
+          user: businessOwner
+        },
+        db,
+        failingGeneratedStorage
+      ),
+    (error) =>
+      error.code === SOLUTION_DESIGN_ERROR.GENERATED_FILE_GENERATION_FAILED &&
+      error.statusCode === 500 &&
+      /Solution design quotation file generation failed/.test(error.message) &&
+      /FAKE_GENERATED_FILE_WRITE_FAILED/.test(error.message)
+  );
+
+  const current = await getSolutionDesignQuotationForm({ projectId: 100, user: businessOwner }, db);
+  assert.equal(current.branchStatus, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED);
+  assert.equal(current.form.status, SOLUTION_DESIGN_QUOTATION_FORM_STATUS.DRAFT);
+  assert.equal(current.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.FAILED);
+  assert.match(current.form.generatedFile.errorMessage, /fake generated file write failed/);
+  assert.equal(failingGeneratedStorage.cleaned.length, 1);
+  assert.equal(db.connection.quotationTenderFlow.branch_status, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED);
+
+  await assert.rejects(
+    () =>
+      processSolutionDesignQuotationResult(
+        {
+          projectId: 100,
+          payload: { result: SOLUTION_DESIGN_QUOTATION_RESULT.ACCEPTED },
+          user: businessOwner
+        },
+        db
+      ),
+    (error) => error.code === SOLUTION_DESIGN_ERROR.NODE_BLOCKED
+  );
+  await assertStageAdvanceBlocked(db, authUser(db.connection.users.get(30)), ['C18']);
+});
+
+test('quotation generated file download rejects missing storage key and missing stored file', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+
+  await submitQuotation(db, storage);
+  const quotationForm = db.connection.currentQuotationForm();
+  const generatedKey = quotationForm.generated_file_storage_key;
+  quotationForm.generated_file_storage_key = null;
+  await assert.rejects(
+    () => getSolutionDesignQuotationGeneratedFileDownload({ projectId: 100, user: businessOwner }, db),
+    (error) => error.code === SOLUTION_DESIGN_ERROR.GENERATED_FILE_NOT_FOUND
+  );
+
+  quotationForm.generated_file_storage_key = generatedKey;
+  db.generatedFileStorage.files.delete(generatedKey);
+  await assert.rejects(
+    () => getSolutionDesignQuotationGeneratedFileDownload({ projectId: 100, user: businessOwner }, db),
+    (error) => error.code === SOLUTION_DESIGN_ERROR.GENERATED_FILE_MISSING
+  );
+});
+
+test('quotation branch rejects legacy quotation_file uploads and old upload data cannot satisfy C18 gates', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+  const technicalOwner = authUser(db.connection.users.get(12));
+  const generalManager = authUser(db.connection.users.get(30));
+
+  await activateQuotationOrTenderNode(db, storage);
+  await selectQuotationBranch(db);
+  const writeCountBefore = storage.written.length;
+  const uploadFileCountBefore = db.connection.uploadFiles.length;
+  await assert.rejects(
+    () =>
+      uploadSolutionDesignWorkflowFile(
+        {
+          projectId: 100,
+          slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE,
+          file: testUploadFile('旧报价单.xlsx'),
+          user: businessOwner
+        },
+        db,
+        storage
+      ),
+    (error) =>
+      error.code === SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE &&
+      error.message.includes('quotation online form')
+  );
+  assert.equal(storage.written.length, writeCountBefore);
+  assert.equal(db.connection.uploadFiles.length, uploadFileCountBefore);
+
+  await assert.rejects(
+    () =>
+      saveSolutionDesignQuotationForm(
+        {
+          projectId: 100,
+          payload: quotationFormPayload(),
+          user: technicalOwner
+        },
+        db
+      ),
+    (error) => error.code === SOLUTION_DESIGN_ERROR.FORBIDDEN
+  );
+
+  const quotationSlot = db.connection.uploadSlots.find(
+    (slot) => slot.slot_key === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE
+  );
+  assert.ok(quotationSlot);
+  quotationSlot.status = SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.UPLOADED;
+  quotationSlot.revision = 1;
+  db.connection.uploadFiles.push({
+    id: db.connection.nextUploadFileId++,
+    project_id: 100,
+    slot_id: quotationSlot.id,
+    slot_key: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE,
+    revision: 1,
+    original_file_name: '历史报价单.xlsx',
+    storage_key: 'legacy/quotation.xlsx',
+    mime_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    file_size: 123,
+    is_current: 1,
+    uploaded_by_user_id: businessOwner.id,
+    uploaded_at: '2026-07-08 09:59:00',
+    replaced_at: null
+  });
+
+  const workflow = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, db);
+  assert.equal(workflow.quotationTender.permissions.canSubmitQuotation, false);
+  await assert.rejects(
+    () => submitSolutionDesignQuotation({ projectId: 100, user: businessOwner }, db),
+    (error) =>
+      error.code === SOLUTION_DESIGN_ERROR.NODE_BLOCKED &&
+      error.details.includes('quotation_form_generated_file')
+  );
+  await assertStageAdvanceBlocked(db, generalManager, ['C18']);
 });
 
 test('rejected quotation can return to RD cost and old cost revisions cannot bypass the new cycle', async () => {
@@ -6100,20 +6775,30 @@ test('rejected quotation can return to RD cost and old cost revisions cannot byp
   await selectQuotationBranch(db);
   const reselectedUploads = await listSolutionDesignUploads({ projectId: 100, user: businessOwner }, db);
   assert.equal(
-    findUploadSlot(reselectedUploads, SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE).permissions.canUpload,
-    true
+    reselectedUploads.slots.some((slot) => slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE),
+    false
   );
-  const reuploadedQuotation = await uploadSolutionDesignWorkflowFile(
+  const resubmittedQuotation = await submitSolutionDesignQuotationForm(
     {
       projectId: 100,
-      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE,
-      file: testUploadFile('报价单-v2.xlsx'),
+      payload: quotationFormPayload({
+        recipientName: '第二轮客户',
+        items: [
+          {
+            name: '第二轮报价设备',
+            unit: '套',
+            quantity: '1',
+            unitPrice: '2000.00',
+            remark: '第二轮'
+          }
+        ]
+      }),
       user: businessOwner
     },
-    db,
-    storage
+    db
   );
-  assert.equal(reuploadedQuotation.file.revision, 2);
+  assert.equal(resubmittedQuotation.form.revision, 2);
+  assert.equal(resubmittedQuotation.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED);
 });
 
 test('rejected quotation can end project and later solution design writes are blocked', async () => {
@@ -6309,17 +6994,25 @@ test('solution design end-to-end smoke covers quotation and tender happy paths',
   }
 
   await selectQuotationBranch(quotationDb);
-  await uploadSolutionDesignWorkflowFile(
+  await submitSolutionDesignQuotationForm(
     {
       projectId: 100,
-      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE,
-      file: testUploadFile('报价单-smoke.xlsx'),
+      payload: quotationFormPayload({
+        recipientName: 'Smoke 客户',
+        items: [
+          {
+            name: 'Smoke 报价项',
+            unit: '套',
+            quantity: '1',
+            unitPrice: '1234.56',
+            remark: ''
+          }
+        ]
+      }),
       user: businessOwner
     },
-    quotationDb,
-    quotationStorage
+    quotationDb
   );
-  await submitSolutionDesignQuotation({ projectId: 100, user: businessOwner }, quotationDb);
   const accepted = await processSolutionDesignQuotationResult(
     {
       projectId: 100,

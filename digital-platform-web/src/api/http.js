@@ -439,7 +439,11 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'INVALID_CREDENTIALS') {
-    return '账号或密码错误。';
+    return '姓名、账号或密码错误。';
+  }
+
+  if (error.code === 'AMBIGUOUS_LOGIN_IDENTIFIER') {
+    return '存在同名用户，请使用账号登录。';
   }
 
   if (error.code === 'USER_DISABLED') {

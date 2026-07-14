@@ -2,13 +2,10 @@
   <el-container class="app-shell">
     <el-header class="app-header">
       <div class="brand-logo-area">
-        <svg class="logo-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-linecap="round"
-            stroke-linejoin="round" />
-        </svg>
+        <img class="company-logo" :src="companyLogo" alt="重庆凯尔夫智能测控技术有限责任公司 Logo" />
         <div class="brand-text">
           <span class="brand-title">数字化管理平台</span>
-          <span class="brand-subtitle">DIGITAL MANAGEMENT</span>
+          <span class="brand-subtitle">重庆凯尔夫智能测控技术</span>
         </div>
       </div>
 
@@ -90,10 +87,7 @@
 
     <aside class="mobile-sidebar" :class="{ 'mobile-sidebar--open': isSidebarOpen }">
       <div class="mobile-brand-area">
-        <svg class="logo-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-linecap="round"
-            stroke-linejoin="round" />
-        </svg>
+        <img class="company-logo" :src="companyLogo" alt="重庆凯尔夫智能测控技术有限责任公司 Logo" />
         <div class="brand-text">
           <span class="brand-title">数字化管理平台</span>
         </div>
@@ -149,6 +143,7 @@
 </template>
 
 <script setup>
+import companyLogo from '../assets/company-logo.png';
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { getModuleNavigation } from '../api/navigation.js';
 import {

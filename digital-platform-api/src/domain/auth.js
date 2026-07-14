@@ -56,8 +56,8 @@ export function getBearerToken(req) {
   return match ? match[1].trim() : '';
 }
 
-export function assertPasswordInput(account, password) {
-  if (!String(account || '').trim() || !String(password || '')) {
-    throw new AuthError('INVALID_CREDENTIALS', 'Invalid account or password', 401);
+export function assertLoginInput(identifier, password) {
+  if (!String(identifier || '').trim() || !String(password || '')) {
+    throw new AuthError('INVALID_CREDENTIALS', 'Invalid login identifier or password', 401);
   }
 }

@@ -1,13 +1,9 @@
 <template>
   <section class="page-stack stage-document-tasks-page">
     <PageHeader
-      eyebrow="我的待办"
-      title="我的工作台"
-      :current-user="currentUser"
-      subtitle="工作台汇总待我填写资料、待我评价/审批和方案设计事项，进入项目工作区后只定位目标，不自动打开在线表单。"
-    >
+      title="我的工作台">
       <template #actions>
-        <el-button :loading="loading" @click="loadWorkbench">重新加载</el-button>
+        <!-- <el-button :loading="loading" @click="loadWorkbench">重新加载</el-button> -->
       </template>
     </PageHeader>
 

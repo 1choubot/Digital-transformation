@@ -79,6 +79,32 @@ export async function findUserByAccount(account) {
   return mapUserWithPassword(rows[0]);
 }
 
+export async function findLoginUserByIdentifier(identifier, executor = pool) {
+  const normalizedIdentifier = String(identifier || '').trim();
+  const [accountRows] = await executor.execute(
+    'SELECT * FROM users WHERE account = ? LIMIT 1',
+    [normalizedIdentifier]
+  );
+
+  if (accountRows[0]) {
+    return {
+      user: mapUserWithPassword(accountRows[0]),
+      isAmbiguous: false
+    };
+  }
+
+  // Two rows are sufficient to distinguish a unique name from an ambiguous one.
+  const [nameRows] = await executor.execute(
+    'SELECT * FROM users WHERE display_name = ? ORDER BY id ASC LIMIT 2',
+    [normalizedIdentifier]
+  );
+
+  return {
+    user: nameRows.length === 1 ? mapUserWithPassword(nameRows[0]) : null,
+    isAmbiguous: nameRows.length > 1
+  };
+}
+
 export async function findSafeUserById(userId) {
   const [rows] = await pool.execute('SELECT * FROM users WHERE id = ? LIMIT 1', [userId]);
   return mapSafeUser(rows[0]);

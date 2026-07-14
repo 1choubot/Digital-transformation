@@ -1,16 +1,11 @@
 <template>
   <section class="page-stack project-create-page">
     <PageHeader
-      eyebrow="项目主数据"
-      title="新建项目"
-      :current-user="currentUser"
-      subtitle="新建项目完成后进入项目工作区，后续阶段、资料和节点产出在工作区处理。"
-    >
-
+      title="新建项目">
     </PageHeader>
 
     <el-alert v-if="!canCreateProject" title="无权创建项目" description="当前账号无权创建项目。项目创建仅开放给总经理和中心负责人。" type="error" show-icon :closable="false">
-      <template #default><el-button type="primary" size="small" @click="navigate('/projects')">返回项目总览</el-button></template>
+      <!-- <template #default><el-button type="primary" size="small" @click="navigate('/projects')">返回项目总览</el-button></template> -->
     </el-alert>
 
     <el-form v-else class="panel form-grid" :model="form" @submit.prevent="submitProject">

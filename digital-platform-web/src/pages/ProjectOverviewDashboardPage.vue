@@ -1,9 +1,8 @@
 <template>
   <section class="page-stack project-overview-dashboard-page">
-    <PageHeader eyebrow="跨项目入口" title="项目总览" :current-user="currentUser"
-      subtitle="齐套率基于资料 completionMode、基础状态和适用性派生完成状态计算。">
+    <PageHeader title="项目总览">
       <template #actions>
-        <el-button :loading="loading" @click="loadDashboard">重新加载</el-button>
+        <!-- <el-button :loading="loading" @click="loadDashboard">重新加载</el-button> -->
       </template>
     </PageHeader>
 
@@ -37,9 +36,6 @@
       </el-col>
     </el-row>
 
-    <p class="manual-status-note">
-      “我的待办”为当前登录用户工作台中的全局待办数量，不随项目状态、当前阶段或关键字筛选变化。
-    </p>
 
     <el-card class="overview-filter-card" shadow="never">
       <el-form class="overview-filters" label-position="top" @submit.prevent="loadDashboard">

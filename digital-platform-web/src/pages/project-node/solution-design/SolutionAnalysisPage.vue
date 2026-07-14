@@ -1,26 +1,12 @@
 <template>
-  <SolutionDesignNodeLayout
-    :workflow="workflow"
-    :node="currentNode"
-    :loading="context.solutionDesignLoading"
-    :error-message="context.solutionDesignErrorMessage"
-    :message="localMessage"
-    :local-error="localError"
-  >
-    <SolutionGeneratedFile
-      :generated-file="analysisFormDto?.form?.generatedFile"
-      :pending="isPending('analysis:download')"
-      @download="downloadAnalysisGeneratedFile"
-    />
-    <SolutionUploadSlots
-      :slots="slots"
-      :is-pending="isPending"
-      @upload="handleUpload"
-      @download="downloadUpload"
-    />
+  <SolutionDesignNodeLayout :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
+    :error-message="context.solutionDesignErrorMessage" :message="localMessage" :local-error="localError">
+    <GeneratedFormFileCard :generated-file="analysisFormDto?.form?.generatedFile"
+      :pending="isPending('analysis:download')" @download="downloadAnalysisGeneratedFile" />
+    <SolutionUploadSlots :slots="slots" :is-pending="isPending" @upload="handleUpload" @download="downloadUpload" />
 
     <section ref="analysisFormRoot" class="analysis-section">
-      <h4>项目方案分析表</h4>
+
       <el-descriptions :column="3" border>
         <el-descriptions-item label="项目编号">
           {{ project?.projectCode || project?.project_code || '-' }}
@@ -33,66 +19,37 @@
         </el-descriptions-item>
       </el-descriptions>
 
-      <section
-        v-for="section in analysisSections"
-        :key="section.key"
-        class="solution-analysis-form-section"
-      >
+      <section v-for="section in analysisSections" :key="section.key" class="solution-analysis-form-section">
         <h4>{{ section.title }}</h4>
-        <SolutionFormFields
-          :fields="section.fields"
-          :model="analysisFormData"
-          :invalid-field-keys="invalidFieldKeys"
-          :disabled="!analysisFormDto?.permissions?.canEditForm"
-          @update="updateAnalysisFormField"
-        >
+        <SolutionFormFields :fields="section.fields" :model="analysisFormData" :invalid-field-keys="invalidFieldKeys"
+          :disabled="!analysisFormDto?.permissions?.canEditForm" @update="updateAnalysisFormField">
           <template #after-field="{ field }">
-            <div
-              v-if="field.imageField"
-              :data-field-key="field.imageField.key"
-              class="solution-form-field-images"
-              :class="{ 'online-form-field--invalid': isFieldInvalid(field.imageField.key) }"
-            >
+            <div v-if="field.imageField" :data-field-key="field.imageField.key" class="solution-form-field-images"
+              :class="{ 'online-form-field--invalid': isFieldInvalid(field.imageField.key) }">
               <div class="form-field-label">
                 <strong>{{ field.imageField.label }}</strong>
                 <small class="form-field-description">{{ field.imageField.description }}</small>
               </div>
-              <el-upload
-                class="solution-form-image-upload"
-                :show-file-list="false"
-                accept="image/png,image/jpeg"
+              <el-upload class="solution-form-image-upload" :show-file-list="false" accept="image/png,image/jpeg"
                 :disabled="!analysisFormDto?.permissions?.canEditForm || imagesFor(field.imageField).length >= field.imageField.maxImages"
-                :http-request="options => uploadAnalysisImage({ field: field.imageField, file: options.file })"
-              >
-                <el-button
-                  :disabled="!analysisFormDto?.permissions?.canEditForm || imagesFor(field.imageField).length >= field.imageField.maxImages"
-                >
+                :http-request="options => uploadAnalysisImage({ field: field.imageField, file: options.file })">
+                <el-button type="primary"
+                  :disabled="!analysisFormDto?.permissions?.canEditForm || imagesFor(field.imageField).length >= field.imageField.maxImages">
                   选择图片（{{ imagesFor(field.imageField).length }}/{{ field.imageField.maxImages }}）
                 </el-button>
               </el-upload>
               <small v-if="isFieldInvalid(field.imageField.key)" class="form-field-error">
                 请上传{{ field.imageField.label }}
               </small>
-              <div
-                v-for="image in imagesFor(field.imageField)"
-                :key="image.id"
-                class="image-row"
-              >
+              <div v-for="image in imagesFor(field.imageField)" :key="image.id" class="image-row">
                 <span>{{ image.originalFileName }}</span>
                 <div>
-                  <el-button
-                    v-if="image.permissions?.canDownload !== false"
-                    link
-                    @click="downloadAnalysisImage({ image })"
-                  >
+                  <el-button v-if="image.permissions?.canDownload !== false" link
+                    @click="downloadAnalysisImage({ image })">
                     下载
                   </el-button>
-                  <el-button
-                    v-if="image.permissions?.canDelete ?? analysisFormDto?.permissions?.canEditForm"
-                    type="danger"
-                    link
-                    @click="confirmDelete(image)"
-                  >
+                  <el-button v-if="image.permissions?.canDelete ?? analysisFormDto?.permissions?.canEditForm"
+                    type="danger" link @click="confirmDelete(image)">
                     删除
                   </el-button>
                 </div>
@@ -103,35 +60,21 @@
       </section>
 
       <div class="action-row">
-        <el-button
-          :disabled="!analysisFormDto?.permissions?.canEditForm"
-          :loading="isPending('analysis:save')"
-          @click="saveAnalysisForm"
-        >
+        <el-button :disabled="!analysisFormDto?.permissions?.canEditForm" :loading="isPending('analysis:save')"
+          @click="saveAnalysisForm">
           保存草稿
         </el-button>
-        <el-button
-          type="primary"
-          :disabled="!analysisFormDto?.permissions?.canSubmitForm"
-          :loading="isPending('analysis:submit')"
-          @click="handleSubmitAnalysisForm"
-        >
+        <el-button type="primary" :disabled="!analysisFormDto?.permissions?.canSubmitForm"
+          :loading="isPending('analysis:submit')" @click="handleSubmitAnalysisForm">
           提交表单
         </el-button>
       </div>
     </section>
 
-    <SolutionNodeActions
-      v-if="currentNode"
-      :node="currentNode"
-      :is-pending="isPending"
-      :submit-disabled="generatedBlocksSubmit"
-      :return-reason="returnReasons[nodeKey] || ''"
-      @update:return-reason="returnReasons[nodeKey] = $event"
-      @submit="submitNode(nodeKey)"
-      @approve="approveNode(nodeKey)"
-      @return="returnNode(nodeKey)"
-    />
+    <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending"
+      :submit-disabled="generatedBlocksSubmit" :return-reason="returnReasons[nodeKey] || ''"
+      @update:return-reason="returnReasons[nodeKey] = $event" @submit="submitNode(nodeKey)"
+      @approve="approveNode(nodeKey)" @return="returnNode(nodeKey)" />
   </SolutionDesignNodeLayout>
 </template>
 
@@ -142,7 +85,7 @@ import SolutionDesignNodeLayout from '../../../components/project-workspace/solu
 import SolutionUploadSlots from '../../../components/project-workspace/solution-design/SolutionUploadSlots.vue';
 import SolutionNodeActions from '../../../components/project-workspace/solution-design/SolutionNodeActions.vue';
 import SolutionFormFields from '../../../components/project-workspace/solution-design/SolutionFormFields.vue';
-import SolutionGeneratedFile from '../../../components/project-workspace/solution-design/SolutionGeneratedFile.vue';
+import GeneratedFormFileCard from '../../../components/GeneratedFormFileCard.vue';
 import { analysisSections } from '../../../components/project-workspace/solution-design/solutionDesignFields.js';
 import {
   solutionDesignNodePageProps,

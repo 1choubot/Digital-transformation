@@ -2,6 +2,27 @@ import { computed, ref, watch } from 'vue';
 
 const emptyObject = Object.freeze({});
 
+export function normalizeNodeGeneratedFile(source, nodeStatus = '') {
+  const status = source?.status || 'not_started';
+  const isRework = [
+    'returned',
+    'returned_for_rework',
+    'blocked_by_rework',
+    'returned_blocked_by_rework',
+    'invalidated'
+  ].includes(nodeStatus);
+
+  return {
+    status,
+    fileName: source?.fileName || source?.downloadableFileName || null,
+    fileSize: source?.fileSize || null,
+    generatedAt: source?.generatedAt || null,
+    errorMessage: source?.failureSummary || source?.failureReason || source?.errorMessage || null,
+    // 失败记录可能关联历史可下载文件；节点表单只允许下载当前成功版本。
+    canDownload: status === 'generated' && source?.downloadable === true && !isRework
+  };
+}
+
 function normalizeNodeCodes(value, props) {
   const source = typeof value === 'function' ? value(props) : value;
   if (Array.isArray(source)) {
@@ -29,6 +50,13 @@ export function useNodeOnlineForm({ props, emit, documentCode, affectedNodeCodes
   const activeForm = computed(() =>
     isActiveOutputForm.value ? context.value.activeOnlineForm || null : null
   );
+  const generatedFile = computed(() => {
+    return normalizeNodeGeneratedFile(output.value?.generatedFile, props.node?.nodeStatus || '');
+  });
+  const generatedFileDownloadPending = computed(() => Boolean(
+    output.value?.documentId &&
+    context.value.isActionPending?.(output.value.documentId, 'download-generated-file')
+  ));
   const unavailableMessage = computed(() => {
     if (!output.value) {
       return `当前节点尚未返回 ${documentCode} 在线表单。`;
@@ -123,14 +151,7 @@ export function useNodeOnlineForm({ props, emit, documentCode, affectedNodeCodes
       return;
     }
 
-    if (activeForm.value?.permissions?.canEdit) {
-      const saved = await invoke('saveOnlineForm', { refreshWorkspace: false, showMessage: false });
-      if (saved === false) {
-        return;
-      }
-    }
-
-    await invoke('downloadOnlineFormFile', targetOutput);
+    await invoke('downloadGeneratedFile', targetOutput);
   }
 
   return {
@@ -138,6 +159,8 @@ export function useNodeOnlineForm({ props, emit, documentCode, affectedNodeCodes
     context,
     output,
     activeForm,
+    generatedFile,
+    generatedFileDownloadPending,
     unavailableMessage,
     invoke,
     saveOnlineForm,

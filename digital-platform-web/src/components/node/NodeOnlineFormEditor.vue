@@ -1,160 +1,78 @@
 <template>
   <section v-if="form" ref="editorRoot" class="online-form-editor" aria-label="在线表单动作区">
     <div class="project-workspace__detail-heading">
-      <div>
-        <!-- <span class="section-eyebrow">在线表单</span> -->
         <h3>{{ form.documentName }}</h3>
-      </div>
-      <div class="online-form-editor__heading-actions">
-        <el-button
-          class="form-download-button"
-          type="primary"
-          size="large"
-          :loading="downloading"
-          :disabled="downloadDisabled"
-          @click="$emit('download-form')"
-        >
-          下载表单
-        </el-button>
-        <!-- <el-tag :type="statusTagType(nodeStatus || form.status)">
-          {{ formatHeaderStatus(nodeStatus, form.status) }}
-        </el-tag> -->
-      </div>
     </div>
 
-    <el-alert
-      v-if="blockingReasons.length"
-      :title="`阻塞原因：${blockingReasons.join('；')}`"
-      type="warning"
-      show-icon
-      :closable="false"
+    <GeneratedFormFileCard
+      :generated-file="generatedFile"
+      :pending="downloadPending"
+      @download="$emit('download-form')"
     />
+    <slot name="generated-files" />
+
+    <el-alert v-if="blockingReasons.length" :title="`阻塞原因：${blockingReasons.join('；')}`" type="warning" show-icon
+      :closable="false" />
 
     <el-alert v-if="errorMessage" :description="errorMessage" type="error" show-icon :closable="false" />
     <el-form class="online-form-editor__form" :model="formData" @submit.prevent="handleSubmit">
-      <section v-if="form.schema?.noticeTemplate" class="online-form-notice-preview">
-        <h4>{{ form.schema.noticeTemplate.title }}</h4>
-        <p v-for="paragraph in form.schema.noticeTemplate.bodyParagraphs" :key="paragraph">
-          {{ paragraph }}
-        </p>
-        <div class="online-form-notice-table" role="table" aria-label="立项通知项目表格">
-          <div class="online-form-notice-table__row online-form-notice-table__row--head" role="row">
-            <span v-for="column in form.schema.noticeTemplate.tableColumns" :key="column" role="columnheader">
-              {{ column }}
-            </span>
-          </div>
-          <div class="online-form-notice-table__row" role="row">
-            <span v-for="column in form.schema.noticeTemplate.tableColumns" :key="column" role="cell">
-              {{ getNoticeTableValue(column) }}
-            </span>
-          </div>
-        </div>
-        <p class="online-form-notice-preview__signer">{{ form.schema.noticeTemplate.signer }}</p>
-        <p class="online-form-notice-preview__date">{{ formData.noticeDate || '日期待填写' }}</p>
-      </section>
-
       <section v-for="section in getSchemaSections(form)" :key="section.key" class="online-form-section">
-        <h4>{{ section.title }}</h4>
+        <h4 v-if="section.title">{{ section.title }}</h4>
         <div class="form-grid">
-          <label
-            v-for="field in section.fields || []"
-            :key="field.key"
-            :data-field-key="field.key"
-            :class="getFieldClass(field)"
-          >
+          <label v-for="field in section.fields || []" :key="field.key" :data-field-key="field.key"
+            :class="getFieldClass(field)">
             <span class="form-field-label">
               <span>{{ field.label }}{{ field.required ? ' *' : '' }}</span>
               <small v-if="field.description" class="form-field-description">{{ field.description }}</small>
             </span>
-            <el-select
-              v-if="field.type === 'select'"
-              :model-value="formData[field.key]"
-              :disabled="isOnlineFormFieldDisabled(field)"
-              placeholder="请选择"
-              @change="$emit('update-field', { key: field.key, value: $event })"
-            >
+            <el-select v-if="field.type === 'select'" :model-value="formData[field.key]"
+              :disabled="isOnlineFormFieldDisabled(field)" placeholder="请选择"
+              @change="$emit('update-field', { key: field.key, value: $event })">
               <el-option v-for="option in field.options || []" :key="option" :label="option" :value="option" />
             </el-select>
-            <el-select
-              v-else-if="field.type === 'score'"
-              :model-value="formData[field.key]"
-              :disabled="isOnlineFormFieldDisabled(field)"
-              placeholder="请选择分值"
-              @change="$emit('update-field', { key: field.key, value: String($event) })"
-            >
+            <el-select v-else-if="field.type === 'score'" :model-value="formData[field.key]"
+              :disabled="isOnlineFormFieldDisabled(field)" placeholder="请选择分值"
+              @change="$emit('update-field', { key: field.key, value: String($event) })">
               <el-option v-for="score in scoreOptions" :key="score" :label="String(score)" :value="String(score)" />
             </el-select>
-            <el-input
-              v-else-if="field.type === 'textarea'"
-              type="textarea"
-              :rows="3"
-              :model-value="formData[field.key]"
+            <el-input v-else-if="field.type === 'textarea'" type="textarea" :rows="3" :model-value="formData[field.key]"
               :disabled="isOnlineFormFieldDisabled(field)"
-              @update:model-value="$emit('update-field', { key: field.key, value: $event })"
-            />
+              @update:model-value="$emit('update-field', { key: field.key, value: $event })" />
             <div v-else-if="field.type === 'image'" class="online-form-image-field">
               <div v-if="getOnlineFormImages(field.key).length" class="online-form-image-field__list">
-                <div
-                  v-for="(image, imageIndex) in getOnlineFormImages(field.key)"
-                  :key="image.id"
-                  class="online-form-image-field__current"
-                >
+                <div v-for="(image, imageIndex) in getOnlineFormImages(field.key)" :key="image.id"
+                  class="online-form-image-field__current">
                   <div>
                     <strong>{{ imageIndex + 1 }}. {{ image.originalFileName }}</strong>
                     <small>{{ formatFileSize(image.fileSize) }}</small>
                   </div>
                   <div class="online-form-image-field__actions">
-                    <el-button
-                      link
-                      type="primary"
-                      :loading="isImageDownloadPending(image)"
-                      @click="$emit('download-image', { field, image })"
-                    >
+                    <el-button link type="primary" :loading="isImageDownloadPending(image)"
+                      @click="$emit('download-image', { field, image })">
                       下载
                     </el-button>
-                    <el-button
-                      link
-                      type="danger"
-                      :loading="isImageDeletePending(image)"
-                      :disabled="isOnlineFormFieldDisabled(field)"
-                      @click="$emit('delete-image', { field, image })"
-                    >
+                    <el-button link type="danger" :loading="isImageDeletePending(image)"
+                      :disabled="isOnlineFormFieldDisabled(field)" @click="$emit('delete-image', { field, image })">
                       删除
                     </el-button>
                   </div>
                 </div>
               </div>
-              <el-upload
-                class="online-form-image-field__upload"
-                :show-file-list="false"
-                accept="image/png,image/jpeg"
+              <el-upload class="online-form-image-field__upload" :show-file-list="false" accept="image/png,image/jpeg"
                 :disabled="isOnlineFormFieldDisabled(field) || isImageUploadPending(field) || isImageLimitReached(field)"
-              :http-request="(request) => handleImageUpload(field, request)"
-            >
-              <el-button
-                :loading="isImageUploadPending(field)"
-                :disabled="isOnlineFormFieldDisabled(field) || isImageLimitReached(field)"
-              >
-                {{ getImageUploadText(field) }}
-              </el-button>
-            </el-upload>
+                :http-request="(request) => handleImageUpload(field, request)">
+                <el-button type="primary" :loading="isImageUploadPending(field)"
+                  :disabled="isOnlineFormFieldDisabled(field) || isImageLimitReached(field)">
+                  {{ getImageUploadText(field) }}
+                </el-button>
+              </el-upload>
             </div>
-            <el-date-picker
-              v-else-if="field.type === 'date'"
-              :model-value="formData[field.key]"
-              type="date"
-              value-format="YYYY-MM-DD"
-              placeholder="选择日期"
+            <el-date-picker v-else-if="field.type === 'date'" :model-value="formData[field.key]" type="date"
+              value-format="YYYY-MM-DD" placeholder="选择日期" :disabled="isOnlineFormFieldDisabled(field)"
+              @update:model-value="$emit('update-field', { key: field.key, value: $event || '' })" />
+            <el-input v-else :model-value="formData[field.key]" :readonly="field.readOnly"
               :disabled="isOnlineFormFieldDisabled(field)"
-              @update:model-value="$emit('update-field', { key: field.key, value: $event || '' })"
-            />
-            <el-input
-              v-else
-              :model-value="formData[field.key]"
-              :readonly="field.readOnly"
-              :disabled="isOnlineFormFieldDisabled(field)"
-              @update:model-value="$emit('update-field', { key: field.key, value: $event })"
-            />
+              @update:model-value="$emit('update-field', { key: field.key, value: $event })" />
             <small v-if="isFieldInvalid(field.key)" class="form-field-error">
               {{ getFieldValidationMessage(field.key) }}
             </small>
@@ -162,28 +80,16 @@
         </div>
       </section>
 
-      <section
-        v-for="section in form.schema?.scoringSections || []"
-        :key="section.key"
-        class="online-form-section"
-      >
+      <section v-for="section in form.schema?.scoringSections || []" :key="section.key" class="online-form-section">
         <h4>{{ section.title }}</h4>
         <div class="online-form-score-list">
-          <article
-            v-for="item in section.items || []"
-            :key="item.key"
-            :data-field-key="`${item.key}Score`"
+          <article v-for="item in section.items || []" :key="item.key" :data-field-key="`${item.key}Score`"
             class="online-form-score-card"
-            :class="{ 'online-form-field--invalid': isFieldInvalid(`${item.key}Score`) }"
-          >
+            :class="{ 'online-form-field--invalid': isFieldInvalid(`${item.key}Score`) }">
             <header>
               <strong>{{ item.itemName }}</strong>
             </header>
             <dl class="online-form-score-card__template">
-              <div>
-                <dt>条款内容</dt>
-                <dd>{{ item.clauseContent || '-' }}</dd>
-              </div>
               <div>
                 <dt>评价标准</dt>
                 <dd>{{ item.evaluationStandard || '-' }}</dd>
@@ -192,12 +98,9 @@
             <div class="online-form-score-card__inputs">
               <label>
                 <span>分值 0-5 *</span>
-                <el-select
-                  :model-value="formData[`${item.key}Score`]"
-                  :disabled="isOnlineFormPartDisabled(section.editablePart)"
-                  placeholder="请选择分值"
-                  @change="$emit('update-field', { key: `${item.key}Score`, value: $event })"
-                >
+                <el-select :model-value="formData[`${item.key}Score`]"
+                  :disabled="isOnlineFormPartDisabled(section.editablePart)" placeholder="请选择分值"
+                  @change="$emit('update-field', { key: `${item.key}Score`, value: $event })">
                   <el-option v-for="score in scoreOptions" :key="score" :label="String(score)" :value="String(score)" />
                 </el-select>
                 <small v-if="isFieldInvalid(`${item.key}Score`)" class="form-field-error">
@@ -206,21 +109,15 @@
               </label>
               <label>
                 <span>信息收集说明（选填）</span>
-                <el-input
-                  type="textarea"
-                  :rows="2"
-                  :model-value="formData[`${item.key}InformationNotes`]"
+                <el-input type="textarea" :rows="2" :model-value="formData[`${item.key}InformationNotes`]"
                   :disabled="isOnlineFormPartDisabled(section.editablePart)"
-                  @update:model-value="$emit('update-field', { key: `${item.key}InformationNotes`, value: $event })"
-                />
+                  @update:model-value="$emit('update-field', { key: `${item.key}InformationNotes`, value: $event })" />
               </label>
               <label>
                 <span>责任人（选填）</span>
-                <el-input
-                  :model-value="formData[`${item.key}ResponsiblePerson`]"
+                <el-input :model-value="formData[`${item.key}ResponsiblePerson`]"
                   :disabled="isOnlineFormPartDisabled(section.editablePart)"
-                  @update:model-value="$emit('update-field', { key: `${item.key}ResponsiblePerson`, value: $event })"
-                />
+                  @update:model-value="$emit('update-field', { key: `${item.key}ResponsiblePerson`, value: $event })" />
               </label>
             </div>
           </article>
@@ -228,7 +125,6 @@
       </section>
 
       <section v-if="form.reviewOpinions?.length" class="online-form-section">
-        <h4>三方意见</h4>
         <div class="online-form-review-opinions">
           <article v-for="opinion in form.reviewOpinions" :key="opinion.nodeKey" class="online-form-review-opinion">
             <strong>{{ opinion.nodeName }}</strong>
@@ -237,26 +133,18 @@
             </el-tag>
             <p>{{ opinion.comment || opinion.returnReason || '暂无意见' }}</p>
             <small>
-              {{ opinion.reviewedByName || opinion.reviewerName || '待处理' }}{{ opinion.reviewedAt ? ` · ${opinion.reviewedAt}` : '' }}
+              {{ opinion.reviewedByName || opinion.reviewerName || '待处理' }}{{ opinion.reviewedAt ? ` ·
+              ${opinion.reviewedAt}` : '' }}
             </small>
           </article>
         </div>
       </section>
 
       <div class="form-actions online-form-editor__actions">
-        <el-button
-          :loading="saving"
-          :disabled="!form.permissions?.canEdit"
-          @click="$emit('save')"
-        >
+        <el-button :loading="saving" :disabled="!form.permissions?.canEdit" @click="$emit('save')">
           保存草稿
         </el-button>
-        <el-button
-          type="primary"
-          native-type="submit"
-          :loading="submitting"
-          :disabled="!form.permissions?.canSubmit"
-        >
+        <el-button type="primary" native-type="submit" :loading="submitting" :disabled="!form.permissions?.canSubmit">
           {{ getOnlineFormSubmitLabel() }}
         </el-button>
       </div>
@@ -267,6 +155,7 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
+import GeneratedFormFileCard from '../GeneratedFormFileCard.vue';
 import { getMissingRequiredFields } from '../../utils/formValidation.js';
 
 const emit = defineEmits([
@@ -308,11 +197,11 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
-  downloading: {
-    type: Boolean,
-    default: false
+  generatedFile: {
+    type: Object,
+    default: null
   },
-  downloadDisabled: {
+  downloadPending: {
     type: Boolean,
     default: false
   },
@@ -488,18 +377,6 @@ function getOnlineFormSubmitLabel() {
   }
 
   return '提交表单';
-}
-
-function getNoticeTableValue(column) {
-  const keyByColumn = {
-    序号: 'sequenceNumber',
-    项目编号: 'projectCode',
-    项目名称: 'projectName',
-    客户单位: 'customerUnit',
-    立项日期: 'initiationDate'
-  };
-  const key = keyByColumn[column];
-  return key ? props.formData[key] || '-' : '-';
 }
 
 function statusTagType(status) {

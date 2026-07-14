@@ -1334,7 +1334,7 @@ p {
   gap: 7px;
 }
 
-.form-grid label span {
+.form-grid label > .form-field-label > span {
   color: #3c4b5b;
   font-size: 13px;
   font-weight: 700;
@@ -1500,6 +1500,10 @@ p {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.project-create-actions {
+  justify-content: center;
 }
 
 .detail-grid {
@@ -2671,8 +2675,7 @@ p {
 .online-form-editor__form,
 .online-form-section,
 .online-form-score-list,
-.online-form-review-opinions,
-.online-form-notice-preview {
+.online-form-review-opinions {
   display: grid;
   gap: 12px;
   min-width: 0;
@@ -2690,8 +2693,7 @@ p {
   align-items: stretch;
 }
 
-.online-form-section h4,
-.online-form-notice-preview h4 {
+.online-form-section h4 {
   margin: 0;
   color: #17212f;
   font-size: 15px;
@@ -2726,8 +2728,7 @@ p {
 }
 
 .online-form-score-card,
-.online-form-review-opinion,
-.online-form-notice-preview {
+.online-form-review-opinion {
   border: 1px solid #dce5ee;
   border-radius: 8px;
   background: #ffffff;
@@ -2788,53 +2789,6 @@ p {
 .online-form-score-list {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
-}
-
-.online-form-notice-preview p {
-  margin: 0;
-  color: #253241;
-  line-height: 1.7;
-  overflow-wrap: anywhere;
-}
-
-.online-form-notice-table {
-  display: grid;
-  border: 1px solid #d5dfe9;
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.online-form-notice-table__row {
-  display: grid;
-  grid-template-columns: 0.45fr minmax(110px, 1fr) minmax(130px, 1.2fr) minmax(120px, 1fr) minmax(110px, 1fr);
-}
-
-.online-form-notice-table__row + .online-form-notice-table__row {
-  border-top: 1px solid #d5dfe9;
-}
-
-.online-form-notice-table__row span {
-  min-width: 0;
-  padding: 9px;
-  border-right: 1px solid #d5dfe9;
-  color: #253241;
-  font-size: 13px;
-  overflow-wrap: anywhere;
-}
-
-.online-form-notice-table__row span:last-child {
-  border-right: 0;
-}
-
-.online-form-notice-table__row--head span {
-  background: #f1f5f8;
-  color: #3c4b5b;
-  font-weight: 700;
-}
-
-.online-form-notice-preview__signer,
-.online-form-notice-preview__date {
-  justify-self: end;
 }
 
 .online-form-review-opinion {
@@ -2976,23 +2930,12 @@ p {
 }
 
 .stage-document-attachment-upload__button {
-  position: relative;
-  overflow: hidden;
   width: fit-content;
   min-width: 88px;
-  text-align: center;
 }
 
-.stage-document-attachment-upload__button input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.stage-document-attachment-upload__button:has(input:disabled) {
-  cursor: not-allowed;
-  opacity: 0.65;
+.stage-document-attachment-upload__button .el-button {
+  min-width: 88px;
 }
 
 .stage-document-attachment-list {
@@ -3408,10 +3351,6 @@ p {
     grid-template-columns: 1fr;
   }
 
-  .online-form-notice-table__row {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-
   .overview-summary-grid,
   .overview-filters,
   .task-card__meta {
@@ -3611,22 +3550,8 @@ p {
   }
 
   .online-form-section,
-  .online-form-score-card,
-  .online-form-notice-preview {
+  .online-form-score-card {
     padding: 10px;
-  }
-
-  .online-form-notice-table__row {
-    grid-template-columns: 1fr;
-  }
-
-  .online-form-notice-table__row span {
-    border-right: 0;
-    border-bottom: 1px solid #d5dfe9;
-  }
-
-  .online-form-notice-table__row span:last-child {
-    border-bottom: 0;
   }
 
   .info-list div {
@@ -4000,7 +3925,7 @@ p {
         }
     }
 
-/* Migrated from digital-platform-web/src/components/project-workspace/solution-design/SolutionGeneratedFile.vue */
+/* Shared generated-file status card for initiation and solution-design forms. */
 .generated-file-card {
         display: flex;
         justify-content: space-between;
@@ -4012,8 +3937,14 @@ p {
         align-items: center;
     }
 
-    .generated-file-card .generated-file-card>div {
+    .generated-file-card__content {
         display: grid;
+        gap: var(--space-2, 8px)
+    }
+
+    .generated-file-card__heading {
+        display: flex;
+        align-items: center;
         gap: var(--space-2, 8px)
     }
 

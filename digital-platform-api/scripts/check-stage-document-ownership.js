@@ -295,6 +295,22 @@ function buildSmokeNoticeFormData(patch = {}) {
   };
 }
 
+function getSmokeShanghaiDateString(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(now);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${byType.year}-${byType.month}-${byType.day}`;
+}
+
+function formatSmokeChineseDate(dateText) {
+  const [year, month, day] = dateText.split('-').map(Number);
+  return `${year}年${month}月${day}日`;
+}
+
 function departmentUser(id, organizationRole, department) {
   return {
     id,
@@ -3524,6 +3540,9 @@ async function runInitiationReviewSmoke({
   assert.equal(gateReadyNoticeWithProjectCode.formData.projectCode, '');
   assert.equal(gateReadyNoticeWithProjectCode.formData.projectName, projectCodeDetail.project.projectName);
   assert.equal(gateReadyNoticeWithProjectCode.formData.customerUnit, projectCodeDetail.project.customerName);
+  const expectedNoticeBusinessDate = getSmokeShanghaiDateString();
+  assert.equal(gateReadyNoticeWithProjectCode.formData.initiationDate, expectedNoticeBusinessDate);
+  assert.equal(gateReadyNoticeWithProjectCode.formData.noticeDate, expectedNoticeBusinessDate);
   await assertGeneratedFileDownloadErrorHandled({
     projectId,
     documentId: gateReadyNotice.id,
@@ -3553,8 +3572,8 @@ async function runInitiationReviewSmoke({
     noticeFormData.projectCode,
     projectDetailAfterNotice.project.projectName,
     projectDetailAfterNotice.project.customerName,
-    noticeFormData.initiationDate,
-    '2026年7月8日'
+    expectedNoticeBusinessDate,
+    formatSmokeChineseDate(expectedNoticeBusinessDate)
   ]);
   assert.equal(noticeDocumentXml.includes('2026年2月9日'), false);
   assert.equal(noticeDocumentXml.includes('2026-07-08'), false);

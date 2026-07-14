@@ -69,7 +69,6 @@ import {
   downloadStageDocumentAttachment,
   downloadStageDocumentGeneratedFile,
   downloadStageDocumentOnlineFormImage,
-  generateStageDocumentOnlineFormFile,
   getProjectDetail,
   // getProjectStageDocumentChecklist 保留为工作区文档数据源：
   // 节点专属页面通过 getOutputDocument 查找文档详情
@@ -174,7 +173,6 @@ const onlineFormData = reactive({});
 const onlineFormLoading = ref(false);
 const onlineFormSaving = ref(false);
 const onlineFormSubmitting = ref(false);
-const onlineFormDownloadPendingDocumentId = ref(null);
 const onlineFormErrorMessage = ref('');
 
 /* ── 责任人候选人状态 ── */
@@ -463,7 +461,6 @@ const nodePageContext = computed(() => ({
   onlineFormLoading: onlineFormLoading.value,
   onlineFormSaving: onlineFormSaving.value,
   onlineFormSubmitting: onlineFormSubmitting.value,
-  onlineFormDownloadPendingDocumentId: onlineFormDownloadPendingDocumentId.value,
   onlineFormErrorMessage: onlineFormErrorMessage.value,
   onlineFormImageState,
   responsibilityCandidates: visibleResponsibilityCandidates.value,
@@ -505,7 +502,6 @@ const nodePageContext = computed(() => ({
   uploadOnlineFormImage,
   downloadOnlineFormImage,
   deleteOnlineFormImage,
-  downloadOnlineFormFile,
   downloadGeneratedFile,
   refreshSolutionDesignState,
   handleBusinessStateChanged
@@ -1537,49 +1533,6 @@ async function downloadGeneratedFile(output) {
   } catch (error) {
     actionErrorMessage.value = toReadableApiError(error);
   } finally {
-    pendingAction.value = '';
-  }
-}
-
-async function downloadOnlineFormFile(output) {
-  clearActionState();
-  const document = getOutputDocument(output);
-  const documentId = document?.id || output?.documentId || activeOnlineForm.value?.stageDocumentId;
-
-  if (!documentId) {
-    onlineFormErrorMessage.value = '关联资料尚未初始化，无法下载在线表单。';
-    actionErrorMessage.value = onlineFormErrorMessage.value;
-    return;
-  }
-
-  onlineFormDownloadPendingDocumentId.value = documentId;
-  pendingAction.value = actionKey(documentId, 'download-online-form-file');
-  onlineFormErrorMessage.value = '';
-
-  try {
-    await generateStageDocumentOnlineFormFile(props.projectId, documentId, props.authToken);
-    const download = await downloadStageDocumentGeneratedFile(props.projectId, documentId, props.authToken);
-    const url = URL.createObjectURL(download.blob);
-    const link = globalThis.document.createElement('a');
-    link.href = url;
-    link.download =
-      download.fileName ||
-      output?.generatedFile?.downloadableFileName ||
-      output?.generatedFile?.fileName ||
-      `${activeOnlineForm.value?.documentName || document?.documentName || 'online-form'}`;
-    globalThis.document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-    actionMessage.value = '在线表单文件已生成并开始下载。';
-  } catch (error) {
-    onlineFormErrorMessage.value = toReadableApiError(error);
-    actionErrorMessage.value = onlineFormErrorMessage.value;
-    onlineFormDownloadPendingDocumentId.value = null;
-    pendingAction.value = '';
-    return;
-  } finally {
-    onlineFormDownloadPendingDocumentId.value = null;
     pendingAction.value = '';
   }
 }

@@ -1,52 +1,26 @@
 <template>
-  <SolutionDesignNodeLayout
-    :workflow="workflow"
-    :node="currentNode"
-    :loading="context.solutionDesignLoading"
-    :error-message="context.solutionDesignErrorMessage"
-  >
-    <SolutionGeneratedFile
-      :generated-file="activeDto?.form?.generatedFile"
-      :pending="isPending(`review:${nodeKey}:download`)"
-      @download="downloadReviewGeneratedFile(nodeKey)"
-    />
+  <GeneratedFormFileCard :generated-file="activeDto?.form?.generatedFile"
+    :pending="isPending(`review:${nodeKey}:download`)" @download="downloadReviewGeneratedFile(nodeKey)" />
+  <SolutionDesignNodeLayout :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
+    :error-message="context.solutionDesignErrorMessage">
     <section ref="reviewFormRoot" class="review-section">
-      <h4>{{ nodeKey === 'internal_solution_review' ? 'C15 内部方案评审记录表' : 'C16 客户方案评审记录表' }}</h4>
-      <SolutionFormFields
-        :fields="fields"
-        :model="reviewFormData"
-        :invalid-field-keys="invalidFieldKeys"
-        :disabled="!activeDto?.permissions?.canEditReviewForm"
-        @update="updateReviewFormField"
-      />
+
+      <SolutionFormFields :fields="fields" :model="reviewFormData" :invalid-field-keys="invalidFieldKeys"
+        :disabled="!activeDto?.permissions?.canEditReviewForm" @update="updateReviewFormField" />
       <div class="action-row">
-        <el-button
-          :disabled="!activeDto?.permissions?.canEditReviewForm"
-          :loading="isPending(`review:${nodeKey}:save`)"
-          @click="saveReviewForm(nodeKey)"
-        >
+        <el-button :disabled="!activeDto?.permissions?.canEditReviewForm" :loading="isPending(`review:${nodeKey}:save`)"
+          @click="saveReviewForm(nodeKey)">
           保存草稿
         </el-button>
-        <el-button
-          type="primary"
-          :disabled="!activeDto?.permissions?.canSubmitReviewForm"
-          :loading="isPending(`review:${nodeKey}:submit`)"
-          @click="handleSubmitReviewForm"
-        >
+        <el-button type="primary" :disabled="!activeDto?.permissions?.canSubmitReviewForm"
+          :loading="isPending(`review:${nodeKey}:submit`)" @click="handleSubmitReviewForm">
           提交表单
         </el-button>
       </div>
     </section>
-    <SolutionNodeActions
-      v-if="currentNode"
-      :node="currentNode"
-      :is-pending="isPending"
-      :return-reason="returnReasons[nodeKey] || ''"
-      @update:return-reason="returnReasons[nodeKey] = $event"
-      @submit="submitNode(nodeKey)"
-      @approve="approveNode(nodeKey)"
-      @return="returnNode(nodeKey)"
-    />
+    <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending"
+      :return-reason="returnReasons[nodeKey] || ''" @update:return-reason="returnReasons[nodeKey] = $event"
+      @submit="submitNode(nodeKey)" @approve="approveNode(nodeKey)" @return="returnNode(nodeKey)" />
   </SolutionDesignNodeLayout>
 </template>
 
@@ -56,7 +30,7 @@ import { ElMessage } from 'element-plus';
 import SolutionDesignNodeLayout from './SolutionDesignNodeLayout.vue';
 import SolutionNodeActions from './SolutionNodeActions.vue';
 import SolutionFormFields from './SolutionFormFields.vue';
-import SolutionGeneratedFile from './SolutionGeneratedFile.vue';
+import GeneratedFormFileCard from '../../GeneratedFormFileCard.vue';
 import { solutionDesignNodePageProps, useSolutionDesignNodePage } from '../../../composables/project-stage/solution-design/useSolutionDesignNodePage.js';
 import { useSolutionReviewForm } from '../../../composables/project-stage/solution-design/useSolutionReviewForm.js';
 import { getMissingRequiredFields } from '../../../utils/formValidation.js';

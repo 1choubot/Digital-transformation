@@ -9,8 +9,8 @@
       :error-message="context.onlineFormErrorMessage || ''"
       :saving="context.onlineFormSaving === true"
       :submitting="context.onlineFormSubmitting === true"
-      :downloading="String(context.onlineFormDownloadPendingDocumentId || '') === String(output?.documentId || '')"
-      :download-disabled="!output?.documentId"
+      :generated-file="generatedFile"
+      :download-pending="generatedFileDownloadPending"
       :image-state="context.onlineFormImageState || emptyObject"
       @save="saveOnlineForm"
       @submit="submitOnlineForm"
@@ -85,6 +85,8 @@ const {
   context,
   output,
   activeForm,
+  generatedFile,
+  generatedFileDownloadPending,
   unavailableMessage,
   invoke,
   saveOnlineForm,

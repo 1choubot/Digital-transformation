@@ -9,8 +9,8 @@
       :error-message="context.onlineFormErrorMessage || ''"
       :saving="context.onlineFormSaving === true"
       :submitting="context.onlineFormSubmitting === true"
-      :downloading="String(context.onlineFormDownloadPendingDocumentId || '') === String(output?.documentId || '')"
-      :download-disabled="!output?.documentId"
+      :generated-file="generatedFile"
+      :download-pending="generatedFileDownloadPending"
       :image-state="context.onlineFormImageState || emptyObject"
       @save="saveOnlineForm"
       @submit="submitOnlineForm"
@@ -19,7 +19,17 @@
       @upload-image="invoke('uploadOnlineFormImage', $event)"
       @download-image="invoke('downloadOnlineFormImage', $event)"
       @delete-image="invoke('deleteOnlineFormImage', $event)"
-    />
+    >
+      <template #generated-files>
+        <GeneratedFormFileCard
+          v-if="marketResearchCompleted"
+          heading="项目需求表"
+          :generated-file="marketResearchGeneratedFile"
+          :pending="marketResearchDownloadPending"
+          @download="downloadMarketResearchFile"
+        />
+      </template>
+    </NodeOnlineFormEditor>
 
     <el-alert v-else-if="context.onlineFormErrorMessage" :description="context.onlineFormErrorMessage" type="error" show-icon :closable="false" />
 
@@ -166,8 +176,12 @@
 <script setup>
 import { computed, reactive } from 'vue';
 import { ElMessageBox } from 'element-plus';
+import GeneratedFormFileCard from '../../../components/GeneratedFormFileCard.vue';
 import NodeOnlineFormEditor from '../../../components/node/NodeOnlineFormEditor.vue';
-import { useNodeOnlineForm } from '../../../composables/node/useNodeOnlineForm.js';
+import {
+  normalizeNodeGeneratedFile,
+  useNodeOnlineForm
+} from '../../../composables/node/useNodeOnlineForm.js';
 import {
   formatBusinessDepartment,
   formatDateTime,
@@ -221,6 +235,8 @@ const {
   context,
   output,
   activeForm,
+  generatedFile,
+  generatedFileDownloadPending,
   unavailableMessage,
   invoke,
   saveOnlineForm,
@@ -235,6 +251,30 @@ const {
 const approvalDocument = computed(() =>
   output.value ? context.value.getOutputDocument?.(output.value) || null : null
 );
+const marketResearchNode = computed(() => {
+  const stageNode = (props.stage?.nodes || []).find((item) => item.nodeKey === 'market_research');
+  if (stageNode) return stageNode;
+
+  for (const workspaceStage of props.workspace?.stages || []) {
+    const node = (workspaceStage.nodes || []).find((item) => item.nodeKey === 'market_research');
+    if (node) return node;
+  }
+  return null;
+});
+const marketResearchOutput = computed(() =>
+  (marketResearchNode.value?.outputs || []).find(
+    (item) => String(item.documentCode || item.legacyDocumentCode || '') === '1.1'
+  ) || null
+);
+const marketResearchCompleted = computed(() => marketResearchNode.value?.nodeStatus === 'completed');
+const marketResearchGeneratedFile = computed(() => normalizeNodeGeneratedFile(
+  marketResearchOutput.value?.generatedFile,
+  marketResearchNode.value?.nodeStatus || ''
+));
+const marketResearchDownloadPending = computed(() => Boolean(
+  marketResearchOutput.value?.documentId &&
+  context.value.isActionPending?.(marketResearchOutput.value.documentId, 'download-generated-file')
+));
 const approvalReview = computed(() => approvalDocument.value?.initiationReview || null);
 const approvalReviewNodes = computed(() => approvalReview.value?.nodes || []);
 const actionableReviewNodes = computed(() => approvalReviewNodes.value.filter((reviewNode) => reviewNode.canAct));
@@ -254,6 +294,11 @@ const nodeComments = reactive({});
 const nodeReturnReasons = reactive({});
 const nodeReturnActions = reactive({});
 const nodeEndReasons = reactive({});
+
+function downloadMarketResearchFile() {
+  if (!marketResearchCompleted.value || !marketResearchGeneratedFile.value.canDownload) return;
+  invoke('downloadGeneratedFile', marketResearchOutput.value);
+}
 
 function approveNode(payload) {
   invoke('approveInitiationNode', payload);

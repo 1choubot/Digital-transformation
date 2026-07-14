@@ -40,9 +40,9 @@
 
       <el-alert v-if="responsibilityCandidatesErrorMessage" class="form-grid__wide" :description="responsibilityCandidatesErrorMessage" type="error" show-icon :closable="false" />
 
-      <div class="form-actions form-grid__wide">
-        <el-button @click="navigate('/projects')">取消</el-button>
-        <el-button type="primary" native-type="submit" :loading="submitting" :disabled="!canCreateProject">创建项目</el-button>
+      <div class="form-actions form-grid__wide project-create-actions">
+        <el-button size="large" @click="navigate('/projects')">取消</el-button>
+        <el-button type="primary" native-type="submit" size="large" :loading="submitting" :disabled="!canCreateProject">创建项目</el-button>
       </div>
     </el-form>
   </section>

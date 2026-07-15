@@ -8,9 +8,11 @@ import {
 } from '../../stageDocuments/onlineFormImageRepository.js';
 
 export const GENERATED_XLSX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+export const GENERATED_DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const SOLUTION_DESIGN_TEMPLATE_DIRECTORY_NAME = '智能制造项目管理文件模板';
 
 export const SOLUTION_DESIGN_FORM_GENERATED_FILE_TYPE = 'xlsx';
+export const SOLUTION_DESIGN_DOCX_GENERATED_FILE_TYPE = 'docx';
 
 function parseStoredJson(value, fallback = {}) {
   if (value === null || value === undefined) {

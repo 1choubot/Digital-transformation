@@ -121,11 +121,28 @@
                 placeholder="审批意见"
                 :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
               />
+              <el-select
+                v-model="nodeProjectExecutionModes[reviewNode.nodeKey]"
+                placeholder="请选择项目开展模式"
+                :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
+              >
+                <el-option
+                  v-for="option in projectExecutionModeOptions"
+                  :key="option"
+                  :label="option"
+                  :value="option"
+                />
+              </el-select>
               <el-button
                 type="primary"
                 :loading="isReviewNodePending(reviewNode, 'approve')"
-                :disabled="isReviewNodePending(reviewNode, 'approve')"
-                @click="approveNode({ document: approvalDocument, node: reviewNode, comment: nodeComments[reviewNode.nodeKey] || '' })"
+                :disabled="isReviewNodePending(reviewNode, 'approve') || !nodeProjectExecutionModes[reviewNode.nodeKey]"
+                @click="approveNode({
+                  document: approvalDocument,
+                  node: reviewNode,
+                  comment: nodeComments[reviewNode.nodeKey] || '',
+                  projectExecutionMode: nodeProjectExecutionModes[reviewNode.nodeKey]
+                })"
               >
                 审批通过
               </el-button>
@@ -294,6 +311,8 @@ const nodeComments = reactive({});
 const nodeReturnReasons = reactive({});
 const nodeReturnActions = reactive({});
 const nodeEndReasons = reactive({});
+const nodeProjectExecutionModes = reactive({});
+const projectExecutionModeOptions = ['自研模式', '供应链模式'];
 
 function downloadMarketResearchFile() {
   if (!marketResearchCompleted.value || !marketResearchGeneratedFile.value.canDownload) return;

@@ -6,6 +6,7 @@ import {
   SOLUTION_DESIGN_GENERATED_FILE_STATUS,
   SOLUTION_DESIGN_NODE_KEY,
   SOLUTION_DESIGN_NODE_STATUS,
+  SOLUTION_DESIGN_QUOTATION_FORM_STATUS,
   SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS,
   SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE,
   SOLUTION_DESIGN_REVIEW_FORM_STATUS,
@@ -46,6 +47,10 @@ export function isNodeProcessableStatus(status) {
 
 function isManufacturingCenterManager(user) {
   return isCenterManagerOf(user, BUSINESS_DEPARTMENT.MANUFACTURING_CENTER);
+}
+
+function isMarketingCenterManager(user) {
+  return isCenterManagerOf(user, BUSINESS_DEPARTMENT.MARKETING_CENTER);
 }
 
 export function isFinanceCostUploadSlot(slotKey) {
@@ -131,10 +136,7 @@ export function canUploadQuotationTenderSlot({ slot, nodeRow, flowRow }) {
   }
 
   if (slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE) {
-    return (
-      isQuotationBranchCurrent(flowRow, nodeRow) &&
-      flowRow.branch_status === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED
-    );
+    return false;
   }
 
   return (
@@ -148,6 +150,25 @@ export function canUploadQuotationTenderSlot({ slot, nodeRow, flowRow }) {
 
 export function assertQuotationTenderSlotProcessable({ slot, nodeRow, flowRow }) {
   if (!canUploadQuotationTenderSlot({ slot, nodeRow, flowRow })) {
+    if (
+      slot?.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE &&
+      isQuotationBranchCurrent(flowRow, nodeRow)
+    ) {
+      throw new SolutionDesignWorkflowError(
+        SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
+        'Quotation file upload is not accepted after quotation branch selection; submit the quotation online form instead',
+        409,
+        {
+          nodeKey: slot?.nodeKey ?? SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+          slotKey: slot?.slotKey ?? null,
+          branchType: flowRow?.branch_type ?? null,
+          branchStatus: flowRow?.branch_status ?? null,
+          branchRevision: flowRow?.revision ?? null,
+          nodeRevision: nodeRow?.current_revision ?? null
+        }
+      );
+    }
+
     throw new SolutionDesignWorkflowError(
       SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
       'Quotation/tender upload slot cannot be processed in its current branch status',
@@ -165,7 +186,7 @@ export function assertQuotationTenderSlotProcessable({ slot, nodeRow, flowRow })
   }
 }
 
-export function canSubmitQuotation({ projectEnded, inSolutionStage, roleState, user, nodeRow, flowRow, uploadSlotRevisionByKey }) {
+export function canProcessQuotationForm({ projectEnded, inSolutionStage, roleState, user, nodeRow, flowRow }) {
   return (
     !projectEnded &&
     inSolutionStage &&
@@ -173,9 +194,36 @@ export function canSubmitQuotation({ projectEnded, inSolutionStage, roleState, u
     isSameId(roleState[SOLUTION_DESIGN_ROLE_KEY.BUSINESS_OWNER]?.userId, user?.id) &&
     isNodeProcessableStatus(nodeRow?.status) &&
     isQuotationBranchCurrent(flowRow, nodeRow) &&
-    flowRow.branch_status === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED &&
-    Number(uploadSlotRevisionByKey.get(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE) ?? 0) >=
-      Number(nodeRow.current_revision ?? 1)
+    flowRow.branch_status === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED
+  );
+}
+
+export function isQuotationFormSubmittedForRevision(quotationFormRow, requiredRevision) {
+  return (
+    quotationFormRow?.form_status === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED &&
+    Number(quotationFormRow.revision ?? 0) >= Number(requiredRevision ?? 1)
+  );
+}
+
+export function isQuotationFormGeneratedForRevision(quotationFormRow, requiredRevision) {
+  return (
+    isQuotationFormSubmittedForRevision(quotationFormRow, requiredRevision) &&
+    quotationFormRow.generated_file_status === SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED &&
+    Boolean(quotationFormRow.generated_file_storage_key)
+  );
+}
+
+export function canSubmitQuotation({ projectEnded, inSolutionStage, roleState, user, nodeRow, flowRow, quotationFormRow }) {
+  return (
+    canProcessQuotationForm({
+      projectEnded,
+      inSolutionStage,
+      roleState,
+      user,
+      nodeRow,
+      flowRow
+    }) &&
+    isQuotationFormGeneratedForRevision(quotationFormRow, nodeRow?.current_revision)
   );
 }
 
@@ -195,6 +243,26 @@ export function areTenderFilesUploadedForRevision(uploadSlotRevisionByKey, requi
   const revision = Number(requiredRevision ?? 1);
   return SOLUTION_DESIGN_TENDER_UPLOAD_SLOT_KEYS.every(
     (slotKey) => Number(uploadSlotRevisionByKey.get(slotKey) ?? 0) >= revision
+  );
+}
+
+export function hasCurrentUploadSlotFile(currentFileSlotKeys, slotKey) {
+  return Boolean(slotKey) && currentFileSlotKeys instanceof Set && currentFileSlotKeys.has(slotKey);
+}
+
+export function hasActiveUploadSlotExemption(exemptedSlotKeys, slotKey) {
+  return (
+    Boolean(slotKey) &&
+    SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS.includes(slotKey) &&
+    exemptedSlotKeys instanceof Set &&
+    exemptedSlotKeys.has(slotKey)
+  );
+}
+
+export function isSolutionDesignOutputSatisfied(currentFileSlotKeys, exemptedSlotKeys, slotKey) {
+  return (
+    hasCurrentUploadSlotFile(currentFileSlotKeys, slotKey) ||
+    hasActiveUploadSlotExemption(exemptedSlotKeys, slotKey)
   );
 }
 
@@ -277,10 +345,26 @@ export function isProductFunctionDiagramUploadedForRevision(uploadSlotRevisionBy
   );
 }
 
+export function isProductFunctionDiagramCurrent(currentFileSlotKeys) {
+  return hasCurrentUploadSlotFile(currentFileSlotKeys, SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PRODUCT_FUNCTION_DIAGRAM);
+}
+
 export function areSolutionDesignOutputsUploadedForRevision(uploadSlotRevisionByKey, requiredRevision) {
   const revision = Number(requiredRevision ?? 1);
   return SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS.every(
     (slotKey) => Number(uploadSlotRevisionByKey.get(slotKey) ?? 0) >= revision
+  );
+}
+
+export function areSolutionDesignOutputsCurrent(currentFileSlotKeys) {
+  return SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS.every((slotKey) =>
+    hasCurrentUploadSlotFile(currentFileSlotKeys, slotKey)
+  );
+}
+
+export function areSolutionDesignOutputsSatisfied(currentFileSlotKeys, exemptedSlotKeys) {
+  return SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS.every((slotKey) =>
+    isSolutionDesignOutputSatisfied(currentFileSlotKeys, exemptedSlotKeys, slotKey)
   );
 }
 
@@ -291,6 +375,10 @@ export function isCostUploadSlotUploadedForRevision(uploadSlotRevisionByKey, nod
   }
 
   return Number(uploadSlotRevisionByKey.get(slotKey) ?? 0) >= Number(requiredRevision ?? 1);
+}
+
+export function isCostUploadSlotCurrent(currentFileSlotKeys, nodeKey) {
+  return hasCurrentUploadSlotFile(currentFileSlotKeys, getCostUploadSlotKeyForNode(nodeKey));
 }
 
 function getSubmitNodeRoleKey(nodeKey) {
@@ -318,6 +406,10 @@ function getSubmitNodeRoleKey(nodeKey) {
     return SOLUTION_DESIGN_ROLE_KEY.PROCUREMENT_OWNER;
   }
 
+  if (nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
+    return SOLUTION_DESIGN_ROLE_KEY.BUSINESS_OWNER;
+  }
+
   if (nodeKey === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST) {
     return SOLUTION_DESIGN_ROLE_KEY.FINANCE_ACCOUNTANT;
   }
@@ -340,7 +432,15 @@ export function buildUploadSlotPermissions({ slot, roleState, user, projectEnded
     canUpload:
       canWrite &&
       Boolean(slot?.requiredRoleKey) &&
-      isSameId(roleState[slot.requiredRoleKey]?.userId, user?.id)
+      isSameId(roleState[slot.requiredRoleKey]?.userId, user?.id),
+    canMarkExemption:
+      canWrite &&
+      SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS.includes(slot?.slotKey) &&
+      isTechnicalOwner(roleState, user),
+    canCancelExemption:
+      canWrite &&
+      SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS.includes(slot?.slotKey) &&
+      isTechnicalOwner(roleState, user)
   };
 }
 
@@ -351,6 +451,7 @@ export function canSubmitNode({
   projectEnded,
   inSolutionStage,
   currentFileSlotKeys,
+  exemptedSlotKeys = new Set(),
   uploadSlotRevisionByKey,
   analysisFormRow,
   reviewFormRowsByNodeKey = new Map(),
@@ -377,12 +478,12 @@ export function canSubmitNode({
   if (nodeRow.node_key === SOLUTION_DESIGN_NODE_KEY.ANALYSIS) {
     return (
       isAnalysisFormGeneratedForRevision(analysisFormRow, nodeRow.current_revision) &&
-      isProductFunctionDiagramUploadedForRevision(uploadSlotRevisionByKey, nodeRow.current_revision)
+      isProductFunctionDiagramCurrent(currentFileSlotKeys)
     );
   }
 
   if (nodeRow.node_key === SOLUTION_DESIGN_NODE_KEY.DESIGN) {
-    return areSolutionDesignOutputsUploadedForRevision(uploadSlotRevisionByKey, nodeRow.current_revision);
+    return areSolutionDesignOutputsSatisfied(currentFileSlotKeys, exemptedSlotKeys);
   }
 
   if (getSolutionDesignReviewFormDefinition(nodeRow.node_key)) {
@@ -393,11 +494,7 @@ export function canSubmitNode({
   }
 
   if (isCostEstimationNode(nodeRow.node_key)) {
-    return isCostUploadSlotUploadedForRevision(
-      uploadSlotRevisionByKey,
-      nodeRow.node_key,
-      nodeRow.current_revision
-    );
+    return isCostUploadSlotCurrent(currentFileSlotKeys, nodeRow.node_key);
   }
 
   if (nodeRow.node_key === SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER) {
@@ -441,6 +538,13 @@ export function canReviewSolutionDesignNode({ nodeRow, user, roleState, projectE
     );
   }
 
+  if (nodeRow?.node_key === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
+    return (
+      nodeRow.status === SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW &&
+      isMarketingCenterManager(user)
+    );
+  }
+
   if (nodeRow?.node_key === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST) {
     if (nodeRow.status === SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW) {
       return isSameId(roleState[SOLUTION_DESIGN_ROLE_KEY.FINANCE_OWNER]?.userId, user?.id);
@@ -478,6 +582,10 @@ export function canActAsReviewerForSolutionDesignNode({ nodeRow, user, roleState
 
   if (nodeRow?.node_key === SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST) {
     return isManufacturingCenterManager(user);
+  }
+
+  if (nodeRow?.node_key === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
+    return isMarketingCenterManager(user);
   }
 
   if (nodeRow?.node_key === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST) {

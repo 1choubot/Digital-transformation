@@ -4,9 +4,15 @@ import {
   V20260629_WORKSPACE_BLUE_MODULES,
   getV20260629TargetOutputByCode
 } from '../../domain/stageDocumentTemplateItemsV20260629.js';
+import {
+  SOLUTION_DESIGN_NODE_STATUS,
+  SOLUTION_DESIGN_NODES,
+  SOLUTION_DESIGN_STAGE
+} from '../../domain/solutionDesignWorkflow.js';
 import { getProjectStageDocumentChecklist } from '../stageDocuments/checklistRepository.js';
 import { listLatestGeneratedFilesForProject } from '../stageDocuments/generatedFileRepository.js';
 import { getProjectDetail } from './coreRepository.js';
+import { getSolutionDesignWorkflow } from './solutionDesignWorkflowRepository.js';
 
 const INITIATION_STAGE_KEY = 'initiation';
 const CURRENT_RUNTIME_TEMPLATE_VERSION = V20260629_TARGET_TEMPLATE_VERSION;
@@ -237,6 +243,28 @@ function resolveAutomaticProcessNodeStatuses(nodes) {
   });
 }
 
+function buildSolutionDesignWorkflowWorkspaceNodes(solutionDesignWorkflow) {
+  const workflowNodeByKey = new Map(
+    (solutionDesignWorkflow?.nodes || []).map((node) => [node.nodeKey, node])
+  );
+
+  return SOLUTION_DESIGN_NODES.map((definition) => {
+    const workflowNode = workflowNodeByKey.get(definition.nodeKey);
+    return {
+      templateVersion: V20260629_TARGET_TEMPLATE_VERSION,
+      nodeKey: definition.nodeKey,
+      nodeName: definition.nodeName,
+      nodeStatus: workflowNode?.status || SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED,
+      nodeOrder: definition.nodeOrder,
+      outputs: [],
+      blockingReasons: workflowNode?.blockingReasons || [],
+      actionHints: workflowNode?.actionHints || [],
+      notes: workflowNode?.notes || '',
+      solutionDesignNode: workflowNode || null
+    };
+  });
+}
+
 function isCompatibilityOnlyModule(moduleConfig) {
   if (!moduleConfig.outputCodes.length) {
     return false;
@@ -245,22 +273,32 @@ function isCompatibilityOnlyModule(moduleConfig) {
   return moduleConfig.outputCodes.every((outputCode) => getV20260629TargetOutputByCode(outputCode)?.workspaceCompatibility);
 }
 
-function buildWorkspaceStage(stage, documents, generatedFilesByDocumentId, project, runtimeTemplateVersion) {
+function buildWorkspaceStage(
+  stage,
+  documents,
+  generatedFilesByDocumentId,
+  project,
+  runtimeTemplateVersion,
+  solutionDesignWorkflow
+) {
   const documentsByCode = new Map(documents.map((document) => [document.documentCode, document]));
-  const moduleConfigs = V20260629_WORKSPACE_BLUE_MODULES.filter((module) => {
-    if (module.stageKey !== stage.stageKey) {
-      return false;
-    }
+  const isSolutionDesignStage = stage.stageKey === SOLUTION_DESIGN_STAGE.STAGE_KEY;
+  const nodes = isSolutionDesignStage
+    ? buildSolutionDesignWorkflowWorkspaceNodes(solutionDesignWorkflow)
+    : V20260629_WORKSPACE_BLUE_MODULES
+        .filter((module) => {
+          if (module.stageKey !== stage.stageKey) {
+            return false;
+          }
 
-    return runtimeTemplateVersion === V20260629_TARGET_TEMPLATE_VERSION
-      ? !isCompatibilityOnlyModule(module)
-      : true;
-  });
-  const nodes = resolveAutomaticProcessNodeStatuses(
-    moduleConfigs.map((moduleConfig) =>
-      buildWorkspaceNode(moduleConfig, documentsByCode, generatedFilesByDocumentId, project)
-    )
-  );
+          return runtimeTemplateVersion === V20260629_TARGET_TEMPLATE_VERSION
+            ? !isCompatibilityOnlyModule(module)
+            : true;
+        })
+        .map((moduleConfig) =>
+          buildWorkspaceNode(moduleConfig, documentsByCode, generatedFilesByDocumentId, project)
+        );
+  const resolvedNodes = isSolutionDesignStage ? nodes : resolveAutomaticProcessNodeStatuses(nodes);
 
   return {
     templateVersion: V20260629_TARGET_TEMPLATE_VERSION,
@@ -274,15 +312,16 @@ function buildWorkspaceStage(stage, documents, generatedFilesByDocumentId, proje
     placeholderStatus: null,
     placeholderText: '',
     legacyChecklistAvailable: documents.length > 0,
-    nodes
+    nodes: resolvedNodes
   };
 }
 
 export async function getProjectWorkspace(projectId, user) {
-  const [detail, checklist, latestGeneratedFiles] = await Promise.all([
+  const [detail, checklist, latestGeneratedFiles, solutionDesignWorkflow] = await Promise.all([
     getProjectDetail(projectId, user),
     getProjectStageDocumentChecklist(projectId, user),
-    listLatestGeneratedFilesForProject(projectId)
+    listLatestGeneratedFilesForProject(projectId),
+    getSolutionDesignWorkflow({ projectId, user })
   ]);
   const generatedFilesByDocumentId = new Map(
     latestGeneratedFiles.map((file) => [Number(file.stageDocumentId), file])
@@ -298,7 +337,14 @@ export async function getProjectWorkspace(projectId, user) {
 
   const stages = (detail.stages || []).map((stage) => {
     const documents = documentsByStageKey.get(stage.stageKey) || [];
-    return buildWorkspaceStage(stage, documents, generatedFilesByDocumentId, detail.project, runtimeTemplateVersion);
+    return buildWorkspaceStage(
+      stage,
+      documents,
+      generatedFilesByDocumentId,
+      detail.project,
+      runtimeTemplateVersion,
+      solutionDesignWorkflow
+    );
   });
 
   return {

@@ -52,9 +52,9 @@ const TEMPLATE_REGISTRY = Object.freeze({
   }),
   [INITIATION_TEMPLATE_KEY.NOTICE]: Object.freeze({
     templateKey: INITIATION_TEMPLATE_KEY.NOTICE,
-    templatePath: templatePath('关于确定项目名称及编号的通知-模板.docx'),
+    templatePath: templatePath('项目立项通知-模板.docx'),
     fileType: 'docx',
-    templateVersion: '20260706-initiation-notice'
+    templateVersion: '20260714-initiation-notice-v2'
   })
 });
 
@@ -280,27 +280,28 @@ export const INITIATION_TEMPLATE_MANIFESTS = Object.freeze({
     documentCode: INITIATION_NOTICE_DOCUMENT_CODE,
     outputDocumentCode: INITIATION_NOTICE_DOCUMENT_CODE,
     fileType: 'docx',
-    generatedFileNamePrefix: '关于确定项目名称及编号的通知',
+    generatedFileNamePrefix: '项目立项通知',
     triggerEvent: INITIATION_TEMPLATE_TRIGGER_EVENT.ONLINE_FORM_SUBMITTED,
     manualTriggerEvents: [INITIATION_TEMPLATE_TRIGGER_EVENT.ONLINE_FORM_DOWNLOAD_REQUESTED],
     requiredSources: ['project.projectCode', 'noticeProjectList.rows'],
     formatRetention: ['preserve document paragraphs', 'preserve table style where possible', 'preserve fonts and paragraph format'],
     mappings: [
       wordTableRows(
-        'firstTable',
-        'dataRow',
+        0,
+        1,
         'noticeProjectList.rows',
         [
           { sourcePath: 'sequenceNumber', label: '序号' },
           { sourcePath: 'projectCode', label: '项目编号' },
           { sourcePath: 'projectName', label: '项目名称' },
           { sourcePath: 'customerName', label: '客户单位' },
+          { sourcePath: 'projectExecutionMode', label: '开展模式' },
           { sourcePath: 'initiationDate', label: '立项日期' }
         ],
         '项目编号累计清单',
         true
       ),
-      wordTextReplacement('2026年2月9日', 'noticeChineseDate', ['form.noticeDate'], '通知落款日期')
+      wordTextReplacement('2026年7月14日', 'noticeChineseDate', ['form.noticeDate'], '通知落款日期')
     ]
   })
 });

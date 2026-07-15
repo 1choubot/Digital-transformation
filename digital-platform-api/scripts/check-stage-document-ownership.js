@@ -7,7 +7,12 @@ import {
   ensureProjectWorkspaceSchema,
   inspectProjectWorkspaceSchema
 } from '../src/db/projectWorkspaceSchema.js';
+import { ensureSolutionDesignWorkflowSchema } from '../src/db/solutionDesignWorkflowSchema.js';
 import { ensureStageDocumentSchema } from '../src/db/stageDocumentSchema.js';
+import {
+  SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES,
+  SOLUTION_DESIGN_NODES
+} from '../src/domain/solutionDesignWorkflow.js';
 import {
   BUSINESS_DEPARTMENT,
   ORGANIZATION_ROLE,
@@ -259,7 +264,6 @@ function buildSmokeScoreData(itemKeys, responsiblePerson, score = '3', notesSuff
 function buildSmokeInitiationBusinessFormData(patch = {}) {
   return {
     projectResponsibleContact: '13800000000',
-    projectExecutionMode: '自研模式',
     ...buildSmokeScoreData(INITIATION_APPROVAL_BUSINESS_SCORE_ITEM_KEYS, 'smoke business responsible', '3'),
     ...patch
   };
@@ -627,7 +631,8 @@ async function completeInitiationGate(projectId, { submitterUser, marketingManag
     documentId: initiationDocument.id,
     nodeKey: 'general_review',
     user: generalManagerUser,
-    comment: 'smoke general approval'
+    comment: 'smoke general approval',
+    projectExecutionMode: '自研模式'
   });
 }
 
@@ -1013,7 +1018,8 @@ async function prepareInitiationNoticeReadyProject(projectId, { businessUser, te
     documentId: initiationDocument.id,
     nodeKey: 'general_review',
     user: generalManagerUser,
-    comment: 'smoke general approval'
+    comment: 'smoke general approval',
+    projectExecutionMode: '自研模式'
   });
   return resetInitiationNoticeForSubmit(projectId, businessUser);
 }
@@ -2041,14 +2047,23 @@ async function runInitiationReviewSmoke({
     .flatMap((stage) => stage.nodes || [])
     .flatMap((node) => node.outputs || []);
   const workspaceOutputCodes = new Set(workspaceOutputs.map((output) => output.targetOutputCode));
+  const workspaceManagedOutputCount =
+    V20260629_TARGET_TEMPLATE_OUTPUT_COUNT - SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES.length;
   assert.equal(
     workspaceOutputCodes.size,
-    V20260629_TARGET_TEMPLATE_OUTPUT_COUNT
+    workspaceManagedOutputCount
   );
   assert.equal(
     workspaceOutputs.filter((output) => !LEGACY_CONTRACT_REVIEW_COMPATIBILITY_OUTPUT_CODES.has(output.targetOutputCode)).length,
-    V20260629_TARGET_TEMPLATE_OUTPUT_COUNT
+    workspaceManagedOutputCount
   );
+  for (const dedicatedDocumentCode of SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES) {
+    assert.equal(
+      workspaceOutputCodes.has(dedicatedDocumentCode),
+      false,
+      `Solution design dedicated document must not be exposed as a workspace output: ${dedicatedDocumentCode}`
+    );
+  }
   for (const compatibilityOutputCode of LEGACY_CONTRACT_REVIEW_COMPATIBILITY_OUTPUT_CODES) {
     assert.equal(
       workspaceOutputCodes.has(compatibilityOutputCode),
@@ -2083,16 +2098,21 @@ async function runInitiationReviewSmoke({
     ['project_input', 'market_research', 'initiation_approval', 'initiation_notice']
   );
   const solutionStage = workspace.stages.find((stage) => stage.stageKey === 'solution');
-  assert.ok(solutionStage.nodes.some((node) => node.nodeKey === 'solution_design'));
-  const solutionPlanOutput = findWorkspaceOutput(workspace, '2.1');
-  assert.equal(solutionPlanOutput.formAvailable, false);
-  assert.equal(solutionPlanOutput.legacyChecklistTarget.available, true);
-  assert.ok(solutionPlanOutput.actionHints.includes('view_attachments'));
-  const tenderOutput = findWorkspaceOutput(workspace, 'C19');
-  assert.ok(tenderOutput.documentId);
-  assert.equal(tenderOutput.documentCode, 'C19');
-  assert.equal(tenderOutput.status, 'waiting_submission');
-  assert.equal(tenderOutput.legacyChecklistTarget.available, true);
+  assert.deepEqual(
+    solutionStage.nodes.map((node) => node.nodeKey),
+    SOLUTION_DESIGN_NODES.map((node) => node.nodeKey)
+  );
+  assert.equal(solutionStage.nodes.some((node) => node.nodeKey === 'cost_price_estimation'), false);
+  assert.equal(solutionStage.nodes.some((node) => node.nodeKey === 'quotation'), false);
+  assert.equal(solutionStage.nodes.some((node) => node.nodeKey === 'tender'), false);
+
+  const managerChecklist = await getProjectStageDocumentChecklist(projectId, managerUser);
+  const checklistDocuments = managerChecklist.stages.flatMap((stage) => stage.documents || []);
+  assert.equal(checklistDocuments.length, EXPECTED_STAGE_DOCUMENT_ITEM_COUNT);
+  const solutionPlanDocument = findChecklistDocument(managerChecklist, '2.1');
+  assert.equal(solutionPlanDocument.documentCode, '2.1');
+  const tenderDocument = findChecklistDocument(managerChecklist, 'C19');
+  assert.equal(tenderDocument.documentCode, 'C19');
 
   const marketingResponsibilityChecklist = await getProjectStageDocumentChecklist(projectId, marketingManagerUser);
   assert.equal(findChecklistDocument(marketingResponsibilityChecklist, '1.1').canManageResponsibility, true);
@@ -2102,7 +2122,7 @@ async function runInitiationReviewSmoke({
   assert.equal(findWorkspaceOutput(marketingResponsibilityWorkspace, '1.1').permissions.canManageResponsibility, true);
   assert.equal(findWorkspaceOutput(marketingResponsibilityWorkspace, '1.2').permissions.canManageResponsibility, false);
   assert.equal(findWorkspaceOutput(marketingResponsibilityWorkspace, '1.3').permissions.canManageResponsibility, false);
-  const rdResponsibilityChecklist = await getProjectStageDocumentChecklist(projectId, managerUser);
+  const rdResponsibilityChecklist = managerChecklist;
   assert.equal(findChecklistDocument(rdResponsibilityChecklist, '1.1').canManageResponsibility, false);
   assert.equal(findChecklistDocument(rdResponsibilityChecklist, '1.2').canManageResponsibility, false);
   const assistantResponsibilityChecklist = await getProjectStageDocumentChecklist(projectId, generalManagerAssistantUser);
@@ -2177,7 +2197,7 @@ async function runInitiationReviewSmoke({
   assert.equal(initiationTemplateForm.schema.reviewOpinionSource, 'initiationReviewNodes');
   assert.deepEqual(
     initiationTemplateForm.schema.sections.map((section) => section.key),
-    ['approvalHeader', 'customerBasicInfo', 'projectBasicInfo', 'projectExecutionModeSection']
+    ['approvalHeader', 'customerBasicInfo', 'projectBasicInfo']
   );
   assert.deepEqual(
     initiationTemplateForm.schema.sections.find((section) => section.key === 'approvalHeader').fields.map((field) => field.key),
@@ -2191,13 +2211,10 @@ async function runInitiationReviewSmoke({
     initiationTemplateForm.schema.sections.find((section) => section.key === 'projectBasicInfo').fields.map((field) => field.key),
     ['projectResponsiblePerson', 'projectResponsibleContact']
   );
-  assert.deepEqual(
-    initiationTemplateForm.schema.sections.find((section) => section.key === 'projectExecutionModeSection').fields.map((field) => field.key),
-    ['projectExecutionMode']
+  assert.equal(
+    initiationTemplateForm.schema.fields.some((field) => field.key === 'projectExecutionMode'),
+    false
   );
-  const executionModeField = initiationTemplateForm.schema.fields.find((field) => field.key === 'projectExecutionMode');
-  assert.equal(executionModeField.required, true);
-  assert.deepEqual(executionModeField.options, ['自研模式', '供应链模式']);
   assert.equal(initiationTemplateForm.schema.scoringSections.length, 2);
   assert.deepEqual(
     initiationTemplateForm.schema.scoringSections.map((section) => section.items.length),
@@ -2813,21 +2830,6 @@ async function runInitiationReviewSmoke({
       Array.isArray(error.details) &&
       error.details.includes('specialEnvironmentScore')
   );
-  await assert.rejects(
-    () =>
-      submitStageDocumentOnlineForm({
-        projectId,
-        documentId: initialInitiationDocument.id,
-        user: marketingManagerUser,
-        formData: buildSmokeInitiationBusinessFormData({
-          projectExecutionMode: ''
-        })
-      }),
-    (error) =>
-      error.code === 'FORM_REQUIRED_FIELDS_MISSING' &&
-      Array.isArray(error.details) &&
-      error.details.includes('projectExecutionMode')
-  );
   await assertOrdinaryOnlineFormDocumentSubmitRejected({
     projectId,
     documentCode: '1.2',
@@ -2842,6 +2844,7 @@ async function runInitiationReviewSmoke({
   assert.equal(businessInitiationResult.form.status, 'draft');
   assert.equal(businessInitiationResult.form.collaboration.businessSubmitted, true);
   assert.equal(businessInitiationResult.form.collaboration.technicalSubmitted, false);
+  assert.equal(Object.hasOwn(businessInitiationResult.form.formData, 'projectExecutionMode'), false);
   assert.equal((await selectSmokeDocument(projectId, '1.2')).status, DOCUMENT_STATUS.NOT_SUBMITTED);
   await assertNoInitiationWorkbenchTask(marketingManagerUser, projectId, 'business_review');
   await assertNoInitiationWorkbenchTask(managerUser, projectId, 'technical_review');
@@ -3232,7 +3235,8 @@ async function runInitiationReviewSmoke({
     documentId: initiationDocument.id,
     nodeKey: 'general_review',
     user: generalManagerUser,
-    comment: 'general approval'
+    comment: 'general approval',
+    projectExecutionMode: '自研模式'
   });
   const approvedInitiationDocument = await selectSmokeDocument(projectId, '1.2');
   const initiationGenerated = await assertGeneratedFileDownloadable({
@@ -3351,12 +3355,7 @@ async function runInitiationReviewSmoke({
   const supplyChainInitiationDocument = await prepareInitiationSmokeBase(
     supplyChainProjectId,
     marketingManagerUser,
-    managerUser,
-    {
-      businessPatch: {
-        projectExecutionMode: '供应链模式'
-      }
-    }
+    managerUser
   );
   await approveInitiationReviewNode({
     projectId: supplyChainProjectId,
@@ -3377,7 +3376,8 @@ async function runInitiationReviewSmoke({
     documentId: supplyChainInitiationDocument.id,
     nodeKey: 'general_review',
     user: generalManagerUser,
-    comment: 'supply chain general approval'
+    comment: 'supply chain general approval',
+    projectExecutionMode: '供应链模式'
   });
   const supplyChainApprovedDocument = await selectSmokeDocument(supplyChainProjectId, '1.2');
   const supplyChainGenerated = await assertGeneratedFileDownloadable({
@@ -4239,7 +4239,8 @@ async function runInitiationReviewSmoke({
     documentId: returnInitiationDocument.id,
     nodeKey: 'general_review',
     user: generalManagerUser,
-    comment: 'general approval after refill'
+    comment: 'general approval after refill',
+    projectExecutionMode: '自研模式'
   });
   nodes = await selectInitiationReviewNodes(returnProjectId);
   assertInitiationNodeStatus(nodes, 'business_review', 'approved');
@@ -6506,6 +6507,7 @@ assert.deepEqual(projectWorkspaceSchemaStatus, {
   projectStageDocumentFormsTable: true
 });
 await ensureStageDocumentSchema(pool);
+await ensureSolutionDesignWorkflowSchema(pool);
 await upsertStageDocumentTemplates(pool, items);
 await initializeInitiationReviewNodesForExistingProjects(pool);
 

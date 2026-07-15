@@ -148,6 +148,7 @@ function buildProject() {
     project_manager_user_id: 10,
     business_responsible_user_id: 12,
     technical_responsible_user_id: 13,
+    project_mode: null,
     created_by_user_id: 10,
     participating_departments: JSON.stringify([
       BUSINESS_DEPARTMENT.MARKETING_CENTER,
@@ -296,7 +297,6 @@ function requirementPayload(overrides = {}) {
 function approvalBusinessPayload(overrides = {}) {
   return {
     projectResponsibleContact: '023-00000000',
-    projectExecutionMode: '自研模式',
     customerEnterpriseAttributeScore: '5',
     customerEnterpriseAttributeInformationNotes: '客户为重点行业客户',
     projectSourceScore: '5',
@@ -343,7 +343,7 @@ function cloneRow(row) {
 }
 
 class InitiationWorkflowFakeConnection {
-  constructor({ duplicateProjectCodes = [] } = {}) {
+  constructor({ duplicateProjectCodes = [], submittedNoticeRows = [] } = {}) {
     this.users = buildUsers();
     this.project = buildProject();
     this.stages = buildProjectStages();
@@ -353,6 +353,9 @@ class InitiationWorkflowFakeConnection {
     this.formImages = [];
     this.operationLogs = [];
     this.duplicateProjectCodes = new Set(duplicateProjectCodes);
+    this.submittedNoticeRows = submittedNoticeRows;
+    this.lastNoticeProjectListQueryRows = [];
+    this.lastGeneratedSnapshot = null;
     this.nextFormId = 1;
     this.nextReviewNodeId = 1;
     this.commits = 0;
@@ -723,7 +726,7 @@ class InitiationWorkflowFakeConnection {
       return [[]];
     }
 
-    if (text.startsWith('SELECT p.id, p.project_code,')) {
+    if (text.startsWith('SELECT p.id, p.project_code,') && !text.includes('FROM project_stage_document_forms f')) {
       return [[this.projectContextRow()]];
     }
 
@@ -880,6 +883,23 @@ class InitiationWorkflowFakeConnection {
       return [form ? [{ id: form.id, form_data_json: form.form_data_json }] : []];
     }
 
+    if (
+      text.startsWith('SELECT f.form_data_json FROM project_stage_document_forms f') &&
+      text.includes('d.status = ?')
+    ) {
+      const [projectId, documentCode, status] = params;
+      const document = this.documentByCode(documentCode);
+      const form = this.formByDocumentId(document?.id);
+      return [
+        document &&
+        Number(document.project_id) === Number(projectId) &&
+        document.status === status &&
+        form?.status === 'submitted'
+          ? [{ form_data_json: form.form_data_json }]
+          : []
+      ];
+    }
+
     if (text.startsWith('INSERT INTO project_stage_document_forms')) {
       this.upsertForm(params);
       return [{ affectedRows: 1, insertId: this.formByDocumentId(params[1])?.id ?? 0 }];
@@ -890,9 +910,11 @@ class InitiationWorkflowFakeConnection {
       const form = this.forms.find((candidate) => Number(candidate.id) === Number(formId));
       if (form) {
         form.form_data_json = formDataJson;
-        form.status = 'draft';
-        form.submitted_by_user_id = null;
-        form.submitted_at = null;
+        if (text.includes("status = 'draft'")) {
+          form.status = 'draft';
+          form.submitted_by_user_id = null;
+          form.submitted_at = null;
+        }
       }
       return [{ affectedRows: form ? 1 : 0 }];
     }
@@ -1138,26 +1160,47 @@ class InitiationWorkflowFakeConnection {
     }
 
     if (text.startsWith('INSERT INTO project_stage_document_generated_files')) {
+      this.lastGeneratedSnapshot = JSON.parse(params[13] || '{}');
       throw new Error('Template generation is disabled in initiation workflow repository tests');
     }
 
     if (text.includes('FROM project_stage_document_forms f') && text.includes("d.document_code = ?")) {
-      const [documentCode] = params;
+      const [reviewDocumentCode, , documentCode] = params.length === 4 ? params : [null, null, params[0]];
       if (documentCode !== INITIATION_NOTICE_DOCUMENT_CODE) {
         return [[]];
       }
       const noticeDocument = this.documentByCode(INITIATION_NOTICE_DOCUMENT_CODE);
       const form = this.formByDocumentId(noticeDocument?.id);
-      return form?.status === 'submitted'
-        ? [[{
+      const reviewDocument = this.documentByCode(reviewDocumentCode || INITIATION_REVIEW_DOCUMENT_CODE);
+      const reviewForm = this.formByDocumentId(reviewDocument?.id);
+      const currentRows = form?.status === 'submitted'
+        ? [{
             id: this.project.id,
             project_code: this.project.project_code,
             project_name: this.project.project_name,
             customer_name: this.project.customer_name,
             form_data_json: form.form_data_json,
+            review_form_data_json: reviewForm?.form_data_json ?? null,
             submitted_at: form.submitted_at
-          }]]
-        : [[]];
+          }]
+        : [];
+      const rows = [
+        ...this.submittedNoticeRows.map((row) => ({
+          id: row.id,
+          project_code: row.projectCode,
+          project_name: row.projectName,
+          customer_name: row.customerName,
+          form_data_json: JSON.stringify(row.noticeFormData || {}),
+          review_form_data_json: JSON.stringify(row.reviewFormData || {}),
+          submitted_at: row.submittedAt || '2026-07-11 09:00:00'
+        })),
+        ...currentRows
+      ].sort((left, right) => {
+        const submittedCompare = String(left.submitted_at || '').localeCompare(String(right.submitted_at || ''));
+        return submittedCompare || Number(left.id) - Number(right.id);
+      });
+      this.lastNoticeProjectListQueryRows = rows;
+      return [rows];
     }
 
     if (text.startsWith('SELECT d.*, p.id AS project_id') && text.includes('d.responsible_user_id = ?')) {
@@ -1254,6 +1297,12 @@ function logActions(db) {
   return db.connection.operationLogs.map((log) => log.action_type);
 }
 
+function formDataByCode(db, documentCode) {
+  const document = documentByCode(db, documentCode);
+  const form = db.connection.formByDocumentId(document?.id);
+  return form ? JSON.parse(form.form_data_json) : {};
+}
+
 async function submitRequirement(db, overrides = {}) {
   return submitStageDocumentOnlineForm({
     projectId: PROJECT_ID,
@@ -1306,13 +1355,14 @@ async function approveTechnicalReview(db, comment = '研发评价通过') {
   });
 }
 
-async function approveGeneralReview(db, comment = '同意立项') {
+async function approveGeneralReview(db, comment = '同意立项', projectExecutionMode = '自研模式') {
   return approveInitiationReviewNode({
     projectId: PROJECT_ID,
     documentId: DOCUMENT_IDS.REVIEW,
     nodeKey: INITIATION_REVIEW_NODE_KEY.GENERAL,
     user: user(db, 3),
-    comment
+    comment,
+    projectExecutionMode
   });
 }
 
@@ -1324,12 +1374,12 @@ async function completeInitiationReview(db) {
   return approveGeneralReview(db);
 }
 
-async function submitNotice(db, projectCode = 'KRF-INIT-001') {
+async function submitNotice(db, projectCode = 'KRF-INIT-001', overrides = {}) {
   return submitStageDocumentOnlineForm({
     projectId: PROJECT_ID,
     documentId: DOCUMENT_IDS.NOTICE,
     user: user(db, 1),
-    formData: noticePayload(projectCode)
+    formData: noticePayload(projectCode, overrides)
   });
 }
 
@@ -1395,6 +1445,10 @@ test('1.2 collaboration and three review nodes derive initiation approval comple
     assert.equal(documentByCode(db, INITIATION_REVIEW_DOCUMENT_CODE).status, DOCUMENT_STATUS.NOT_SUBMITTED);
     assert.equal(businessDraft.form.collaboration.businessSubmitted, true);
     assert.equal(businessDraft.form.collaboration.technicalSubmitted, false);
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(formDataByCode(db, INITIATION_REVIEW_DOCUMENT_CODE), 'projectExecutionMode'),
+      false
+    );
 
     const submitted = await submitApprovalTechnicalPart(db);
     assert.equal(submitted.form.status, 'submitted');
@@ -1415,15 +1469,37 @@ test('1.2 collaboration and three review nodes derive initiation approval comple
     assert.equal(reviewNode(db, INITIATION_REVIEW_NODE_KEY.TECHNICAL).node_status, INITIATION_REVIEW_NODE_STATUS.APPROVED);
     assert.equal(reviewNode(db, INITIATION_REVIEW_NODE_KEY.GENERAL).node_status, INITIATION_REVIEW_NODE_STATUS.PENDING);
 
-    const approved = await approveGeneralReview(db);
+    await assert.rejects(
+      () => approveGeneralReview(db, '缺少模式', ''),
+      (error) => error?.code === 'INITIATION_PROJECT_EXECUTION_MODE_REQUIRED'
+    );
+    await assert.rejects(
+      () => approveGeneralReview(db, '非法模式', '外包模式'),
+      (error) => error?.code === 'INVALID_INITIATION_PROJECT_EXECUTION_MODE'
+    );
+    assert.equal(reviewNode(db, INITIATION_REVIEW_NODE_KEY.GENERAL).node_status, INITIATION_REVIEW_NODE_STATUS.PENDING);
+
+    const approved = await approveGeneralReview(db, '同意立项', '供应链模式');
     assert.equal(reviewNode(db, INITIATION_REVIEW_NODE_KEY.GENERAL).node_status, INITIATION_REVIEW_NODE_STATUS.APPROVED);
     assert.equal(documentByCode(db, INITIATION_REVIEW_DOCUMENT_CODE).status, DOCUMENT_STATUS.CONFIRMED);
     assert.equal(approved.initiationReview.isComplete, true);
     assert.equal(approved.isComplete, true);
+    assert.equal(formDataByCode(db, INITIATION_REVIEW_DOCUMENT_CODE).projectExecutionMode, '供应链模式');
+    assert.equal(db.connection.lastGeneratedSnapshot.formData.projectExecutionMode, '供应链模式');
+    assert.equal(db.connection.project.project_mode, null);
     assert.ok(logActions(db).includes(OPERATION_ACTION_TYPE.INITIATION_REVIEW_BUSINESS_APPROVED));
     assert.ok(logActions(db).includes(OPERATION_ACTION_TYPE.INITIATION_REVIEW_TECHNICAL_APPROVED));
     assert.ok(logActions(db).includes(OPERATION_ACTION_TYPE.INITIATION_REVIEW_GENERAL_APPROVED));
+    assert.ok(logActions(db).includes(OPERATION_ACTION_TYPE.INITIATION_PROJECT_EXECUTION_MODE_SELECTED));
     assert.ok(logActions(db).includes(OPERATION_ACTION_TYPE.INITIATION_REVIEW_COMPLETED));
+    const modeLog = db.connection.operationLogs.find(
+      (log) => log.action_type === OPERATION_ACTION_TYPE.INITIATION_PROJECT_EXECUTION_MODE_SELECTED
+    );
+    const modeDetails = JSON.parse(modeLog.details_json);
+    assert.equal(modeDetails.stageDocumentId, DOCUMENT_IDS.REVIEW);
+    assert.equal(modeDetails.nodeKey, INITIATION_REVIEW_NODE_KEY.GENERAL);
+    assert.equal(modeDetails.selectedProjectExecutionMode, '供应链模式');
+    assert.equal(modeDetails.writesProjectsProjectMode, false);
   });
 });
 
@@ -1435,6 +1511,11 @@ test('general manager return triggers precise 1.1 rework and rework resubmission
     await submitApprovalForm(db);
     await approveBusinessReview(db);
     await approveTechnicalReview(db);
+    const staleReviewForm = db.connection.formByDocumentId(DOCUMENT_IDS.REVIEW);
+    staleReviewForm.form_data_json = JSON.stringify({
+      ...JSON.parse(staleReviewForm.form_data_json),
+      projectExecutionMode: '自研模式'
+    });
 
     const returned = await returnInitiationReviewNode({
       projectId: PROJECT_ID,
@@ -1452,6 +1533,10 @@ test('general manager return triggers precise 1.1 rework and rework resubmission
       DOCUMENT_IDS.REVIEW
     );
     assert.equal(reviewNode(db, INITIATION_REVIEW_NODE_KEY.GENERAL).node_status, INITIATION_REVIEW_NODE_STATUS.RETURNED_BLOCKED_BY_REWORK);
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(formDataByCode(db, INITIATION_REVIEW_DOCUMENT_CODE), 'projectExecutionMode'),
+      false
+    );
 
     await assert.rejects(
       () => submitNotice(db, 'KRF-BLOCKED-001'),
@@ -1470,9 +1555,14 @@ test('general manager return triggers precise 1.1 rework and rework resubmission
     await submitApprovalForm(db);
     await approveBusinessReview(db, '返工后营销评价通过');
     await approveTechnicalReview(db, '返工后研发评价通过');
-    const approvedAgain = await approveGeneralReview(db, '返工后同意立项');
+    await assert.rejects(
+      () => approveGeneralReview(db, '返工后缺少模式', ''),
+      (error) => error?.code === 'INITIATION_PROJECT_EXECUTION_MODE_REQUIRED'
+    );
+    const approvedAgain = await approveGeneralReview(db, '返工后同意立项', '供应链模式');
     assert.equal(approvedAgain.initiationReview.isComplete, true);
     assert.equal(documentByCode(db, INITIATION_REVIEW_DOCUMENT_CODE).status, DOCUMENT_STATUS.CONFIRMED);
+    assert.equal(formDataByCode(db, INITIATION_REVIEW_DOCUMENT_CODE).projectExecutionMode, '供应链模式');
   });
 });
 
@@ -1499,14 +1589,46 @@ test('1.3 notice gate writes unique project code and initiation completeness aut
     assert.equal(logActions(duplicateDb).includes(OPERATION_ACTION_TYPE.STAGE_ADVANCED), false);
   });
 
-  const db = fakeDb();
+  const db = fakeDb({
+    submittedNoticeRows: [
+      {
+        id: PROJECT_ID - 1,
+        projectCode: 'KRF-OLD-001',
+        projectName: '历史供应链项目',
+        customerName: '历史客户',
+        noticeFormData: {
+          projectCode: 'KRF-OLD-001',
+          projectName: '历史供应链项目',
+          customerUnit: '历史客户',
+          initiationDate: '2026-07-01'
+        },
+        reviewFormData: {
+          projectExecutionMode: '供应链模式'
+        },
+        submittedAt: '2026-07-01 09:00:00'
+      }
+    ]
+  });
   await withFakePool(db, async () => {
     await completeInitiationReview(db);
-    const noticeSubmitted = await submitNotice(db, 'KRF-INIT-001');
+    const noticeForm = await getStageDocumentOnlineForm({
+      projectId: PROJECT_ID,
+      documentId: DOCUMENT_IDS.NOTICE,
+      user: user(db, 1)
+    });
+    assert.equal(noticeForm.formData.projectExecutionMode, '自研模式');
+    assert.ok(noticeForm.schema.noticeTemplate.tableColumns.includes('开展模式'));
+
+    const noticeSubmitted = await submitNotice(db, 'KRF-INIT-001', {
+      projectExecutionMode: '供应链模式'
+    });
 
     assert.equal(noticeSubmitted.form.status, 'submitted');
     assert.equal(documentByCode(db, INITIATION_NOTICE_DOCUMENT_CODE).status, DOCUMENT_STATUS.SUBMITTED);
     assert.equal(db.connection.project.project_code, 'KRF-INIT-001');
+    assert.equal(noticeSubmitted.form.formData.projectExecutionMode, '自研模式');
+    assert.equal(formDataByCode(db, INITIATION_NOTICE_DOCUMENT_CODE).projectExecutionMode, '自研模式');
+    assert.equal(db.connection.project.project_mode, null);
     assert.equal(db.connection.currentStage().stage_key, 'solution');
     assert.equal(db.connection.stageByOrder(1).stage_status, STAGE_STATUS.COMPLETED);
     assert.equal(db.connection.stageByOrder(2).stage_status, STAGE_STATUS.CURRENT);
@@ -1522,6 +1644,18 @@ test('1.3 notice gate writes unique project code and initiation completeness aut
     assert.equal(details.toStageKey, 'solution');
     assert.equal(details.completenessSummary.completionPercent, 100);
     assert.equal(details.completenessSummary.incompleteRequiredCount, 0);
+    const noticeRows = db.connection.lastGeneratedSnapshot.noticeProjectList.rows;
+    assert.equal(noticeRows.length, 2);
+    assert.deepEqual(
+      noticeRows.map((row) => ({
+        projectCode: row.projectCode,
+        projectExecutionMode: row.projectExecutionMode
+      })),
+      [
+        { projectCode: 'KRF-OLD-001', projectExecutionMode: '供应链模式' },
+        { projectCode: 'KRF-INIT-001', projectExecutionMode: '自研模式' }
+      ]
+    );
     assert.equal(db.connection.stages.length, 8);
     assert.equal(EXPECTED_STAGE_DOCUMENT_ITEM_COUNT, 71);
   });

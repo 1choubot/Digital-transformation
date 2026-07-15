@@ -13,6 +13,7 @@ import {
   SOLUTION_DESIGN_NODE_KEY,
   SOLUTION_DESIGN_NODE_STATUS,
   SOLUTION_DESIGN_NODES,
+  SOLUTION_DESIGN_QUOTATION_FORM_STATUS,
   SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS,
   SOLUTION_DESIGN_QUOTATION_REJECTED_ACTION,
   SOLUTION_DESIGN_QUOTATION_RESULT,
@@ -34,20 +35,26 @@ import {
   buildSolutionDesignWorkbenchTodos,
   getSolutionDesignAnalysisGeneratedFileDownload,
   getSolutionDesignAnalysisForm,
+  getSolutionDesignQuotationForm,
+  getSolutionDesignQuotationGeneratedFileDownload,
   getSolutionDesignReviewGeneratedFileDownload,
   getSolutionDesignReviewForm,
   getSolutionDesignUploadDownload,
   getSolutionDesignWorkflow,
   listSolutionDesignUploads,
+  markSolutionDesignUploadExemption,
   processSolutionDesignQuotationResult,
   returnSolutionDesignWorkflowNode,
   saveSolutionDesignAnalysisForm,
+  saveSolutionDesignQuotationForm,
   saveSolutionDesignReviewForm,
   selectSolutionDesignQuotationTenderBranch,
   submitSolutionDesignAnalysisForm,
   submitSolutionDesignQuotation,
+  submitSolutionDesignQuotationForm,
   submitSolutionDesignReviewForm,
   submitSolutionDesignWorkflowNode,
+  cancelSolutionDesignUploadExemption,
   uploadSolutionDesignWorkflowFile
 } from '../../src/repositories/projects/solutionDesignWorkflowRepository.js';
 import {
@@ -192,6 +199,13 @@ function baseUsers() {
         department: null,
         organizationRole: ORGANIZATION_ROLE.SYSTEM_ADMIN,
         isPlatformAdmin: 1
+      }),
+      dbUser({
+        id: 5,
+        account: 'marketing_manager',
+        displayName: '营销中心负责人',
+        department: BUSINESS_DEPARTMENT.MARKETING_CENTER,
+        organizationRole: ORGANIZATION_ROLE.CENTER_MANAGER
       }),
       dbUser({
         id: 10,
@@ -392,8 +406,8 @@ function fakeGeneratedFileStorage({ failWrite = false } = {}) {
     written,
     cleaned,
     files,
-    createStorageKey({ projectId, documentCode, revision }) {
-      return `${projectId}/generated/${documentCode}/v${revision}-${written.length + cleaned.length + 1}.xlsx`;
+    createStorageKey({ projectId, documentCode, revision, fileType = 'xlsx' }) {
+      return `${projectId}/generated/${documentCode}/v${revision}-${written.length + cleaned.length + 1}.${fileType}`;
     },
     async writeFile(storageKey, buffer) {
       if (failWrite) {
@@ -579,6 +593,72 @@ function assertGeneratedXlsxHasImageAnchorFrom(storage, storageKey, { column = n
   );
 }
 
+function generatedDocxDocumentXml(storage, storageKey) {
+  const entries = readZipEntries(generatedFileBuffer(storage, storageKey));
+  return entries.find((entry) => entry.name === 'word/document.xml')?.data.toString('utf8') || '';
+}
+
+function extractDocxText(xml) {
+  return decodeXmlText(
+    [...String(xml || '').matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)]
+      .map((match) => match[1])
+      .join('')
+  );
+}
+
+function extractDocxTableRows(storage, storageKey) {
+  const documentXml = generatedDocxDocumentXml(storage, storageKey);
+  const tableMatch = documentXml.match(/<w:tbl[\s\S]*?<\/w:tbl>/);
+  assert.ok(tableMatch, 'Expected generated docx table');
+  return [...tableMatch[0].matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)].map((rowMatch) =>
+    [...rowMatch[0].matchAll(/<w:tc\b[\s\S]*?<\/w:tc>/g)].map((cellMatch) => extractDocxText(cellMatch[0]))
+  );
+}
+
+function extractDocxParagraphXmls(xml) {
+  return [...String(xml || '').matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)].map((match) => match[0]);
+}
+
+function extractDocxRunTexts(xml) {
+  return [...String(xml || '').matchAll(/<w:r\b[\s\S]*?<\/w:r>/g)].map((match) => extractDocxText(match[0]));
+}
+
+function extractDocxTableCellXmls(storage, storageKey, rowIndex) {
+  const documentXml = generatedDocxDocumentXml(storage, storageKey);
+  const tableMatch = documentXml.match(/<w:tbl[\s\S]*?<\/w:tbl>/);
+  assert.ok(tableMatch, 'Expected generated docx table');
+  const rowXml = [...tableMatch[0].matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)][rowIndex]?.[0];
+  assert.ok(rowXml, `Expected generated docx table row ${rowIndex}`);
+  return [...rowXml.matchAll(/<w:tc\b[\s\S]*?<\/w:tc>/g)].map((match) => match[0]);
+}
+
+function assertGeneratedDocxCellSingleParagraph(cellXml, expectedText) {
+  const paragraphs = extractDocxParagraphXmls(cellXml);
+  assert.equal(paragraphs.length, 1, `Expected one Word paragraph in cell containing ${expectedText}`);
+  assert.equal(extractDocxText(paragraphs[0]), expectedText);
+}
+
+function assertQuotationContactLineUsesPhoneUnderlineRun(storage, storageKey) {
+  const documentXml = generatedDocxDocumentXml(storage, storageKey);
+  const contactParagraph = extractDocxParagraphXmls(documentXml)
+    .find((paragraphXml) => extractDocxText(paragraphXml).includes('联系人：'));
+  assert.ok(contactParagraph, 'Expected quotation contact paragraph');
+  const runTexts = extractDocxRunTexts(contactParagraph);
+  const contactLabelIndex = runTexts.findIndex((text) => text === '联系人：');
+  const phoneLabelIndex = runTexts.findIndex((text) => text === '电话');
+  assert.ok(contactLabelIndex >= 0, 'Expected contact label run');
+  assert.ok(phoneLabelIndex > contactLabelIndex, 'Expected phone label run after contact label');
+  assert.match(runTexts[contactLabelIndex + 1] || '', /商务负责人/);
+  assert.equal(runTexts[phoneLabelIndex], '电话');
+  assert.doesNotMatch(runTexts[phoneLabelIndex], /023-12345678/);
+  assert.match(runTexts[phoneLabelIndex + 1] || '', /023-12345678/);
+}
+
+function assertGeneratedDocxTextIncludes(storage, storageKey, expected) {
+  const text = extractDocxText(generatedDocxDocumentXml(storage, storageKey));
+  assert.match(text, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}
+
 function analysisFormPayload(overrides = {}) {
   return {
     formData: {
@@ -602,6 +682,53 @@ function reviewFormPayload(overrides = {}) {
       ...overrides
     }
   };
+}
+
+function quotationFormPayload(overrides = {}) {
+  const defaultItems = [
+    {
+      name: '机器人工作站',
+      unit: '套',
+      quantity: '2.125',
+      unitPrice: '1000.12',
+      amount: '999999.99',
+      remark: '含安装调试'
+    },
+    {
+      name: '视觉检测系统',
+      unit: '套',
+      quantity: '1',
+      unitPrice: '3456.78',
+      totalAmount: '1.00',
+      totalAmountUppercase: '前端篡改大写金额',
+      remark: ''
+    }
+  ];
+
+  return {
+    formData: {
+      recipientName: '王客户',
+      recipientTitle: '先生',
+      contactName: '商务负责人',
+      contactPhone: '023-12345678',
+      quotationDate: '2026-07-13',
+      items: defaultItems,
+      ...overrides
+    }
+  };
+}
+
+function quotationFormPayloadWithItemCount(count) {
+  return quotationFormPayload({
+    items: Array.from({ length: count }, (_unused, index) => ({
+      name: `动态明细${index + 1}`,
+      unit: '项',
+      quantity: index === 9 ? '1.2345' : '1',
+      unitPrice: index === 9 ? '10.01' : `${100 + index}.00`,
+      amount: '0.01',
+      remark: `备注${index + 1}`
+    }))
+  });
 }
 
 const SOLUTION_DESIGN_STAGE_DOCUMENTS = Object.freeze([
@@ -967,7 +1094,7 @@ async function submitManufacturingCostForReview(db, storage = fakeUploadStorage(
   );
 }
 
-async function activateFinanceCostNode(db, storage = fakeUploadStorage()) {
+async function activateMarketingCostNode(db, storage = fakeUploadStorage()) {
   const manufacturingManager = authUser(db.connection.users.get(2));
   await submitManufacturingCostForReview(db, storage);
   await approveSolutionDesignWorkflowNode(
@@ -975,6 +1102,43 @@ async function activateFinanceCostNode(db, storage = fakeUploadStorage()) {
       projectId: 100,
       nodeKey: SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST,
       user: manufacturingManager
+    },
+    db
+  );
+  return storage;
+}
+
+async function submitMarketingCostForReview(db, storage = fakeUploadStorage()) {
+  const businessOwner = authUser(db.connection.users.get(13));
+  await activateMarketingCostNode(db, storage);
+  await uploadSolutionDesignWorkflowFile(
+    {
+      projectId: 100,
+      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MARKETING_COST_ESTIMATION,
+      file: testUploadFile('营销中心成本估算表.xlsx'),
+      user: businessOwner
+    },
+    db,
+    storage
+  );
+  return submitSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      user: businessOwner
+    },
+    db
+  );
+}
+
+async function activateFinanceCostNode(db, storage = fakeUploadStorage()) {
+  const marketingManager = authUser(db.connection.users.get(5));
+  await submitMarketingCostForReview(db, storage);
+  await approveSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      user: marketingManager
     },
     db
   );
@@ -1018,17 +1182,35 @@ async function submitFinanceCostForGeneralReview(db, storage = fakeUploadStorage
   return storage;
 }
 
-async function activateQuotationOrTenderNode(db, storage = fakeUploadStorage()) {
+async function activateQuotationOrTenderNode(
+  db,
+  storage = fakeUploadStorage(),
+  branchType = SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION
+) {
   const generalManager = authUser(db.connection.users.get(30));
   await submitFinanceCostForGeneralReview(db, storage);
   await approveSolutionDesignWorkflowNode(
     {
       projectId: 100,
       nodeKey: SOLUTION_DESIGN_NODE_KEY.FINANCE_COST,
+      payload: { branchType },
       user: generalManager
     },
     db
   );
+  return storage;
+}
+
+async function activateLegacyUnselectedQuotationOrTenderNode(db, storage = fakeUploadStorage()) {
+  await submitFinanceCostForGeneralReview(db, storage);
+  const financeNode = db.connection.nodes.find((node) => node.node_key === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST);
+  const quotationTenderNode = db.connection.nodes.find(
+    (node) => node.node_key === SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER
+  );
+  financeNode.status = SOLUTION_DESIGN_NODE_STATUS.APPROVED;
+  financeNode.approved_at = '2026-07-08 10:25:00';
+  quotationTenderNode.status = SOLUTION_DESIGN_NODE_STATUS.PENDING;
+  quotationTenderNode.activated_at = quotationTenderNode.activated_at || '2026-07-08 10:25:00';
   return storage;
 }
 
@@ -1058,21 +1240,11 @@ async function selectTenderBranch(db) {
 
 async function submitQuotation(db, storage = fakeUploadStorage()) {
   const businessOwner = authUser(db.connection.users.get(13));
-  await activateQuotationOrTenderNode(db, storage);
-  await selectQuotationBranch(db);
-  await uploadSolutionDesignWorkflowFile(
+  await activateQuotationOrTenderNode(db, storage, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION);
+  return submitSolutionDesignQuotationForm(
     {
       projectId: 100,
-      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE,
-      file: testUploadFile('报价单.xlsx'),
-      user: businessOwner
-    },
-    db,
-    storage
-  );
-  return submitSolutionDesignQuotation(
-    {
-      projectId: 100,
+      payload: quotationFormPayload(),
       user: businessOwner
     },
     db
@@ -1082,8 +1254,7 @@ async function submitQuotation(db, storage = fakeUploadStorage()) {
 async function submitTenderForReview(db, storage = fakeUploadStorage()) {
   const businessOwner = authUser(db.connection.users.get(13));
   const technicalOwner = authUser(db.connection.users.get(12));
-  await activateQuotationOrTenderNode(db, storage);
-  await selectTenderBranch(db);
+  await activateQuotationOrTenderNode(db, storage, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.TENDER);
   await uploadSolutionDesignWorkflowFile(
     {
       projectId: 100,
@@ -1273,16 +1444,24 @@ function fakeDedicatedStageDocumentStatusConnection({ documentCode = 'C15', stat
 }
 
 class SolutionDesignWorkflowFakeConnection {
-  constructor({ project = baseProject(), users = baseUsers(), visible = true } = {}) {
+  constructor(options = {}) {
+    const {
+      project = baseProject(),
+      users = baseUsers(),
+      visible = true,
+      quotationSubmittedAt = '2026-07-08 10:40:00'
+    } = options;
     this.project = { ...project };
     this.users = users;
     this.visible = visible;
+    this.quotationSubmittedAt = quotationSubmittedAt;
     this.rolesRow = null;
     this.nodes = [];
     this.uploadSlots = [];
     this.uploadFiles = [];
     this.analysisForms = [];
     this.reviewForms = [];
+    this.quotationForms = [];
     this.formImages = [];
     this.quotationTenderFlow = null;
     this.stages = buildProjectStages(this.project.id, Number(this.project.current_stage_order ?? 2));
@@ -1294,6 +1473,7 @@ class SolutionDesignWorkflowFakeConnection {
     this.nextUploadFileId = 1;
     this.nextAnalysisFormId = 1;
     this.nextReviewFormId = 1;
+    this.nextQuotationFormId = 1;
     this.nextFormImageId = 1;
     this.committed = false;
     this.rolledBack = false;
@@ -1354,6 +1534,10 @@ class SolutionDesignWorkflowFakeConnection {
       .sort((left, right) => left.node_key.localeCompare(right.node_key));
   }
 
+  currentQuotationForm() {
+    return this.quotationForms.find((form) => form.is_current === 1) || null;
+  }
+
   analysisFormRowWithUsers(form) {
     if (!form) {
       return null;
@@ -1392,12 +1576,32 @@ class SolutionDesignWorkflowFakeConnection {
     };
   }
 
+  quotationFormRowWithUsers(form) {
+    if (!form) {
+      return null;
+    }
+
+    const submitter = form.submitted_by_user_id ? this.users.get(Number(form.submitted_by_user_id)) : null;
+    const creator = this.users.get(Number(form.created_by_user_id)) || null;
+    const updater = this.users.get(Number(form.updated_by_user_id)) || null;
+    return {
+      ...form,
+      submitted_by_account: submitter?.account ?? null,
+      submitted_by_display_name: submitter?.display_name ?? null,
+      created_by_account: creator?.account ?? null,
+      created_by_display_name: creator?.display_name ?? null,
+      updated_by_account: updater?.account ?? null,
+      updated_by_display_name: updater?.display_name ?? null
+    };
+  }
+
   uploadSlotRowsWithCurrentFiles() {
     return [...this.uploadSlots]
       .sort((left, right) => left.slot_order - right.slot_order)
       .map((slot) => {
         const currentFile = this.currentUploadFileForSlot(slot.slot_key);
         const uploader = currentFile ? this.users.get(Number(currentFile.uploaded_by_user_id)) : null;
+        const exemptedBy = slot.exempted_by_user_id ? this.users.get(Number(slot.exempted_by_user_id)) : null;
 
         return {
           ...slot,
@@ -1409,7 +1613,9 @@ class SolutionDesignWorkflowFakeConnection {
           current_file_uploaded_by_user_id: currentFile?.uploaded_by_user_id ?? null,
           current_file_uploaded_at: currentFile?.uploaded_at ?? null,
           current_file_uploaded_by_account: uploader?.account ?? null,
-          current_file_uploaded_by_display_name: uploader?.display_name ?? null
+          current_file_uploaded_by_display_name: uploader?.display_name ?? null,
+          exempted_by_account: exemptedBy?.account ?? null,
+          exempted_by_display_name: exemptedBy?.display_name ?? null
         };
       });
   }
@@ -1545,6 +1751,23 @@ class SolutionDesignWorkflowFakeConnection {
       ];
     }
 
+    if (text.startsWith('SELECT * FROM project_solution_design_quotation_forms')) {
+      if (text.includes('WHERE project_id IN')) {
+        const projectIds = new Set(params.map(Number));
+        return [
+          this.quotationForms
+            .filter((form) => projectIds.has(Number(form.project_id)) && form.is_current === 1)
+            .map((form) => ({ ...form }))
+        ];
+      }
+
+      return [
+        this.quotationForms
+          .filter((form) => form.is_current === 1)
+          .map((form) => ({ ...form }))
+      ];
+    }
+
     if (
       text.startsWith('SELECT f.*, submitter.account AS submitted_by_account') &&
       text.includes('FROM project_solution_design_review_forms')
@@ -1556,6 +1779,14 @@ class SolutionDesignWorkflowFakeConnection {
       }
 
       return [this.currentReviewForms().map((form) => this.reviewFormRowWithUsers(form))];
+    }
+
+    if (
+      text.startsWith('SELECT f.*, submitter.account AS submitted_by_account') &&
+      text.includes('FROM project_solution_design_quotation_forms')
+    ) {
+      const currentForm = this.currentQuotationForm();
+      return [currentForm ? [this.quotationFormRowWithUsers(currentForm)] : []];
     }
 
     if (text.startsWith('SELECT f.*, submitter.account AS submitted_by_account')) {
@@ -1570,6 +1801,17 @@ class SolutionDesignWorkflowFakeConnection {
       const [projectId, nodeKey] = params;
       const maxRevision = this.reviewForms
         .filter((form) => form.project_id === projectId && form.node_key === nodeKey)
+        .reduce((max, form) => Math.max(max, Number(form.revision ?? 0)), 0);
+      return [[{ max_revision: maxRevision }]];
+    }
+
+    if (
+      text.startsWith('SELECT COALESCE(MAX(revision), 0) AS max_revision') &&
+      text.includes('FROM project_solution_design_quotation_forms')
+    ) {
+      const [projectId] = params;
+      const maxRevision = this.quotationForms
+        .filter((form) => form.project_id === projectId)
         .reduce((max, form) => Math.max(max, Number(form.revision ?? 0)), 0);
       return [[{ max_revision: maxRevision }]];
     }
@@ -1598,6 +1840,10 @@ class SolutionDesignWorkflowFakeConnection {
         is_required: 1,
         revision: 1,
         status,
+        is_upload_exempted: 0,
+        exemption_reason: null,
+        exempted_by_user_id: null,
+        exempted_at: null,
         submitted_by_user_id: null,
         submitted_at: null,
         created_at: '2026-07-08 10:00:00',
@@ -1879,6 +2125,49 @@ class SolutionDesignWorkflowFakeConnection {
 
     if (
       text.startsWith('UPDATE project_solution_design_upload_slots') &&
+      text.includes('SET is_upload_exempted = 1')
+    ) {
+      const [reason, exemptedByUserId, projectId, slotKey] = params;
+      const slot = this.uploadSlots.find(
+        (candidate) =>
+          candidate.project_id === projectId &&
+          candidate.slot_key === slotKey &&
+          Number(candidate.is_upload_exempted ?? 0) === 0
+      );
+      if (slot) {
+        slot.is_upload_exempted = 1;
+        slot.exemption_reason = reason;
+        slot.exempted_by_user_id = exemptedByUserId;
+        slot.exempted_at = '2026-07-08 10:15:00';
+        slot.updated_at = '2026-07-08 10:15:00';
+      }
+      return [{ affectedRows: slot ? 1 : 0 }];
+    }
+
+    if (
+      text.startsWith('UPDATE project_solution_design_upload_slots') &&
+      text.includes('SET is_upload_exempted = 0') &&
+      text.includes('AND is_upload_exempted = 1')
+    ) {
+      const [projectId, slotKey] = params;
+      const slot = this.uploadSlots.find(
+        (candidate) =>
+          candidate.project_id === projectId &&
+          candidate.slot_key === slotKey &&
+          Number(candidate.is_upload_exempted ?? 0) === 1
+      );
+      if (slot) {
+        slot.is_upload_exempted = 0;
+        slot.exemption_reason = null;
+        slot.exempted_by_user_id = null;
+        slot.exempted_at = null;
+        slot.updated_at = '2026-07-08 10:15:00';
+      }
+      return [{ affectedRows: slot ? 1 : 0 }];
+    }
+
+    if (
+      text.startsWith('UPDATE project_solution_design_upload_slots') &&
       text.includes('submitted_by_user_id')
     ) {
       const [status, submittedByUserId, projectId, nodeOrSlotKey] = params;
@@ -1906,6 +2195,10 @@ class SolutionDesignWorkflowFakeConnection {
       if (slot) {
         slot.status = status;
         slot.revision = revision;
+        slot.is_upload_exempted = 0;
+        slot.exemption_reason = null;
+        slot.exempted_by_user_id = null;
+        slot.exempted_at = null;
         slot.updated_at = '2026-07-08 10:10:00';
       }
       return [{ affectedRows: slot ? 1 : 0 }];
@@ -2223,6 +2516,169 @@ class SolutionDesignWorkflowFakeConnection {
           form.updated_by_user_id = fileSizeOrUpdatedByUserId;
         }
         form.updated_at = '2026-07-08 10:36:00';
+      }
+      return [{ affectedRows: form ? 1 : 0 }];
+    }
+
+    if (text.startsWith('UPDATE project_solution_design_quotation_forms SET is_current = 0')) {
+      const [projectId] = params;
+      for (const form of this.quotationForms) {
+        if (form.project_id === projectId && form.is_current === 1) {
+          form.is_current = 0;
+          form.updated_at = '2026-07-08 10:40:00';
+        }
+      }
+      return [{ affectedRows: 1 }];
+    }
+
+    if (text.startsWith('INSERT INTO project_solution_design_quotation_forms')) {
+      const [
+        projectId,
+        revision,
+        formStatus,
+        formDataJson,
+        submittedByUserId,
+        generatedFileStatus,
+        generatedFileTemplateName,
+        generatedByUserId,
+        generationErrorMessage,
+        createdByUserId,
+        updatedByUserId
+      ] = params;
+      const form = {
+        id: this.nextQuotationFormId++,
+        project_id: projectId,
+        node_key: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+        revision,
+        form_status: formStatus,
+        form_data_json: formDataJson,
+        is_current: 1,
+        submitted_by_user_id: submittedByUserId,
+        submitted_at: text.includes('CURRENT_TIMESTAMP') ? this.quotationSubmittedAt : null,
+        generated_file_status: generatedFileStatus,
+        generated_file_storage_key: null,
+        generated_file_name: null,
+        generated_file_mime_type: null,
+        generated_file_size: null,
+        generated_file_template_name: generatedFileTemplateName,
+        generated_at: null,
+        generated_by_user_id: generatedByUserId,
+        generation_error_message: generationErrorMessage,
+        created_by_user_id: createdByUserId,
+        updated_by_user_id: updatedByUserId,
+        created_at: '2026-07-08 10:40:00',
+        updated_at: '2026-07-08 10:40:00'
+      };
+      this.quotationForms.push(form);
+      return [{ affectedRows: 1, insertId: form.id }];
+    }
+
+    if (text.startsWith('UPDATE project_solution_design_quotation_forms SET form_status = ?')) {
+      const [
+        formStatus,
+        formDataJson,
+        submittedByUserId,
+        generatedFileStatus,
+        generatedFileTemplateName,
+        generatedByUserId,
+        generationErrorMessage,
+        updatedByUserId,
+        formId
+      ] = params;
+      const form = this.quotationForms.find((candidate) => candidate.id === formId);
+      if (form) {
+        form.form_status = formStatus;
+        form.form_data_json = formDataJson;
+        form.submitted_by_user_id = submittedByUserId;
+        form.submitted_at = text.includes('CURRENT_TIMESTAMP') ? this.quotationSubmittedAt : null;
+        form.generated_file_status = generatedFileStatus;
+        form.generated_file_storage_key = null;
+        form.generated_file_name = null;
+        form.generated_file_mime_type = null;
+        form.generated_file_size = null;
+        form.generated_file_template_name = generatedFileTemplateName;
+        form.generated_at = null;
+        form.generated_by_user_id = generatedByUserId;
+        form.generation_error_message = generationErrorMessage;
+        form.updated_by_user_id = updatedByUserId;
+        form.updated_at = '2026-07-08 10:40:00';
+      }
+      return [{ affectedRows: form ? 1 : 0 }];
+    }
+
+    if (text.startsWith('UPDATE project_solution_design_quotation_forms SET generated_file_status = ?')) {
+      const isGenerated = text.includes('generated_file_storage_key = ?');
+      const hasFailedFormStatus = !isGenerated && text.includes('form_status = ?');
+      const resolvedFormId = isGenerated
+        ? params[8]
+        : hasFailedFormStatus
+          ? params[6]
+          : params[5];
+      const form = this.quotationForms.find((candidate) => candidate.id === resolvedFormId);
+      if (form) {
+        if (isGenerated) {
+          const [
+            generatedFileStatus,
+            storageKey,
+            fileName,
+            mimeType,
+            fileSize,
+            templateName,
+            generatedByUserId,
+            updatedByUserId
+          ] = params;
+          form.generated_file_status = generatedFileStatus;
+          form.generated_file_storage_key = storageKey;
+          form.generated_file_name = fileName;
+          form.generated_file_mime_type = mimeType;
+          form.generated_file_size = fileSize;
+          form.generated_file_template_name = templateName;
+          form.generated_at = '2026-07-08 10:41:00';
+          form.generated_by_user_id = generatedByUserId;
+          form.generation_error_message = null;
+          form.updated_by_user_id = updatedByUserId;
+        } else if (hasFailedFormStatus) {
+          const [
+            generatedFileStatus,
+            formStatus,
+            templateName,
+            generatedByUserId,
+            errorMessage,
+            updatedByUserId
+          ] = params;
+          form.form_status = formStatus;
+          form.submitted_by_user_id = null;
+          form.submitted_at = null;
+          form.generated_file_status = generatedFileStatus;
+          form.generated_file_storage_key = null;
+          form.generated_file_name = null;
+          form.generated_file_mime_type = null;
+          form.generated_file_size = null;
+          form.generated_file_template_name = templateName;
+          form.generated_at = '2026-07-08 10:41:00';
+          form.generated_by_user_id = generatedByUserId;
+          form.generation_error_message = errorMessage;
+          form.updated_by_user_id = updatedByUserId;
+        } else {
+          const [
+            generatedFileStatus,
+            templateName,
+            generatedByUserId,
+            errorMessage,
+            updatedByUserId
+          ] = params;
+          form.generated_file_status = generatedFileStatus;
+          form.generated_file_storage_key = null;
+          form.generated_file_name = null;
+          form.generated_file_mime_type = null;
+          form.generated_file_size = null;
+          form.generated_file_template_name = templateName;
+          form.generated_at = '2026-07-08 10:41:00';
+          form.generated_by_user_id = generatedByUserId;
+          form.generation_error_message = errorMessage;
+          form.updated_by_user_id = updatedByUserId;
+        }
+        form.updated_at = '2026-07-08 10:41:00';
       }
       return [{ affectedRows: form ? 1 : 0 }];
     }
@@ -2691,16 +3147,16 @@ test('visible project users can query workflow and lazy initialization is idempo
 
   assert.equal(first.projectId, 100);
   assert.equal(first.permissions.canViewWorkflow, true);
-  assert.equal(first.nodes.length, 9);
+  assert.equal(first.nodes.length, SOLUTION_DESIGN_NODES.length);
   assert.deepEqual(
     first.nodes.map((node) => node.nodeKey),
     SOLUTION_DESIGN_NODES.map((node) => node.nodeKey)
   );
   assert.equal(first.nodes[0].status, SOLUTION_DESIGN_NODE_STATUS.PENDING);
   assert.equal(first.nodes[1].status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
-  assert.equal(second.nodes.length, 9);
-  assert.equal(db.connection.nodes.length, 9);
-  assert.equal(db.connection.nodeInsertCount, 9);
+  assert.equal(second.nodes.length, SOLUTION_DESIGN_NODES.length);
+  assert.equal(db.connection.nodes.length, SOLUTION_DESIGN_NODES.length);
+  assert.equal(db.connection.nodeInsertCount, SOLUTION_DESIGN_NODES.length);
 });
 
 test('workflow query rejects users without project visibility', async () => {
@@ -2739,7 +3195,7 @@ test('RD center manager can assign roles and project manager stays single-source
   assert.equal(db.connection.project.project_manager_user_id, 11);
   assert.equal(db.connection.project.project_manager, '新项目经理');
   assert.equal(Object.hasOwn(db.connection.rolesRow, 'project_manager_user_id'), false);
-  assert.equal(db.connection.nodes.length, 9);
+  assert.equal(db.connection.nodes.length, SOLUTION_DESIGN_NODES.length);
   assert.deepEqual(
     workflow.nodes[0].blockingReasons,
     ['等待项目经理提交方案设计工作计划']
@@ -2758,7 +3214,7 @@ test('workflow query after solution stage does not lazily insert missing nodes',
 
   const workflow = await getSolutionDesignWorkflow({ projectId: 100, user: requester }, db);
 
-  assert.equal(workflow.nodes.length, 9);
+  assert.equal(workflow.nodes.length, SOLUTION_DESIGN_NODES.length);
   assert.equal(workflow.nodes.every((node) => node.status === SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED), true);
   assert.equal(db.connection.nodes.length, 0);
   assert.equal(db.connection.nodeInsertCount, 0);
@@ -4021,7 +4477,7 @@ test('RD manager approves solution analysis node and activates solution design n
   );
 });
 
-test('RD manager returns solution analysis node and requires overall resubmission', async () => {
+test('RD manager returns solution analysis node and reuses current product diagram after form regeneration', async () => {
   const db = fakeDb();
   seedAssignedRoles(db.connection);
   const storage = fakeUploadStorage();
@@ -4068,7 +4524,7 @@ test('RD manager returns solution analysis node and requires overall resubmissio
     (error) =>
       error.code === SOLUTION_DESIGN_ERROR.NODE_BLOCKED &&
       error.details.includes('analysis_form') &&
-      error.details.includes(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PRODUCT_FUNCTION_DIAGRAM)
+      !error.details.includes(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PRODUCT_FUNCTION_DIAGRAM)
   );
   assert.equal(db.connection.operationLogs.length, logCountBeforeOldRevisionSubmit);
 
@@ -4100,16 +4556,6 @@ test('RD manager returns solution analysis node and requires overall resubmissio
     '退回后重新评估节拍风险'
   );
   assert.equal(Object.hasOwn(JSON.parse(db.connection.currentAnalysisForm().form_data_json), 'technicalRisks'), false);
-  await uploadSolutionDesignWorkflowFile(
-    {
-      projectId: 100,
-      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PRODUCT_FUNCTION_DIAGRAM,
-      file: testUploadFile('产品功能框图-v2.png'),
-      user: technicalOwner
-    },
-    db,
-    storage
-  );
   const readyAgain = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
   assert.equal(findWorkflowNode(readyAgain, SOLUTION_DESIGN_NODE_KEY.ANALYSIS).permissions.canSubmit, true);
   const resubmitted = await submitSolutionDesignWorkflowNode(
@@ -4129,7 +4575,7 @@ test('RD manager returns solution analysis node and requires overall resubmissio
     db.connection.uploadFiles.find(
       (file) => file.slot_key === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PRODUCT_FUNCTION_DIAGRAM && file.is_current === 1
     ).revision,
-    2
+    1
   );
 
   const returnLog = db.connection.operationLogs.find(
@@ -5023,7 +5469,7 @@ test('internal review node submits for review and RD manager approval activates 
   );
 });
 
-test('RD manager returns internal review to solution design and old design outputs cannot be resubmitted', async () => {
+test('RD manager returns internal review to solution design and current design outputs can be resubmitted', async () => {
   const db = fakeDb();
   seedAssignedRoles(db.connection);
   const storage = fakeUploadStorage();
@@ -5046,39 +5492,12 @@ test('RD manager returns internal review to solution design and old design outpu
   assert.equal(designNode.currentRevision, 2);
   assert.equal(internalNode.status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
   assert.equal(internalNode.currentRevision, 2);
-  assert.equal(designNode.permissions.canSubmit, false);
-
-  const logCountBeforeOldRevisionSubmit = db.connection.operationLogs.length;
-  await assert.rejects(
-    () =>
-      submitSolutionDesignWorkflowNode(
-        {
-          projectId: 100,
-          nodeKey: SOLUTION_DESIGN_NODE_KEY.DESIGN,
-          user: technicalOwner
-        },
-        db
-      ),
-    (error) =>
-      error.code === SOLUTION_DESIGN_ERROR.NODE_BLOCKED &&
-      error.details.includes(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PROCESS_TIMING_DIAGRAM)
+  const returnedForTechnicalOwner = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
+  assert.equal(
+    findWorkflowNode(returnedForTechnicalOwner, SOLUTION_DESIGN_NODE_KEY.DESIGN).permissions.canSubmit,
+    true
   );
-  assert.equal(db.connection.operationLogs.length, logCountBeforeOldRevisionSubmit);
 
-  for (const slotKey of SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS) {
-    await uploadSolutionDesignWorkflowFile(
-      {
-        projectId: 100,
-        slotKey,
-        file: testUploadFile(`${slotKey}-v2.dat`),
-        user: technicalOwner
-      },
-      db,
-      storage
-    );
-  }
-  const readyAgain = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
-  assert.equal(findWorkflowNode(readyAgain, SOLUTION_DESIGN_NODE_KEY.DESIGN).permissions.canSubmit, true);
   await submitSolutionDesignWorkflowNode(
     {
       projectId: 100,
@@ -5087,7 +5506,15 @@ test('RD manager returns internal review to solution design and old design outpu
     },
     db
   );
+  assert.equal(
+    db.connection.operationLogs.at(-1).action_type,
+    OPERATION_ACTION_TYPE.SOLUTION_DESIGN_DESIGN_OUTPUTS_SUBMITTED
+  );
   const internalReviewReadyAgain = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
+  assert.equal(
+    findWorkflowNode(internalReviewReadyAgain, SOLUTION_DESIGN_NODE_KEY.DESIGN).status,
+    SOLUTION_DESIGN_NODE_STATUS.APPROVED
+  );
   assert.equal(
     findWorkflowNode(internalReviewReadyAgain, SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW).permissions.canSubmit,
     false
@@ -5115,6 +5542,358 @@ test('RD manager returns internal review to solution design and old design outpu
   assert.equal(details.returnReason, '内部评审要求整体调整方案');
   assert.equal(details.returnToNodeKey, SOLUTION_DESIGN_NODE_KEY.DESIGN);
   assert.deepEqual(details.resubmitScope, SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS);
+});
+
+test('returned solution design output reupload replaces current file and non-current history cannot satisfy submit gate', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const technicalOwner = authUser(db.connection.users.get(12));
+  const rdManager = authUser(db.connection.users.get(1));
+
+  await submitReviewNodeForReview(db, SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW, storage);
+  await returnSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
+      payload: { returnReason: '内部评审要求整体调整方案' },
+      user: rdManager
+    },
+    db
+  );
+
+  const replacedSlotKey = SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PROCESS_TIMING_DIAGRAM;
+  const removedCurrentSlotKey = SOLUTION_DESIGN_UPLOAD_SLOT_KEY.CYCLE_TIME_TABLE;
+  const originalReplacedFile = db.connection.currentUploadFileForSlot(replacedSlotKey);
+  assert.equal(originalReplacedFile.revision, 1);
+
+  await uploadSolutionDesignWorkflowFile(
+    {
+      projectId: 100,
+      slotKey: replacedSlotKey,
+      file: testUploadFile('工艺时序图-v2.dat'),
+      user: technicalOwner
+    },
+    db,
+    storage
+  );
+  const replacementFiles = db.connection.uploadFiles.filter((file) => file.slot_key === replacedSlotKey);
+  assert.deepEqual(
+    replacementFiles.map((file) => ({ revision: file.revision, isCurrent: file.is_current })),
+    [
+      { revision: 1, isCurrent: 0 },
+      { revision: 2, isCurrent: 1 }
+    ]
+  );
+  const download = await getSolutionDesignUploadDownload(
+    { projectId: 100, slotKey: replacedSlotKey, user: technicalOwner },
+    db,
+    storage
+  );
+  assert.equal(download.revision, 2);
+  assert.equal(download.originalFileName, '工艺时序图-v2.dat');
+
+  const removedCurrentFile = db.connection.currentUploadFileForSlot(removedCurrentSlotKey);
+  removedCurrentFile.is_current = 0;
+  const blockedWorkflow = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
+  assert.equal(findWorkflowNode(blockedWorkflow, SOLUTION_DESIGN_NODE_KEY.DESIGN).permissions.canSubmit, false);
+  const logCountBeforeBlockedSubmit = db.connection.operationLogs.length;
+  await assert.rejects(
+    () =>
+      submitSolutionDesignWorkflowNode(
+        {
+          projectId: 100,
+          nodeKey: SOLUTION_DESIGN_NODE_KEY.DESIGN,
+          user: technicalOwner
+        },
+        db,
+      ),
+    (error) =>
+      error.code === SOLUTION_DESIGN_ERROR.NODE_BLOCKED &&
+      error.details.includes(removedCurrentSlotKey)
+  );
+  assert.equal(db.connection.operationLogs.length, logCountBeforeBlockedSubmit);
+});
+
+test('technical owner can exempt one C07-C14 output and invalid exemption operations are rejected', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const technicalOwner = authUser(db.connection.users.get(12));
+  const businessOwner = authUser(db.connection.users.get(13));
+
+  await activateSolutionDesignNode(db, storage);
+
+  const exemptedUploads = await markSolutionDesignUploadExemption(
+    {
+      projectId: 100,
+      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.THREE_D_MODEL,
+      payload: { exemptionReason: '客户不需要三维模型' },
+      user: technicalOwner
+    },
+    db
+  );
+  const exemptedSlot = findUploadSlot(exemptedUploads, SOLUTION_DESIGN_UPLOAD_SLOT_KEY.THREE_D_MODEL);
+  assert.equal(exemptedSlot.exemption.isExempted, true);
+  assert.equal(exemptedSlot.exemption.reason, '客户不需要三维模型');
+  assert.equal(exemptedSlot.exemption.exemptedByUserId, 12);
+  assert.equal(exemptedSlot.exemption.exemptedByUser.name, '技术负责人');
+  assert.equal(exemptedSlot.permissions.canMarkExemption, false);
+  assert.equal(exemptedSlot.permissions.canCancelExemption, true);
+
+  const slotRow = db.connection.uploadSlots.find(
+    (slot) => slot.slot_key === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.THREE_D_MODEL
+  );
+  assert.equal(slotRow.is_upload_exempted, 1);
+  assert.equal(slotRow.exemption_reason, '客户不需要三维模型');
+  assert.equal(slotRow.exempted_by_user_id, 12);
+  assert.equal(slotRow.exempted_at, '2026-07-08 10:15:00');
+  assert.equal(
+    db.connection.operationLogs.at(-1).action_type,
+    OPERATION_ACTION_TYPE.SOLUTION_DESIGN_DESIGN_OUTPUT_EXEMPTED
+  );
+
+  const logCountBeforeRejected = db.connection.operationLogs.length;
+  await assert.rejects(
+    () =>
+      markSolutionDesignUploadExemption(
+        {
+          projectId: 100,
+          slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.LAYOUT_DIAGRAM,
+          payload: { exemptionReason: '商务不能操作' },
+          user: businessOwner
+        },
+        db
+      ),
+    (error) => error.code === SOLUTION_DESIGN_ERROR.FORBIDDEN
+  );
+  await assert.rejects(
+    () =>
+      markSolutionDesignUploadExemption(
+        {
+          projectId: 100,
+          slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PRODUCT_FUNCTION_DIAGRAM,
+          payload: { exemptionReason: '非 C07-C14' },
+          user: technicalOwner
+        },
+        db
+      ),
+    (error) => error.code === SOLUTION_DESIGN_ERROR.INVALID_UPLOAD_SLOT
+  );
+  await assert.rejects(
+    () =>
+      markSolutionDesignUploadExemption(
+        {
+          projectId: 100,
+          slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.LAYOUT_DIAGRAM,
+          payload: { exemptionReason: '' },
+          user: technicalOwner
+        },
+        db
+      ),
+    (error) => error.code === SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE && error.statusCode === 400
+  );
+  assert.equal(db.connection.operationLogs.length, logCountBeforeRejected);
+});
+
+test('uploaded or exempted C07-C14 outputs can submit and derive complete without changing document count', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const technicalOwner = authUser(db.connection.users.get(12));
+
+  await activateSolutionDesignNode(db, storage);
+  const uploadedSlotKeys = SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS.slice(0, 4);
+  const exemptedSlotKeys = SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS.slice(4);
+  for (const slotKey of uploadedSlotKeys) {
+    await uploadSolutionDesignWorkflowFile(
+      {
+        projectId: 100,
+        slotKey,
+        file: testUploadFile(`${slotKey}.dat`),
+        user: technicalOwner
+      },
+      db,
+      storage
+    );
+  }
+  for (const slotKey of exemptedSlotKeys) {
+    await markSolutionDesignUploadExemption(
+      {
+        projectId: 100,
+        slotKey,
+        payload: { exemptionReason: `${slotKey} 本项目无需上传` },
+        user: technicalOwner
+      },
+      db
+    );
+  }
+
+  const uploads = await listSolutionDesignUploads({ projectId: 100, user: technicalOwner }, db);
+  for (const slotKey of uploadedSlotKeys) {
+    const slot = findUploadSlot(uploads, slotKey);
+    assert.equal(slot.hasCurrentFile, true);
+    assert.equal(slot.exemption.isExempted, false);
+  }
+  for (const slotKey of exemptedSlotKeys) {
+    const slot = findUploadSlot(uploads, slotKey);
+    assert.equal(slot.hasCurrentFile, false);
+    assert.equal(slot.exemption.isExempted, true);
+    assert.equal(slot.satisfied, true);
+  }
+
+  const workflow = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
+  const designNode = findWorkflowNode(workflow, SOLUTION_DESIGN_NODE_KEY.DESIGN);
+  assert.equal(designNode.permissions.canSubmit, true);
+  assert.deepEqual(designNode.blockingReasons, []);
+  const todos = buildSolutionDesignWorkbenchTodos({
+    projectRow: db.connection.projectContextRow(),
+    workflow,
+    uploads
+  });
+  const designUploadTodos = todos.filter(
+    (todo) =>
+      todo.nodeKey === SOLUTION_DESIGN_NODE_KEY.DESIGN &&
+      String(todo.actionKey || '').startsWith('upload:')
+  );
+  assert.deepEqual(designUploadTodos, []);
+
+  const submitted = await submitSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.DESIGN,
+      user: technicalOwner
+    },
+    db
+  );
+  assert.equal(findWorkflowNode(submitted, SOLUTION_DESIGN_NODE_KEY.DESIGN).status, SOLUTION_DESIGN_NODE_STATUS.APPROVED);
+  assert.equal(db.connection.stages.length, 8);
+  assert.equal(EXPECTED_STAGE_DOCUMENT_ITEM_COUNT, 71);
+
+  const derivedRows = await attachSolutionDesignDerivedCompletionToStageDocumentRows(
+    db.connection,
+    db.connection.stageDocuments.filter((document) =>
+      ['C07', 'C08', 'C09', 'C10', 'C11', 'C12', 'C13', 'C14'].includes(document.document_code)
+    )
+  );
+  assert.equal(derivedRows.length, 8);
+  assert.equal(
+    derivedRows.every((row) => row.solutionDesignDerivedCompletion?.isComplete === true),
+    true
+  );
+  assert.equal(
+    derivedRows.every((row) => row.solutionDesignDerivedCompletion?.derivedCompletionStatus === COMPLETION_STATUS.COMPLETED),
+    true
+  );
+});
+
+test('cancelled C07-C14 exemption blocks submit again when no current file exists', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const technicalOwner = authUser(db.connection.users.get(12));
+  const exemptedSlotKey = SOLUTION_DESIGN_UPLOAD_SLOT_KEY.SOLUTION_PPT;
+
+  await activateSolutionDesignNode(db, storage);
+  for (const slotKey of SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS.filter((slotKey) => slotKey !== exemptedSlotKey)) {
+    await uploadSolutionDesignWorkflowFile(
+      {
+        projectId: 100,
+        slotKey,
+        file: testUploadFile(`${slotKey}.dat`),
+        user: technicalOwner
+      },
+      db,
+      storage
+    );
+  }
+  await markSolutionDesignUploadExemption(
+    {
+      projectId: 100,
+      slotKey: exemptedSlotKey,
+      payload: { exemptionReason: '不需要项目方案 PPT' },
+      user: technicalOwner
+    },
+    db
+  );
+  let workflow = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
+  assert.equal(findWorkflowNode(workflow, SOLUTION_DESIGN_NODE_KEY.DESIGN).permissions.canSubmit, true);
+
+  const uploadsAfterCancel = await cancelSolutionDesignUploadExemption(
+    {
+      projectId: 100,
+      slotKey: exemptedSlotKey,
+      user: technicalOwner
+    },
+    db
+  );
+  const cancelledSlot = findUploadSlot(uploadsAfterCancel, exemptedSlotKey);
+  assert.equal(cancelledSlot.exemption.isExempted, false);
+  assert.equal(cancelledSlot.permissions.canMarkExemption, true);
+  assert.equal(
+    db.connection.operationLogs.at(-1).action_type,
+    OPERATION_ACTION_TYPE.SOLUTION_DESIGN_DESIGN_OUTPUT_EXEMPTION_CANCELLED
+  );
+
+  workflow = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
+  assert.equal(findWorkflowNode(workflow, SOLUTION_DESIGN_NODE_KEY.DESIGN).permissions.canSubmit, false);
+  await assert.rejects(
+    () =>
+      submitSolutionDesignWorkflowNode(
+        {
+          projectId: 100,
+          nodeKey: SOLUTION_DESIGN_NODE_KEY.DESIGN,
+          user: technicalOwner
+        },
+        db
+      ),
+    (error) => error.code === SOLUTION_DESIGN_ERROR.NODE_BLOCKED && error.details.includes(exemptedSlotKey)
+  );
+});
+
+test('uploading an exempted C07-C14 output clears exemption and records automatic cancellation log', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const technicalOwner = authUser(db.connection.users.get(12));
+  const slotKey = SOLUTION_DESIGN_UPLOAD_SLOT_KEY.DEMO_ANIMATION;
+
+  await activateSolutionDesignNode(db, storage);
+  await markSolutionDesignUploadExemption(
+    {
+      projectId: 100,
+      slotKey,
+      payload: { exemptionReason: '先按无需上传处理' },
+      user: technicalOwner
+    },
+    db
+  );
+  await uploadSolutionDesignWorkflowFile(
+    {
+      projectId: 100,
+      slotKey,
+      file: testUploadFile('演示动画-v1.mp4'),
+      user: technicalOwner
+    },
+    db,
+    storage
+  );
+
+  const slotRow = db.connection.uploadSlots.find((slot) => slot.slot_key === slotKey);
+  assert.equal(slotRow.is_upload_exempted, 0);
+  assert.equal(slotRow.exemption_reason, null);
+  assert.equal(slotRow.exempted_by_user_id, null);
+  assert.equal(slotRow.exempted_at, null);
+  const uploads = await listSolutionDesignUploads({ projectId: 100, user: technicalOwner }, db);
+  const slot = findUploadSlot(uploads, slotKey);
+  assert.equal(slot.hasCurrentFile, true);
+  assert.equal(slot.currentFile.originalFileName, '演示动画-v1.mp4');
+  assert.equal(slot.exemption.isExempted, false);
+  assert.equal(slot.permissions.canMarkExemption, false);
+  assert.equal(
+    db.connection.operationLogs.at(-1).action_type,
+    OPERATION_ACTION_TYPE.SOLUTION_DESIGN_DESIGN_OUTPUT_EXEMPTION_CANCELLED_BY_UPLOAD
+  );
 });
 
 test('customer review node submits for review and RD manager approval activates RD cost estimation', async () => {
@@ -5393,7 +6172,7 @@ test('technical owner can upload, submit and get approval for RD cost estimation
   );
 });
 
-test('RD cost return increments revision and blocks old file resubmission', async () => {
+test('RD cost return increments revision and allows current file resubmission', async () => {
   const db = fakeDb();
   seedAssignedRoles(db.connection);
   const storage = fakeUploadStorage();
@@ -5413,37 +6192,25 @@ test('RD cost return increments revision and blocks old file resubmission', asyn
   const rdNode = findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.RD_COST);
   assert.equal(rdNode.status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
   assert.equal(rdNode.currentRevision, 2);
-  assert.equal(rdNode.permissions.canSubmit, false);
-
-  const logCountBeforeOldSubmit = db.connection.operationLogs.length;
-  await assert.rejects(
-    () =>
-      submitSolutionDesignWorkflowNode(
-        {
-          projectId: 100,
-          nodeKey: SOLUTION_DESIGN_NODE_KEY.RD_COST,
-          user: technicalOwner
-        },
-        db
-      ),
-    (error) =>
-      error.code === SOLUTION_DESIGN_ERROR.NODE_BLOCKED &&
-      error.details.includes(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.RD_COST_ESTIMATION)
+  const returnedForTechnicalOwner = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
+  assert.equal(
+    findWorkflowNode(returnedForTechnicalOwner, SOLUTION_DESIGN_NODE_KEY.RD_COST).permissions.canSubmit,
+    true
   );
-  assert.equal(db.connection.operationLogs.length, logCountBeforeOldSubmit);
 
-  await uploadSolutionDesignWorkflowFile(
+  const resubmitted = await submitSolutionDesignWorkflowNode(
     {
       projectId: 100,
-      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.RD_COST_ESTIMATION,
-      file: testUploadFile('研发中心成本估算表-v2.xlsx'),
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.RD_COST,
       user: technicalOwner
     },
-    db,
-    storage
+    db
   );
-  const readyAgain = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
-  assert.equal(findWorkflowNode(readyAgain, SOLUTION_DESIGN_NODE_KEY.RD_COST).permissions.canSubmit, true);
+  assert.equal(findWorkflowNode(resubmitted, SOLUTION_DESIGN_NODE_KEY.RD_COST).status, SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW);
+  assert.equal(
+    db.connection.operationLogs.at(-1).action_type,
+    OPERATION_ACTION_TYPE.SOLUTION_DESIGN_RD_COST_SUBMITTED
+  );
 });
 
 test('procurement owner completes manufacturing cost estimation and manufacturing manager can return it', async () => {
@@ -5490,7 +6257,8 @@ test('procurement owner completes manufacturing cost estimation and manufacturin
     findWorkflowNode(approved, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).status,
     SOLUTION_DESIGN_NODE_STATUS.APPROVED
   );
-  assert.equal(findWorkflowNode(approved, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.PENDING);
+  assert.equal(findWorkflowNode(approved, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.PENDING);
+  assert.equal(findWorkflowNode(approved, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
 
   const dbReturned = fakeDb();
   seedAssignedRoles(dbReturned.connection);
@@ -5516,7 +6284,148 @@ test('procurement owner completes manufacturing cost estimation and manufacturin
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).currentRevision, 2);
 });
 
-test('finance cost estimation uses finance owner and general manager two-level approval', async () => {
+test('business owner completes marketing cost estimation and marketing manager can approve or return it', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+  const marketingManager = authUser(db.connection.users.get(5));
+  const financeOwner = authUser(db.connection.users.get(16));
+
+  await activateMarketingCostNode(db, storage);
+  const initialUploads = await listSolutionDesignUploads({ projectId: 100, user: businessOwner }, db);
+  assert.equal(
+    findUploadSlot(initialUploads, SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MARKETING_COST_ESTIMATION).permissions.canUpload,
+    true
+  );
+  const initialWorkflow = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, db);
+  const businessTodos = buildSolutionDesignWorkbenchTodos({
+    projectRow: db.connection.projectContextRow(),
+    workflow: initialWorkflow,
+    uploads: initialUploads
+  });
+  assert.ok(
+    businessTodos.some(
+      (todo) =>
+        todo.nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST &&
+        todo.actionText === '上传/提交营销中心成本估算表'
+    )
+  );
+
+  await uploadSolutionDesignWorkflowFile(
+    {
+      projectId: 100,
+      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MARKETING_COST_ESTIMATION,
+      file: testUploadFile('营销中心成本估算表.xlsx'),
+      user: businessOwner
+    },
+    db,
+    storage
+  );
+  const readyWorkflow = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, db);
+  assert.equal(findWorkflowNode(readyWorkflow, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).permissions.canSubmit, true);
+
+  await submitSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      user: businessOwner
+    },
+    db
+  );
+  const reviewerWorkflow = await getSolutionDesignWorkflow({ projectId: 100, user: marketingManager }, db);
+  assert.equal(findWorkflowNode(reviewerWorkflow, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).permissions.canApprove, true);
+  assert.equal(findWorkflowNode(reviewerWorkflow, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).permissions.canReturn, true);
+  const reviewerUploads = await listSolutionDesignUploads({ projectId: 100, user: marketingManager }, db);
+  const reviewerTodos = buildSolutionDesignWorkbenchTodos({
+    projectRow: db.connection.projectContextRow(),
+    workflow: reviewerWorkflow,
+    uploads: reviewerUploads
+  });
+  assert.ok(
+    reviewerTodos.some(
+      (todo) =>
+        todo.nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST &&
+        todo.actionText === '审批/退回营销成本估算'
+    )
+  );
+
+  const logCountBeforeUnauthorizedReview = db.connection.operationLogs.length;
+  await assert.rejects(
+    () =>
+      approveSolutionDesignWorkflowNode(
+        {
+          projectId: 100,
+          nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+          user: financeOwner
+        },
+        db
+      ),
+    (error) => error.code === SOLUTION_DESIGN_ERROR.FORBIDDEN
+  );
+  assert.equal(db.connection.operationLogs.length, logCountBeforeUnauthorizedReview);
+
+  const approved = await approveSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      user: marketingManager
+    },
+    db
+  );
+  assert.equal(findWorkflowNode(approved, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.APPROVED);
+  assert.equal(findWorkflowNode(approved, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.PENDING);
+  assert.deepEqual(
+    db.connection.operationLogs.slice(-3).map((log) => log.action_type),
+    [
+      OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MARKETING_COST_FILE_UPLOADED,
+      OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MARKETING_COST_SUBMITTED,
+      OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MARKETING_COST_APPROVED
+    ]
+  );
+
+  const dbReturned = fakeDb();
+  seedAssignedRoles(dbReturned.connection);
+  const returnStorage = fakeUploadStorage();
+  await submitMarketingCostForReview(dbReturned, returnStorage);
+  const returned = await returnSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      payload: { returnReason: '营销成本需补充报价策略' },
+      user: marketingManager
+    },
+    dbReturned
+  );
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).currentRevision, 2);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.RD_COST).status, SOLUTION_DESIGN_NODE_STATUS.APPROVED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).status, SOLUTION_DESIGN_NODE_STATUS.APPROVED);
+
+  const returnedForBusinessOwner = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, dbReturned);
+  assert.equal(
+    findWorkflowNode(returnedForBusinessOwner, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).permissions.canSubmit,
+    true
+  );
+  const resubmitted = await submitSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      user: businessOwner
+    },
+    dbReturned
+  );
+  assert.equal(
+    findWorkflowNode(resubmitted, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status,
+    SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW
+  );
+  assert.equal(
+    dbReturned.connection.operationLogs.at(-1).action_type,
+    OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MARKETING_COST_SUBMITTED
+  );
+});
+
+test('finance cost estimation uses finance owner and general manager approval with quotation branch selection', async () => {
   const db = fakeDb();
   seedAssignedRoles(db.connection);
   const storage = fakeUploadStorage();
@@ -5569,6 +6478,7 @@ test('finance cost estimation uses finance owner and general manager two-level a
     {
       projectId: 100,
       nodeKey: SOLUTION_DESIGN_NODE_KEY.FINANCE_COST,
+      payload: { branchType: SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION },
       user: generalManager
     },
     db
@@ -5578,9 +6488,138 @@ test('finance cost estimation uses finance owner and general manager two-level a
     findWorkflowNode(approved, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER).status,
     SOLUTION_DESIGN_NODE_STATUS.PENDING
   );
+  assert.equal(approved.quotationTender.branchType, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION);
+  assert.equal(approved.quotationTender.branchStatus, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED);
+  assert.equal(
+    findWorkflowNode(approved, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER).permissions.canSelectBranch,
+    false
+  );
   assert.equal(
     db.connection.operationLogs.at(-1).action_type,
     OPERATION_ACTION_TYPE.SOLUTION_DESIGN_FINANCE_COST_GENERAL_APPROVED
+  );
+  assert.equal(
+    db.connection.operationLogs.at(-2).action_type,
+    OPERATION_ACTION_TYPE.SOLUTION_DESIGN_QUOTATION_BRANCH_SELECTED
+  );
+});
+
+test('general manager finance approval requires a valid quotation or tender branch without mutating state on failure', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const generalManager = authUser(db.connection.users.get(30));
+
+  await submitFinanceCostForGeneralReview(db, storage);
+  const logCountBeforeMissingBranch = db.connection.operationLogs.length;
+  await assert.rejects(
+    () =>
+      approveSolutionDesignWorkflowNode(
+        {
+          projectId: 100,
+          nodeKey: SOLUTION_DESIGN_NODE_KEY.FINANCE_COST,
+          user: generalManager
+        },
+        db
+      ),
+    (error) =>
+      error.code === SOLUTION_DESIGN_ERROR.INVALID_QUOTATION_TENDER_BRANCH &&
+      error.details.includes('branchType')
+  );
+  assert.equal(db.connection.operationLogs.length, logCountBeforeMissingBranch);
+  assert.equal(
+    db.connection.nodes.find((node) => node.node_key === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status,
+    SOLUTION_DESIGN_NODE_STATUS.PENDING_GENERAL_REVIEW
+  );
+  assert.equal(
+    db.connection.nodes.find((node) => node.node_key === SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER).status,
+    SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED
+  );
+  assert.equal(db.connection.quotationTenderFlow, null);
+
+  await assert.rejects(
+    () =>
+      approveSolutionDesignWorkflowNode(
+        {
+          projectId: 100,
+          nodeKey: SOLUTION_DESIGN_NODE_KEY.FINANCE_COST,
+          payload: { branchType: 'invalid' },
+          user: generalManager
+        },
+        db
+      ),
+    (error) => error.code === SOLUTION_DESIGN_ERROR.INVALID_QUOTATION_TENDER_BRANCH
+  );
+  assert.equal(db.connection.operationLogs.length, logCountBeforeMissingBranch);
+  assert.equal(
+    db.connection.nodes.find((node) => node.node_key === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status,
+    SOLUTION_DESIGN_NODE_STATUS.PENDING_GENERAL_REVIEW
+  );
+  assert.equal(db.connection.quotationTenderFlow, null);
+});
+
+test('general manager finance approval can select tender branch and preserves tender upload path', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+  const technicalOwner = authUser(db.connection.users.get(12));
+  const generalManager = authUser(db.connection.users.get(30));
+
+  await activateQuotationOrTenderNode(db, storage, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.TENDER);
+  const workflow = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, db);
+  assert.equal(workflow.quotationTender.branchType, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.TENDER);
+  assert.equal(workflow.quotationTender.branchStatus, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED);
+  assert.equal(
+    findWorkflowNode(workflow, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER).permissions.canSelectBranch,
+    false
+  );
+  assert.equal(workflow.quotationTender.permissions.canUploadTenderBusiness, true);
+  assert.equal(workflow.quotationTender.permissions.canUploadQuotation, false);
+  assert.equal(
+    db.connection.operationLogs.some(
+      (log) => log.action_type === OPERATION_ACTION_TYPE.SOLUTION_DESIGN_TENDER_BRANCH_SELECTED
+    ),
+    true
+  );
+
+  await uploadSolutionDesignWorkflowFile(
+    {
+      projectId: 100,
+      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.TENDER_BUSINESS_FILE,
+      file: testUploadFile('投标商务标.docx'),
+      user: businessOwner
+    },
+    db,
+    storage
+  );
+  await uploadSolutionDesignWorkflowFile(
+    {
+      projectId: 100,
+      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.TENDER_TECHNICAL_FILE,
+      file: testUploadFile('投标技术标.docx'),
+      user: technicalOwner
+    },
+    db,
+    storage
+  );
+  const readyTenderWorkflow = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, db);
+  assert.equal(
+    findWorkflowNode(readyTenderWorkflow, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER).permissions.canSubmit,
+    true
+  );
+  await submitSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+      user: businessOwner
+    },
+    db
+  );
+  const reviewerWorkflow = await getSolutionDesignWorkflow({ projectId: 100, user: generalManager }, db);
+  assert.equal(
+    findWorkflowNode(reviewerWorkflow, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER).permissions.canApproveTender,
+    true
   );
 });
 
@@ -5604,30 +6643,39 @@ test('finance owner return only reopens finance cost estimation', async () => {
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).currentRevision, 2);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).status, SOLUTION_DESIGN_NODE_STATUS.APPROVED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.APPROVED);
+  const returnedForFinanceAccountant = await getSolutionDesignWorkflow({ projectId: 100, user: financeAccountant }, db);
+  assert.equal(
+    findWorkflowNode(returnedForFinanceAccountant, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).permissions.canSubmit,
+    true
+  );
 
-  await assert.rejects(
-    () =>
-      submitSolutionDesignWorkflowNode(
-        {
-          projectId: 100,
-          nodeKey: SOLUTION_DESIGN_NODE_KEY.FINANCE_COST,
-          user: financeAccountant
-        },
-        db
-      ),
-    (error) =>
-      error.code === SOLUTION_DESIGN_ERROR.NODE_BLOCKED &&
-      error.details.includes(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.FINANCE_COST_ESTIMATION)
+  const resubmitted = await submitSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.FINANCE_COST,
+      user: financeAccountant
+    },
+    db
+  );
+  assert.equal(
+    findWorkflowNode(resubmitted, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status,
+    SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW
   );
 });
 
-test('general manager return sends cost workflow back to RD and blocks old revisions', async () => {
+test('general manager return sends cost workflow back to RD and current cost files can be resubmitted', async () => {
   const db = fakeDb();
   seedAssignedRoles(db.connection);
   const storage = fakeUploadStorage();
   const technicalOwner = authUser(db.connection.users.get(12));
   const procurementOwner = authUser(db.connection.users.get(14));
+  const businessOwner = authUser(db.connection.users.get(13));
+  const financeAccountant = authUser(db.connection.users.get(15));
+  const financeOwner = authUser(db.connection.users.get(16));
   const rdManager = authUser(db.connection.users.get(1));
+  const manufacturingManager = authUser(db.connection.users.get(2));
+  const marketingManager = authUser(db.connection.users.get(5));
   const generalManager = authUser(db.connection.users.get(30));
 
   await submitFinanceCostForGeneralReview(db, storage);
@@ -5644,34 +6692,16 @@ test('general manager return sends cost workflow back to RD and blocks old revis
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.RD_COST).currentRevision, 2);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).currentRevision, 2);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).currentRevision, 2);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).currentRevision, 2);
-
-  await assert.rejects(
-    () =>
-      submitSolutionDesignWorkflowNode(
-        {
-          projectId: 100,
-          nodeKey: SOLUTION_DESIGN_NODE_KEY.RD_COST,
-          user: technicalOwner
-        },
-        db
-      ),
-    (error) =>
-      error.code === SOLUTION_DESIGN_ERROR.NODE_BLOCKED &&
-      error.details.includes(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.RD_COST_ESTIMATION)
+  const returnedForTechnicalOwner = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
+  assert.equal(
+    findWorkflowNode(returnedForTechnicalOwner, SOLUTION_DESIGN_NODE_KEY.RD_COST).permissions.canSubmit,
+    true
   );
 
-  await uploadSolutionDesignWorkflowFile(
-    {
-      projectId: 100,
-      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.RD_COST_ESTIMATION,
-      file: testUploadFile('研发中心成本估算表-v2.xlsx'),
-      user: technicalOwner
-    },
-    db,
-    storage
-  );
   await submitSolutionDesignWorkflowNode(
     {
       projectId: 100,
@@ -5693,7 +6723,113 @@ test('general manager return sends cost workflow back to RD and blocks old revis
     findWorkflowNode(afterRdApproval, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).status,
     SOLUTION_DESIGN_NODE_STATUS.PENDING
   );
-  assert.equal(findWorkflowNode(afterRdApproval, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).permissions.canSubmit, false);
+  assert.equal(findWorkflowNode(afterRdApproval, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).permissions.canSubmit, true);
+
+  await submitSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST,
+      user: procurementOwner
+    },
+    db
+  );
+  await approveSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST,
+      user: manufacturingManager
+    },
+    db
+  );
+  const afterManufacturingApproval = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, db);
+  assert.equal(
+    findWorkflowNode(afterManufacturingApproval, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status,
+    SOLUTION_DESIGN_NODE_STATUS.PENDING
+  );
+  assert.equal(findWorkflowNode(afterManufacturingApproval, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).permissions.canSubmit, true);
+
+  await submitSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      user: businessOwner
+    },
+    db
+  );
+  await approveSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      user: marketingManager
+    },
+    db
+  );
+  const afterMarketingApproval = await getSolutionDesignWorkflow({ projectId: 100, user: financeAccountant }, db);
+  assert.equal(
+    findWorkflowNode(afterMarketingApproval, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status,
+    SOLUTION_DESIGN_NODE_STATUS.PENDING
+  );
+  assert.equal(findWorkflowNode(afterMarketingApproval, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).permissions.canSubmit, true);
+
+  await submitSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.FINANCE_COST,
+      user: financeAccountant
+    },
+    db
+  );
+  await approveSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.FINANCE_COST,
+      user: financeOwner
+    },
+    db
+  );
+  await approveSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.FINANCE_COST,
+      payload: { branchType: SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION },
+      user: generalManager
+    },
+    db
+  );
+
+  const rowsWithDerivedCompletion = await attachSolutionDesignDerivedCompletionToStageDocumentRows(
+    db.connection,
+    db.connection.stageDocuments.map((document) => ({ ...document }))
+  );
+  const costDocument = mapDocument(
+    rowsWithDerivedCompletion.find((document) => document.document_code === 'C17')
+  );
+  assert.equal(costDocument.isComplete, true);
+  assert.equal(costDocument.completionStatus, COMPLETION_STATUS.COMPLETED);
+
+  const marketingCurrentFile = db.connection.currentUploadFileForSlot(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MARKETING_COST_ESTIMATION);
+  marketingCurrentFile.is_current = 0;
+  const rowsWithoutMarketingCurrentFile = await attachSolutionDesignDerivedCompletionToStageDocumentRows(
+    db.connection,
+    db.connection.stageDocuments.map((document) => ({ ...document }))
+  );
+  const incompleteWithoutMarketingDocument = mapDocument(
+    rowsWithoutMarketingCurrentFile.find((document) => document.document_code === 'C17')
+  );
+  assert.equal(incompleteWithoutMarketingDocument.isComplete, false);
+  assert.equal(incompleteWithoutMarketingDocument.completionStatus, COMPLETION_STATUS.INCOMPLETE);
+  marketingCurrentFile.is_current = 1;
+
+  db.connection.currentUploadFileForSlot(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MANUFACTURING_COST_ESTIMATION).is_current = 0;
+  const rowsWithoutManufacturingCurrentFile = await attachSolutionDesignDerivedCompletionToStageDocumentRows(
+    db.connection,
+    db.connection.stageDocuments.map((document) => ({ ...document }))
+  );
+  const incompleteCostDocument = mapDocument(
+    rowsWithoutManufacturingCurrentFile.find((document) => document.document_code === 'C17')
+  );
+  assert.equal(incompleteCostDocument.isComplete, false);
+  assert.equal(incompleteCostDocument.completionStatus, COMPLETION_STATUS.INCOMPLETE);
 });
 
 test('cost estimation roles are enforced and failed requests do not write success logs', async () => {
@@ -5837,14 +6973,14 @@ test('finance cost upload metadata is redacted and download is restricted', asyn
   assert.equal(details.confidential, true);
 });
 
-test('general manager selects quotation or tender branch and duplicate or non-GM selection is rejected', async () => {
+test('legacy quotation/tender branch selection still works before finance approval selected a branch', async () => {
   const db = fakeDb();
   seedAssignedRoles(db.connection);
   const storage = fakeUploadStorage();
   const generalManager = authUser(db.connection.users.get(30));
   const businessOwner = authUser(db.connection.users.get(13));
 
-  await activateQuotationOrTenderNode(db, storage);
+  await activateLegacyUnselectedQuotationOrTenderNode(db, storage);
   const beforeSelection = await getSolutionDesignWorkflow({ projectId: 100, user: generalManager }, db);
   assert.equal(
     findWorkflowNode(beforeSelection, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER).permissions.canSelectBranch,
@@ -5898,46 +7034,130 @@ test('general manager selects quotation or tender branch and duplicate or non-GM
   assert.equal(db.connection.operationLogs.length, logCountBeforeFailures);
 });
 
-test('business owner uploads and submits quotation, accepted quotation approves node and auto advances to contract stage', async () => {
+test('legacy branch selection API rejects duplicate selection after finance approval already selected branch', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const generalManager = authUser(db.connection.users.get(30));
+
+  await activateQuotationOrTenderNode(db, storage, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION);
+  const branchNodeBefore = db.connection.nodes.find(
+    (node) => node.node_key === SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER
+  );
+  const logCountBeforeDuplicateSelection = db.connection.operationLogs.length;
+  await assert.rejects(
+    () =>
+      selectSolutionDesignQuotationTenderBranch(
+        {
+          projectId: 100,
+          payload: { branchType: SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.TENDER },
+          user: generalManager
+        },
+        db
+      ),
+    (error) =>
+      error.code === SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE &&
+      /already been selected/.test(error.message)
+  );
+  assert.equal(db.connection.operationLogs.length, logCountBeforeDuplicateSelection);
+  assert.equal(db.connection.quotationTenderFlow.branch_type, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION);
+  assert.equal(db.connection.quotationTenderFlow.branch_status, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED);
+  assert.equal(
+    db.connection.nodes.find((node) => node.node_key === SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER).status,
+    branchNodeBefore.status
+  );
+});
+
+test('business owner saves and submits quotation form, accepted quotation approves node and auto advances to contract stage', async () => {
   const db = fakeDb();
   seedAssignedRoles(db.connection);
   const storage = fakeUploadStorage();
   const businessOwner = authUser(db.connection.users.get(13));
 
   await activateQuotationOrTenderNode(db, storage);
-  await selectQuotationBranch(db);
-  const uploadsBeforeFile = await listSolutionDesignUploads({ projectId: 100, user: businessOwner }, db);
+  const uploadsAfterBranch = await listSolutionDesignUploads({ projectId: 100, user: businessOwner }, db);
   assert.equal(
-    findUploadSlot(uploadsBeforeFile, SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE).permissions.canUpload,
-    true
-  );
-
-  await uploadSolutionDesignWorkflowFile(
-    {
-      projectId: 100,
-      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE,
-      file: testUploadFile('报价单.xlsx'),
-      user: businessOwner
-    },
-    db,
-    storage
-  );
-  const readyToSubmit = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, db);
-  assert.equal(readyToSubmit.quotationTender.permissions.canSubmitQuotation, true);
-  assert.equal(readyToSubmit.quotationTender.permissions.canAcceptQuotation, false);
-
-  const submitted = await submitSolutionDesignQuotation({ projectId: 100, user: businessOwner }, db);
-  assert.equal(submitted.quotationTender.branchStatus, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SUBMITTED);
-  assert.equal(submitted.quotationTender.permissions.canUploadQuotation, false);
-  assert.equal(submitted.quotationTender.permissions.canSubmitQuotation, false);
-  assert.equal(submitted.quotationTender.permissions.canAcceptQuotation, true);
-  assert.equal(
-    findWorkflowNode(submitted, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER).permissions.canUploadQuotation,
+    uploadsAfterBranch.slots.some((slot) => slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE),
     false
   );
-  const uploadsAfterSubmit = await listSolutionDesignUploads({ projectId: 100, user: businessOwner }, db);
+
+  const initialForm = await getSolutionDesignQuotationForm({ projectId: 100, user: businessOwner }, db);
+  assert.equal(initialForm.permissions.canEditQuotationForm, true);
+  assert.equal(initialForm.permissions.canSubmitQuotationForm, true);
+  assert.equal(initialForm.form, null);
+
+  const saved = await saveSolutionDesignQuotationForm(
+    {
+      projectId: 100,
+      payload: quotationFormPayload({
+        recipientName: '保存草稿客户',
+        items: [
+          {
+            name: '草稿设备',
+            unit: '套',
+            quantity: '1',
+            unitPrice: '100.00',
+            remark: ''
+          }
+        ]
+      }),
+      user: businessOwner
+    },
+    db
+  );
+  assert.equal(saved.form.status, SOLUTION_DESIGN_QUOTATION_FORM_STATUS.DRAFT);
+  assert.equal(saved.form.formData.totalAmount, '100.00');
+  assert.equal(saved.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.NOT_STARTED);
+
+  const submittedForm = await submitSolutionDesignQuotationForm(
+    {
+      projectId: 100,
+      payload: quotationFormPayload(),
+      user: businessOwner
+    },
+    db
+  );
+  assert.equal(submittedForm.branchStatus, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SUBMITTED);
+  assert.equal(submittedForm.form.status, SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED);
+  assert.equal(submittedForm.form.formData.items[0].amount, '2125.26');
+  assert.equal(submittedForm.form.formData.totalAmount, '5582.04');
+  assert.equal(submittedForm.form.formData.totalAmountUppercase, '伍仟伍佰捌拾贰元零肆分');
+  assert.equal(submittedForm.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED);
+  assert.equal(submittedForm.form.generatedFile.mimeType, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+
+  const quotationForm = db.connection.currentQuotationForm();
+  const quotationGeneratedKey = quotationForm.generated_file_storage_key;
+  assert.equal(db.generatedFileStorage.written.at(-1).storageKey, quotationGeneratedKey);
+  assertGeneratedDocxTextIncludes(db.generatedFileStorage, quotationGeneratedKey, '王客户');
+  assertGeneratedDocxTextIncludes(db.generatedFileStorage, quotationGeneratedKey, '先生');
+  assertGeneratedDocxTextIncludes(db.generatedFileStorage, quotationGeneratedKey, '商务负责人');
+  assertGeneratedDocxTextIncludes(db.generatedFileStorage, quotationGeneratedKey, '023-12345678');
+  assertGeneratedDocxTextIncludes(db.generatedFileStorage, quotationGeneratedKey, '重庆凯尔夫智能测控技术有限责任公司');
+  assertGeneratedDocxTextIncludes(db.generatedFileStorage, quotationGeneratedKey, '2026年7月13日');
+  assertQuotationContactLineUsesPhoneUnderlineRun(db.generatedFileStorage, quotationGeneratedKey);
+  const quotationRows = extractDocxTableRows(db.generatedFileStorage, quotationGeneratedKey);
+  assert.deepEqual(quotationRows[1].slice(0, 7), ['1', '机器人工作站', '套', '2.125', '1000.12', '2125.26', '含安装调试']);
+  assert.deepEqual(quotationRows[2].slice(0, 7), ['2', '视觉检测系统', '套', '1', '3456.78', '3456.78', '']);
+  const firstItemCells = extractDocxTableCellXmls(db.generatedFileStorage, quotationGeneratedKey, 1);
+  ['1', '机器人工作站', '套', '2.125', '1000.12', '2125.26', '含安装调试'].forEach((expectedText, index) => {
+    assertGeneratedDocxCellSingleParagraph(firstItemCells[index], expectedText);
+  });
+  assert.ok(quotationRows.some((row) => row.includes('伍仟伍佰捌拾贰元零肆分') && row.includes('5582.04')));
+
+  const download = await getSolutionDesignQuotationGeneratedFileDownload(
+    { projectId: 100, user: businessOwner },
+    db
+  );
+  assert.equal(download.filePath, quotationGeneratedKey);
+  assert.equal(download.mimeType, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+
+  const submittedWorkflow = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, db);
+  assert.equal(submittedWorkflow.quotationTender.branchStatus, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SUBMITTED);
+  assert.equal(submittedWorkflow.quotationTender.permissions.canUploadQuotation, false);
+  assert.equal(submittedWorkflow.quotationTender.permissions.canSubmitQuotation, false);
+  assert.equal(submittedWorkflow.quotationTender.permissions.canAcceptQuotation, true);
   assert.equal(
-    findUploadSlot(uploadsAfterSubmit, SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE).permissions.canUpload,
+    findWorkflowNode(submittedWorkflow, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER).permissions.canUploadQuotation,
     false
   );
 
@@ -6001,7 +7221,286 @@ test('business owner uploads and submits quotation, accepted quotation approves 
   assert.equal(details.completenessSummary.completionPercent, 100);
 });
 
-test('rejected quotation can return to RD cost and old cost revisions cannot bypass the new cycle', async () => {
+test('quotation form supports dynamic docx rows and keeps total row, company and date after 10 items', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+
+  await activateQuotationOrTenderNode(db, storage);
+  const submitted = await submitSolutionDesignQuotationForm(
+    {
+      projectId: 100,
+      payload: quotationFormPayloadWithItemCount(10),
+      user: businessOwner
+    },
+    db
+  );
+
+  assert.equal(submitted.form.formData.items.length, 10);
+  assert.equal(submitted.form.formData.items[9].amount, '12.36');
+  assert.equal(submitted.form.formData.totalAmount, '948.36');
+  const generatedKey = db.connection.currentQuotationForm().generated_file_storage_key;
+  const rows = extractDocxTableRows(db.generatedFileStorage, generatedKey);
+  assert.deepEqual(rows[10].slice(0, 7), ['10', '动态明细10', '项', '1.2345', '10.01', '12.36', '备注10']);
+  const tenthItemCells = extractDocxTableCellXmls(db.generatedFileStorage, generatedKey, 10);
+  ['10', '动态明细10', '项', '1.2345', '10.01', '12.36', '备注10'].forEach((expectedText, index) => {
+    assertGeneratedDocxCellSingleParagraph(tenthItemCells[index], expectedText);
+  });
+  assert.ok(rows[11].includes(submitted.form.formData.totalAmountUppercase));
+  assert.ok(rows[11].includes('948.36'));
+  assertGeneratedDocxTextIncludes(db.generatedFileStorage, generatedKey, '重庆凯尔夫智能测控技术有限责任公司');
+  assertGeneratedDocxTextIncludes(db.generatedFileStorage, generatedKey, '2026年7月13日');
+});
+
+test('quotation form defaults blank quotation date from submitted_at Date object in generated docx', async () => {
+  const db = fakeDb({ quotationSubmittedAt: new Date(2026, 6, 15, 8, 30, 0) });
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+
+  await activateQuotationOrTenderNode(db, storage);
+  const submitted = await submitSolutionDesignQuotationForm(
+    {
+      projectId: 100,
+      payload: quotationFormPayload({ quotationDate: '' }),
+      user: businessOwner
+    },
+    db
+  );
+
+  assert.equal(submitted.form.formData.quotationDate, '');
+  const generatedKey = db.connection.currentQuotationForm().generated_file_storage_key;
+  const generatedText = extractDocxText(generatedDocxDocumentXml(db.generatedFileStorage, generatedKey));
+  assert.match(generatedText, /2026年7月15日/);
+  assert.doesNotMatch(generatedText, /Mon Jul/);
+});
+
+test('quotation form draft allows partial item rows but submit requires complete item data', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+  const partialPayload = quotationFormPayload({
+    items: [
+      {
+        name: '半填设备',
+        unit: '套',
+        quantity: '',
+        unitPrice: '',
+        remark: '待补报价'
+      }
+    ]
+  });
+
+  await activateQuotationOrTenderNode(db, storage);
+  const saved = await saveSolutionDesignQuotationForm(
+    {
+      projectId: 100,
+      payload: partialPayload,
+      user: businessOwner
+    },
+    db
+  );
+
+  assert.equal(saved.form.status, SOLUTION_DESIGN_QUOTATION_FORM_STATUS.DRAFT);
+  assert.equal(saved.form.formData.items[0].name, '半填设备');
+  assert.equal(saved.form.formData.items[0].quantity, '');
+  assert.equal(saved.form.formData.items[0].unitPrice, '');
+  assert.equal(saved.form.formData.items[0].amount, '0.00');
+  assert.equal(saved.form.formData.totalAmount, '0.00');
+
+  await assert.rejects(
+    () =>
+      saveSolutionDesignQuotationForm(
+        {
+          projectId: 100,
+          payload: quotationFormPayload({
+            items: [
+              {
+                name: '非法数字草稿',
+                unit: '套',
+                quantity: '1.23456',
+                unitPrice: '',
+                remark: ''
+              }
+            ]
+          }),
+          user: businessOwner
+        },
+        db
+      ),
+    (error) =>
+      error.code === SOLUTION_DESIGN_ERROR.INVALID_QUOTATION_FORM &&
+      error.statusCode === 400 &&
+      /formData\.items\[0\]\.quantity/.test(error.message)
+  );
+  await assert.rejects(
+    () =>
+      submitSolutionDesignQuotationForm(
+        {
+          projectId: 100,
+          payload: partialPayload,
+          user: businessOwner
+        },
+        db
+      ),
+    (error) =>
+      error.code === SOLUTION_DESIGN_ERROR.INVALID_QUOTATION_FORM &&
+      error.statusCode === 400 &&
+      /formData\.items\[0\]\.quantity is required/.test(error.message)
+  );
+});
+
+test('quotation form generation failure blocks branch submission, result processing and C18 completion', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const failingGeneratedStorage = fakeGeneratedFileStorage({ failWrite: true });
+  const businessOwner = authUser(db.connection.users.get(13));
+
+  await activateQuotationOrTenderNode(db, storage);
+  await assert.rejects(
+    () =>
+      submitSolutionDesignQuotationForm(
+        {
+          projectId: 100,
+          payload: quotationFormPayload(),
+          user: businessOwner
+        },
+        db,
+        failingGeneratedStorage
+      ),
+    (error) =>
+      error.code === SOLUTION_DESIGN_ERROR.GENERATED_FILE_GENERATION_FAILED &&
+      error.statusCode === 500 &&
+      /Solution design quotation file generation failed/.test(error.message) &&
+      /FAKE_GENERATED_FILE_WRITE_FAILED/.test(error.message)
+  );
+
+  const current = await getSolutionDesignQuotationForm({ projectId: 100, user: businessOwner }, db);
+  assert.equal(current.branchStatus, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED);
+  assert.equal(current.form.status, SOLUTION_DESIGN_QUOTATION_FORM_STATUS.DRAFT);
+  assert.equal(current.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.FAILED);
+  assert.match(current.form.generatedFile.errorMessage, /fake generated file write failed/);
+  assert.equal(failingGeneratedStorage.cleaned.length, 1);
+  assert.equal(db.connection.quotationTenderFlow.branch_status, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED);
+
+  await assert.rejects(
+    () =>
+      processSolutionDesignQuotationResult(
+        {
+          projectId: 100,
+          payload: { result: SOLUTION_DESIGN_QUOTATION_RESULT.ACCEPTED },
+          user: businessOwner
+        },
+        db
+      ),
+    (error) => error.code === SOLUTION_DESIGN_ERROR.NODE_BLOCKED
+  );
+  await assertStageAdvanceBlocked(db, authUser(db.connection.users.get(30)), ['C18']);
+});
+
+test('quotation generated file download rejects missing storage key and missing stored file', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+
+  await submitQuotation(db, storage);
+  const quotationForm = db.connection.currentQuotationForm();
+  const generatedKey = quotationForm.generated_file_storage_key;
+  quotationForm.generated_file_storage_key = null;
+  await assert.rejects(
+    () => getSolutionDesignQuotationGeneratedFileDownload({ projectId: 100, user: businessOwner }, db),
+    (error) => error.code === SOLUTION_DESIGN_ERROR.GENERATED_FILE_NOT_FOUND
+  );
+
+  quotationForm.generated_file_storage_key = generatedKey;
+  db.generatedFileStorage.files.delete(generatedKey);
+  await assert.rejects(
+    () => getSolutionDesignQuotationGeneratedFileDownload({ projectId: 100, user: businessOwner }, db),
+    (error) => error.code === SOLUTION_DESIGN_ERROR.GENERATED_FILE_MISSING
+  );
+});
+
+test('quotation branch rejects legacy quotation_file uploads and old upload data cannot satisfy C18 gates', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+  const technicalOwner = authUser(db.connection.users.get(12));
+  const generalManager = authUser(db.connection.users.get(30));
+
+  await activateQuotationOrTenderNode(db, storage);
+  const writeCountBefore = storage.written.length;
+  const uploadFileCountBefore = db.connection.uploadFiles.length;
+  await assert.rejects(
+    () =>
+      uploadSolutionDesignWorkflowFile(
+        {
+          projectId: 100,
+          slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE,
+          file: testUploadFile('旧报价单.xlsx'),
+          user: businessOwner
+        },
+        db,
+        storage
+      ),
+    (error) =>
+      error.code === SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE &&
+      error.message.includes('quotation online form')
+  );
+  assert.equal(storage.written.length, writeCountBefore);
+  assert.equal(db.connection.uploadFiles.length, uploadFileCountBefore);
+
+  await assert.rejects(
+    () =>
+      saveSolutionDesignQuotationForm(
+        {
+          projectId: 100,
+          payload: quotationFormPayload(),
+          user: technicalOwner
+        },
+        db
+      ),
+    (error) => error.code === SOLUTION_DESIGN_ERROR.FORBIDDEN
+  );
+
+  const quotationSlot = db.connection.uploadSlots.find(
+    (slot) => slot.slot_key === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE
+  );
+  assert.ok(quotationSlot);
+  quotationSlot.status = SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.UPLOADED;
+  quotationSlot.revision = 1;
+  db.connection.uploadFiles.push({
+    id: db.connection.nextUploadFileId++,
+    project_id: 100,
+    slot_id: quotationSlot.id,
+    slot_key: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE,
+    revision: 1,
+    original_file_name: '历史报价单.xlsx',
+    storage_key: 'legacy/quotation.xlsx',
+    mime_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    file_size: 123,
+    is_current: 1,
+    uploaded_by_user_id: businessOwner.id,
+    uploaded_at: '2026-07-08 09:59:00',
+    replaced_at: null
+  });
+
+  const workflow = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, db);
+  assert.equal(workflow.quotationTender.permissions.canSubmitQuotation, false);
+  await assert.rejects(
+    () => submitSolutionDesignQuotation({ projectId: 100, user: businessOwner }, db),
+    (error) =>
+      error.code === SOLUTION_DESIGN_ERROR.NODE_BLOCKED &&
+      error.details.includes('quotation_form_generated_file')
+  );
+  await assertStageAdvanceBlocked(db, generalManager, ['C18']);
+});
+
+test('rejected quotation can return to RD cost and current cost files can be reused in the new cycle', async () => {
   const db = fakeDb();
   seedAssignedRoles(db.connection);
   const storage = fakeUploadStorage();
@@ -6009,6 +7508,7 @@ test('rejected quotation can return to RD cost and old cost revisions cannot byp
   const technicalOwner = authUser(db.connection.users.get(12));
   const rdManager = authUser(db.connection.users.get(1));
   const manufacturingManager = authUser(db.connection.users.get(2));
+  const marketingManager = authUser(db.connection.users.get(5));
   const procurementOwner = authUser(db.connection.users.get(14));
   const financeAccountant = authUser(db.connection.users.get(15));
   const financeOwner = authUser(db.connection.users.get(16));
@@ -6033,40 +7533,20 @@ test('rejected quotation can return to RD cost and old cost revisions cannot byp
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.RD_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.RD_COST).currentRevision, 2);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
   assert.equal(db.connection.quotationTenderFlow.quotation_rejected_action, SOLUTION_DESIGN_QUOTATION_REJECTED_ACTION.RETURN_TO_RD_COST);
-
-  const logCountBeforeOldSubmit = db.connection.operationLogs.length;
-  await assert.rejects(
-    () =>
-      submitSolutionDesignWorkflowNode(
-        {
-          projectId: 100,
-          nodeKey: SOLUTION_DESIGN_NODE_KEY.RD_COST,
-          user: technicalOwner
-        },
-        db
-      ),
-    (error) =>
-      error.code === SOLUTION_DESIGN_ERROR.NODE_BLOCKED &&
-      error.details.includes(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.RD_COST_ESTIMATION)
+  const returnedForTechnicalOwner = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
+  assert.equal(
+    findWorkflowNode(returnedForTechnicalOwner, SOLUTION_DESIGN_NODE_KEY.RD_COST).permissions.canSubmit,
+    true
   );
-  assert.equal(db.connection.operationLogs.length, logCountBeforeOldSubmit);
+
   assert.equal(
     db.connection.operationLogs.at(-1).action_type,
     OPERATION_ACTION_TYPE.SOLUTION_DESIGN_QUOTATION_REJECTED_RETURN_RD_COST
   );
 
-  await uploadSolutionDesignWorkflowFile(
-    {
-      projectId: 100,
-      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.RD_COST_ESTIMATION,
-      file: testUploadFile('研发中心成本估算表-v2.xlsx'),
-      user: technicalOwner
-    },
-    db,
-    storage
-  );
   await submitSolutionDesignWorkflowNode(
     {
       projectId: 100,
@@ -6083,16 +7563,8 @@ test('rejected quotation can return to RD cost and old cost revisions cannot byp
     },
     db
   );
-  await uploadSolutionDesignWorkflowFile(
-    {
-      projectId: 100,
-      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MANUFACTURING_COST_ESTIMATION,
-      file: testUploadFile('制造中心成本估算表-v2.xlsx'),
-      user: procurementOwner
-    },
-    db,
-    storage
-  );
+  const afterRdApproval = await getSolutionDesignWorkflow({ projectId: 100, user: procurementOwner }, db);
+  assert.equal(findWorkflowNode(afterRdApproval, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).permissions.canSubmit, true);
   await submitSolutionDesignWorkflowNode(
     {
       projectId: 100,
@@ -6109,16 +7581,26 @@ test('rejected quotation can return to RD cost and old cost revisions cannot byp
     },
     db
   );
-  await uploadSolutionDesignWorkflowFile(
+  const afterManufacturingApproval = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, db);
+  assert.equal(findWorkflowNode(afterManufacturingApproval, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).permissions.canSubmit, true);
+  await submitSolutionDesignWorkflowNode(
     {
       projectId: 100,
-      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.FINANCE_COST_ESTIMATION,
-      file: testUploadFile('运营中心财务成本估算表-v2.xlsx'),
-      user: financeAccountant
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      user: businessOwner
     },
-    db,
-    storage
+    db
   );
+  await approveSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      user: marketingManager
+    },
+    db
+  );
+  const afterMarketingApproval = await getSolutionDesignWorkflow({ projectId: 100, user: financeAccountant }, db);
+  assert.equal(findWorkflowNode(afterMarketingApproval, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).permissions.canSubmit, true);
   await submitSolutionDesignWorkflowNode(
     {
       projectId: 100,
@@ -6139,27 +7621,37 @@ test('rejected quotation can return to RD cost and old cost revisions cannot byp
     {
       projectId: 100,
       nodeKey: SOLUTION_DESIGN_NODE_KEY.FINANCE_COST,
+      payload: { branchType: SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION },
       user: generalManager
     },
     db
   );
-  await selectQuotationBranch(db);
   const reselectedUploads = await listSolutionDesignUploads({ projectId: 100, user: businessOwner }, db);
   assert.equal(
-    findUploadSlot(reselectedUploads, SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE).permissions.canUpload,
-    true
+    reselectedUploads.slots.some((slot) => slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE),
+    false
   );
-  const reuploadedQuotation = await uploadSolutionDesignWorkflowFile(
+  const resubmittedQuotation = await submitSolutionDesignQuotationForm(
     {
       projectId: 100,
-      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE,
-      file: testUploadFile('报价单-v2.xlsx'),
+      payload: quotationFormPayload({
+        recipientName: '第二轮客户',
+        items: [
+          {
+            name: '第二轮报价设备',
+            unit: '套',
+            quantity: '1',
+            unitPrice: '2000.00',
+            remark: '第二轮'
+          }
+        ]
+      }),
       user: businessOwner
     },
-    db,
-    storage
+    db
   );
-  assert.equal(reuploadedQuotation.file.revision, 2);
+  assert.equal(resubmittedQuotation.form.revision, 2);
+  assert.equal(resubmittedQuotation.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED);
 });
 
 test('rejected quotation can end project and later solution design writes are blocked', async () => {
@@ -6217,8 +7709,7 @@ test('tender branch requires both business and technical files before submitting
   const technicalOwner = authUser(db.connection.users.get(12));
   const generalManager = authUser(db.connection.users.get(30));
 
-  await activateQuotationOrTenderNode(db, storage);
-  await selectTenderBranch(db);
+  await activateQuotationOrTenderNode(db, storage, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.TENDER);
   await uploadSolutionDesignWorkflowFile(
     {
       projectId: 100,
@@ -6310,7 +7801,11 @@ test('solution design end-to-end smoke covers quotation and tender happy paths',
   );
   assert.equal(assigned.roles.project_manager.userId, 11);
 
-  await activateQuotationOrTenderNode(quotationDb, quotationStorage);
+  await activateQuotationOrTenderNode(
+    quotationDb,
+    quotationStorage,
+    SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION
+  );
   const readyForBranch = await getSolutionDesignWorkflow({ projectId: 100, user: generalManager }, quotationDb);
 
   for (const nodeKey of [
@@ -6321,13 +7816,15 @@ test('solution design end-to-end smoke covers quotation and tender happy paths',
     SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
     SOLUTION_DESIGN_NODE_KEY.RD_COST,
     SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST,
+    SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
     SOLUTION_DESIGN_NODE_KEY.FINANCE_COST
   ]) {
     assert.equal(findWorkflowNode(readyForBranch, nodeKey).status, SOLUTION_DESIGN_NODE_STATUS.APPROVED);
   }
   const branchNode = findWorkflowNode(readyForBranch, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER);
   assert.equal(branchNode.status, SOLUTION_DESIGN_NODE_STATUS.PENDING);
-  assert.equal(branchNode.permissions.canSelectBranch, true);
+  assert.equal(branchNode.permissions.canSelectBranch, false);
+  assert.equal(readyForBranch.quotationTender.branchType, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION);
 
   const analysisForm = quotationDb.connection.currentAnalysisForm();
   assert.equal(analysisForm.form_status, SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.SUBMITTED);
@@ -6349,23 +7846,31 @@ test('solution design end-to-end smoke covers quotation and tender happy paths',
     ...SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS,
     SOLUTION_DESIGN_UPLOAD_SLOT_KEY.RD_COST_ESTIMATION,
     SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MANUFACTURING_COST_ESTIMATION,
+    SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MARKETING_COST_ESTIMATION,
     SOLUTION_DESIGN_UPLOAD_SLOT_KEY.FINANCE_COST_ESTIMATION
   ]) {
     assert.ok(quotationDb.connection.currentUploadFileForSlot(slotKey), `Expected current file for ${slotKey}`);
   }
 
-  await selectQuotationBranch(quotationDb);
-  await uploadSolutionDesignWorkflowFile(
+  await submitSolutionDesignQuotationForm(
     {
       projectId: 100,
-      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE,
-      file: testUploadFile('报价单-smoke.xlsx'),
+      payload: quotationFormPayload({
+        recipientName: 'Smoke 客户',
+        items: [
+          {
+            name: 'Smoke 报价项',
+            unit: '套',
+            quantity: '1',
+            unitPrice: '1234.56',
+            remark: ''
+          }
+        ]
+      }),
       user: businessOwner
     },
-    quotationDb,
-    quotationStorage
+    quotationDb
   );
-  await submitSolutionDesignQuotation({ projectId: 100, user: businessOwner }, quotationDb);
   const accepted = await processSolutionDesignQuotationResult(
     {
       projectId: 100,
@@ -6759,6 +8264,111 @@ test('navigation process nodes respect current, future, and completed stage boun
   assert.equal(futureProcessNode.status, NAVIGATION_STATUS.PENDING);
 });
 
+test('navigation uses solution design workflow nodes before solution stage starts', () => {
+  const navigation = buildProjectNavigationFromWorkspace(100, {
+    project: {
+      projectName: '方案设计导航未开始项目',
+      projectCode: 'NAV-BEFORE-SOLUTION',
+      projectMode: null,
+      status: 'normal'
+    },
+    currentStage: {
+      stageKey: 'initiation',
+      stageOrder: 1,
+      stageName: '立项阶段'
+    },
+    stages: [
+      {
+        stageId: 101,
+        stageOrder: 1,
+        stageKey: 'initiation',
+        stageName: '立项阶段',
+        stageStatus: 'current',
+        isCurrent: true,
+        configured: true,
+        nodes: []
+      },
+      {
+        stageId: 102,
+        stageOrder: 2,
+        stageKey: 'solution',
+        stageName: '方案设计阶段',
+        stageStatus: 'not_started',
+        isCurrent: false,
+        configured: true,
+        nodes: [
+          { nodeKey: 'cost_price_estimation', nodeName: '成本/价格估算', nodeStatus: 'waiting_submission', outputs: [] },
+          { nodeKey: 'quotation', nodeName: '报价', nodeStatus: 'waiting_submission', outputs: [] },
+          { nodeKey: 'tender', nodeName: '投标', nodeStatus: 'waiting_submission', outputs: [] }
+        ]
+      }
+    ]
+  });
+
+  const solutionStage = navigation.children.find((stage) => stage.stageKey === 'solution');
+  const nodeKeys = solutionStage.children.map((node) => node.nodeKey);
+
+  assert.deepEqual(nodeKeys, SOLUTION_DESIGN_NODES.map((node) => node.nodeKey));
+  assert.equal(nodeKeys.includes('cost_price_estimation'), false);
+  assert.equal(nodeKeys.includes('quotation'), false);
+  assert.equal(nodeKeys.includes('tender'), false);
+  assert.equal(nodeKeys.includes(SOLUTION_DESIGN_NODE_KEY.MARKETING_COST), true);
+  assert.equal(solutionStage.children.length, 10);
+  assert.equal(solutionStage.children.every((node) => node.status === NAVIGATION_STATUS.PENDING), true);
+  assert.equal(EXPECTED_STAGE_DOCUMENT_ITEM_COUNT, 71);
+});
+
+test('navigation keeps marketing cost estimation selectable after entering solution stage', () => {
+  const navigation = buildProjectNavigationFromWorkspace(100, {
+    project: {
+      projectName: '方案设计导航营销节点项目',
+      projectCode: 'NAV-MARKETING-COST',
+      projectMode: null,
+      status: 'normal'
+    },
+    currentStage: {
+      stageKey: 'solution',
+      stageOrder: 2,
+      stageName: '方案设计阶段'
+    },
+    stages: [
+      {
+        stageId: 202,
+        stageOrder: 2,
+        stageKey: 'solution',
+        stageName: '方案设计阶段',
+        stageStatus: 'current',
+        isCurrent: true,
+        configured: true,
+        nodes: [
+          ...SOLUTION_DESIGN_NODES.map((node) => ({
+            nodeKey: node.nodeKey,
+            nodeName: node.nodeName,
+            nodeStatus:
+              node.nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST
+                ? SOLUTION_DESIGN_NODE_STATUS.PENDING
+                : SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED,
+            outputs: []
+          })),
+          { nodeKey: 'cost_price_estimation', nodeName: '成本/价格估算', nodeStatus: 'waiting_submission', outputs: [] }
+        ]
+      }
+    ]
+  });
+
+  const solutionStage = navigation.children.find((stage) => stage.stageKey === 'solution');
+  const nodeKeys = solutionStage.children.map((node) => node.nodeKey);
+  const marketingNode = solutionStage.children.find(
+    (node) => node.nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST
+  );
+
+  assert.deepEqual(nodeKeys, SOLUTION_DESIGN_NODES.map((node) => node.nodeKey));
+  assert.equal(solutionStage.children.length, 10);
+  assert.equal(nodeKeys.includes('cost_price_estimation'), false);
+  assert.equal(marketingNode.name, '营销成本估算');
+  assert.equal(marketingNode.status, NAVIGATION_STATUS.PROCESSING);
+});
+
 test('auto advance completes project after final stage gate is satisfied', async () => {
   const db = fakeDb({
     project: baseProject({
@@ -6918,7 +8528,7 @@ test('solution design derived gate blocks incomplete workflow, missing branch, u
 
   const missingBranchDb = fakeDb();
   seedAssignedRoles(missingBranchDb.connection);
-  await activateQuotationOrTenderNode(missingBranchDb, fakeUploadStorage());
+  await activateLegacyUnselectedQuotationOrTenderNode(missingBranchDb, fakeUploadStorage());
   await assertStageAdvanceBlocked(missingBranchDb, generalManager, ['C18', 'C19']);
 
   const quotationSubmittedDb = fakeDb();
@@ -7025,8 +8635,7 @@ test('quotation and tender role permissions reject wrong actors without success 
   const technicalOwner = authUser(db.connection.users.get(12));
   const generalManager = authUser(db.connection.users.get(30));
 
-  await activateQuotationOrTenderNode(db, storage);
-  await selectTenderBranch(db);
+  await activateQuotationOrTenderNode(db, storage, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.TENDER);
   const logCountBeforeWrongUpload = db.connection.operationLogs.length;
   await assert.rejects(
     () =>
@@ -7366,4 +8975,87 @@ test('solution design workbench finance approval todo does not expose confidenti
   assert.equal(serialized.includes('运营中心财务成本估算表.xlsx'), false);
   assert.equal(serialized.includes('storageKey'), false);
   assert.equal(serialized.includes('fileSize'), false);
+});
+
+test('solution design workbench todos move from finance approval branch selection to selected branch work', async () => {
+  const quotationDb = fakeDb();
+  seedAssignedRoles(quotationDb.connection);
+  const generalManager = authUser(quotationDb.connection.users.get(30));
+  const businessOwner = authUser(quotationDb.connection.users.get(13));
+  await submitFinanceCostForGeneralReview(quotationDb);
+
+  const generalWorkflow = await getSolutionDesignWorkflow({ projectId: 100, user: generalManager }, quotationDb);
+  const generalUploads = await listSolutionDesignUploads({ projectId: 100, user: generalManager }, quotationDb);
+  const generalTodos = buildSolutionDesignWorkbenchTodos({
+    projectRow: quotationDb.connection.project,
+    workflow: generalWorkflow,
+    uploads: generalUploads
+  });
+  assert.ok(
+    generalTodos.some(
+      (todo) =>
+        todo.nodeKey === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST &&
+        todo.actionText === '总经理审批/退回财务成本估算'
+    )
+  );
+
+  await approveSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.FINANCE_COST,
+      payload: { branchType: SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION },
+      user: generalManager
+    },
+    quotationDb
+  );
+  const businessWorkflow = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, quotationDb);
+  const businessUploads = await listSolutionDesignUploads({ projectId: 100, user: businessOwner }, quotationDb);
+  const businessTodos = buildSolutionDesignWorkbenchTodos({
+    projectRow: quotationDb.connection.project,
+    workflow: businessWorkflow,
+    uploads: businessUploads
+  });
+  assert.equal(
+    businessTodos.some((todo) => todo.actionKey === 'select_quotation_tender_branch'),
+    false
+  );
+  assert.ok(
+    businessTodos.some(
+      (todo) =>
+        todo.nodeKey === SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER &&
+        todo.actionText === '填写/提交报价单在线表单'
+    )
+  );
+
+  const tenderDb = fakeDb();
+  seedAssignedRoles(tenderDb.connection);
+  const tenderStorage = fakeUploadStorage();
+  const tenderBusinessOwner = authUser(tenderDb.connection.users.get(13));
+  const tenderTechnicalOwner = authUser(tenderDb.connection.users.get(12));
+  await activateQuotationOrTenderNode(
+    tenderDb,
+    tenderStorage,
+    SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.TENDER
+  );
+  const tenderBusinessWorkflow = await getSolutionDesignWorkflow({ projectId: 100, user: tenderBusinessOwner }, tenderDb);
+  const tenderBusinessUploads = await listSolutionDesignUploads({ projectId: 100, user: tenderBusinessOwner }, tenderDb);
+  const tenderBusinessTodos = buildSolutionDesignWorkbenchTodos({
+    projectRow: tenderDb.connection.project,
+    workflow: tenderBusinessWorkflow,
+    uploads: tenderBusinessUploads
+  });
+  assert.equal(
+    tenderBusinessTodos.some((todo) => todo.actionKey === 'select_quotation_tender_branch'),
+    false
+  );
+  assert.ok(tenderBusinessTodos.some((todo) => todo.actionText === '上传投标商务标'));
+
+  const tenderTechnicalWorkflow = await getSolutionDesignWorkflow({ projectId: 100, user: tenderTechnicalOwner }, tenderDb);
+  const tenderTechnicalUploads = await listSolutionDesignUploads({ projectId: 100, user: tenderTechnicalOwner }, tenderDb);
+  const tenderTechnicalTodos = buildSolutionDesignWorkbenchTodos({
+    projectRow: tenderDb.connection.project,
+    workflow: tenderTechnicalWorkflow,
+    uploads: tenderTechnicalUploads
+  });
+  assert.ok(tenderTechnicalTodos.some((todo) => todo.actionText === '上传投标技术标'));
 });

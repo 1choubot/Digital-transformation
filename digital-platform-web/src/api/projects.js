@@ -93,6 +93,21 @@ export async function downloadSolutionDesignWorkflowFile(projectId, slotKey, aut
   });
 }
 
+export async function markSolutionDesignUploadExemption(projectId, slotKey, exemptionReason, authToken = '') {
+  return request(`/api/projects/${projectId}/solution-design-workflow/uploads/${slotKey}/exemption`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ exemptionReason })
+  });
+}
+
+export async function cancelSolutionDesignUploadExemption(projectId, slotKey, authToken = '') {
+  return request(`/api/projects/${projectId}/solution-design-workflow/uploads/${slotKey}/exemption`, {
+    method: 'DELETE',
+    authToken
+  });
+}
+
 export async function submitSolutionDesignWorkflowNode(projectId, nodeKey, authToken = '') {
   return request(`/api/projects/${projectId}/solution-design-workflow/nodes/${nodeKey}/submit`, {
     method: 'POST',
@@ -101,11 +116,15 @@ export async function submitSolutionDesignWorkflowNode(projectId, nodeKey, authT
   });
 }
 
-export async function approveSolutionDesignWorkflowNode(projectId, nodeKey, comment = '', authToken = '') {
+export async function approveSolutionDesignWorkflowNode(projectId, nodeKey, commentOrPayload = '', authToken = '') {
+  const payload =
+    commentOrPayload && typeof commentOrPayload === 'object'
+      ? commentOrPayload
+      : { comment: commentOrPayload };
   return request(`/api/projects/${projectId}/solution-design-workflow/nodes/${nodeKey}/approve`, {
     method: 'POST',
     authToken,
-    body: JSON.stringify({ comment })
+    body: JSON.stringify(payload)
   });
 }
 
@@ -166,6 +185,33 @@ export async function submitSolutionDesignReviewForm(projectId, nodeKey, formDat
 export async function downloadSolutionDesignReviewGeneratedFile(projectId, nodeKey, authToken = '') {
   return requestBlob(
     `/api/projects/${projectId}/solution-design-workflow/nodes/${nodeKey}/review-form/generated-file/download`,
+    { authToken }
+  );
+}
+
+export async function getSolutionDesignQuotationForm(projectId, authToken = '') {
+  return request(`/api/projects/${projectId}/solution-design-workflow/quotation-tender/quotation-form`, { authToken });
+}
+
+export async function saveSolutionDesignQuotationForm(projectId, formData, authToken = '') {
+  return request(`/api/projects/${projectId}/solution-design-workflow/quotation-tender/quotation-form`, {
+    method: 'PUT',
+    authToken,
+    body: JSON.stringify({ formData })
+  });
+}
+
+export async function submitSolutionDesignQuotationForm(projectId, formData, authToken = '') {
+  return request(`/api/projects/${projectId}/solution-design-workflow/quotation-tender/quotation-form/submit`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ formData })
+  });
+}
+
+export async function downloadSolutionDesignQuotationGeneratedFile(projectId, authToken = '') {
+  return requestBlob(
+    `/api/projects/${projectId}/solution-design-workflow/quotation-tender/quotation-form/generated-file/download`,
     { authToken }
   );
 }
@@ -341,11 +387,14 @@ export async function returnStageDocument(projectId, documentId, returnReason, a
   });
 }
 
-export async function approveInitiationReviewNode(projectId, documentId, nodeKey, comment, authToken) {
+export async function approveInitiationReviewNode(projectId, documentId, nodeKey, comment, authToken, options = {}) {
   return request(`/api/projects/${projectId}/stage-documents/${documentId}/initiation-review/${nodeKey}/approve`, {
     method: 'POST',
     authToken,
-    body: JSON.stringify({ comment })
+    body: JSON.stringify({
+      comment,
+      ...(options.projectExecutionMode ? { projectExecutionMode: options.projectExecutionMode } : {})
+    })
   });
 }
 

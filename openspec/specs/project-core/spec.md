@@ -2114,7 +2114,7 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **THEN** 商务负责人和技术负责人 SHOULD see their respective `1.2` collaboration todos until their own part is submitted
 
 ### Requirement: 1.2 项目立项审批表新版模板
-项目核心能力 MUST 适配新版 `1.2 项目立项审批表` 模板；新版模板不包含项目号/项目编号字段，`1.2` MUST 只承载商务/技术评分协同填写和后续审批。
+项目核心能力 MUST 适配新版 `1.2 项目立项审批表` 模板；新版模板不包含项目号/项目编号字段，`1.2` MUST 承载商务/技术评分协同填写、总经理项目开展模式选择和后续审批。
 
 #### Scenario: 1.2 不要求项目编号
 - **WHEN** 商务负责人或技术负责人保存或提交 `1.2 项目立项审批表`
@@ -2127,26 +2127,39 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **THEN** 商务模块 MUST 使用客户企业属性、项目来源、项目定位、商务竞争条件、项目预算、付款条件
 - **AND** 技术模块 MUST 使用项目需求、特殊环境要求、行业门槛、技术成熟度、研发模式
 - **AND** 系统 MUST 保持商务负责人填写商务模块、技术负责人填写技术模块、双方完成后进入评价审批
+- **AND** 系统 MUST NOT 要求商务负责人填写项目开展模式
+
+#### Scenario: 总经理审批通过时选择项目开展模式
+- **WHEN** 总经理最终审批通过 `1.2`
+- **THEN** 系统 MUST 要求总经理选择项目开展模式
+- **AND** 项目开展模式 MUST 只能为自研模式或供应链模式
+- **AND** 系统 MUST 将该选择写回 `1.2` 表单数据
+- **AND** 系统 MUST 记录总经理选择项目开展模式的业务日志
+
+#### Scenario: 总经理审批不通过时不要求项目开展模式
+- **WHEN** 总经理审批不通过 `1.2`
+- **THEN** 系统 MUST NOT 要求总经理选择项目开展模式
+- **AND** 系统 MUST 保持既有 `1.1` 返工和后续阻断语义
 
 #### Scenario: 1.2 总经理通过后生成新版审批表
 - **WHEN** `1.2` 总经理最终审批通过
 - **THEN** 系统 MUST 使用新版 `项目立项审批表-模板.xlsx` 生成审批表
 - **AND** 生成文件 MUST NOT 写入项目编号
 - **AND** 生成文件 MUST 包含新版商务/技术评分项和营销中心、研发中心、总经理意见
+- **AND** 生成文件 MUST 根据总经理写回的 `1.2` 项目开展模式勾选自研模式或供应链模式
 
-#### Scenario: 项目开展模式必填且仅用于 1.2 产出文件
-- **WHEN** 实现 `1.2` 新版模板映射
-- **THEN** 系统 MUST 将项目开展模式作为商务负责人填写的 `1.2` 必填单选字段
-- **AND** 选项 MUST 为自研模式和供应链模式
-- **AND** 项目开展模式 MUST 只用于生成新版 `1.2 项目立项审批表`
+#### Scenario: 项目开展模式只用于立项产出文件展示和生成
+- **WHEN** 系统保存、生成或查看项目开展模式
+- **THEN** 项目开展模式 MUST 只用于立项产出文件展示和生成
+- **AND** 适用范围 MUST 包括 `1.2 项目立项审批表` 和 `1.3 项目立项通知`
 - **AND** 系统 MUST NOT 将该字段写入 `projects.project_mode`
 - **AND** 系统 MUST NOT 用该字段影响项目阶段、项目状态、项目筛选或其他业务逻辑
 
-#### Scenario: 商务负责人未填项目开展模式不得提交
-- **WHEN** 商务负责人提交 `1.2` 商务部分
-- **AND** 项目开展模式为空
-- **THEN** 系统 MUST 拒绝提交商务部分
-- **AND** 系统 MUST 返回明确业务错误
+#### Scenario: 1.2 退回重走后旧项目开展模式选择失效
+- **WHEN** `1.2` 被总经理退回或因并行评价退回进入新一轮审批
+- **THEN** 系统 MUST 使上一轮总经理选择的项目开展模式失效
+- **AND** 新一轮总经理审批通过时 MUST 重新选择项目开展模式
+- **AND** 系统 MUST NOT 使用旧轮次项目开展模式绕过本轮审批通过校验
 
 ### Requirement: 项目编号由 1.3 确定
 项目核心能力 MUST 将项目编号正式确定点移动到 `1.3 项目立项通知`；`1.3` 提交时项目编号必填、唯一，并写入项目主数据。
@@ -2360,13 +2373,14 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **AND** 方案设计 8 个文件 MUST 重新提交
 - **AND** 系统 MUST NOT 物理删除历史评审记录
 
-### Requirement: 成本估算三段协作流程
-系统 MUST 将 C17 成本估算表建模为一个主资料项下的研发、制造、财务/运营三段文件协作和审批流程。
+### Requirement: 成本估算四段协作流程
+系统 MUST 将 C17 成本估算表建模为一个主资料项下的研发、制造、营销、财务/运营四段文件协作和审批流程。
 
 #### Scenario: C17 仍为一个主产出
 - **WHEN** 系统处理方案设计阶段成本估算
 - **THEN** 系统 MUST 保持 C17 成本估算表为一个主资料项
-- **AND** 系统 MUST NOT 新增研发成本估算表、制造成本估算表或财务成本估算表三个资料项
+- **AND** 系统 MUST NOT 新增研发成本估算表、制造成本估算表、营销成本估算表或财务成本估算表资料项
+- **AND** 系统 MUST NOT 改变 8 大阶段或 71 项资料数量
 
 #### Scenario: 研发成本估算审批
 - **WHEN** 技术负责人上传研发成本估算文件并提交
@@ -2378,12 +2392,19 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **WHEN** 采购负责人上传制造成本估算文件并提交
 - **THEN** 系统 MUST 允许采购负责人下载研发成本估算文件作为制作基础
 - **AND** 系统 MUST 将制造成本估算节点置为待制造中心负责人审批
-- **AND** 制造中心负责人审批通过后系统 MUST 进入财务成本估算节点
+- **AND** 制造中心负责人审批通过后系统 MUST 进入营销成本估算节点
 - **AND** 审批不通过时系统 MUST 返回制造成本估算节点重新提交
+
+#### Scenario: 营销成本估算审批
+- **WHEN** 商务负责人上传营销中心成本估算文件并提交
+- **THEN** 系统 MUST 允许商务负责人下载研发成本估算文件和制造成本估算文件作为制作基础
+- **AND** 系统 MUST 将营销成本估算节点置为待营销中心负责人审批
+- **AND** 营销中心负责人审批通过后系统 MUST 进入财务成本估算节点
+- **AND** 审批不通过时系统 MUST 返回营销成本估算节点重新提交
 
 #### Scenario: 财务成本估算两级审批
 - **WHEN** 财务会计上传财务/运营成本估算文件并提交
-- **THEN** 系统 MUST 允许财务会计下载研发成本估算文件和制造成本估算文件作为制作基础
+- **THEN** 系统 MUST 允许财务会计下载研发成本估算文件、制造成本估算文件和营销成本估算文件作为制作基础
 - **AND** 系统 MUST 先由财务负责人审批
 - **AND** 财务负责人审批通过后系统 MUST 进入总经理审批
 - **AND** 财务负责人审批不通过时系统 MUST 返回财务成本估算节点重新提交
@@ -2391,12 +2412,19 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 #### Scenario: 总经理退回财务成本估算
 - **WHEN** 总经理审批不通过财务成本估算
 - **THEN** 系统 MUST 返回研发成本估算节点
-- **AND** 系统 MUST 要求重新走研发、制造和财务三段成本估算流程
+- **AND** 系统 MUST 要求重新走研发、制造、营销和财务四段成本估算流程
+- **AND** 退回后旧 current file 可复用的规则 MUST 覆盖营销成本估算文件
 
 #### Scenario: 总经理通过财务成本估算
 - **WHEN** 总经理审批通过财务成本估算
 - **THEN** 系统 MUST 进入报价/投标节点
-- **AND** 报价/投标节点 MUST 处于未选择分支状态
+- **AND** 总经理 MUST 按既有口径在财务审批通过动作中选择报价或投标分支
+
+#### Scenario: 报价拒绝返回成本链路
+- **WHEN** 报价被客户拒绝并选择返回成本链路
+- **THEN** 系统 MUST 返回研发成本估算节点
+- **AND** 系统 MUST 要求重新走研发、制造、营销和财务四段成本估算流程
+- **AND** 退回后旧 current file 可复用的规则 MUST 覆盖营销成本估算文件
 
 ### Requirement: 财务成本估算文件保密
 系统 MUST 对财务/运营成本估算文件执行后端权限控制，不能只依赖前端隐藏。
@@ -2445,7 +2473,7 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **AND** 系统 MUST NOT 同时生成普通资料审核待办和专用节点审批待办
 
 ### Requirement: 报价投标分支流程
-系统 MUST 将报价/投标建模为方案设计阶段内的一个节点，并支持报价流程、投标流程和项目结束路径。
+系统 MUST 将报价/投标建模为方案设计阶段内的一个节点，并支持报价流程、投标流程和项目结束路径；报价流程的 C18 报价单 MUST 通过在线表单生成 Word 文件提交，投标流程仍使用商务标和技术标上传槽。
 
 #### Scenario: 总经理选择报价或投标
 - **WHEN** 财务成本估算总经理审批通过后进入报价/投标节点
@@ -2453,13 +2481,50 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **AND** 系统 MUST 记录分支选择和选择时间
 - **AND** 系统 MUST 根据选择生成对应待办
 
+#### Scenario: 报价流程显示报价单在线表单
+- **WHEN** 报价/投标节点选择报价流程
+- **THEN** 报价节点 MUST 显示报价单在线表单
+- **AND** 商务负责人 MUST 能按当前报价分支 revision 保存和提交报价单在线表单
+- **AND** 系统 MUST NOT 要求新报价流程通过上传 `quotation_file` 文件提交 C18 报价单
+- **AND** 报价分支选择后，系统 MUST NOT 将 `quotation_file` 作为可操作上传入口暴露
+- **AND** 后端 MUST 拒绝报价分支下新的 `quotation_file` 上传并返回明确业务错误
+- **AND** 系统 MUST NOT 使用旧 `quotation_file` 上传作为 C18 当前提交、下载或完成依据
+
+#### Scenario: 报价单在线表单提交生成 Word 文件
+- **WHEN** 商务负责人提交报价单在线表单
+- **THEN** 系统 MUST 按 `报价单-模板.docx` 生成 `.docx` 报价单
+- **AND** 生成文件 MUST 包含收件人、报价明细、总金额、大写金额、联系人、联系电话和报价日期等模板字段
+- **AND** `TO` MUST 填写收件人人名，称谓 MUST 支持选择 `先生`、`女士` 或等价称谓
+- **AND** 明细行 MUST 支持按用户填写的报价明细动态生成
+- **AND** 数量 MUST 支持最多 4 位小数，单价、每行金额和总金额 MUST 使用人民币 2 位小数
+- **AND** 每行金额 MUST 由后端根据数量和单价计算，并按四舍五入保留 2 位小数，不能信任前端提交的金额
+- **AND** 总金额 MUST 由后端汇总已保留 2 位小数的每行金额计算
+- **AND** 大写金额 MUST 由后端基于最终总金额按人民币大写金额规则计算
+- **AND** 公司名和报价备注 MUST 使用模板固定内容
+- **AND** 生成成功后，该生成文件 MUST 视为当前 revision 的 C18 报价资料已提交
+- **AND** 系统 MUST 记录提交人、提交时间、生成状态和生成文件存储引用
+
+#### Scenario: 报价单生成失败不得完成
+- **WHEN** 商务负责人提交报价单在线表单但 Word 文件生成失败
+- **THEN** 系统 MUST 返回明确的生成失败业务错误
+- **AND** 系统 MUST NOT 将报价单显示为已完成或已提交
+- **AND** 系统 MUST NOT 允许旧的报价生成文件或旧 `quotation_file` 上传绕过当前 revision 的报价单提交门禁
+
+#### Scenario: 报价单生成文件下载
+- **WHEN** 用户下载报价单
+- **AND** 当前报价单在线表单已提交
+- **AND** 当前 revision 生成文件状态为成功
+- **AND** 生成文件 storage key 不为空且存储文件可读
+- **THEN** 系统 MUST 下载生成后的 `.docx` 报价单
+- **AND** 系统 MUST 使用 Word 文档 MIME 类型返回下载
+
 #### Scenario: 报价流程被客户接受
-- **WHEN** 商务负责人上传报价单并在系统中确认报价被客户接受
+- **WHEN** 商务负责人已提交并成功生成当前 revision 报价单
+- **AND** 商务负责人在系统中确认报价被客户接受
 - **THEN** 系统 MUST 将报价/投标节点置为已通过
 - **AND** 系统 MUST 返回 `permissions.canAdvanceToContract=true`
 - **AND** 系统 MUST 记录 `solution_design.ready_for_contract` 门禁日志
-- **AND** 本 change MUST NOT 直接实现合同签订阶段业务或真实阶段推进
-- **AND** 报价单第一版 MUST 按文件上传处理
+- **AND** 本 change MUST NOT 直接实现合同签订阶段业务
 
 #### Scenario: 报价流程未被客户接受
 - **WHEN** 客户不同意报价
@@ -2474,7 +2539,7 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **AND** 总经理审批通过后系统 MUST 将报价/投标节点置为已通过
 - **AND** 系统 MUST 返回 `permissions.canAdvanceToContract=true`
 - **AND** 系统 MUST 记录 `solution_design.ready_for_contract` 门禁日志
-- **AND** 本 change MUST NOT 直接实现合同签订阶段业务或真实阶段推进
+- **AND** 本 change MUST NOT 直接实现合同签订阶段业务
 - **AND** 商务标和技术标 MUST 作为投标书产出下的两个必填上传槽处理
 
 #### Scenario: 投标流程审批不通过
@@ -2521,7 +2586,7 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **AND** C14 项目方案PPT MUST 由方案设计节点 `approved` 且当前 revision 对应上传槽齐套派生完成
 - **AND** C15 内部方案评审记录表 MUST 由内部方案评审节点 `approved` 且当前 revision 生成文件成功派生完成
 - **AND** C16 客户方案评审记录表 MUST 由客户方案评审节点 `approved` 且当前 revision 生成文件成功派生完成
-- **AND** C17 成本估算表 MUST 由研发、制造、财务成本估算三段均 `approved` 派生完成
+- **AND** C17 成本估算表 MUST 由研发、制造、营销、财务四段成本估算均 `approved` 且四个 current 文件齐套派生完成
 
 #### Scenario: C07-C14 归属方案设计专用节点
 - **WHEN** 系统派生 C07-C14 方案设计产出完成状态
@@ -2543,18 +2608,27 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 系统 MUST 在 C18 报价单和 C19 投标书中按报价/投标分支派生完成或不适用结果，且 MUST 保持 71 项资料数量不变。
 
 #### Scenario: 报价路径完成 C18 且 C19 不阻塞
-- **WHEN** 报价/投标节点选择报价分支，且商务负责人确认客户接受报价
+- **WHEN** 报价/投标节点选择报价分支
+- **AND** 当前 revision 报价单在线表单已提交且 Word 生成文件成功
+- **AND** 商务负责人确认客户接受报价
 - **THEN** C18 报价单 MUST 派生完成
 - **AND** C19 投标书 MUST 派生为不适用或等价不阻塞
 - **AND** 系统 MUST NOT 因 C19 未上传投标书而阻止第 2 阶段推进
-- **AND** 系统 MUST 使用当前分支、当前 revision 和当前报价/投标节点结果派生 C18/C19
-- **AND** 系统 MUST NOT 复用历史报价或投标文件绕过当前 revision
+- **AND** 系统 MUST 使用当前分支、当前 revision、当前报价单生成文件和当前报价/投标节点结果派生 C18/C19
+- **AND** 系统 MUST NOT 使用旧 `quotation_file` 上传或历史报价/投标文件绕过当前 revision
+
+#### Scenario: 报价路径生成文件未成功时阻止推进
+- **WHEN** 报价/投标节点选择报价分支
+- **AND** 当前 revision 报价单在线表单未提交、生成状态不是成功、storage key 为空或存储文件不可读
+- **THEN** C18 报价单 MUST 视为未完成
+- **AND** 即使存在当前 revision 或历史 revision 的 `quotation_file` 上传，系统也 MUST NOT 将其作为 C18 完成依据
+- **AND** 系统 MUST 阻止第 2 阶段推进
 
 #### Scenario: 投标路径完成 C19 且 C18 不阻塞
 - **WHEN** 报价/投标节点选择投标分支，且投标经总经理审批通过
 - **THEN** C19 投标书 MUST 派生完成
 - **AND** C18 报价单 MUST 派生为不适用或等价不阻塞
-- **AND** 系统 MUST NOT 因 C18 未上传报价单而阻止第 2 阶段推进
+- **AND** 系统 MUST NOT 因 C18 未提交报价单在线表单而阻止第 2 阶段推进
 - **AND** 系统 MUST 使用当前分支、当前 revision 和当前报价/投标节点结果派生 C18/C19
 - **AND** 系统 MUST NOT 复用历史报价或投标文件绕过当前 revision
 
@@ -2883,3 +2957,132 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **WHEN** 某旧模板版本已无项目创建入口、初始化入口、兼容数据入口和测试依赖
 - **THEN** 系统 SHOULD 移除该旧模板版本的注册、脚本检查和测试引用
 - **AND** 移除 MUST NOT 改变当前有效模板和 legacy 项目的运行结果
+
+### Requirement: 方案设计退回后复用旧文件重提
+系统 MUST 支持方案设计内部节点退回后复用当前有效上传文件重新提交，并 MUST 允许用户重新上传覆盖旧文件。
+
+#### Scenario: 退回后旧 current 文件满足重提门禁
+- **WHEN** 方案设计内部节点被退回并进入新一轮处理
+- **AND** 某上传槽存在旧 revision 的 current file
+- **AND** 该文件未被删除、未被替换且仍是该槽位 current file
+- **THEN** 系统 MUST 允许该文件满足对应上传槽的重新提交门禁
+- **AND** 系统 MUST NOT 仅因文件 revision 小于节点 current revision 而强制用户重新上传同一文件
+
+#### Scenario: 财务成本估算总经理退回后成本文件可直接重提
+- **WHEN** 财务成本估算被总经理退回并重新进入成本估算链路
+- **AND** 研发成本估算、制造成本估算、财务/运营成本估算上传槽存在旧 revision 的 current file
+- **AND** 这些文件未被删除、未被替换且仍是各自槽位 current file
+- **THEN** 系统 MUST 允许研发、制造、财务成本节点直接使用这些旧 current file 重新提交或审批
+- **AND** 系统 MUST NOT 强制用户重新上传相同的 C17 成本估算链路文件
+
+#### Scenario: 重新上传覆盖旧文件
+- **WHEN** 用户在退回后重新上传某上传槽文件
+- **THEN** 新文件 MUST 成为该槽位 current file
+- **AND** 新文件 MUST 优先满足后续提交、下载、派生完成和工作台待办计算
+- **AND** 旧文件 MUST NOT 继续作为该槽位 current file 满足门禁
+
+#### Scenario: 非 current 历史文件不得绕过门禁
+- **WHEN** 某上传槽只存在历史文件但不存在 current file
+- **THEN** 系统 MUST 阻止该槽位满足提交门禁
+- **AND** 系统 MUST 返回明确缺失文件或节点不可提交错误
+
+### Requirement: 财务成本估算审批选择报价投标分支
+系统 MUST 在财务成本估算总经理审批通过时记录报价/投标分支，并 MUST 让报价/投标节点按已选分支继续处理。
+
+#### Scenario: 总经理审批通过时选择报价分支
+- **WHEN** 总经理审批通过财务成本估算
+- **AND** 请求选择 `quotation` 分支
+- **THEN** 系统 MUST 记录报价分支、选择人和选择时间
+- **AND** 系统 MUST 激活报价/投标节点并进入报价流程处理
+- **AND** 系统 MUST 记录财务成本估算审批通过和报价分支选择的 operation log
+
+#### Scenario: 总经理审批通过时选择投标分支
+- **WHEN** 总经理审批通过财务成本估算
+- **AND** 请求选择 `tender` 分支
+- **THEN** 系统 MUST 记录投标分支、选择人和选择时间
+- **AND** 系统 MUST 激活报价/投标节点并进入投标流程处理
+- **AND** 系统 MUST 记录财务成本估算审批通过和投标分支选择的 operation log
+
+#### Scenario: 缺少分支选择时拒绝审批通过
+- **WHEN** 总经理请求审批通过财务成本估算
+- **AND** 请求未提供有效 `quotation` 或 `tender` 分支
+- **THEN** 系统 MUST 拒绝审批通过
+- **AND** 系统 MUST NOT 激活报价/投标节点
+- **AND** 系统 MUST NOT 记录分支选择日志
+
+#### Scenario: 报价投标节点不重复选择
+- **WHEN** 项目进入报价/投标节点
+- **AND** 财务成本估算总经理审批已记录分支
+- **THEN** 报价/投标节点 MUST 根据已选分支展示报价流程或投标流程
+- **AND** 系统 MUST NOT 再要求总经理在报价/投标节点重复选择分支
+
+#### Scenario: 旧分支选择接口拒绝重复选择
+- **WHEN** 财务成本估算总经理审批已记录报价或投标分支
+- **AND** 用户调用旧报价/投标节点分支选择接口
+- **THEN** 系统 MUST 拒绝该重复选择并返回明确业务错误
+- **AND** 系统 MUST NOT 改变已记录分支、节点状态或报价/投标流程状态
+- **AND** 系统 MUST NOT 写入新的分支选择成功 operation log
+
+### Requirement: 方案设计八项产出无需上传豁免
+系统 MUST 支持 C07-C14 方案设计 8 个产出按单项标记“无需上传”，并 MUST 以“已上传或已豁免”判断方案设计节点提交门禁。
+
+#### Scenario: 标记单项产出无需上传
+- **WHEN** 技术负责人将某个方案设计产出标记为“无需上传”
+- **THEN** 系统 MUST 记录豁免状态、操作人、操作时间和原因或备注
+- **AND** 系统 MUST 写入 operation log
+- **AND** 系统 MUST NOT 删除该资料项或改变 71 项资料数量
+
+#### Scenario: 已上传或已豁免均满足提交门禁
+- **WHEN** 技术负责人提交方案设计节点
+- **AND** C07-C14 每个产出均已上传 current file 或已标记无需上传
+- **THEN** 系统 MUST 允许提交方案设计节点
+- **AND** 被豁免的产出 MUST NOT 阻塞提交
+
+#### Scenario: 重新上传自动取消无需上传豁免
+- **WHEN** 某方案设计产出已标记无需上传
+- **AND** 技术负责人对该产出重新上传文件
+- **THEN** 系统 MUST 自动取消该产出的无需上传豁免
+- **AND** 新上传文件 MUST 成为该产出的 current file
+- **AND** 系统 MUST 写入重新上传取消豁免的 operation log
+
+#### Scenario: 未上传且未豁免仍阻塞提交
+- **WHEN** 技术负责人提交方案设计节点
+- **AND** C07-C14 任一产出既没有 current file 也没有无需上传豁免
+- **THEN** 系统 MUST 阻止提交方案设计节点
+- **AND** 系统 MUST 返回缺失产出的明确门禁错误
+
+#### Scenario: 豁免参与 C04-C19 派生齐套和自动推进
+- **WHEN** 方案设计节点已批准
+- **AND** C07-C14 产出通过 current file 或无需上传豁免满足门禁
+- **THEN** 系统 MUST 将对应 C07-C14 资料派生为完成或等价满足状态
+- **AND** 系统 MUST 在 C04-C19 阶段齐套和自动推进门禁中使用同一满足结果
+- **AND** 系统 MUST NOT 因被豁免产出未上传文件而阻止第 2 阶段推进
+
+#### Scenario: 工作台待办按豁免结果收敛
+- **WHEN** 方案设计 8 个产出中某项已上传或已豁免
+- **THEN** 系统 MUST NOT 为该产出继续生成待上传或待提交待办
+- **AND** 未上传且未豁免的产出 MUST 继续生成技术负责人处理待办
+
+### Requirement: 1.3 项目立项通知新版模板开展模式列
+项目核心能力 MUST 使用新版 `项目立项通知-模板.docx` 生成 `1.3 项目立项通知`，并 MUST 在累计项目清单中包含项目开展模式。
+
+#### Scenario: 1.3 使用新版项目立项通知模板
+- **WHEN** 系统生成 `1.3 项目立项通知` Word 文件
+- **THEN** 系统 MUST 使用 `项目立项通知-模板.docx`
+- **AND** 系统 MUST NOT 继续使用旧模板名 `关于确定项目名称及编号的通知-模板.docx`
+
+#### Scenario: 1.3 通知包含开展模式列
+- **WHEN** 系统生成 `1.3 项目立项通知` Word 文件
+- **THEN** 生成文件表格 MUST 包含“开展模式”列
+- **AND** 表格列 MUST 表达序号、项目编号、项目名称、客户单位、开展模式、立项日期
+
+#### Scenario: 1.3 每个项目行使用各自开展模式
+- **WHEN** 系统生成 `1.3` 累计项目清单
+- **THEN** 每个项目行的开展模式 MUST 来自该项目 `1.2 项目立项审批表` 总经理审批通过时选择的 `projectExecutionMode`
+- **AND** 系统 MUST NOT 使用当前项目的 `projectExecutionMode` 填充所有项目行
+
+#### Scenario: 1.3 不允许手动改写开展模式
+- **WHEN** 用户查看、保存或提交 `1.3 项目立项通知`
+- **THEN** 系统 MUST 将开展模式作为只读字段展示或快照
+- **AND** 系统 MUST NOT 允许用户在 `1.3` 中手动改写开展模式
+- **AND** 系统 MUST NOT 将该字段写入 `projects.project_mode`

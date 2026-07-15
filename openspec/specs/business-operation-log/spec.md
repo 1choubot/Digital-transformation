@@ -516,7 +516,7 @@ TBD - created by archiving change add-business-operation-log. Update Purpose aft
 - **AND** 退回日志 MUST 关联 C16 方案评审记录表，并包含返回方案设计节点和 8 个产出重新提交的上下文
 
 ### Requirement: 成本估算业务日志动作
-系统 MUST 为研发、制造、财务/运营成本估算文件提交和审批动作记录业务日志。
+系统 MUST 为研发、制造、营销、财务/运营成本估算文件提交和审批动作记录业务日志。
 
 #### Scenario: 研发成本估算日志
 - **WHEN** 技术负责人成功提交研发成本估算文件
@@ -528,6 +528,11 @@ TBD - created by archiving change add-business-operation-log. Update Purpose aft
 - **THEN** 系统 MUST 记录制造成本估算提交业务日志
 - **AND** 制造中心负责人审批通过或退回时系统 MUST 记录制造成本估算审批通过或退回业务日志
 
+#### Scenario: 营销成本估算日志
+- **WHEN** 商务负责人成功提交营销中心成本估算文件
+- **THEN** 系统 MUST 记录营销成本估算提交业务日志
+- **AND** 营销中心负责人审批通过或退回时系统 MUST 记录营销成本估算审批通过或退回业务日志
+
 #### Scenario: 财务成本估算财务负责人审批日志
 - **WHEN** 财务会计成功提交财务/运营成本估算文件
 - **THEN** 系统 MUST 记录财务成本估算提交业务日志
@@ -536,7 +541,7 @@ TBD - created by archiving change add-business-operation-log. Update Purpose aft
 #### Scenario: 财务成本估算总经理审批日志
 - **WHEN** 总经理审批通过或退回财务成本估算
 - **THEN** 系统 MUST 记录财务成本估算总经理审批通过或退回业务日志
-- **AND** 总经理退回日志 MUST 包含返回研发成本估算并重新走三段流程的上下文
+- **AND** 总经理退回日志 MUST 包含返回研发成本估算并重新走研发、制造、营销、财务四段流程的上下文
 
 ### Requirement: 报价投标业务日志动作
 系统 MUST 为报价/投标分支选择、报价、投标和满足进入合同签订阶段门禁记录业务日志。
@@ -637,4 +642,14 @@ TBD - created by archiving change add-business-operation-log. Update Purpose aft
 - **WHEN** 第 8 阶段齐套后系统自动完成项目
 - **THEN** 系统 SHALL 写入项目完成日志
 - **AND** 日志 SHALL 标明该完成由自动阶段推进触发
+
+### Requirement: 立项项目开展模式业务日志
+系统 MUST 记录总经理在 `1.2 项目立项审批表` 最终审批通过时选择项目开展模式的业务日志。
+
+#### Scenario: 总经理选择项目开展模式日志
+- **WHEN** 总经理审批通过 `1.2 项目立项审批表`
+- **AND** 总经理选择项目开展模式
+- **THEN** 系统 MUST 记录项目开展模式选择业务日志
+- **AND** 日志 MUST 包含项目 ID、资料 ID、审批节点、选择值、操作人和操作时间
+- **AND** 日志 MUST 明确该选择不写入 `projects.project_mode`
 

@@ -1,5 +1,10 @@
 import { getProjectWorkspace } from '../repositories/projects/workspaceRepository.js';
 import { getEffectiveProjectMode } from '../domain/projectProcessTemplates.js';
+import {
+  SOLUTION_DESIGN_NODE_STATUS,
+  SOLUTION_DESIGN_NODES,
+  SOLUTION_DESIGN_STAGE
+} from '../domain/solutionDesignWorkflow.js';
 
 export const NAVIGATION_STATUS = Object.freeze({
   PENDING: 'PENDING',
@@ -18,11 +23,27 @@ function normalizeNodeStatus(
     return NAVIGATION_STATUS.COMPLETED;
   }
 
-  if (['pending_review'].includes(status)) {
+  if ([
+    SOLUTION_DESIGN_NODE_STATUS.APPROVED,
+    SOLUTION_DESIGN_NODE_STATUS.SKIPPED,
+    SOLUTION_DESIGN_NODE_STATUS.ENDED
+  ].includes(status)) {
+    return NAVIGATION_STATUS.COMPLETED;
+  }
+
+  if ([
+    'pending_review',
+    SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW,
+    SOLUTION_DESIGN_NODE_STATUS.PENDING_GENERAL_REVIEW
+  ].includes(status)) {
     return NAVIGATION_STATUS.WAIT_APPROVAL;
   }
 
-  if (['returned_for_rework', 'blocked_by_rework'].includes(status)) {
+  if ([
+    'returned_for_rework',
+    'blocked_by_rework',
+    SOLUTION_DESIGN_NODE_STATUS.RETURNED
+  ].includes(status)) {
     return NAVIGATION_STATUS.RETURNED;
   }
 
@@ -30,8 +51,12 @@ function normalizeNodeStatus(
     return NAVIGATION_STATUS.FAILED;
   }
 
-  if (['in_progress'].includes(status)) {
+  if (['in_progress', SOLUTION_DESIGN_NODE_STATUS.PENDING].includes(status)) {
     return NAVIGATION_STATUS.PROCESSING;
+  }
+
+  if (status === SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED) {
+    return isCompletedStage ? NAVIGATION_STATUS.COMPLETED : NAVIGATION_STATUS.PENDING;
   }
 
   if (['process_node'].includes(status)) {
@@ -131,9 +156,30 @@ function buildNode(projectId, stage, node, { isFirstWaitingSubmission = false } 
   };
 }
 
+function normalizeSolutionDesignStageNodes(nodes = []) {
+  const nodeByKey = new Map(nodes.map((node) => [node.nodeKey, node]));
+  return SOLUTION_DESIGN_NODES.map((definition) => {
+    const node = nodeByKey.get(definition.nodeKey) || {};
+    return {
+      ...node,
+      nodeKey: definition.nodeKey,
+      nodeName: definition.nodeName,
+      nodeStatus: node.nodeStatus || SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED,
+      nodeOrder: definition.nodeOrder,
+      outputs: Array.isArray(node.outputs) ? node.outputs : [],
+      actionHints: node.actionHints || [],
+      blockingReasons: node.blockingReasons || [],
+      notes: node.notes || ''
+    };
+  });
+}
+
 function buildStage(projectId, stage) {
-  const firstWaitingSubmissionIndex = (stage.nodes || []).findIndex((node) => node.nodeStatus === 'waiting_submission');
-  const children = (stage.nodes || []).map((node, index) =>
+  const stageNodes = stage.stageKey === SOLUTION_DESIGN_STAGE.STAGE_KEY
+    ? normalizeSolutionDesignStageNodes(stage.nodes || [])
+    : stage.nodes || [];
+  const firstWaitingSubmissionIndex = stageNodes.findIndex((node) => node.nodeStatus === 'waiting_submission');
+  const children = stageNodes.map((node, index) =>
     buildNode(projectId, stage, node, {
       isFirstWaitingSubmission: index === firstWaitingSubmissionIndex
     })

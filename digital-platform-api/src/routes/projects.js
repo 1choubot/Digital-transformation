@@ -11,6 +11,7 @@ import {
   completeStageDocumentRevisionHandler,
   createProjectHandler,
   downloadSolutionDesignAnalysisGeneratedFileHandler,
+  downloadSolutionDesignQuotationGeneratedFileHandler,
   downloadSolutionDesignReviewGeneratedFileHandler,
   deleteStageDocumentAttachmentHandler,
   deleteStageDocumentOnlineFormImageHandler,
@@ -24,6 +25,7 @@ import {
   getProjectOverviewDashboardHandler,
   getProjectWorkspaceHandler,
   getSolutionDesignAnalysisFormHandler,
+  getSolutionDesignQuotationFormHandler,
   getSolutionDesignReviewFormHandler,
   getSolutionDesignWorkflowHandler,
   getStageDocumentOnlineFormHandler,
@@ -36,6 +38,7 @@ import {
   listMyActiveProjectsHandler,
   listStageDocumentAttachmentsHandler,
   markStageDocumentNotApplicableHandler,
+  markSolutionDesignUploadExemptionHandler,
   processSolutionDesignQuotationResultHandler,
   restoreStageDocumentApplicableHandler,
   returnStageApprovalHandler,
@@ -43,11 +46,14 @@ import {
   returnSolutionDesignWorkflowNodeHandler,
   returnStageDocumentHandler,
   resubmitStageApprovalHandler,
+  cancelSolutionDesignUploadExemptionHandler,
   saveStageDocumentOnlineFormHandler,
   saveSolutionDesignAnalysisFormHandler,
+  saveSolutionDesignQuotationFormHandler,
   saveSolutionDesignReviewFormHandler,
   selectSolutionDesignQuotationTenderBranchHandler,
   submitSolutionDesignAnalysisFormHandler,
+  submitSolutionDesignQuotationFormHandler,
   submitSolutionDesignQuotationHandler,
   submitSolutionDesignReviewFormHandler,
   submitSolutionDesignWorkflowNodeHandler,
@@ -140,6 +146,30 @@ projectsRouter.post(
 );
 
 projectsRouter.get(
+  '/:projectId/solution-design-workflow/quotation-tender/quotation-form',
+  requireAuth,
+  asyncHandler(getSolutionDesignQuotationFormHandler)
+);
+
+projectsRouter.put(
+  '/:projectId/solution-design-workflow/quotation-tender/quotation-form',
+  requireAuth,
+  asyncHandler(saveSolutionDesignQuotationFormHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/solution-design-workflow/quotation-tender/quotation-form/submit',
+  requireAuth,
+  asyncHandler(submitSolutionDesignQuotationFormHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/solution-design-workflow/quotation-tender/quotation-form/generated-file/download',
+  requireAuth,
+  asyncHandler(downloadSolutionDesignQuotationGeneratedFileHandler)
+);
+
+projectsRouter.get(
   '/:projectId/solution-design-workflow/analysis-form',
   requireAuth,
   asyncHandler(getSolutionDesignAnalysisFormHandler)
@@ -197,6 +227,18 @@ projectsRouter.get(
   '/:projectId/solution-design-workflow/uploads/:slotKey/download',
   requireAuth,
   asyncHandler(downloadSolutionDesignWorkflowFileHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/solution-design-workflow/uploads/:slotKey/exemption',
+  requireAuth,
+  asyncHandler(markSolutionDesignUploadExemptionHandler)
+);
+
+projectsRouter.delete(
+  '/:projectId/solution-design-workflow/uploads/:slotKey/exemption',
+  requireAuth,
+  asyncHandler(cancelSolutionDesignUploadExemptionHandler)
 );
 
 projectsRouter.post(

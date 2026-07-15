@@ -10,6 +10,8 @@ import {
   SOLUTION_DESIGN_NODE_STATUS,
   SOLUTION_DESIGN_NODES,
   SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS,
+  SOLUTION_DESIGN_QUOTATION_FORM_DEFINITION,
+  SOLUTION_DESIGN_QUOTATION_FORM_STATUS,
   SOLUTION_DESIGN_QUOTATION_REJECTED_ACTION,
   SOLUTION_DESIGN_QUOTATION_RESULT,
   SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS,
@@ -32,6 +34,7 @@ import {
   getSolutionDesignUploadSlotDefinition,
   isProjectInSolutionDesignStage,
   isSolutionDesignGeneralManager,
+  isSolutionDesignOutputUploadSlot,
   isSolutionDesignProjectEnded,
   normalizeSolutionDesignRoleAssignmentPayload
 } from '../../domain/solutionDesignWorkflow.js';
@@ -62,6 +65,7 @@ import { ProjectAuthorizationError } from './shared.js';
 import { tryAutoAdvanceProjectStage } from './stageAdvanceRepository.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
 import {
+  GENERATED_DOCX_MIME_TYPE,
   GENERATED_XLSX_MIME_TYPE,
   SOLUTION_DESIGN_FORM_GENERATED_FILE_TYPE,
   generateSolutionDesignFormFile
@@ -71,6 +75,12 @@ import {
   normalizeAnalysisFormPayload,
   normalizeReviewFormPayload
 } from './solutionDesignWorkflow/formPayloads.js';
+import {
+  buildQuotationFormDto,
+  generateSolutionDesignQuotationFormFile,
+  mapQuotationForm,
+  normalizeQuotationFormPayload
+} from './solutionDesignWorkflow/quotationForms.js';
 import {
   buildAnalysisFormDto,
   buildReviewFormDto,
@@ -84,6 +94,7 @@ import {
   canActAsReviewerForSolutionDesignNode,
   canDownloadUploadFile,
   canProcessAnalysisForm,
+  canProcessQuotationForm,
   canProcessQuotationResult,
   canProcessReviewForm,
   canReviewSolutionDesignNode,
@@ -93,14 +104,20 @@ import {
   canSubmitTender,
   buildUploadSlotPermissions,
   canViewFinanceCostUploadFile,
+  areSolutionDesignOutputsSatisfied,
   getCostUploadSlotKeyForNode,
+  isSolutionDesignOutputSatisfied,
   isAnalysisFormGeneratedForRevision,
   isAnalysisFormSubmittedForRevision,
+  isCostUploadSlotCurrent,
   isCostEstimationNode,
   isFinanceCostUploadSlot,
   isNodeProcessableStatus,
-  isProductFunctionDiagramUploadedForRevision,
+  isProductFunctionDiagramCurrent,
   isQuotationBranchCurrent,
+  isQuotationFormGeneratedForRevision,
+  isQuotationFormSubmittedForRevision,
+  isQuotationTenderFlowCurrentForNode,
   isQuotationTenderUploadSlot,
   isReviewFormGeneratedForRevision,
   isReviewFormSubmittedForRevision,
@@ -108,6 +125,7 @@ import {
 } from './solutionDesignWorkflow/permissions.js';
 import {
   selectCurrentAnalysisForm,
+  selectCurrentQuotationForm,
   selectCurrentReviewForm,
   selectCurrentReviewForms,
   selectProjectContext,
@@ -122,6 +140,7 @@ import {
 
 const DEFAULT_UPLOAD_MIME_TYPE = 'application/octet-stream';
 const MAX_UPLOAD_TEXT_FIELD_LENGTH = 255;
+const MAX_UPLOAD_EXEMPTION_REASON_LENGTH = 1000;
 
 const defaultSolutionDesignUploadStorage = {
   createStorageKey: createSolutionDesignUploadStorageKey,
@@ -131,12 +150,12 @@ const defaultSolutionDesignUploadStorage = {
 };
 
 const defaultSolutionDesignGeneratedFileStorage = {
-  createStorageKey: ({ projectId, documentCode, revision }) =>
+  createStorageKey: ({ projectId, documentCode, revision, fileType = SOLUTION_DESIGN_FORM_GENERATED_FILE_TYPE }) =>
     createStageDocumentGeneratedFileStorageKey({
       projectId,
       documentId: `solution-design-${documentCode}`,
       version: revision,
-      fileType: SOLUTION_DESIGN_FORM_GENERATED_FILE_TYPE
+      fileType
     }),
   writeFile: writeStageDocumentGeneratedFile,
   assertFileReadable: assertStageDocumentGeneratedFileReadable,
@@ -277,6 +296,31 @@ function normalizeReturnReason(payload = {}) {
       'Solution analysis return reason is too long',
       400,
       ['returnReason']
+    );
+  }
+
+  return reason;
+}
+
+function normalizeUploadExemptionReason(payload = {}) {
+  const reason = String(
+    payload.exemptionReason ?? payload.exemption_reason ?? payload.reason ?? payload.remark ?? ''
+  ).trim();
+  if (!reason) {
+    throw new SolutionDesignWorkflowError(
+      SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
+      'Solution design upload exemption reason is required',
+      400,
+      ['exemptionReason']
+    );
+  }
+
+  if (reason.length > MAX_UPLOAD_EXEMPTION_REASON_LENGTH) {
+    throw new SolutionDesignWorkflowError(
+      SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
+      'Solution design upload exemption reason is too long',
+      400,
+      ['exemptionReason']
     );
   }
 
@@ -472,6 +516,12 @@ function buildVirtualUploadSlots() {
     is_required: 1,
     revision: 1,
     status: SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.PENDING,
+    is_upload_exempted: 0,
+    exemption_reason: null,
+    exempted_by_user_id: null,
+    exempted_at: null,
+    exempted_by_account: null,
+    exempted_by_display_name: null,
     submitted_by_user_id: null,
     submitted_at: null,
     current_file_id: null
@@ -569,6 +619,17 @@ async function selectMaxReviewFormRevision(executor, projectId, nodeKey) {
     WHERE project_id = ?
       AND node_key = ?`,
     [projectId, nodeKey]
+  );
+
+  return Number(rows[0]?.max_revision ?? 0);
+}
+
+async function selectMaxQuotationFormRevision(executor, projectId) {
+  const [rows] = await executor.execute(
+    `SELECT COALESCE(MAX(revision), 0) AS max_revision
+    FROM project_solution_design_quotation_forms
+    WHERE project_id = ?`,
+    [projectId]
   );
 
   return Number(rows[0]?.max_revision ?? 0);
@@ -772,7 +833,27 @@ function mapUploadedFile(row) {
 }
 
 function buildCurrentFileSlotKeySet(slots = []) {
-  return new Set(slots.filter((slot) => Boolean(slot.current_file_id)).map((slot) => slot.slot_key));
+  const readyStatuses = new Set([
+    SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.UPLOADED,
+    SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.SUBMITTED
+  ]);
+  return new Set(
+    slots
+      .filter((slot) => Boolean(slot.current_file_id) && readyStatuses.has(slot.status))
+      .map((slot) => slot.slot_key)
+  );
+}
+
+function isUploadSlotExempted(row) {
+  return isSolutionDesignOutputUploadSlot(row?.slot_key) && Boolean(row?.is_upload_exempted);
+}
+
+function buildExemptedUploadSlotKeySet(slots = []) {
+  return new Set(
+    slots
+      .filter((slot) => isUploadSlotExempted(slot))
+      .map((slot) => slot.slot_key)
+  );
 }
 
 function buildCurrentUploadSlotRevisionMap(slots = []) {
@@ -864,8 +945,27 @@ function mapUploadSlot(row, { roleState, user, projectEnded, inSolutionStage, no
     currentFile: mapCurrentUploadFile(row, { includeFileDetails }),
     confidential: isFinanceCostUploadSlot(slot.slotKey),
     currentFileHidden: Boolean(row.current_file_id) && !includeFileDetails,
+    exemption: {
+      isExempted: isUploadSlotExempted(row),
+      reason: isUploadSlotExempted(row) ? row.exemption_reason ?? null : null,
+      exemptedByUserId: isUploadSlotExempted(row) ? row.exempted_by_user_id ?? null : null,
+      exemptedByUser: isUploadSlotExempted(row)
+        ? {
+            id: row.exempted_by_user_id ?? null,
+            account: row.exempted_by_account ?? null,
+            name: row.exempted_by_display_name ?? null
+          }
+        : null,
+      exemptedAt: isUploadSlotExempted(row) ? row.exempted_at ?? null : null
+    },
+    satisfied: Boolean(row.current_file_id) || isUploadSlotExempted(row),
     permissions: {
       ...permissions,
+      canMarkExemption:
+        permissions.canMarkExemption === true &&
+        !Boolean(row.current_file_id) &&
+        !isUploadSlotExempted(row),
+      canCancelExemption: permissions.canCancelExemption === true && isUploadSlotExempted(row),
       canDownload
     }
   };
@@ -878,12 +978,16 @@ function buildUploadsDto({ projectRow, slots, nodes, rolesRow, user, quotationTe
   const materializedSlots = slots.length > 0 ? slots : buildVirtualUploadSlots();
   const materializedNodes = nodes.length > 0 ? nodes : buildVirtualNodes();
   const nodeRowByKey = new Map(materializedNodes.map((node) => [node.node_key, node]));
+  const quotationTenderNode = nodeRowByKey.get(SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER);
+  const visibleSlots = isQuotationBranchCurrent(quotationTenderFlow, quotationTenderNode)
+    ? materializedSlots.filter((slot) => slot.slot_key !== SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE)
+    : materializedSlots;
 
   return {
     projectId: projectRow.id,
     stageKey: SOLUTION_DESIGN_STAGE.STAGE_KEY,
     stageOrder: SOLUTION_DESIGN_STAGE.STAGE_ORDER,
-    slots: materializedSlots.map((slot) =>
+    slots: visibleSlots.map((slot) =>
       mapUploadSlot(slot, {
         roleState,
         user,
@@ -906,7 +1010,8 @@ function buildGeneratedFileBlockingReason({ row, label, requiredRevision }) {
   }
 
   if (row.form_status !== SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.SUBMITTED &&
-      row.form_status !== SOLUTION_DESIGN_REVIEW_FORM_STATUS.SUBMITTED) {
+      row.form_status !== SOLUTION_DESIGN_REVIEW_FORM_STATUS.SUBMITTED &&
+      row.form_status !== SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED) {
     return `等待技术负责人提交${label}`;
   }
 
@@ -931,9 +1036,13 @@ function buildNodeBlockingReasons(
   row,
   roleState,
   {
+    currentFileSlotKeys = new Set(),
+    exemptedSlotKeys = new Set(),
     uploadSlotRevisionByKey = new Map(),
     analysisFormRow = null,
-    reviewFormRowsByNodeKey = new Map()
+    reviewFormRowsByNodeKey = new Map(),
+    quotationTenderFlow = null,
+    quotationFormRow = null
   } = {}
 ) {
   if (row.node_key === SOLUTION_DESIGN_NODE_KEY.PREPARATION && row.status === SOLUTION_DESIGN_NODE_STATUS.PENDING) {
@@ -954,7 +1063,7 @@ function buildNodeBlockingReasons(
     if (generatedFileReason) {
       reasons.push(generatedFileReason);
     }
-    if (!isProductFunctionDiagramUploadedForRevision(uploadSlotRevisionByKey, row.current_revision)) {
+    if (!isProductFunctionDiagramCurrent(currentFileSlotKeys)) {
       reasons.push('等待技术负责人上传当前版本产品功能框图');
     }
     return reasons;
@@ -968,6 +1077,32 @@ function buildNodeBlockingReasons(
       requiredRevision: row.current_revision
     });
     return generatedFileReason ? [generatedFileReason] : [];
+  }
+
+  if (row.node_key === SOLUTION_DESIGN_NODE_KEY.DESIGN && isNodeProcessableStatus(row.status)) {
+    return areSolutionDesignOutputsSatisfied(currentFileSlotKeys, exemptedSlotKeys)
+      ? []
+      : ['等待技术负责人上传或标记无需上传方案设计 8 个产出'];
+  }
+
+  if (isCostEstimationNode(row.node_key) && isNodeProcessableStatus(row.status)) {
+    return isCostUploadSlotCurrent(currentFileSlotKeys, row.node_key)
+      ? []
+      : ['等待上传成本估算文件'];
+  }
+
+  if (row.node_key === SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER && isNodeProcessableStatus(row.status)) {
+    if (
+      isQuotationBranchCurrent(quotationTenderFlow, row) &&
+      quotationTenderFlow.branch_status === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED
+    ) {
+      const generatedFileReason = buildGeneratedFileBlockingReason({
+        row: quotationFormRow,
+        label: '报价单',
+        requiredRevision: row.current_revision
+      });
+      return generatedFileReason ? [generatedFileReason.replace('技术负责人', '商务负责人')] : [];
+    }
   }
 
   if (row.status === SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED && row.node_order > 1) {
@@ -991,10 +1126,12 @@ function mapNode(
     projectEnded,
     inSolutionStage,
     currentFileSlotKeys,
+    exemptedSlotKeys,
     uploadSlotRevisionByKey,
     analysisFormRow,
     reviewFormRowsByNodeKey,
-    quotationTenderFlow
+    quotationTenderFlow,
+    quotationFormRow
   }
 ) {
   const canReview = canReviewSolutionDesignNode({ nodeRow: row, user, roleState, projectEnded, inSolutionStage });
@@ -1017,10 +1154,12 @@ function mapNode(
       projectEnded,
       inSolutionStage,
       currentFileSlotKeys,
+      exemptedSlotKeys,
       uploadSlotRevisionByKey,
       analysisFormRow,
       reviewFormRowsByNodeKey,
-      quotationTenderFlow
+      quotationTenderFlow,
+      quotationFormRow
     }),
     canApprove: canReview,
     canReturn: canReview,
@@ -1066,8 +1205,28 @@ function mapNode(
       user,
       nodeRow: row,
       flowRow: quotationTenderFlow,
-      uploadSlotRevisionByKey
+      quotationFormRow
     });
+    permissions.canEditQuotationForm = canProcessQuotationForm({
+      projectEnded,
+      inSolutionStage,
+      roleState,
+      user,
+      nodeRow: row,
+      flowRow: quotationTenderFlow
+    });
+    permissions.canSubmitQuotationForm = canProcessQuotationForm({
+      projectEnded,
+      inSolutionStage,
+      roleState,
+      user,
+      nodeRow: row,
+      flowRow: quotationTenderFlow
+    });
+    permissions.canDownloadQuotationForm = isQuotationFormGeneratedForRevision(
+      quotationFormRow,
+      row.current_revision
+    );
     const canProcessQuoteResult = canProcessQuotationResult({
       projectEnded,
       inSolutionStage,
@@ -1123,9 +1282,13 @@ function mapNode(
     approvedAt: row.approved_at,
     returnedAt: row.returned_at,
     blockingReasons: buildNodeBlockingReasons(row, roleState, {
+      currentFileSlotKeys,
+      exemptedSlotKeys,
       uploadSlotRevisionByKey,
       analysisFormRow,
-      reviewFormRowsByNodeKey
+      reviewFormRowsByNodeKey,
+      quotationTenderFlow,
+      quotationFormRow
     }),
     permissions
   };
@@ -1138,6 +1301,7 @@ function buildWorkflowDto({
   analysisFormRow,
   reviewFormRows,
   quotationTenderFlow,
+  quotationFormRow,
   rolesRow,
   usersById,
   user
@@ -1151,6 +1315,7 @@ function buildWorkflowDto({
     inSolutionStage;
   const materializedNodes = nodes.length > 0 ? nodes : buildVirtualNodes();
   const currentFileSlotKeys = buildCurrentFileSlotKeySet(uploadSlots);
+  const exemptedSlotKeys = buildExemptedUploadSlotKeySet(uploadSlots);
   const uploadSlotRevisionByKey = buildCurrentUploadSlotRevisionMap(uploadSlots);
   const reviewFormRowsByNodeKey = buildReviewFormRowByNodeKey(reviewFormRows);
   const quotationTenderNode = getNodeByKey(materializedNodes, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER);
@@ -1196,8 +1361,28 @@ function buildWorkflowDto({
       user,
       nodeRow: quotationTenderNode,
       flowRow: quotationTenderFlow,
-      uploadSlotRevisionByKey
+      quotationFormRow
     }),
+    canEditQuotationForm: canProcessQuotationForm({
+      projectEnded,
+      inSolutionStage,
+      roleState,
+      user,
+      nodeRow: quotationTenderNode,
+      flowRow: quotationTenderFlow
+    }),
+    canSubmitQuotationForm: canProcessQuotationForm({
+      projectEnded,
+      inSolutionStage,
+      roleState,
+      user,
+      nodeRow: quotationTenderNode,
+      flowRow: quotationTenderFlow
+    }),
+    canDownloadQuotationForm: isQuotationFormGeneratedForRevision(
+      quotationFormRow,
+      quotationTenderNode?.current_revision
+    ),
     canAcceptQuotation: canProcessQuotationResult({
       projectEnded,
       inSolutionStage,
@@ -1267,10 +1452,12 @@ function buildWorkflowDto({
         projectEnded,
         inSolutionStage,
         currentFileSlotKeys,
+        exemptedSlotKeys,
         uploadSlotRevisionByKey,
         analysisFormRow,
         reviewFormRowsByNodeKey,
-        quotationTenderFlow
+        quotationTenderFlow,
+        quotationFormRow
       })
     ),
     analysisForm: mapAnalysisForm(analysisFormRow),
@@ -1285,6 +1472,7 @@ function buildWorkflowDto({
       nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
       nodeStatus: quotationTenderNode?.status ?? SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED,
       nodeRevision: quotationTenderNode?.current_revision ?? 1,
+      quotationForm: mapQuotationForm(quotationFormRow),
       permissions: quotationTenderPermissions
     },
     roles: roleState,
@@ -1294,6 +1482,39 @@ function buildWorkflowDto({
       canAdvanceToContract: quotationTenderPermissions.canAdvanceToContract
     },
     isProjectEnded: projectEnded
+  };
+}
+
+function buildQuotationFormPermissions({ projectRow, quotationNode, rolesRow, user, quotationTenderFlow, quotationFormRow }) {
+  const projectEnded = isSolutionDesignProjectEnded(projectRow);
+  const inSolutionStage = isProjectInSolutionDesignStage(projectRow);
+  const roleState = buildRoleStateWithoutUserDetails(projectRow, rolesRow);
+  const canProcessForm = canProcessQuotationForm({
+    projectEnded,
+    inSolutionStage,
+    roleState,
+    user,
+    nodeRow: quotationNode,
+    flowRow: quotationTenderFlow
+  });
+
+  return {
+    canViewQuotationForm: true,
+    canEditQuotationForm: canProcessForm,
+    canSubmitQuotationForm: canProcessForm,
+    canSubmitQuotation: canSubmitQuotation({
+      projectEnded,
+      inSolutionStage,
+      roleState,
+      user,
+      nodeRow: quotationNode,
+      flowRow: quotationTenderFlow,
+      quotationFormRow
+    }),
+    canDownloadGeneratedFile: isQuotationFormGeneratedForRevision(
+      quotationFormRow,
+      quotationNode?.current_revision
+    )
   };
 }
 
@@ -1371,6 +1592,10 @@ function getSolutionDesignSlotUploadActionText(slot) {
     return '上传/提交制造中心成本估算表';
   }
 
+  if (slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MARKETING_COST_ESTIMATION) {
+    return '上传/提交营销中心成本估算表';
+  }
+
   if (slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.FINANCE_COST_ESTIMATION) {
     return '上传/提交财务成本估算表';
   }
@@ -1419,6 +1644,10 @@ function getSolutionDesignNodeSubmitActionText(node) {
     return '提交制造成本估算';
   }
 
+  if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
+    return '提交营销成本估算';
+  }
+
   if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST) {
     return '提交财务成本估算';
   }
@@ -1449,6 +1678,10 @@ function getSolutionDesignNodeReviewActionText(node) {
 
   if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST) {
     return '审批/退回制造成本估算';
+  }
+
+  if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
+    return '审批/退回营销成本估算';
   }
 
   if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST) {
@@ -1515,6 +1748,13 @@ export function buildSolutionDesignWorkbenchTodos({ projectRow = null, workflow,
       continue;
     }
 
+    if (
+      isSolutionDesignOutputUploadSlot(slot.slotKey) &&
+      (slot.hasCurrentFile === true || slot.exemption?.isExempted === true)
+    ) {
+      continue;
+    }
+
     const node = getWorkflowNodeDto(workflow, slot.nodeKey);
     addTodo({
       node,
@@ -1576,6 +1816,18 @@ export function buildSolutionDesignWorkbenchTodos({ projectRow = null, workflow,
       node: quotationTenderNode,
       actionText: '选择报价/投标分支',
       actionKey: 'select_quotation_tender_branch'
+    });
+  }
+
+  if (
+    (quotationTenderPermissions.canEditQuotationForm === true ||
+      quotationTenderPermissions.canSubmitQuotationForm === true) &&
+    !isGeneratedFormDtoCurrent(workflow.quotationTender?.quotationForm, quotationTenderNode?.currentRevision)
+  ) {
+    addTodo({
+      node: quotationTenderNode,
+      actionText: '填写/提交报价单在线表单',
+      actionKey: 'quotation_form'
     });
   }
 
@@ -1682,6 +1934,7 @@ export async function selectSolutionDesignWorkbenchTodos(user, db = pool) {
         const analysisFormRow = await selectCurrentAnalysisForm(connection, projectRow.id);
         const reviewFormRows = await selectCurrentReviewForms(connection, projectRow.id);
         const quotationTenderFlow = await selectQuotationTenderFlow(connection, projectRow.id);
+        const quotationFormRow = await selectCurrentQuotationForm(connection, projectRow.id);
         const usersById = await selectUsersByIds(connection, collectRoleUserIds(projectRow, rolesRow));
         const workflow = buildWorkflowDto({
           projectRow,
@@ -1690,6 +1943,7 @@ export async function selectSolutionDesignWorkbenchTodos(user, db = pool) {
           analysisFormRow,
           reviewFormRows,
           quotationTenderFlow,
+          quotationFormRow,
           rolesRow,
           usersById,
           user
@@ -1724,6 +1978,7 @@ async function buildWorkflowDtoForProject(executor, { projectRow, user }) {
   const analysisFormRow = await selectCurrentAnalysisForm(executor, projectRow.id);
   const reviewFormRows = await selectCurrentReviewForms(executor, projectRow.id);
   const quotationTenderFlow = await selectQuotationTenderFlow(executor, projectRow.id);
+  const quotationFormRow = await selectCurrentQuotationForm(executor, projectRow.id);
   const usersById = await selectUsersByIds(executor, collectRoleUserIds(projectRow, rolesRow));
   return buildWorkflowDto({
     projectRow,
@@ -1732,6 +1987,7 @@ async function buildWorkflowDtoForProject(executor, { projectRow, user }) {
     analysisFormRow,
     reviewFormRows,
     quotationTenderFlow,
+    quotationFormRow,
     rolesRow,
     usersById,
     user
@@ -1930,6 +2186,10 @@ function getUploadLogActionType(slot) {
     return OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MANUFACTURING_COST_FILE_UPLOADED;
   }
 
+  if (slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MARKETING_COST_ESTIMATION) {
+    return OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MARKETING_COST_FILE_UPLOADED;
+  }
+
   if (slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.FINANCE_COST_ESTIMATION) {
     return OPERATION_ACTION_TYPE.SOLUTION_DESIGN_FINANCE_COST_FILE_UPLOADED;
   }
@@ -1964,6 +2224,10 @@ function buildUploadLogSummary(slot, fileRow) {
 
   if (slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MANUFACTURING_COST_ESTIMATION) {
     return `上传制造中心成本估算表：${fileRow.original_file_name}`;
+  }
+
+  if (slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MARKETING_COST_ESTIMATION) {
+    return `上传营销中心成本估算表：${fileRow.original_file_name}`;
   }
 
   if (slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.FINANCE_COST_ESTIMATION) {
@@ -2009,6 +2273,35 @@ async function insertUploadLog(executor, { projectId, actorUserId, slot, fileRow
   });
 }
 
+async function insertUploadExemptionLog(executor, {
+  projectId,
+  actorUserId,
+  slot,
+  reason = null,
+  actionType,
+  summary,
+  fileRow = null
+}) {
+  await insertOperationLog(executor, {
+    projectId,
+    actorUserId,
+    actionType,
+    targetType: OPERATION_TARGET_TYPE.SOLUTION_DESIGN_WORKFLOW,
+    targetId: projectId,
+    summary,
+    details: {
+      projectId,
+      nodeKey: slot.nodeKey,
+      slotKey: slot.slotKey,
+      slotName: slot.slotName,
+      reason,
+      fileId: fileRow?.id ?? null,
+      revision: fileRow?.revision ?? null,
+      actorUserId
+    }
+  });
+}
+
 async function insertNodeSubmitLog(executor, { projectId, actorUserId, nodeKey }) {
   let actionType = OPERATION_ACTION_TYPE.SOLUTION_DESIGN_DESIGN_OUTPUTS_SUBMITTED;
   let summary = '提交方案设计 8 个产出';
@@ -2037,6 +2330,11 @@ async function insertNodeSubmitLog(executor, { projectId, actorUserId, nodeKey }
   if (nodeKey === SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST) {
     actionType = OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MANUFACTURING_COST_SUBMITTED;
     summary = '提交制造成本估算节点审批';
+  }
+
+  if (nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
+    actionType = OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MARKETING_COST_SUBMITTED;
+    summary = '提交营销成本估算节点审批';
   }
 
   if (nodeKey === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST) {
@@ -2330,6 +2628,13 @@ function getCostApproveMetadata(nodeKey, nodeStatus) {
     };
   }
 
+  if (nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
+    return {
+      actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MARKETING_COST_APPROVED,
+      summary: '营销成本估算审批通过'
+    };
+  }
+
   if (nodeKey === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST && nodeStatus === SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW) {
     return {
       actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_FINANCE_COST_FINANCE_APPROVED,
@@ -2358,6 +2663,13 @@ function getCostReturnMetadata(nodeKey, nodeStatus) {
     };
   }
 
+  if (nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
+    return {
+      actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MARKETING_COST_RETURNED,
+      summary: '营销成本估算审批退回'
+    };
+  }
+
   if (nodeKey === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST && nodeStatus === SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW) {
     return {
       actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_FINANCE_COST_FINANCE_RETURNED,
@@ -2367,7 +2679,7 @@ function getCostReturnMetadata(nodeKey, nodeStatus) {
 
   return {
     actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_FINANCE_COST_GENERAL_RETURNED,
-    summary: '总经理退回财务成本估算，返回研发成本估算重走三段流程'
+    summary: '总经理退回财务成本估算，返回研发成本估算重走四段流程'
   };
 }
 
@@ -2765,6 +3077,163 @@ async function saveReviewFormVersion(executor, {
   });
 }
 
+async function deactivateCurrentQuotationForm(executor, projectId) {
+  await executor.execute(
+    `UPDATE project_solution_design_quotation_forms
+    SET is_current = 0,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE project_id = ?
+      AND is_current = 1`,
+    [projectId]
+  );
+}
+
+async function insertQuotationForm(executor, {
+  projectId,
+  revision,
+  formStatus,
+  formDataJson,
+  actorUserId,
+  generatedFileStatus,
+  generatedFileTemplateName = null,
+  generatedByUserId = null,
+  generationErrorMessage = null
+}) {
+  await executor.execute(
+    `INSERT INTO project_solution_design_quotation_forms (
+      project_id,
+      revision,
+      form_status,
+      form_data_json,
+      is_current,
+      submitted_by_user_id,
+      submitted_at,
+      generated_file_status,
+      generated_file_storage_key,
+      generated_file_name,
+      generated_file_mime_type,
+      generated_file_size,
+      generated_file_template_name,
+      generated_at,
+      generated_by_user_id,
+      generation_error_message,
+      created_by_user_id,
+      updated_by_user_id
+    ) VALUES (?, ?, ?, ?, 1, ?, ${
+      formStatus === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED ? 'CURRENT_TIMESTAMP' : 'NULL'
+    }, ?, NULL, NULL, NULL, NULL, ?, NULL, ?, ?, ?, ?)`,
+    [
+      projectId,
+      revision,
+      formStatus,
+      formDataJson,
+      formStatus === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED ? actorUserId : null,
+      generatedFileStatus,
+      generatedFileTemplateName,
+      generatedByUserId,
+      generationErrorMessage,
+      actorUserId,
+      actorUserId
+    ]
+  );
+
+  return selectCurrentQuotationForm(executor, projectId);
+}
+
+async function updateQuotationForm(executor, {
+  formId,
+  projectId,
+  formStatus,
+  formDataJson,
+  actorUserId,
+  generatedFileStatus,
+  generatedFileTemplateName = null,
+  generatedByUserId = null,
+  generationErrorMessage = null
+}) {
+  await executor.execute(
+    `UPDATE project_solution_design_quotation_forms
+    SET form_status = ?,
+      form_data_json = ?,
+      submitted_by_user_id = ?,
+      submitted_at = ${formStatus === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED ? 'CURRENT_TIMESTAMP' : 'NULL'},
+      generated_file_status = ?,
+      generated_file_storage_key = NULL,
+      generated_file_name = NULL,
+      generated_file_mime_type = NULL,
+      generated_file_size = NULL,
+      generated_file_template_name = ?,
+      generated_at = NULL,
+      generated_by_user_id = ?,
+      generation_error_message = ?,
+      updated_by_user_id = ?,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?`,
+    [
+      formStatus,
+      formDataJson,
+      formStatus === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED ? actorUserId : null,
+      generatedFileStatus,
+      generatedFileTemplateName,
+      generatedByUserId,
+      generationErrorMessage,
+      actorUserId,
+      formId
+    ]
+  );
+
+  return selectCurrentQuotationForm(executor, projectId);
+}
+
+async function saveQuotationFormVersion(executor, {
+  projectId,
+  nodeRevision,
+  currentFormRow,
+  formStatus,
+  formDataJson,
+  actorUserId
+}) {
+  const isSubmit = formStatus === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED;
+  const generatedFileStatus = isSubmit
+    ? SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATING
+    : SOLUTION_DESIGN_GENERATED_FILE_STATUS.NOT_STARTED;
+  const generatedFileTemplateName = isSubmit ? SOLUTION_DESIGN_QUOTATION_FORM_DEFINITION.templateName : null;
+  const generatedByUserId = isSubmit ? actorUserId : null;
+  const generationErrorMessage = null;
+  const canUpdateCurrentDraft =
+    currentFormRow?.form_status === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.DRAFT &&
+    Number(currentFormRow.revision ?? 0) >= Number(nodeRevision ?? 1);
+
+  if (canUpdateCurrentDraft) {
+    return updateQuotationForm(executor, {
+      formId: currentFormRow.id,
+      projectId,
+      formStatus,
+      formDataJson,
+      actorUserId,
+      generatedFileStatus,
+      generatedFileTemplateName,
+      generatedByUserId,
+      generationErrorMessage
+    });
+  }
+
+  await deactivateCurrentQuotationForm(executor, projectId);
+  const maxRevision = await selectMaxQuotationFormRevision(executor, projectId);
+  const nextRevision = Math.max(maxRevision + 1, Number(nodeRevision ?? 1));
+  return insertQuotationForm(executor, {
+    projectId,
+    revision: nextRevision,
+    formStatus,
+    formDataJson,
+    actorUserId,
+    generatedFileStatus,
+    generatedFileTemplateName,
+    generatedByUserId,
+    generationErrorMessage
+  });
+}
+
 async function markAnalysisFormGenerated(executor, {
   formId,
   storageKey,
@@ -2901,6 +3370,78 @@ async function markReviewFormGenerationFailed(executor, {
   );
 }
 
+async function markQuotationFormGenerated(executor, {
+  formId,
+  storageKey,
+  fileName,
+  mimeType,
+  fileSize,
+  templateName,
+  generatedByUserId
+}) {
+  await executor.execute(
+    `UPDATE project_solution_design_quotation_forms
+    SET generated_file_status = ?,
+      generated_file_storage_key = ?,
+      generated_file_name = ?,
+      generated_file_mime_type = ?,
+      generated_file_size = ?,
+      generated_file_template_name = ?,
+      generated_at = CURRENT_TIMESTAMP,
+      generated_by_user_id = ?,
+      generation_error_message = NULL,
+      updated_by_user_id = ?,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?`,
+    [
+      SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED,
+      storageKey,
+      fileName,
+      mimeType,
+      fileSize,
+      templateName,
+      generatedByUserId,
+      generatedByUserId,
+      formId
+    ]
+  );
+}
+
+async function markQuotationFormGenerationFailed(executor, {
+  formId,
+  templateName,
+  generatedByUserId,
+  errorMessage
+}) {
+  await executor.execute(
+    `UPDATE project_solution_design_quotation_forms
+    SET generated_file_status = ?,
+      form_status = ?,
+      submitted_by_user_id = NULL,
+      submitted_at = NULL,
+      generated_file_storage_key = NULL,
+      generated_file_name = NULL,
+      generated_file_mime_type = NULL,
+      generated_file_size = NULL,
+      generated_file_template_name = ?,
+      generated_at = CURRENT_TIMESTAMP,
+      generated_by_user_id = ?,
+      generation_error_message = ?,
+      updated_by_user_id = ?,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?`,
+    [
+      SOLUTION_DESIGN_GENERATED_FILE_STATUS.FAILED,
+      SOLUTION_DESIGN_QUOTATION_FORM_STATUS.DRAFT,
+      templateName,
+      generatedByUserId,
+      String(errorMessage || 'Solution design quotation file generation failed').slice(0, 1000),
+      generatedByUserId,
+      formId
+    ]
+  );
+}
+
 async function generateAndPersistAnalysisFormFile(executor, {
   projectRow,
   formRow,
@@ -2998,6 +3539,40 @@ async function generateAndPersistReviewFormFile(executor, {
   return refreshed;
 }
 
+async function generateAndPersistQuotationFormFile(executor, {
+  projectRow,
+  formRow,
+  actorUserId,
+  storage
+}) {
+  const generation = await generateSolutionDesignQuotationFormFile({
+    projectRow,
+    formRow,
+    storage
+  });
+
+  if (generation.success) {
+    await markQuotationFormGenerated(executor, {
+      formId: formRow.id,
+      storageKey: generation.storageKey,
+      fileName: generation.fileName,
+      mimeType: generation.mimeType,
+      fileSize: generation.fileSize,
+      templateName: generation.templateName,
+      generatedByUserId: actorUserId
+    });
+  } else {
+    await markQuotationFormGenerationFailed(executor, {
+      formId: formRow.id,
+      templateName: generation.templateName,
+      generatedByUserId: actorUserId,
+      errorMessage: generation.errorMessage
+    });
+  }
+
+  return selectCurrentQuotationForm(executor, projectRow.id);
+}
+
 async function replaceCurrentSlotFile(executor, { projectId, slotRow, slot, uploadFile, storageKey, userId }) {
   const currentFiles = await selectCurrentUploadFiles(executor, projectId, [slot.slotKey]);
   const currentRevision = Math.max(
@@ -3046,6 +3621,10 @@ async function replaceCurrentSlotFile(executor, { projectId, slotRow, slot, uplo
     `UPDATE project_solution_design_upload_slots
     SET status = ?,
       revision = ?,
+      is_upload_exempted = 0,
+      exemption_reason = NULL,
+      exempted_by_user_id = NULL,
+      exempted_at = NULL,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?`,
     [SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.UPLOADED, nextRevision, slotRow.id]
@@ -3477,6 +4056,28 @@ async function upsertQuotationTenderBranchSelection(executor, {
   );
 }
 
+async function insertQuotationTenderBranchSelectionLog(executor, {
+  projectId,
+  branchType,
+  nodeRevision,
+  actorUserId
+}) {
+  await insertQuotationTenderLog(executor, {
+    projectId,
+    actorUserId,
+    actionType: branchType === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION
+      ? OPERATION_ACTION_TYPE.SOLUTION_DESIGN_QUOTATION_BRANCH_SELECTED
+      : OPERATION_ACTION_TYPE.SOLUTION_DESIGN_TENDER_BRANCH_SELECTED,
+    summary: branchType === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION
+      ? '总经理选择报价流程'
+      : '总经理选择投标流程',
+    details: {
+      branchType,
+      revision: Number(nodeRevision ?? 1)
+    }
+  });
+}
+
 async function updateQuotationSubmitted(executor, { projectId, actorUserId }) {
   const [updateResult] = await executor.execute(
     `UPDATE project_solution_design_quotation_tender_flows
@@ -3609,7 +4210,8 @@ async function getNextQuotationTenderNodeRevisionAfterReturn(executor, projectId
     (max, file) => Math.max(max, Number(file.revision ?? 0)),
     0
   );
-  return Math.max(Number(nodeRow?.current_revision ?? 1), maxFileRevision) + 1;
+  const maxQuotationFormRevision = await selectMaxQuotationFormRevision(executor, projectId);
+  return Math.max(Number(nodeRow?.current_revision ?? 1), maxFileRevision, maxQuotationFormRevision) + 1;
 }
 
 async function returnQuotationTenderNode(executor, { projectId, returnReason, expectedStatus }) {
@@ -4010,6 +4612,7 @@ async function returnFinanceCostToRdCost(executor, { projectId, returnReason }) 
   const nodeKeys = [
     SOLUTION_DESIGN_NODE_KEY.RD_COST,
     SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST,
+    SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
     SOLUTION_DESIGN_NODE_KEY.FINANCE_COST
   ];
 
@@ -4181,6 +4784,10 @@ function getSubmitNodeRoleKey(nodeKey) {
     return SOLUTION_DESIGN_ROLE_KEY.PROCUREMENT_OWNER;
   }
 
+  if (nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
+    return SOLUTION_DESIGN_ROLE_KEY.BUSINESS_OWNER;
+  }
+
   if (nodeKey === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST) {
     return SOLUTION_DESIGN_ROLE_KEY.FINANCE_ACCOUNTANT;
   }
@@ -4234,10 +4841,7 @@ async function assertSubmitNodeReady(executor, { projectId, nodeKey }) {
       missing.push('analysis_form_generated_file');
     }
 
-    if (
-      !productFunctionDiagram ||
-      Number(productFunctionDiagram.revision ?? 0) < requiredRevision
-    ) {
+    if (!productFunctionDiagram) {
       missing.push(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PRODUCT_FUNCTION_DIAGRAM);
     }
 
@@ -4253,19 +4857,16 @@ async function assertSubmitNodeReady(executor, { projectId, nodeKey }) {
   }
 
   if (nodeKey === SOLUTION_DESIGN_NODE_KEY.DESIGN) {
-    const nodeRow = await selectSolutionDesignNodeForUpdate(executor, projectId, nodeKey);
-    const requiredRevision = Number(nodeRow?.current_revision ?? 1);
-    const files = await selectCurrentUploadFiles(executor, projectId, SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS);
-    const uploadedRevisionBySlotKey = new Map(
-      files.map((file) => [file.slot_key, Number(file.revision ?? 0)])
-    );
+    const slots = await selectSolutionDesignUploadSlots(executor, projectId);
+    const currentFileSlotKeys = buildCurrentFileSlotKeySet(slots);
+    const exemptedSlotKeys = buildExemptedUploadSlotKeySet(slots);
     const missing = SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS.filter(
-      (slotKey) => Number(uploadedRevisionBySlotKey.get(slotKey) ?? 0) < requiredRevision
+      (slotKey) => !isSolutionDesignOutputSatisfied(currentFileSlotKeys, exemptedSlotKeys, slotKey)
     );
     if (missing.length > 0) {
       throw new SolutionDesignWorkflowError(
         SOLUTION_DESIGN_ERROR.NODE_BLOCKED,
-        'All solution design outputs are required before submitting solution design node',
+        'All solution design outputs must have a current file or upload exemption before submitting solution design node',
         409,
         missing
       );
@@ -4298,12 +4899,10 @@ async function assertSubmitNodeReady(executor, { projectId, nodeKey }) {
 
   if (isCostEstimationNode(nodeKey)) {
     const slotKey = getCostUploadSlotKeyForNode(nodeKey);
-    const nodeRow = await selectSolutionDesignNodeForUpdate(executor, projectId, nodeKey);
-    const requiredRevision = Number(nodeRow?.current_revision ?? 1);
     const files = await selectCurrentUploadFiles(executor, projectId, [slotKey]);
     const currentFile = files[0] || null;
 
-    if (!currentFile || Number(currentFile.revision ?? 0) < requiredRevision) {
+    if (!currentFile) {
       throw new SolutionDesignWorkflowError(
         SOLUTION_DESIGN_ERROR.NODE_BLOCKED,
         'Current cost estimation file is required before submitting cost estimation node',
@@ -4353,6 +4952,73 @@ function assertCanDownloadSolutionDesignUploadFile({ slot, roleState, user }) {
         : SOLUTION_DESIGN_ERROR.FORBIDDEN,
       'Current user cannot download this solution design upload file',
       403,
+      [slot.slotKey]
+    );
+  }
+}
+
+function assertSolutionDesignOutputExemptionSlot(slot) {
+  if (!slot || !isSolutionDesignOutputUploadSlot(slot.slotKey)) {
+    throw new SolutionDesignWorkflowError(
+      SOLUTION_DESIGN_ERROR.INVALID_UPLOAD_SLOT,
+      'Only C07-C14 solution design output upload slots can be exempted',
+      400,
+      ['slotKey']
+    );
+  }
+}
+
+function assertCanManageSolutionDesignOutputExemption({ projectRow, rolesRow, nodeRow, user }) {
+  assertProjectWriteAllowed(projectRow);
+  const roleState = buildRoleStateWithoutUserDetails(projectRow, rolesRow);
+  assertAllRolesAssigned(roleState);
+  assertProjectRoleActor(roleState, SOLUTION_DESIGN_ROLE_KEY.TECHNICAL_OWNER, user);
+  assertNodeProcessable(nodeRow, SOLUTION_DESIGN_NODE_KEY.DESIGN, 'processed');
+}
+
+async function markUploadSlotExempted(executor, { projectId, slot, reason, actorUserId }) {
+  const [result] = await executor.execute(
+    `UPDATE project_solution_design_upload_slots
+    SET is_upload_exempted = 1,
+      exemption_reason = ?,
+      exempted_by_user_id = ?,
+      exempted_at = CURRENT_TIMESTAMP,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE project_id = ?
+      AND slot_key = ?
+      AND is_upload_exempted = 0`,
+    [reason, actorUserId, projectId, slot.slotKey]
+  );
+
+  if (Number(result?.affectedRows ?? 0) !== 1) {
+    throw new SolutionDesignWorkflowError(
+      SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
+      'Solution design output upload exemption cannot be marked in its current state',
+      409,
+      [slot.slotKey]
+    );
+  }
+}
+
+async function cancelUploadSlotExemption(executor, { projectId, slot }) {
+  const [result] = await executor.execute(
+    `UPDATE project_solution_design_upload_slots
+    SET is_upload_exempted = 0,
+      exemption_reason = NULL,
+      exempted_by_user_id = NULL,
+      exempted_at = NULL,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE project_id = ?
+      AND slot_key = ?
+      AND is_upload_exempted = 1`,
+    [projectId, slot.slotKey]
+  );
+
+  if (Number(result?.affectedRows ?? 0) !== 1) {
+    throw new SolutionDesignWorkflowError(
+      SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
+      'Solution design output upload exemption cannot be cancelled in its current state',
+      409,
       [slot.slotKey]
     );
   }
@@ -4441,6 +5107,19 @@ export async function selectSolutionDesignQuotationTenderBranch({ projectId, pay
       SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER
     );
     const existingFlow = await selectQuotationTenderFlow(connection, projectId, { forUpdate: true });
+    if (isQuotationTenderFlowCurrentForNode(existingFlow, nodeRow)) {
+      throw new SolutionDesignWorkflowError(
+        SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
+        'Quotation/tender branch has already been selected during finance cost approval',
+        409,
+        {
+          nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+          branchType: existingFlow?.branch_type ?? null,
+          branchStatus: existingFlow?.branch_status ?? null,
+          nodeStatus: nodeRow?.status ?? null
+        }
+      );
+    }
     if (
       !canSelectQuotationTenderBranch({
         projectEnded: isSolutionDesignProjectEnded(projectRow),
@@ -4470,24 +5149,200 @@ export async function selectSolutionDesignQuotationTenderBranch({ projectId, pay
       actorUserId: user.id,
       existingFlow
     });
-    await insertQuotationTenderLog(connection, {
+    await insertQuotationTenderBranchSelectionLog(connection, {
       projectId,
-      actorUserId: user.id,
-      actionType: branchType === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION
-        ? OPERATION_ACTION_TYPE.SOLUTION_DESIGN_QUOTATION_BRANCH_SELECTED
-        : OPERATION_ACTION_TYPE.SOLUTION_DESIGN_TENDER_BRANCH_SELECTED,
-      summary: branchType === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION
-        ? '总经理选择报价流程'
-        : '总经理选择投标流程',
-      details: {
-        branchType,
-        revision: Number(nodeRow.current_revision ?? 1)
-      }
+      branchType,
+      nodeRevision: nodeRow.current_revision,
+      actorUserId: user.id
     });
 
     const refreshedProjectRow = await selectProjectContext(connection, projectId);
     return buildWorkflowDtoForProject(connection, { projectRow: refreshedProjectRow, user });
   });
+}
+
+export async function getSolutionDesignQuotationForm({ projectId, user }, db = pool) {
+  return withConnection(db, async (connection) => {
+    const projectRow = await selectProjectContext(connection, projectId);
+    const rolesRow = await selectSolutionDesignRoles(connection, projectId);
+    await assertWorkflowViewable(connection, projectId, user, { projectRow, rolesRow });
+    const nodes = await ensureSolutionDesignNodes(connection, projectRow);
+    await ensureSolutionDesignUploadSlots(connection, projectRow);
+    const quotationNode = getNodeByKey(nodes, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER);
+    const quotationTenderFlow = await selectQuotationTenderFlow(connection, projectId);
+    const quotationFormRow = await selectCurrentQuotationForm(connection, projectId);
+
+    return buildQuotationFormDto({
+      projectRow,
+      quotationNode,
+      quotationTenderFlow,
+      quotationFormRow,
+      permissions: buildQuotationFormPermissions({
+        projectRow,
+        quotationNode,
+        rolesRow,
+        user,
+        quotationTenderFlow,
+        quotationFormRow
+      }),
+      isProjectEnded: isSolutionDesignProjectEnded(projectRow)
+    });
+  });
+}
+
+async function saveOrSubmitSolutionDesignQuotationForm(
+  { projectId, payload, user, formStatus },
+  db = pool,
+  generatedFileStorage = null
+) {
+  const isSubmit = formStatus === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED;
+  const normalized = normalizeQuotationFormPayload(payload, { requireComplete: isSubmit });
+  const storage = resolveGeneratedFileStorage(db, generatedFileStorage);
+
+  const outcome = await withConnection(db, async (connection) => {
+    const projectRow = await selectProjectContext(connection, projectId, { forUpdate: true });
+    assertProjectWriteAllowed(projectRow);
+    await ensureSolutionDesignNodes(connection, projectRow);
+    await ensureSolutionDesignUploadSlots(connection, projectRow);
+
+    const rolesRow = await selectSolutionDesignRolesForUpdate(connection, projectId);
+    await assertWorkflowViewable(connection, projectId, user, { projectRow, rolesRow });
+    const roleState = buildRoleStateWithoutUserDetails(projectRow, rolesRow);
+    assertAllRolesAssigned(roleState);
+    assertProjectRoleActor(roleState, SOLUTION_DESIGN_ROLE_KEY.BUSINESS_OWNER, user);
+
+    const quotationNode = await selectSolutionDesignNodeForUpdate(
+      connection,
+      projectId,
+      SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER
+    );
+    assertNodeProcessable(quotationNode, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER, 'processed');
+    const quotationTenderFlow = await selectQuotationTenderFlow(connection, projectId, { forUpdate: true });
+    if (!canProcessQuotationForm({
+      projectEnded: isSolutionDesignProjectEnded(projectRow),
+      inSolutionStage: isProjectInSolutionDesignStage(projectRow),
+      roleState,
+      user,
+      nodeRow: quotationNode,
+      flowRow: quotationTenderFlow
+    })) {
+      throw new SolutionDesignWorkflowError(
+        SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
+        'Quotation online form cannot be processed in current branch status',
+        409,
+        {
+          nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+          branchType: quotationTenderFlow?.branch_type ?? null,
+          branchStatus: quotationTenderFlow?.branch_status ?? null,
+          nodeStatus: quotationNode?.status ?? null
+        }
+      );
+    }
+
+    const currentFormRow = await selectCurrentQuotationForm(connection, projectId, { forUpdate: true });
+    let savedFormRow = await saveQuotationFormVersion(connection, {
+      projectId,
+      nodeRevision: quotationNode.current_revision,
+      currentFormRow,
+      formStatus,
+      formDataJson: normalized.formDataJson,
+      actorUserId: user.id
+    });
+    let generationFailureError = null;
+
+    if (isSubmit) {
+      savedFormRow = await generateAndPersistQuotationFormFile(connection, {
+        projectRow,
+        formRow: savedFormRow,
+        actorUserId: user.id,
+        storage
+      });
+
+      if (isQuotationFormGeneratedForRevision(savedFormRow, quotationNode.current_revision)) {
+        await updateQuotationSubmitted(connection, { projectId, actorUserId: user.id });
+        await insertQuotationTenderLog(connection, {
+          projectId,
+          actorUserId: user.id,
+          actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_QUOTATION_SUBMITTED,
+          summary: '商务负责人提交报价单',
+          details: {
+            branchType: SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION,
+            revision: Number(savedFormRow.revision ?? 1),
+            formId: savedFormRow.id,
+            documentCode: SOLUTION_DESIGN_QUOTATION_FORM_DEFINITION.documentCode,
+            generatedFileName: savedFormRow.generated_file_name
+          }
+        });
+      } else {
+        const failureMessage = savedFormRow?.generation_error_message ||
+          'Solution design quotation file generation failed';
+        generationFailureError = new SolutionDesignWorkflowError(
+          SOLUTION_DESIGN_ERROR.GENERATED_FILE_GENERATION_FAILED,
+          `Solution design quotation file generation failed: ${failureMessage}`,
+          500,
+          {
+            nodeKey: SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER,
+            formId: savedFormRow?.id ?? null,
+            generatedFileStatus: savedFormRow?.generated_file_status ?? null
+          }
+        );
+      }
+    }
+
+    const refreshedFlow = await selectQuotationTenderFlow(connection, projectId);
+    const dto = buildQuotationFormDto({
+      projectRow,
+      quotationNode,
+      quotationTenderFlow: refreshedFlow,
+      quotationFormRow: savedFormRow,
+      permissions: buildQuotationFormPermissions({
+        projectRow,
+        quotationNode,
+        rolesRow,
+        user,
+        quotationTenderFlow: refreshedFlow,
+        quotationFormRow: savedFormRow
+      }),
+      isProjectEnded: isSolutionDesignProjectEnded(projectRow)
+    });
+
+    return { dto, generationFailureError };
+  });
+
+  if (outcome.generationFailureError) {
+    throw outcome.generationFailureError;
+  }
+
+  return outcome.dto;
+}
+
+export async function saveSolutionDesignQuotationForm({ projectId, payload, user }, db = pool) {
+  return saveOrSubmitSolutionDesignQuotationForm(
+    {
+      projectId,
+      payload,
+      user,
+      formStatus: SOLUTION_DESIGN_QUOTATION_FORM_STATUS.DRAFT
+    },
+    db
+  );
+}
+
+export async function submitSolutionDesignQuotationForm(
+  { projectId, payload, user },
+  db = pool,
+  generatedFileStorage = null
+) {
+  return saveOrSubmitSolutionDesignQuotationForm(
+    {
+      projectId,
+      payload,
+      user,
+      formStatus: SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED
+    },
+    db,
+    generatedFileStorage
+  );
 }
 
 export async function submitSolutionDesignQuotation({ projectId, user }, db = pool) {
@@ -4510,34 +5365,41 @@ export async function submitSolutionDesignQuotation({ projectId, user }, db = po
     );
     assertNodeProcessable(nodeRow, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER, 'submitted');
     const flowRow = await selectQuotationTenderFlow(connection, projectId, { forUpdate: true });
-    const files = await selectCurrentUploadFiles(connection, projectId, [SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE]);
-    const currentFile = files[0] || null;
+    const quotationFormRow = await selectCurrentQuotationForm(connection, projectId, { forUpdate: true });
     if (
       !isQuotationBranchCurrent(flowRow, nodeRow) ||
-      !currentFile ||
-      Number(currentFile.revision ?? 0) < Number(nodeRow.current_revision ?? 1)
+      ![
+        SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED,
+        SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SUBMITTED
+      ].includes(flowRow.branch_status) ||
+      !isQuotationFormGeneratedForRevision(quotationFormRow, nodeRow.current_revision)
     ) {
       throw new SolutionDesignWorkflowError(
         SOLUTION_DESIGN_ERROR.NODE_BLOCKED,
-        'Quotation file and quotation branch selection are required before submitting quotation',
+        'Current quotation online form generated file is required before submitting quotation',
         409,
-        [SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE]
+        ['quotation_form_generated_file']
       );
     }
 
+    const shouldLogSubmission =
+      flowRow.branch_status !== SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SUBMITTED;
     await updateQuotationSubmitted(connection, { projectId, actorUserId: user.id });
-    await markQuotationSlotSubmitted(connection, { projectId, userId: user.id });
-    await insertQuotationTenderLog(connection, {
-      projectId,
-      actorUserId: user.id,
-      actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_QUOTATION_SUBMITTED,
-      summary: '商务负责人提交报价单',
-      details: {
-        branchType: SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION,
-        revision: Number(nodeRow.current_revision ?? 1),
-        slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE
-      }
-    });
+    if (shouldLogSubmission) {
+      await insertQuotationTenderLog(connection, {
+        projectId,
+        actorUserId: user.id,
+        actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_QUOTATION_SUBMITTED,
+        summary: '商务负责人提交报价单',
+        details: {
+          branchType: SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION,
+          revision: Number(quotationFormRow.revision ?? 1),
+          formId: quotationFormRow.id,
+          documentCode: SOLUTION_DESIGN_QUOTATION_FORM_DEFINITION.documentCode,
+          generatedFileName: quotationFormRow.generated_file_name
+        }
+      });
+    }
 
     const refreshedProjectRow = await selectProjectContext(connection, projectId);
     return buildWorkflowDtoForProject(connection, { projectRow: refreshedProjectRow, user });
@@ -4566,6 +5428,7 @@ export async function processSolutionDesignQuotationResult({ projectId, payload,
     );
     assertNodeProcessable(nodeRow, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER, 'processed');
     const flowRow = await selectQuotationTenderFlow(connection, projectId, { forUpdate: true });
+    const quotationFormRow = await selectCurrentQuotationForm(connection, projectId, { forUpdate: true });
     if (!canProcessQuotationResult({
       projectEnded: isSolutionDesignProjectEnded(projectRow),
       inSolutionStage: isProjectInSolutionDesignStage(projectRow),
@@ -4579,6 +5442,14 @@ export async function processSolutionDesignQuotationResult({ projectId, payload,
         'Quotation result cannot be processed before quotation is submitted',
         409,
         ['quotation']
+      );
+    }
+    if (!isQuotationFormGeneratedForRevision(quotationFormRow, nodeRow.current_revision)) {
+      throw new SolutionDesignWorkflowError(
+        SOLUTION_DESIGN_ERROR.NODE_BLOCKED,
+        'Current quotation online form generated file is required before processing quotation result',
+        409,
+        ['quotation_form_generated_file']
       );
     }
 
@@ -4692,6 +5563,113 @@ export async function listSolutionDesignUploads({ projectId, user }, db = pool) 
   });
 }
 
+export async function markSolutionDesignUploadExemption({ projectId, slotKey, payload = {}, user }, db = pool) {
+  const slot = getSolutionDesignUploadSlotDefinition(slotKey);
+  assertSolutionDesignOutputExemptionSlot(slot);
+  const reason = normalizeUploadExemptionReason(payload);
+
+  return withConnection(db, async (connection) => {
+    const projectRow = await selectProjectContext(connection, projectId, { forUpdate: true });
+    await ensureSolutionDesignNodes(connection, projectRow);
+    await ensureSolutionDesignUploadSlots(connection, projectRow);
+    const rolesRow = await selectSolutionDesignRolesForUpdate(connection, projectId);
+    await assertWorkflowViewable(connection, projectId, user, { projectRow, rolesRow });
+    const designNode = await selectSolutionDesignNodeForUpdate(connection, projectId, SOLUTION_DESIGN_NODE_KEY.DESIGN);
+    assertCanManageSolutionDesignOutputExemption({ projectRow, rolesRow, nodeRow: designNode, user });
+    const slotRow = await selectUploadSlotForUpdate(connection, projectId, slot.slotKey);
+    if (!slotRow) {
+      throw new SolutionDesignWorkflowError(
+        SOLUTION_DESIGN_ERROR.INVALID_UPLOAD_SLOT,
+        'Solution design upload slot is not initialized',
+        409,
+        ['slotKey']
+      );
+    }
+    const currentFiles = await selectCurrentUploadFiles(connection, projectId, [slot.slotKey]);
+    if (currentFiles.length > 0) {
+      throw new SolutionDesignWorkflowError(
+        SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
+        'Solution design output already has a current file and cannot be exempted',
+        409,
+        [slot.slotKey]
+      );
+    }
+
+    await markUploadSlotExempted(connection, {
+      projectId,
+      slot,
+      reason,
+      actorUserId: user.id
+    });
+    await insertUploadExemptionLog(connection, {
+      projectId,
+      actorUserId: user.id,
+      slot,
+      reason,
+      actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_DESIGN_OUTPUT_EXEMPTED,
+      summary: `标记无需上传：${slot.slotName}`
+    });
+
+    const nodes = await selectSolutionDesignNodes(connection, projectId);
+    const slots = await selectSolutionDesignUploadSlots(connection, projectId);
+    const quotationTenderFlow = await selectQuotationTenderFlow(connection, projectId);
+    return buildUploadsDto({
+      projectRow,
+      slots,
+      nodes,
+      rolesRow,
+      quotationTenderFlow,
+      user
+    });
+  });
+}
+
+export async function cancelSolutionDesignUploadExemption({ projectId, slotKey, user }, db = pool) {
+  const slot = getSolutionDesignUploadSlotDefinition(slotKey);
+  assertSolutionDesignOutputExemptionSlot(slot);
+
+  return withConnection(db, async (connection) => {
+    const projectRow = await selectProjectContext(connection, projectId, { forUpdate: true });
+    await ensureSolutionDesignNodes(connection, projectRow);
+    await ensureSolutionDesignUploadSlots(connection, projectRow);
+    const rolesRow = await selectSolutionDesignRolesForUpdate(connection, projectId);
+    await assertWorkflowViewable(connection, projectId, user, { projectRow, rolesRow });
+    const designNode = await selectSolutionDesignNodeForUpdate(connection, projectId, SOLUTION_DESIGN_NODE_KEY.DESIGN);
+    assertCanManageSolutionDesignOutputExemption({ projectRow, rolesRow, nodeRow: designNode, user });
+    const slotRow = await selectUploadSlotForUpdate(connection, projectId, slot.slotKey);
+    if (!slotRow) {
+      throw new SolutionDesignWorkflowError(
+        SOLUTION_DESIGN_ERROR.INVALID_UPLOAD_SLOT,
+        'Solution design upload slot is not initialized',
+        409,
+        ['slotKey']
+      );
+    }
+    const reason = slotRow.exemption_reason ?? null;
+    await cancelUploadSlotExemption(connection, { projectId, slot });
+    await insertUploadExemptionLog(connection, {
+      projectId,
+      actorUserId: user.id,
+      slot,
+      reason,
+      actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_DESIGN_OUTPUT_EXEMPTION_CANCELLED,
+      summary: `取消无需上传：${slot.slotName}`
+    });
+
+    const nodes = await selectSolutionDesignNodes(connection, projectId);
+    const slots = await selectSolutionDesignUploadSlots(connection, projectId);
+    const quotationTenderFlow = await selectQuotationTenderFlow(connection, projectId);
+    return buildUploadsDto({
+      projectRow,
+      slots,
+      nodes,
+      rolesRow,
+      quotationTenderFlow,
+      user
+    });
+  });
+}
+
 export async function getSolutionDesignUploadDownload(
   { projectId, slotKey, user },
   db = pool,
@@ -4713,6 +5691,19 @@ export async function getSolutionDesignUploadDownload(
     await assertWorkflowViewable(connection, projectId, user, { projectRow, rolesRow });
     const roleState = buildRoleStateWithoutUserDetails(projectRow, rolesRow);
     assertCanDownloadSolutionDesignUploadFile({ slot, roleState, user });
+    if (slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE) {
+      const nodes = await ensureSolutionDesignNodes(connection, projectRow);
+      const quotationNode = getNodeByKey(nodes, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER);
+      const quotationTenderFlow = await selectQuotationTenderFlow(connection, projectId);
+      if (isQuotationBranchCurrent(quotationTenderFlow, quotationNode)) {
+        throw new SolutionDesignWorkflowError(
+          SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
+          'Quotation file upload download is disabled after quotation branch selection; download the generated quotation form instead',
+          409,
+          [slot.slotKey]
+        );
+      }
+    }
 
     const fileRow = await selectCurrentUploadFileForDownload(connection, projectId, slot.slotKey);
     if (!fileRow) {
@@ -4960,13 +5951,13 @@ function assertGeneratedFormFileReady({ formRow, nodeRow, detailKey, isGenerated
   }
 }
 
-async function buildGeneratedFormDownload({ formRow, storage, detailKey }) {
+async function buildGeneratedFormDownload({ formRow, storage, detailKey, fallbackMimeType = GENERATED_XLSX_MIME_TYPE }) {
   try {
     const filePath = await storage.assertFileReadable(formRow.generated_file_storage_key);
     return {
       filePath,
       fileName: formRow.generated_file_name,
-      mimeType: formRow.generated_file_mime_type || GENERATED_XLSX_MIME_TYPE,
+      mimeType: formRow.generated_file_mime_type || fallbackMimeType,
       fileSize: Number(formRow.generated_file_size || 0)
     };
   } catch {
@@ -5039,6 +6030,34 @@ export async function getSolutionDesignReviewGeneratedFileDownload(
       formRow,
       storage: generatedFileStorage,
       detailKey: `${definition.reviewType}ReviewFormGeneratedFile`
+    });
+  });
+}
+
+export async function getSolutionDesignQuotationGeneratedFileDownload(
+  { projectId, user },
+  db = pool,
+  storage = null
+) {
+  const generatedFileStorage = resolveGeneratedFileStorage(db, storage);
+  return withConnection(db, async (connection) => {
+    const projectRow = await selectProjectContext(connection, projectId);
+    const rolesRow = await selectSolutionDesignRoles(connection, projectId);
+    await assertWorkflowViewable(connection, projectId, user, { projectRow, rolesRow });
+    const nodes = await ensureSolutionDesignNodes(connection, projectRow);
+    const quotationNode = getNodeByKey(nodes, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER);
+    const formRow = await selectCurrentQuotationForm(connection, projectId);
+    assertGeneratedFormFileReady({
+      formRow,
+      nodeRow: quotationNode,
+      detailKey: 'quotationFormGeneratedFile',
+      isGeneratedForRevision: isQuotationFormGeneratedForRevision
+    });
+    return buildGeneratedFormDownload({
+      formRow,
+      storage: generatedFileStorage,
+      detailKey: 'quotationFormGeneratedFile',
+      fallbackMimeType: GENERATED_DOCX_MIME_TYPE
     });
   });
 }
@@ -5231,6 +6250,17 @@ export async function uploadSolutionDesignWorkflowFile(
       slot,
       fileRow
     });
+    if (isUploadSlotExempted(slotRow)) {
+      await insertUploadExemptionLog(connection, {
+        projectId,
+        actorUserId: user.id,
+        slot,
+        reason: slotRow.exemption_reason ?? null,
+        actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_DESIGN_OUTPUT_EXEMPTION_CANCELLED_BY_UPLOAD,
+        summary: `重新上传自动取消无需上传：${slot.slotName}`,
+        fileRow
+      });
+    }
 
     await connection.commit();
     committed = true;
@@ -5340,7 +6370,7 @@ export async function submitSolutionDesignWorkflowNode({ projectId, nodeKey, use
   });
 }
 
-export async function approveSolutionDesignWorkflowNode({ projectId, nodeKey, user }, db = pool) {
+export async function approveSolutionDesignWorkflowNode({ projectId, nodeKey, payload = {}, user }, db = pool) {
   const node = getSolutionDesignNodeDefinition(nodeKey);
   if (
     !node ||
@@ -5350,6 +6380,7 @@ export async function approveSolutionDesignWorkflowNode({ projectId, nodeKey, us
       SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
       SOLUTION_DESIGN_NODE_KEY.RD_COST,
       SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST,
+      SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
       SOLUTION_DESIGN_NODE_KEY.FINANCE_COST,
       SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER
     ].includes(node.nodeKey)
@@ -5423,6 +6454,20 @@ export async function approveSolutionDesignWorkflowNode({ projectId, nodeKey, us
       await approveReviewNodeAndActivateNext(connection, {
         projectId,
         nodeKey: node.nodeKey,
+        nextNodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST
+      });
+      const metadata = getCostApproveMetadata(node.nodeKey, nodeRow.status);
+      await insertCostApprovalLog(connection, {
+        projectId,
+        actorUserId: user.id,
+        nodeKey: node.nodeKey,
+        actionType: metadata.actionType,
+        summary: metadata.summary
+      });
+    } else if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
+      await approveReviewNodeAndActivateNext(connection, {
+        projectId,
+        nodeKey: node.nodeKey,
         nextNodeKey: SOLUTION_DESIGN_NODE_KEY.FINANCE_COST
       });
       const metadata = getCostApproveMetadata(node.nodeKey, nodeRow.status);
@@ -5438,7 +6483,27 @@ export async function approveSolutionDesignWorkflowNode({ projectId, nodeKey, us
       if (nodeRow.status === SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW) {
         await approveFinanceCostByFinanceOwner(connection, { projectId });
       } else {
+        const branchType = normalizeQuotationTenderBranchType(payload);
         await approveFinanceCostByGeneralManager(connection, { projectId });
+        const quotationTenderNode = await selectSolutionDesignNodeForUpdate(
+          connection,
+          projectId,
+          SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER
+        );
+        const existingFlow = await selectQuotationTenderFlow(connection, projectId, { forUpdate: true });
+        await upsertQuotationTenderBranchSelection(connection, {
+          projectId,
+          branchType,
+          nodeRevision: Number(quotationTenderNode.current_revision ?? 1),
+          actorUserId: user.id,
+          existingFlow
+        });
+        await insertQuotationTenderBranchSelectionLog(connection, {
+          projectId,
+          branchType,
+          nodeRevision: quotationTenderNode.current_revision,
+          actorUserId: user.id
+        });
       }
       await insertCostApprovalLog(connection, {
         projectId,
@@ -5504,6 +6569,7 @@ export async function returnSolutionDesignWorkflowNode({ projectId, nodeKey, pay
       SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
       SOLUTION_DESIGN_NODE_KEY.RD_COST,
       SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST,
+      SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
       SOLUTION_DESIGN_NODE_KEY.FINANCE_COST,
       SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER
     ].includes(node.nodeKey)
@@ -5562,6 +6628,7 @@ export async function returnSolutionDesignWorkflowNode({ projectId, nodeKey, pay
     } else if (
       node.nodeKey === SOLUTION_DESIGN_NODE_KEY.RD_COST ||
       node.nodeKey === SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST ||
+      node.nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST ||
       (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST &&
         nodeRow.status === SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW)
     ) {

@@ -30,6 +30,9 @@
         <section v-else-if="projectNavigationErrorMessage" class="state-panel state-panel--inline state-panel--error">
           <p>{{ projectNavigationErrorMessage }}</p>
         </section>
+        <section v-else-if="workspaceRouteErrorMessage" class="state-panel state-panel--inline state-panel--error">
+          <p>{{ workspaceRouteErrorMessage }}</p>
+        </section>
         <section v-else-if="projectNavigationLoading" class="state-panel state-panel--inline">
           <p>正在加载项目流程导航...</p>
         </section>
@@ -154,6 +157,7 @@ const workspace = ref(null);
 const projectNavigationLoading = ref(false);
 const projectNavigationErrorMessage = ref('');
 const projectNavigation = ref(null);
+const workspaceRouteErrorMessage = ref('');
 const solutionDesignWorkflowLoading = ref(false);
 const solutionDesignWorkflowErrorMessage = ref('');
 const solutionDesignWorkflow = ref(null);
@@ -217,9 +221,11 @@ const solutionDesignWorkflowNodeKeys = new Set([
   'customer_solution_review',
   'rd_cost_estimation',
   'manufacturing_cost_estimation',
+  'marketing_cost_estimation',
   'finance_cost_estimation',
   'quotation_or_tender'
 ]);
+const deprecatedSolutionDesignBlueprintNodeKeys = new Set(['cost_price_estimation', 'quotation', 'tender']);
 const responsibilitySelections = reactive({});
 const attachmentStates = reactive({});
 const onlineFormImageState = reactive({
@@ -343,6 +349,19 @@ const solutionDesignWorkspaceStage = computed(() => {
       return null;
     }
 
+    const fallbackNodes = [...(baseStage.nodes || [])]
+      .filter((node) => solutionDesignWorkflowNodeKeys.has(node.nodeKey))
+      .sort((left, right) => Number(left.nodeOrder || 0) - Number(right.nodeOrder || 0));
+    if (fallbackNodes.length > 0) {
+      return {
+        ...baseStage,
+        stageKey: 'solution',
+        stageName: '方案设计阶段',
+        configured: true,
+        nodes: fallbackNodes
+      };
+    }
+
     return {
       ...baseStage,
       stageKey: 'solution',
@@ -366,7 +385,7 @@ const solutionDesignWorkspaceStage = computed(() => {
 });
 const workspaceDisplayStages = computed(() => {
   const stages = workspace.value?.stages || [];
-  if (!hasReachedSolutionDesignStage.value || !solutionDesignWorkspaceStage.value) {
+  if (!solutionDesignWorkspaceStage.value) {
     return stages;
   }
 
@@ -374,7 +393,7 @@ const workspaceDisplayStages = computed(() => {
 });
 const projectNavigationDisplay = computed(() => {
   const navigation = projectNavigation.value;
-  if (!navigation || !hasReachedSolutionDesignStage.value || !solutionDesignWorkspaceStage.value) {
+  if (!navigation || !solutionDesignWorkspaceStage.value) {
     return navigation;
   }
 
@@ -413,7 +432,6 @@ const projectNavigationDisplay = computed(() => {
 });
 const activeWorkspaceDisplayStage = computed(() => {
   if (
-    hasReachedSolutionDesignStage.value &&
     isSelectedSolutionDesignWorkspaceStage.value &&
     solutionDesignWorkspaceStage.value
   ) {
@@ -424,7 +442,6 @@ const activeWorkspaceDisplayStage = computed(() => {
 });
 const isActiveSolutionWorkspaceStage = computed(
   () =>
-    hasReachedSolutionDesignStage.value &&
     isSelectedSolutionDesignWorkspaceStage.value &&
     activeWorkspaceDisplayStage.value?.stageKey === 'solution' &&
     Boolean(solutionDesignWorkspaceStage.value)
@@ -617,7 +634,7 @@ function findSolutionDesignWorkflowNodeKey(nodeKey) {
     return normalized;
   }
 
-  return hasReachedSolutionDesignStage.value && solutionDesignWorkflowNodeKeys.has(normalized) ? normalized : '';
+  return solutionDesignWorkflowNodeKeys.has(normalized) ? normalized : '';
 }
 
 function isSolutionDesignDedicatedStageDocument(document) {
@@ -697,6 +714,7 @@ function selectWorkspaceNode(stage, node) {
     return;
   }
 
+  workspaceRouteErrorMessage.value = '';
   manualWorkspaceSelectionRouteKey.value = getWorkspaceRouteKey();
   selectedWorkspaceStageKey.value = stage.stageKey;
   selectedWorkspaceNodeKey.value = node.nodeKey;
@@ -705,7 +723,7 @@ function selectWorkspaceNode(stage, node) {
 }
 
 function selectWorkspaceNodeFromNavigation({ stage, node }) {
-  if (hasReachedSolutionDesignStage.value && stage?.stageKey === 'solution' && solutionDesignWorkspaceStage.value) {
+  if (stage?.stageKey === 'solution' && solutionDesignWorkspaceStage.value) {
     const solutionNode = (solutionDesignWorkspaceStage.value.nodes || []).find((item) => item.nodeKey === node.nodeCode);
     if (solutionNode) {
       selectWorkspaceNode(solutionDesignWorkspaceStage.value, solutionNode);
@@ -896,6 +914,7 @@ function selectWorkspaceTargetFromRoute(options = {}) {
 
   const documentTarget = findWorkspaceTargetByDocumentId(props.focusDocumentId);
   if (documentTarget) {
+    workspaceRouteErrorMessage.value = '';
     selectedWorkspaceStageKey.value = documentTarget.stage.stageKey;
     selectedWorkspaceNodeKey.value = documentTarget.node.nodeKey;
     clearWorkspaceOnlineForm(options);
@@ -905,6 +924,7 @@ function selectWorkspaceTargetFromRoute(options = {}) {
 
   const documentStageTarget = findWorkspaceStageByDocumentIdFromChecklist(props.focusDocumentId);
   if (documentStageTarget) {
+    workspaceRouteErrorMessage.value = '';
     selectedWorkspaceStageKey.value = documentStageTarget.stageKey;
     selectedWorkspaceNodeKey.value = '';
     clearWorkspaceOnlineForm(options);
@@ -914,6 +934,7 @@ function selectWorkspaceTargetFromRoute(options = {}) {
 
   const stageTarget = findWorkspaceStageByStageId(props.focusStageId);
   if (stageTarget) {
+    workspaceRouteErrorMessage.value = '';
     selectedWorkspaceStageKey.value = stageTarget.stageKey;
     selectedWorkspaceNodeKey.value = '';
     clearWorkspaceOnlineForm(options);
@@ -924,6 +945,7 @@ function selectWorkspaceTargetFromRoute(options = {}) {
   const nodeKey = String(props.focusNodeKey || '').trim();
   const solutionFocusedNodeKey = findSolutionDesignWorkflowNodeKey(nodeKey);
   if (solutionFocusedNodeKey) {
+    workspaceRouteErrorMessage.value = '';
     selectedWorkspaceStageKey.value = 'solution';
     selectedWorkspaceNodeKey.value = solutionFocusedNodeKey;
     clearWorkspaceOnlineForm(options);
@@ -932,17 +954,31 @@ function selectWorkspaceTargetFromRoute(options = {}) {
   }
 
   if (nodeKey && restoreWorkspaceSelectionByNodeKey(nodeKey)) {
+    workspaceRouteErrorMessage.value = '';
     clearWorkspaceOnlineForm(options);
     markWorkspaceRouteApplied(routeKey);
     return true;
   }
 
   if (props.focusDocumentId) {
+    workspaceRouteErrorMessage.value = '';
     selectCurrentWorkspaceNode();
     clearWorkspaceOnlineForm(options);
     return false;
   }
 
+  if (nodeKey) {
+    selectedWorkspaceStageKey.value = deprecatedSolutionDesignBlueprintNodeKeys.has(nodeKey) ? 'solution' : '';
+    selectedWorkspaceNodeKey.value = nodeKey;
+    workspaceRouteErrorMessage.value = deprecatedSolutionDesignBlueprintNodeKeys.has(nodeKey)
+      ? `方案设计流程节点「${nodeKey}」已下线，请从左侧方案设计节点选择有效流程。`
+      : `流程节点「${nodeKey}」不存在或尚未加载，请从左侧导航选择有效节点。`;
+    clearWorkspaceOnlineForm(options);
+    markWorkspaceRouteApplied(routeKey);
+    return true;
+  }
+
+  workspaceRouteErrorMessage.value = '';
   selectCurrentWorkspaceNode();
   clearWorkspaceOnlineForm(options);
   markWorkspaceRouteApplied(routeKey);
@@ -1124,7 +1160,7 @@ function syncSolutionWorkspaceFocusNodeFromRoute() {
 }
 
 function ensureSolutionDesignWorkspaceSelection(options = {}) {
-  if (!hasReachedSolutionDesignStage.value || !workspace.value || !solutionDesignWorkflow.value) {
+  if (!workspace.value || !solutionDesignWorkflow.value) {
     return;
   }
 
@@ -1286,7 +1322,7 @@ async function returnDocument(payload) {
 }
 
 /* ── 立项审批 ── */
-async function approveInitiationNode({ document, node, comment }) {
+async function approveInitiationNode({ document, node, comment, projectExecutionMode }) {
   const successText =
     node.nodeKey === 'general_review'
       ? '总经理审批已通过。'
@@ -1300,7 +1336,8 @@ async function approveInitiationNode({ document, node, comment }) {
         document.id,
         node.nodeKey,
         comment || '',
-        props.authToken
+        props.authToken,
+        { projectExecutionMode }
       ),
     successText
   );
@@ -1766,13 +1803,6 @@ async function loadProjectNavigation() {
 }
 
 async function loadSolutionDesignWorkflow() {
-  if (!hasReachedSolutionDesignStage.value) {
-    solutionDesignWorkflowLoading.value = false;
-    solutionDesignWorkflowErrorMessage.value = '';
-    solutionDesignWorkflow.value = null;
-    return;
-  }
-
   solutionDesignWorkflowLoading.value = true;
   solutionDesignWorkflowErrorMessage.value = '';
 
@@ -1787,13 +1817,6 @@ async function loadSolutionDesignWorkflow() {
 }
 
 async function loadSolutionDesignUploads() {
-  if (!hasReachedSolutionDesignStage.value) {
-    solutionDesignUploadsLoading.value = false;
-    solutionDesignUploadsErrorMessage.value = '';
-    solutionDesignUploads.value = null;
-    return;
-  }
-
   solutionDesignUploadsLoading.value = true;
   solutionDesignUploadsErrorMessage.value = '';
 
@@ -1917,6 +1940,7 @@ async function loadDetail() {
   solutionDesignUploads.value = null;
   workspaceErrorMessage.value = '';
   projectNavigationErrorMessage.value = '';
+  workspaceRouteErrorMessage.value = '';
   solutionDesignWorkflowErrorMessage.value = '';
   solutionDesignUploadsErrorMessage.value = '';
   responsibilityCandidates.value = [];

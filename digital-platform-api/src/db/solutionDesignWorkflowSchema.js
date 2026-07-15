@@ -44,6 +44,33 @@ async function ensureSolutionDesignGeneratedFileColumns(executor) {
   );
 }
 
+async function ensureSolutionDesignUploadSlotExemptionColumns(executor) {
+  await ensureSolutionDesignColumn(
+    executor,
+    'project_solution_design_upload_slots',
+    'is_upload_exempted',
+    'ALTER TABLE project_solution_design_upload_slots ADD COLUMN is_upload_exempted TINYINT(1) NOT NULL DEFAULT 0 AFTER status'
+  );
+  await ensureSolutionDesignColumn(
+    executor,
+    'project_solution_design_upload_slots',
+    'exemption_reason',
+    'ALTER TABLE project_solution_design_upload_slots ADD COLUMN exemption_reason VARCHAR(1000) NULL AFTER is_upload_exempted'
+  );
+  await ensureSolutionDesignColumn(
+    executor,
+    'project_solution_design_upload_slots',
+    'exempted_by_user_id',
+    'ALTER TABLE project_solution_design_upload_slots ADD COLUMN exempted_by_user_id BIGINT UNSIGNED NULL AFTER exemption_reason'
+  );
+  await ensureSolutionDesignColumn(
+    executor,
+    'project_solution_design_upload_slots',
+    'exempted_at',
+    'ALTER TABLE project_solution_design_upload_slots ADD COLUMN exempted_at DATETIME NULL AFTER exempted_by_user_id'
+  );
+}
+
 export async function ensureSolutionDesignWorkflowSchema(executor) {
   await executor.execute(
     `CREATE TABLE IF NOT EXISTS project_solution_design_roles (
@@ -106,6 +133,7 @@ export async function ensureSolutionDesignWorkflowSchema(executor) {
         'customer_solution_review',
         'rd_cost_estimation',
         'manufacturing_cost_estimation',
+        'marketing_cost_estimation',
         'finance_cost_estimation',
         'quotation_or_tender'
       ) NOT NULL,
@@ -187,6 +215,7 @@ export async function ensureSolutionDesignWorkflowSchema(executor) {
         'customer_solution_review',
         'rd_cost_estimation',
         'manufacturing_cost_estimation',
+        'marketing_cost_estimation',
         'finance_cost_estimation',
         'quotation_or_tender'
       ) NOT NULL,
@@ -203,6 +232,7 @@ export async function ensureSolutionDesignWorkflowSchema(executor) {
         'solution_ppt',
         'rd_cost_estimation_file',
         'manufacturing_cost_estimation_file',
+        'marketing_cost_estimation_file',
         'finance_cost_estimation_file',
         'quotation_file',
         'tender_business_file',
@@ -213,6 +243,10 @@ export async function ensureSolutionDesignWorkflowSchema(executor) {
       is_required TINYINT(1) NOT NULL DEFAULT 1,
       revision INT UNSIGNED NOT NULL DEFAULT 1,
       status ENUM('pending', 'uploaded', 'submitted') NOT NULL DEFAULT 'pending',
+      is_upload_exempted TINYINT(1) NOT NULL DEFAULT 0,
+      exemption_reason VARCHAR(1000) NULL,
+      exempted_by_user_id BIGINT UNSIGNED NULL,
+      exempted_at DATETIME NULL,
       submitted_by_user_id BIGINT UNSIGNED NULL,
       submitted_at DATETIME NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -221,9 +255,13 @@ export async function ensureSolutionDesignWorkflowSchema(executor) {
       UNIQUE KEY uk_solution_design_upload_slots_project_slot (project_id, slot_key),
       KEY idx_solution_design_upload_slots_project_node (project_id, node_key, slot_order),
       KEY idx_solution_design_upload_slots_submitted_by (submitted_by_user_id),
+      KEY idx_solution_design_upload_slots_exempted_by (exempted_by_user_id),
       CONSTRAINT fk_solution_design_upload_slots_project
         FOREIGN KEY (project_id) REFERENCES projects (id)
         ON DELETE CASCADE,
+      CONSTRAINT fk_solution_design_upload_slots_exempted_by
+        FOREIGN KEY (exempted_by_user_id) REFERENCES users (id)
+        ON DELETE SET NULL,
       CONSTRAINT fk_solution_design_upload_slots_submitted_by
         FOREIGN KEY (submitted_by_user_id) REFERENCES users (id)
         ON DELETE SET NULL
@@ -248,6 +286,7 @@ export async function ensureSolutionDesignWorkflowSchema(executor) {
         'solution_ppt',
         'rd_cost_estimation_file',
         'manufacturing_cost_estimation_file',
+        'marketing_cost_estimation_file',
         'finance_cost_estimation_file',
         'quotation_file',
         'tender_business_file',
@@ -381,6 +420,56 @@ export async function ensureSolutionDesignWorkflowSchema(executor) {
   );
 
   await executor.execute(
+    `CREATE TABLE IF NOT EXISTS project_solution_design_quotation_forms (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      project_id BIGINT UNSIGNED NOT NULL,
+      node_key ENUM('quotation_or_tender') NOT NULL DEFAULT 'quotation_or_tender',
+      revision INT UNSIGNED NOT NULL DEFAULT 1,
+      form_status ENUM('draft', 'submitted') NOT NULL DEFAULT 'draft',
+      form_data_json JSON NOT NULL,
+      is_current TINYINT(1) NOT NULL DEFAULT 1,
+      submitted_by_user_id BIGINT UNSIGNED NULL,
+      submitted_at DATETIME NULL,
+      generated_file_status ENUM('not_started', 'generating', 'generated', 'failed') NOT NULL DEFAULT 'not_started',
+      generated_file_storage_key VARCHAR(500) NULL,
+      generated_file_name VARCHAR(255) NULL,
+      generated_file_mime_type VARCHAR(255) NULL,
+      generated_file_size BIGINT UNSIGNED NULL,
+      generated_file_template_name VARCHAR(255) NULL,
+      generated_at DATETIME NULL,
+      generated_by_user_id BIGINT UNSIGNED NULL,
+      generation_error_message VARCHAR(1000) NULL,
+      created_by_user_id BIGINT UNSIGNED NOT NULL,
+      updated_by_user_id BIGINT UNSIGNED NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uk_solution_design_quotation_forms_project_revision (project_id, revision),
+      KEY idx_solution_design_quotation_forms_current (project_id, is_current),
+      KEY idx_solution_design_quotation_forms_project_status (project_id, form_status, generated_file_status),
+      KEY idx_solution_design_quotation_forms_submitted_by (submitted_by_user_id),
+      KEY idx_solution_design_quotation_forms_generated_by (generated_by_user_id),
+      KEY idx_solution_design_quotation_forms_created_by (created_by_user_id),
+      KEY idx_solution_design_quotation_forms_updated_by (updated_by_user_id),
+      CONSTRAINT fk_solution_design_quotation_forms_project
+        FOREIGN KEY (project_id) REFERENCES projects (id)
+        ON DELETE CASCADE,
+      CONSTRAINT fk_solution_design_quotation_forms_submitted_by
+        FOREIGN KEY (submitted_by_user_id) REFERENCES users (id)
+        ON DELETE SET NULL,
+      CONSTRAINT fk_solution_design_quotation_forms_generated_by
+        FOREIGN KEY (generated_by_user_id) REFERENCES users (id)
+        ON DELETE SET NULL,
+      CONSTRAINT fk_solution_design_quotation_forms_created_by
+        FOREIGN KEY (created_by_user_id) REFERENCES users (id)
+        ON DELETE RESTRICT,
+      CONSTRAINT fk_solution_design_quotation_forms_updated_by
+        FOREIGN KEY (updated_by_user_id) REFERENCES users (id)
+        ON DELETE RESTRICT
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+  );
+
+  await executor.execute(
     `CREATE TABLE IF NOT EXISTS project_solution_design_quotation_tender_flows (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
       project_id BIGINT UNSIGNED NOT NULL,
@@ -427,4 +516,5 @@ export async function ensureSolutionDesignWorkflowSchema(executor) {
   );
 
   await ensureSolutionDesignGeneratedFileColumns(executor);
+  await ensureSolutionDesignUploadSlotExemptionColumns(executor);
 }

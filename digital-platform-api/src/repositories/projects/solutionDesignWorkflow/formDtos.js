@@ -4,10 +4,12 @@ import {
   SOLUTION_DESIGN_GENERATED_FILE_STATUS,
   SOLUTION_DESIGN_NODE_KEY,
   SOLUTION_DESIGN_NODE_STATUS,
+  SOLUTION_DESIGN_QUOTATION_FORM_STATUS,
   SOLUTION_DESIGN_REVIEW_FORM_STATUS,
   SOLUTION_DESIGN_ROLE_DEFINITIONS,
   SOLUTION_DESIGN_ROLE_KEY,
   SOLUTION_DESIGN_STAGE,
+  SOLUTION_DESIGN_UPLOAD_SLOT_STATUS,
   buildInitialSolutionDesignNodes,
   getSolutionDesignReviewFormDefinition,
   isProjectInSolutionDesignStage,
@@ -18,7 +20,7 @@ import {
   canProcessReviewForm,
   canReviewSolutionDesignNode,
   isAnalysisFormGeneratedForRevision,
-  isProductFunctionDiagramUploadedForRevision,
+  isProductFunctionDiagramCurrent,
   isReviewFormGeneratedForRevision
 } from './permissions.js';
 
@@ -85,11 +87,15 @@ function buildRoleStateWithoutUserDetails(projectRow, rolesRow) {
   return entries;
 }
 
-function buildCurrentUploadSlotRevisionMap(slots = []) {
-  return new Map(
+function buildCurrentFileSlotKeySet(slots = []) {
+  const readyStatuses = new Set([
+    SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.UPLOADED,
+    SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.SUBMITTED
+  ]);
+  return new Set(
     slots
-      .filter((slot) => Boolean(slot.current_file_id))
-      .map((slot) => [slot.slot_key, Number(slot.current_file_revision ?? slot.revision ?? 0)])
+      .filter((slot) => Boolean(slot.current_file_id) && readyStatuses.has(slot.status))
+      .map((slot) => slot.slot_key)
   );
 }
 
@@ -191,7 +197,7 @@ export function mapReviewForm(row) {
 export function buildAnalysisFormPermissions({ projectRow, analysisNode, roleState, user, analysisFormRow, uploadSlots }) {
   const projectEnded = isSolutionDesignProjectEnded(projectRow);
   const inSolutionStage = isProjectInSolutionDesignStage(projectRow);
-  const uploadSlotRevisionByKey = buildCurrentUploadSlotRevisionMap(uploadSlots);
+  const currentFileSlotKeys = buildCurrentFileSlotKeySet(uploadSlots);
   const canEditForm = canProcessAnalysisForm({
     projectEnded,
     inSolutionStage,
@@ -202,7 +208,7 @@ export function buildAnalysisFormPermissions({ projectRow, analysisNode, roleSta
   const canSubmitNode =
     canEditForm &&
     isAnalysisFormGeneratedForRevision(analysisFormRow, analysisNode?.current_revision) &&
-    isProductFunctionDiagramUploadedForRevision(uploadSlotRevisionByKey, analysisNode?.current_revision);
+    isProductFunctionDiagramCurrent(currentFileSlotKeys);
   const canReview = canReviewSolutionDesignNode({
     nodeRow: analysisNode || {},
     user,
@@ -324,7 +330,8 @@ export function buildReviewFormDto({ projectRow, nodes, rolesRow, reviewFormRow,
 export function isGeneratedFormDtoCurrent(formDto, requiredRevision) {
   return (
     formDto?.status === SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.SUBMITTED ||
-    formDto?.status === SOLUTION_DESIGN_REVIEW_FORM_STATUS.SUBMITTED
+    formDto?.status === SOLUTION_DESIGN_REVIEW_FORM_STATUS.SUBMITTED ||
+    formDto?.status === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED
   ) &&
     Number(formDto?.revision ?? 0) >= Number(requiredRevision ?? 1) &&
     formDto?.generatedFile?.status === SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED &&

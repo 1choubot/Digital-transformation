@@ -865,6 +865,18 @@ function setWordCellText(cellXml, value) {
     return updated;
   }
 
+  const paragraphMatch = cellXml.match(/<w:p\b[\s\S]*?<\/w:p>/);
+  if (paragraphMatch?.index !== undefined) {
+    const paragraphXml = paragraphMatch[0];
+    const paragraphInsertionIndex = paragraphXml.lastIndexOf('</w:p>');
+    if (paragraphInsertionIndex !== -1) {
+      const run = `<w:r><w:t xml:space="preserve">${escapeXml(value)}</w:t></w:r>`;
+      const updatedParagraph =
+        `${paragraphXml.slice(0, paragraphInsertionIndex)}${run}${paragraphXml.slice(paragraphInsertionIndex)}`;
+      return `${cellXml.slice(0, paragraphMatch.index)}${updatedParagraph}${cellXml.slice(paragraphMatch.index + paragraphXml.length)}`;
+    }
+  }
+
   const insertionIndex = cellXml.lastIndexOf('</w:tc>');
   if (insertionIndex === -1) {
     return cellXml;
@@ -952,15 +964,26 @@ function buildWordTableRowTargets(tableRows) {
   for (const item of tableRows || []) {
     const tableIndex = resolveWordTableIndex(item.target?.tableIndex);
     const templateRowIndex = resolveWordRowIndex(item.target?.templateRowIndex);
+    const replaceUntilRowIndex = item.target?.replaceUntilRowIndex === null ||
+      item.target?.replaceUntilRowIndex === undefined
+      ? null
+      : resolveWordRowIndex(item.target?.replaceUntilRowIndex);
     if (!Number.isSafeInteger(tableIndex) || tableIndex < 0) {
       throw new Error(`Invalid Word table target index: ${item.target?.tableIndex}`);
     }
     if (!Number.isSafeInteger(templateRowIndex) || templateRowIndex < 0) {
       throw new Error(`Invalid Word row target index: ${item.target?.templateRowIndex}`);
     }
+    if (
+      replaceUntilRowIndex !== null &&
+      (!Number.isSafeInteger(replaceUntilRowIndex) || replaceUntilRowIndex < templateRowIndex)
+    ) {
+      throw new Error(`Invalid Word row replacement end index: ${item.target?.replaceUntilRowIndex}`);
+    }
 
     targets.set(String(tableIndex), {
       templateRowIndex,
+      replaceUntilRowIndex,
       rows: Array.isArray(item.rows) ? item.rows : [],
       removeRowsAfterTemplate: item.removeRowsAfterTemplate !== false
     });
@@ -984,7 +1007,12 @@ function replaceWordTableRowsFromTemplate(tableXml, rowTarget) {
   });
 
   const start = templateRow.index;
-  const replacementEnd = rowTarget.removeRowsAfterTemplate
+  if (rowTarget.replaceUntilRowIndex !== null && !rowMatches[rowTarget.replaceUntilRowIndex]) {
+    throw new Error(`Invalid Word document XML: replacement end row not found ${rowTarget.replaceUntilRowIndex}`);
+  }
+  const replacementEnd = rowTarget.replaceUntilRowIndex !== null
+    ? rowMatches[rowTarget.replaceUntilRowIndex].index + rowMatches[rowTarget.replaceUntilRowIndex][0].length
+    : rowTarget.removeRowsAfterTemplate
     ? rowMatches[rowMatches.length - 1].index + rowMatches[rowMatches.length - 1][0].length
     : templateRow.index + templateRow[0].length;
 
@@ -1032,7 +1060,7 @@ function updateWordTables(documentXml, { tableCellValues = [], tableRows = [], c
           throw new Error(`Invalid Word document XML: target row not found ${targetRowIndex}`);
         }
         const maxCellIndex = Math.max(...valuesByCellIndex.keys());
-        const rowXml = [...tableMatch[0].matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)][Number(targetRowIndex)]?.[0];
+        const rowXml = [...workingTableXml.matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)][Number(targetRowIndex)]?.[0];
         const cellCount = [...(rowXml || '').matchAll(/<w:tc\b[\s\S]*?<\/w:tc>/g)].length;
         if (cellCount <= maxCellIndex) {
           throw new Error(`Invalid Word document XML: target cell not found ${targetRowIndex}.${maxCellIndex}`);

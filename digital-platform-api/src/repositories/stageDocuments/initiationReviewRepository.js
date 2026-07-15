@@ -42,6 +42,10 @@ const INITIATION_REVIEW_RETURN_ACTION = {
 };
 
 const INITIATION_COLLABORATION_METADATA_KEY = '_collaboration';
+const INITIATION_PROJECT_EXECUTION_MODE = Object.freeze({
+  SELF_DEVELOPED: '自研模式',
+  SUPPLY_CHAIN: '供应链模式'
+});
 
 function buildResetInitiationCollaboration() {
   return {
@@ -83,6 +87,7 @@ async function resetInitiationCollaborationFormForRefill(connection, documentId)
   }
 
   const formData = parseJsonValue(rows[0].form_data_json, {});
+  delete formData.projectExecutionMode;
   formData[INITIATION_COLLABORATION_METADATA_KEY] = buildResetInitiationCollaboration();
   await connection.execute(
     `UPDATE project_stage_document_forms
@@ -90,6 +95,65 @@ async function resetInitiationCollaborationFormForRefill(connection, documentId)
       status = 'draft',
       submitted_by_user_id = NULL,
       submitted_at = NULL
+    WHERE id = ?`,
+    [JSON.stringify(formData), rows[0].id]
+  );
+}
+
+function normalizeGeneralApprovalProjectExecutionMode({ nodeKey, document, projectExecutionMode }) {
+  if (
+    nodeKey !== INITIATION_REVIEW_NODE_KEY.GENERAL ||
+    String(document?.document_code ?? document?.documentCode ?? '') !== INITIATION_REVIEW_DOCUMENT_CODE
+  ) {
+    return null;
+  }
+
+  const value = String(projectExecutionMode ?? '').trim();
+  if (!value) {
+    throw new InitiationReviewError(
+      'INITIATION_PROJECT_EXECUTION_MODE_REQUIRED',
+      'Project execution mode is required for general initiation approval',
+      400,
+      ['projectExecutionMode']
+    );
+  }
+
+  if (!Object.values(INITIATION_PROJECT_EXECUTION_MODE).includes(value)) {
+    throw new InitiationReviewError(
+      'INVALID_INITIATION_PROJECT_EXECUTION_MODE',
+      'Invalid project execution mode for general initiation approval',
+      400,
+      ['projectExecutionMode']
+    );
+  }
+
+  return value;
+}
+
+async function writeInitiationProjectExecutionModeSelection(connection, { documentId, projectExecutionMode }) {
+  const [rows] = await connection.execute(
+    `SELECT id, form_data_json
+    FROM project_stage_document_forms
+    WHERE stage_document_id = ?
+    LIMIT 1
+    FOR UPDATE`,
+    [documentId]
+  );
+
+  if (rows.length === 0) {
+    throw new InitiationReviewError(
+      'INITIATION_REVIEW_FORM_NOT_FOUND',
+      'Initiation approval form is required before general approval',
+      409,
+      ['documentId']
+    );
+  }
+
+  const formData = parseJsonValue(rows[0].form_data_json, {});
+  formData.projectExecutionMode = projectExecutionMode;
+  await connection.execute(
+    `UPDATE project_stage_document_forms
+    SET form_data_json = ?
     WHERE id = ?`,
     [JSON.stringify(formData), rows[0].id]
   );
@@ -1121,7 +1185,8 @@ export async function approveInitiationReviewNode({
   documentId,
   nodeKey,
   user,
-  comment = ''
+  comment = '',
+  projectExecutionMode = null
 }) {
   const connection = providedConnection || (await pool.getConnection());
   const ownsConnection = !providedConnection;
@@ -1154,7 +1219,18 @@ export async function approveInitiationReviewNode({
     );
   }
 
+  const normalizedProjectExecutionMode = normalizeGeneralApprovalProjectExecutionMode({
+    nodeKey,
+    document,
+    projectExecutionMode
+  });
   const normalizedComment = normalizeNodeComment(nodeKey, comment);
+  if (normalizedProjectExecutionMode) {
+    await writeInitiationProjectExecutionModeSelection(connection, {
+      documentId,
+      projectExecutionMode: normalizedProjectExecutionMode
+    });
+  }
   await connection.execute(
     `UPDATE project_initiation_review_nodes
     SET node_status = ?,
@@ -1179,6 +1255,28 @@ export async function approveInitiationReviewNode({
     toStatus: INITIATION_REVIEW_NODE_STATUS.APPROVED,
     comment: normalizedComment
   });
+
+  if (normalizedProjectExecutionMode) {
+    await insertOperationLog(connection, {
+      projectId,
+      actorUserId: user.id,
+      actionType: OPERATION_ACTION_TYPE.INITIATION_PROJECT_EXECUTION_MODE_SELECTED,
+      targetType: OPERATION_TARGET_TYPE.INITIATION_REVIEW,
+      targetId: node.id,
+      summary: `总经理选择项目开展模式：${normalizedProjectExecutionMode}`,
+      details: {
+        projectId,
+        stageDocumentId: document.id,
+        documentCode: document.document_code,
+        documentName: document.document_name,
+        nodeKey,
+        selectedProjectExecutionMode: normalizedProjectExecutionMode,
+        selectedByUserId: user.id,
+        selectedAt: new Date().toISOString(),
+        writesProjectsProjectMode: false
+      }
+    });
+  }
 
   const refreshedNodes = (await selectInitiationReviewNodes(connection, [documentId], { forUpdate: true })).map(
     (candidate) =>

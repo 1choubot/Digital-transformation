@@ -1426,49 +1426,53 @@ TBD - created by archiving change define-technical-architecture. Update Purpose 
 - **AND** 后端 MUST NOT 依赖未确认的新全局角色字段
 
 ### Requirement: 方案设计在线表单生成架构
-技术架构 MUST 复用立项阶段在线表单和模板文件生成机制支持项目方案分析表、C15 内部方案评审记录表和 C16 客户方案评审记录表。
+技术架构 MUST 复用立项阶段在线表单和模板文件生成机制支持项目方案分析表、C15 内部方案评审记录表、C16 客户方案评审记录表和 C18 报价单。
 
 #### Scenario: 项目方案分析表在线表单
-- **WHEN** 后续实现项目方案分析表
+- **WHEN** 项目方案分析表通过在线表单生成文件
 - **THEN** 架构 MUST 支持在线表单保存、提交、审批前置状态和模板文件生成状态
 - **AND** 模板文件生成 MUST 使用 `项目方案分析表-模板.xlsx`
 
 #### Scenario: C15 C16 方案评审记录表多上下文
-- **WHEN** 后续实现内部方案评审和客户方案评审记录
+- **WHEN** 内部方案评审和客户方案评审记录通过在线表单生成文件
 - **THEN** 架构 MUST 保留 C15 方案评审记录表（内部方案评审）和 C16 方案评审记录表（客户方案评审）两个独立产出/资料项
 - **AND** 架构 MUST 支持二者复用同一 `方案评审记录表-模板.xlsx` 在不同评审类型或节点上下文下生成文件
 - **AND** 架构 MUST 分别保留 C15 和 C16 的多次评审记录版本、审批历史和最新有效版本
 - **AND** 架构 MUST NOT 将 C15 和 C16 合并为一个资料项或减少 71 项资料数量
 
+#### Scenario: C18 报价单 Word 模板生成
+- **WHEN** 报价单在线表单提交并生成文件
+- **THEN** 架构 MUST 支持在线表单保存、提交、生成状态、生成失败原因和生成文件下载状态
+- **AND** 报价单生成 MUST 使用 `报价单-模板.docx`
+- **AND** 报价单生成文件格式 MUST 为 `.docx`
+- **AND** 后端 SHOULD 复用现有 `renderDocxTemplate()` 或同等 OOXML 渲染能力
+- **AND** 后端 MUST NOT 为报价单生成引入外部文档服务或浏览器端模板填充
+
 #### Scenario: 不在前端填充模板
-- **WHEN** 用户查看或下载项目方案分析表或方案评审记录表生成文件
+- **WHEN** 用户查看或下载项目方案分析表、方案评审记录表或报价单生成文件
 - **THEN** 前端 MUST 只调用后端状态、查看或下载接口
-- **AND** 前端 MUST NOT 维护 Excel 单元格映射或在浏览器端填充模板
+- **AND** 前端 MUST NOT 维护 Excel 单元格、Word 表格或 Word 文本替换映射
 
 ### Requirement: 方案设计上传槽和版本架构
-技术架构 MUST 支持方案设计阶段文件产出、成本估算三段文件和投标书双上传槽的版本化上传。
+技术架构 MUST 支持方案设计阶段文件产出、成本估算四段文件和投标书双上传槽的版本化上传。
 
 #### Scenario: 普通文件产出上传槽
 - **WHEN** 后续实现方案设计工作计划、产品功能框图、方案设计 8 个产出或报价单
 - **THEN** 架构 MUST 使用阶段资料或节点上传槽记录文件、提交人、提交时间、版本、状态和审批关联
 - **AND** 架构 MUST 不接外部文件平台
 
-#### Scenario: 成本估算三段上传槽
+#### Scenario: 成本估算四段上传槽
 - **WHEN** 后续实现 C17 成本估算表
-- **THEN** 架构 MUST 在一个主资料项下支持研发成本估算、制造成本估算、财务/运营成本估算三个内部上传槽
+- **THEN** 架构 MUST 在一个主资料项下支持研发成本估算、制造成本估算、营销成本估算、财务/运营成本估算四个内部上传槽
 - **AND** 每个上传槽 MUST 保留文件版本和审批历史
 - **AND** 后一上传槽 MUST 能引用前一上传槽的文件作为制作基础
+- **AND** 营销成本估算上传槽 MUST 使用 `marketing_cost_estimation_file`
 
 #### Scenario: 投标书双上传槽
 - **WHEN** 后续实现投标流程
 - **THEN** 架构 MUST 在投标书产出下支持商务标和技术标两个必填上传槽
 - **AND** 架构 MUST 支持两个上传槽均完成后再提交总经理审批
 - **AND** 架构 MUST NOT 新增商务标和技术标资料项
-
-#### Scenario: 退回后保留历史版本
-- **WHEN** 节点审批退回并要求重新提交文件
-- **THEN** 架构 MUST 保留旧文件版本和审批历史
-- **AND** 架构 MUST 通过最新有效版本或当前版本标记表达当前可用文件
 
 ### Requirement: 财务文件后端保密架构
 技术架构 MUST 在后端统一保护财务/运营成本估算文件的元数据、预览和下载。
@@ -1500,12 +1504,13 @@ TBD - created by archiving change define-technical-architecture. Update Purpose 
 #### Scenario: 专用对象完成状态派生
 - **WHEN** 后端计算项目方案分析、C15 内部方案评审、C16 客户方案评审、C17 成本估算、报价或投标相关资料的完成状态
 - **THEN** 完成状态 MUST 从方案设计专用节点状态机派生
+- **AND** C17 派生 MUST 消费研发、制造、营销、财务四段成本节点和 current 文件齐套结果
 - **AND** 阶段推进门禁 MUST 使用专用节点最终状态和专用完成口径
 
 #### Scenario: 普通审核接口拦截
 - **WHEN** 用户直接调用普通阶段资料提交、确认或退回接口处理专用流程对象
 - **THEN** 后端 MUST 拒绝请求或返回专用流程错误
-- **AND** 普通接口 MUST NOT 绕过或替代项目方案分析节点审批、内部方案评审审批、客户方案评审审批、研发成本估算审批、制造成本估算审批、财务负责人审批、总经理财务成本估算审批、商务负责人报价结果处理或投标审批
+- **AND** 普通接口 MUST NOT 绕过或替代项目方案分析节点审批、内部方案评审审批、客户方案评审审批、研发成本估算审批、制造成本估算审批、营销成本估算审批、财务负责人审批、总经理财务成本估算审批、商务负责人报价结果处理或投标审批
 
 #### Scenario: 避免双重真相
 - **WHEN** 架构设计方案设计节点状态、资料状态、齐套摘要、阶段推进门禁或工作台待办
@@ -1778,3 +1783,88 @@ TBD - created by archiving change define-technical-architecture. Update Purpose 
 - **WHEN** 团队完成旧模板版本删除或引用整理
 - **THEN** 实现 MUST 运行并通过现有项目核心、立项、方案设计和模板 ownership 校验
 - **AND** 校验 MUST 证明 `v20260629` 仍为当前有效模板、资料数量仍为 71、标准阶段仍为 8 个
+
+### Requirement: 方案设计提交门禁调整架构
+技术架构 MUST 统一方案设计 workflow 的上传槽有效性、分支选择、豁免状态、待办、日志和自动推进判断，避免多套门禁结果。
+
+#### Scenario: 上传槽有效性不只依赖节点 current revision
+- **WHEN** 后端判断退回后的方案设计上传槽是否满足提交门禁
+- **THEN** 架构 MUST 使用 current file 有效性判断
+- **AND** 架构 MUST NOT 仅以文件 revision 等于节点 current revision 作为唯一门禁
+- **AND** 架构 MUST 继续防止非 current 历史文件绕过门禁
+- **AND** 架构 MUST 覆盖 C17 研发、制造、财务/运营成本估算上传槽在总经理退回后的重提门禁
+
+#### Scenario: 分支选择和财务总经理审批同事务
+- **WHEN** 总经理审批通过财务成本估算并选择报价或投标
+- **THEN** 架构 MUST 在同一事务中完成审批状态更新、分支记录、下一节点激活和 operation log
+- **AND** 失败时 MUST 回滚审批通过和分支选择
+- **AND** 后续报价/投标节点 MUST 消费已记录分支，而不是创建第二套选择状态
+- **AND** 旧报价/投标节点分支选择接口 MUST 在分支已存在时拒绝重复选择，不改状态且不写新的成功选择日志
+
+#### Scenario: 方案设计产出豁免状态集中记录
+- **WHEN** 系统支持 C07-C14 单项无需上传
+- **THEN** 架构 MUST 将豁免状态与对应方案设计上传槽或等价 workflow 对象绑定
+- **AND** 架构 MUST 记录操作人、操作时间和原因或备注
+- **AND** 架构 MUST 将该状态提供给 DTO、提交门禁、C04-C19 派生、工作台待办和 operation log
+- **AND** 重新上传已豁免槽位文件时 MUST 自动清除该槽位豁免并写入 operation log
+
+#### Scenario: 自动推进消费统一派生结果
+- **WHEN** 后端判断方案设计阶段是否可自动推进到合同签订阶段
+- **THEN** 架构 MUST 复用 C04-C19 派生齐套结果
+- **AND** 架构 MUST NOT 在自动推进中重新实现一套不同的 C07-C14 上传或豁免判断
+
+#### Scenario: 保持边界
+- **WHEN** 实现本 change 的三批门禁调整
+- **THEN** 架构 MUST NOT 改报价单在线表单生成规则
+- **AND** 架构 MUST NOT 改合同签订阶段业务
+- **AND** 架构 MUST NOT 改 8 大阶段或 71 项资料数量
+- **AND** 架构 MUST NOT 重启旧关口审批作为主流程入口
+
+### Requirement: 立项项目开展模式审批写回架构
+技术架构 MUST 将 `1.2` 项目开展模式建模为总经理最终审批通过动作的一部分，并 MUST 写回 `1.2` 表单数据供模板生成使用。
+
+#### Scenario: 总经理审批通过写回表单字段
+- **WHEN** 总经理审批通过 `1.2 项目立项审批表`
+- **THEN** 后端 MUST 在审批通过事务中校验并写回 `formData.projectExecutionMode`
+- **AND** 模板生成 MUST 从 `1.2` 表单数据读取该字段
+- **AND** 后端 MUST NOT 将该字段写入 `projects.project_mode`
+
+#### Scenario: 总经理退回不校验项目开展模式
+- **WHEN** 总经理退回 `1.2 项目立项审批表`
+- **THEN** 后端 MUST NOT 校验 `projectExecutionMode`
+- **AND** 后端 MUST 保持既有返工和阻断后续语义
+
+### Requirement: 营销成本估算节点迁移架构
+技术架构 MUST 通过正式 migration 扩展方案设计成本估算节点和上传槽枚举，并 MUST 将营销成本估算纳入 C17 专用 workflow。
+
+#### Scenario: 正式 migration 扩展 enum
+- **WHEN** 实现营销成本估算节点和上传槽
+- **THEN** 系统 MUST 新增正式 migration 扩展 MySQL enum
+- **AND** migration MUST 覆盖 `project_solution_design_nodes.node_key`
+- **AND** migration MUST 覆盖 `project_solution_design_upload_slots.node_key`
+- **AND** migration MUST 覆盖 `project_solution_design_upload_slots.slot_key`
+- **AND** migration MUST 覆盖 `project_solution_design_upload_files.slot_key`
+- **AND** 实现 MUST NOT 只依赖 `ensureSolutionDesignWorkflowSchema()`
+
+#### Scenario: 成本链路统一重置范围
+- **WHEN** 财务总经理退回成本估算或报价拒绝返回成本链路
+- **THEN** 架构 MUST 将研发、制造、营销、财务四段作为统一重置和重提范围
+- **AND** 退回后复用旧 current file 的判断 MUST 覆盖营销成本估算上传槽
+
+### Requirement: 1.3 项目立项通知生成架构
+技术架构 MUST 将新版 `1.3 项目立项通知` 模板、累计项目清单和项目开展模式列作为后端模板生成能力统一治理。
+
+#### Scenario: 1.3 通知模板注册切换
+- **WHEN** 后端注册 `INITIATION_TEMPLATE_KEY.NOTICE`
+- **THEN** registry MUST 使用 `项目立项通知-模板.docx`
+- **AND** registry MUST NOT 继续指向 `关于确定项目名称及编号的通知-模板.docx`
+
+#### Scenario: 1.3 累计清单逐项目携带开展模式
+- **WHEN** 后端生成 `1.3 项目立项通知` 累计项目清单
+- **THEN** 每一行 MUST 携带该项目自己的 `projectExecutionMode`
+- **AND** 后端 MUST NOT 只用当前项目的 `1.2` 值填充所有行
+
+#### Scenario: 1.3 模板映射开展模式列
+- **WHEN** 后端渲染 `项目立项通知-模板.docx`
+- **THEN** 模板映射 MUST 将 `projectExecutionMode` 写入“开展模式”列
+- **AND** `projectExecutionMode` MUST 仍不写入 `projects.project_mode`

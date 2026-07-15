@@ -15,11 +15,14 @@ import {
   getProjectWorkspace,
   getSolutionDesignAnalysisGeneratedFileDownload,
   getSolutionDesignAnalysisForm,
+  getSolutionDesignQuotationForm,
+  getSolutionDesignQuotationGeneratedFileDownload,
   getSolutionDesignReviewGeneratedFileDownload,
   getSolutionDesignReviewForm,
   getSolutionDesignUploadDownload,
   getSolutionDesignWorkflow,
   listSolutionDesignUploads,
+  markSolutionDesignUploadExemption,
   listStageApprovalHistory,
   listProjects,
   normalizeProjectOverviewDashboardFilters,
@@ -31,13 +34,16 @@ import {
   returnSolutionDesignWorkflowNode,
   returnStageApproval,
   saveSolutionDesignAnalysisForm,
+  saveSolutionDesignQuotationForm,
   saveSolutionDesignReviewForm,
   selectSolutionDesignQuotationTenderBranch,
   submitSolutionDesignAnalysisForm,
   submitSolutionDesignQuotation,
+  submitSolutionDesignQuotationForm,
   submitSolutionDesignReviewForm,
   submitSolutionDesignWorkflowNode,
   submitStageApproval,
+  cancelSolutionDesignUploadExemption,
   updateProjectCode,
   uploadSolutionDesignWorkflowFile
 } from '../repositories/projectRepository.js';
@@ -368,6 +374,73 @@ export async function processSolutionDesignQuotationResultHandler(req, res) {
   });
 }
 
+export async function getSolutionDesignQuotationFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const quotationForm = await getSolutionDesignQuotationForm({
+    projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: quotationForm
+  });
+}
+
+export async function saveSolutionDesignQuotationFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const quotationForm = await saveSolutionDesignQuotationForm({
+    projectId,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: quotationForm
+  });
+}
+
+export async function submitSolutionDesignQuotationFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const quotationForm = await submitSolutionDesignQuotationForm({
+    projectId,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: quotationForm
+  });
+}
+
+export async function downloadSolutionDesignQuotationGeneratedFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const download = await getSolutionDesignQuotationGeneratedFileDownload({
+    projectId,
+    user: req.auth.user
+  });
+
+  await new Promise((resolve, reject) => {
+    res.download(
+      download.filePath,
+      download.fileName,
+      {
+        headers: {
+          'Content-Type': download.mimeType,
+          'Content-Length': String(download.fileSize)
+        }
+      },
+      (error) => {
+        if (error && !res.headersSent) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      }
+    );
+  });
+}
+
 export async function getSolutionDesignAnalysisFormHandler(req, res) {
   const projectId = parseProjectId(req.params.projectId);
   const analysisForm = await getSolutionDesignAnalysisForm({
@@ -535,6 +608,33 @@ export async function uploadSolutionDesignWorkflowFileHandler(req, res) {
   });
 }
 
+export async function markSolutionDesignUploadExemptionHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const uploads = await markSolutionDesignUploadExemption({
+    projectId,
+    slotKey: req.params.slotKey,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: uploads
+  });
+}
+
+export async function cancelSolutionDesignUploadExemptionHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const uploads = await cancelSolutionDesignUploadExemption({
+    projectId,
+    slotKey: req.params.slotKey,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: uploads
+  });
+}
+
 export async function downloadSolutionDesignWorkflowFileHandler(req, res) {
   const projectId = parseProjectId(req.params.projectId);
   const download = await getSolutionDesignUploadDownload({
@@ -583,6 +683,7 @@ export async function approveSolutionDesignWorkflowNodeHandler(req, res) {
   const workflow = await approveSolutionDesignWorkflowNode({
     projectId,
     nodeKey: req.params.nodeKey,
+    payload: req.body || {},
     user: req.auth.user
   });
 
@@ -756,7 +857,8 @@ export async function approveInitiationReviewNodeHandler(req, res) {
     documentId,
     nodeKey: req.params.nodeKey,
     user: req.auth.user,
-    comment: req.body?.comment
+    comment: req.body?.comment,
+    projectExecutionMode: req.body?.projectExecutionMode
   });
 
   res.json({

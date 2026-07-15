@@ -105,24 +105,53 @@
         </div>
       </section>
 
-      <section v-for="section in form.schema?.scoringSections || []" :key="section.key" class="online-form-section">
-        <h4>{{ section.title }}</h4>
-        <div class="online-form-score-list">
+      <section
+        v-for="section in form.schema?.scoringSections || []"
+        :key="section.key"
+        class="online-form-section online-form-score-section"
+        :data-score-section-key="section.key"
+      >
+        <button
+          class="online-form-score-section__toggle"
+          type="button"
+          :aria-expanded="isScoringSectionExpanded(section)"
+          :aria-controls="`score-section-${section.key}`"
+          @click="toggleScoringSection(section)"
+        >
+          <span>{{ formatScoringSectionTitle(section) }}</span>
+          <span class="online-form-score-section__toggle-icon" aria-hidden="true">
+            {{ isScoringSectionExpanded(section) ? '⌃' : '⌄' }}
+          </span>
+        </button>
+        <div
+          v-show="isScoringSectionExpanded(section)"
+          :id="`score-section-${section.key}`"
+          class="online-form-score-table-wrap"
+        >
+          <div class="online-form-score-table">
+            <div class="online-form-score-table__header" aria-hidden="true">
+              <span>评价项</span><span>评价标准</span><span>分值（0-5）</span><span>信息收集说明</span><span>责任人</span>
+            </div>
+            <div class="online-form-score-list">
           <article v-for="item in section.items || []" :key="item.key" :data-field-key="`${item.key}Score`"
             class="online-form-score-card"
             :class="{ 'online-form-field--invalid': isFieldInvalid(`${item.key}Score`) }">
-            <header>
+            <header class="online-form-score-card__item">
               <strong>{{ item.itemName }}</strong>
             </header>
             <dl class="online-form-score-card__template">
               <div>
                 <dt>评价标准</dt>
-                <dd>{{ item.evaluationStandard || '-' }}</dd>
+                <dd>
+                  <span v-for="(line, lineIndex) in formatEvaluationStandardLines(item.evaluationStandard)" :key="lineIndex">
+                    {{ line }}
+                  </span>
+                </dd>
               </div>
             </dl>
             <div class="online-form-score-card__inputs">
               <label>
-                <span>分值 0-5 *</span>
+                <span class="online-form-score-card__mobile-label">分值（0-5）*</span>
                 <el-select :model-value="formData[`${item.key}Score`]"
                   :disabled="isOnlineFormPartDisabled(section.editablePart)" placeholder="请选择分值"
                   @change="$emit('update-field', { key: `${item.key}Score`, value: $event })">
@@ -133,19 +162,21 @@
                 </small>
               </label>
               <label>
-                <span>信息收集说明（选填）</span>
+                <span class="online-form-score-card__mobile-label">信息收集说明（选填）</span>
                 <el-input type="textarea" :rows="2" :model-value="formData[`${item.key}InformationNotes`]"
                   :disabled="isOnlineFormPartDisabled(section.editablePart)"
                   @update:model-value="$emit('update-field', { key: `${item.key}InformationNotes`, value: $event })" />
               </label>
               <label>
-                <span>责任人（选填）</span>
+                <span class="online-form-score-card__mobile-label">责任人（选填）</span>
                 <el-input :model-value="formData[`${item.key}ResponsiblePerson`]"
                   :disabled="isOnlineFormPartDisabled(section.editablePart)"
                   @update:model-value="$emit('update-field', { key: `${item.key}ResponsiblePerson`, value: $event })" />
               </label>
             </div>
           </article>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -240,6 +271,7 @@ const props = defineProps({
 const scoreOptions = [0, 1, 2, 3, 4, 5];
 const editorRoot = ref(null);
 const validationAttempted = ref(false);
+const expandedScoringSections = ref({});
 const schemaFields = computed(() => props.form?.schema?.fields || []);
 const missingRequiredFields = computed(() => getMissingRequiredFields(
   schemaFields.value,
@@ -254,11 +286,47 @@ const invalidFieldKeys = computed(() => validationAttempted.value
   : []);
 
 watch(
-  () => props.form?.stageDocumentId || props.form?.documentCode || null,
+  () => [
+    props.form?.id || props.form?.stageDocumentId || props.form?.documentCode || null,
+    props.form?.permissions?.editablePart || '',
+    (props.form?.schema?.scoringSections || []).map((section) => `${section.key}:${section.editablePart || ''}`).join('|')
+  ],
   () => {
     validationAttempted.value = false;
-  }
+    initializeScoringSectionExpansion();
+  },
+  { immediate: true }
 );
+
+function initializeScoringSectionExpansion() {
+  const editablePart = props.form?.permissions?.editablePart;
+  expandedScoringSections.value = Object.fromEntries(
+    (props.form?.schema?.scoringSections || []).map((section) => [
+      section.key,
+      !['business', 'technical'].includes(editablePart) || section.editablePart === editablePart
+    ])
+  );
+}
+
+function isScoringSectionExpanded(section) {
+  return expandedScoringSections.value[section.key] !== false;
+}
+
+function toggleScoringSection(section) {
+  expandedScoringSections.value = { ...expandedScoringSections.value, [section.key]: !isScoringSectionExpanded(section) };
+}
+
+function formatScoringSectionTitle(section) {
+  if (section.editablePart === 'business') return '商务板块';
+  if (section.editablePart === 'technical') return '技术板块';
+  return String(section.title || '').replace('模块', '板块');
+}
+
+function formatEvaluationStandardLines(value) {
+  const text = String(value || '').trim();
+  if (!text) return ['-'];
+  return text.split('；').map((line) => line.trim()).filter(Boolean);
+}
 
 function getSchemaSections(form) {
   if (Array.isArray(form?.schema?.sections) && form.schema.sections.length > 0) {
@@ -307,8 +375,12 @@ async function handleSubmit() {
   }
 
   ElMessage.warning(`请补充以下必填内容：${missingRequiredFields.value.map((field) => field.label).join('、')}`);
+  const firstMissingField = missingRequiredFields.value[0];
+  if (firstMissingField?.sectionKey) {
+    expandedScoringSections.value = { ...expandedScoringSections.value, [firstMissingField.sectionKey]: true };
+  }
   await nextTick();
-  const firstFieldKey = missingRequiredFields.value[0]?.key;
+  const firstFieldKey = firstMissingField?.key;
   const firstField = firstFieldKey
     ? editorRoot.value?.querySelector(`[data-field-key="${firstFieldKey}"]`)
     : null;
@@ -390,8 +462,8 @@ function formatCollaborationPartStatus(value) {
 
 function formatEditablePart(part) {
   return {
-    business: '基础模块和商务模块',
-    technical: '技术模块'
+    business: '基础信息和商务板块',
+    technical: '技术板块'
   }[part] || '仅查看';
 }
 

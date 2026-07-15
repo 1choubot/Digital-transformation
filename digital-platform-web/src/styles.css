@@ -2373,16 +2373,6 @@ p {
   background: #fbfcfe;
 }
 
-.initiation-review-panel {
-  grid-column: 1 / -1;
-  display: grid;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid #dde6ee;
-  border-radius: 6px;
-  background: #fbfcfe;
-}
-
 .initiation-review-action-panel {
   grid-column: 1 / -1;
   display: grid;
@@ -2390,18 +2380,11 @@ p {
   min-width: 0;
 }
 
-.initiation-review-panel__heading,
 .initiation-review-node__main {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-}
-
-.initiation-review-panel__heading p {
-  margin: 0;
-  color: #667789;
-  font-size: 13px;
 }
 
 .initiation-review-nodes {
@@ -2805,9 +2788,90 @@ p {
   min-width: 0;
 }
 
+.online-form-score-section {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.online-form-score-section__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 14px;
+  border: 0;
+  background: #fbfcfe;
+  color: #17212f;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.online-form-score-section__toggle:hover,
+.online-form-score-section__toggle:focus-visible {
+  background: #f2f6fa;
+}
+
+.online-form-score-section__toggle:focus-visible {
+  outline: 2px solid #409eff;
+  outline-offset: -2px;
+}
+
+.online-form-score-section__toggle-icon {
+  color: #667789;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.online-form-score-table-wrap {
+  overflow-x: auto;
+  border-top: 1px solid #dce5ee;
+}
+
+.online-form-score-table {
+  min-width: 1080px;
+}
+
+.online-form-score-table__header,
 .online-form-score-card {
   display: grid;
-  gap: 12px;
+  grid-template-columns: 140px minmax(300px, 2fr) 130px minmax(240px, 1.2fr) 180px;
+  align-items: stretch;
+}
+
+.online-form-score-table__header {
+  background: #f5f8fb;
+  color: #425466;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.online-form-score-table__header span,
+.online-form-score-card__item,
+.online-form-score-card__template,
+.online-form-score-card__inputs > label {
+  min-width: 0;
+  padding: 10px;
+  border-right: 1px solid #dce5ee;
+}
+
+.online-form-score-table__header span:last-child,
+.online-form-score-card__inputs > label:last-child {
+  border-right: 0;
+}
+
+.online-form-score-card {
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid #dce5ee;
+  border-radius: 0;
+}
+
+.online-form-score-card:last-child {
+  border-bottom: 0;
 }
 
 .online-form-score-card header {
@@ -2835,9 +2899,15 @@ p {
 }
 
 .online-form-score-card__template dt {
-  color: #5d6c7a;
-  font-size: 12px;
-  font-weight: 700;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .online-form-score-card__template dd {
@@ -2848,16 +2918,46 @@ p {
   overflow-wrap: anywhere;
 }
 
+.online-form-score-card__template dd span {
+  display: block;
+}
+
 .online-form-score-card__inputs {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
-  padding: 0;
+  display: contents;
 }
 
 .online-form-score-list {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
+  display: block;
+  gap: 0;
+}
+
+.online-form-score-card__inputs > label {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 6px;
+}
+
+.online-form-score-card__inputs > label > .el-select,
+.online-form-score-card__inputs > label > .el-input,
+.online-form-score-card__inputs > label > .el-textarea {
+  width: 100%;
+}
+
+.online-form-score-card__inputs > label > .form-field-error {
+  justify-self: start;
+}
+
+.online-form-score-card__mobile-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .online-form-review-opinion {
@@ -3523,7 +3623,6 @@ p {
   }
 
   .stage-document-card__actions,
-  .initiation-review-panel,
   .stage-document-attachments,
   .project-workspace__output-body .stage-document-card__actions,
   .project-workspace__output-body .stage-document-attachments {
@@ -3618,9 +3717,12 @@ p {
     width: 100%;
   }
 
-  .online-form-section,
-  .online-form-score-card {
+  .online-form-section {
     padding: 10px;
+  }
+
+  .online-form-score-section {
+    padding: 0;
   }
 
   .info-list div {
@@ -3682,9 +3784,6 @@ p {
     width: 100%;
   }
 
-  .online-form-score-list {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* Center daily report preview cards keep grouped employee summaries scannable. */

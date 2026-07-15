@@ -37,39 +37,6 @@
 
     <el-empty v-else :description="unavailableMessage" />
 
-    <section v-if="approvalReview" class="initiation-review-panel" aria-label="1.2 项目立项评价与最终审批记录">
-      <div class="initiation-review-panel__heading">
-        <div>
-          <h4>审批记录展示</h4>
-          <p>{{ approvalOverallText }}</p>
-        </div>
-        <el-tag :type="approvalReview.isComplete ? 'success' : 'warning'">{{ approvalReview.isComplete ? '最终通过' : '未最终通过' }}</el-tag>
-      </div>
-
-      <div class="initiation-review-nodes">
-        <article v-for="reviewNode in approvalReviewNodes" :key="reviewNode.nodeKey" class="initiation-review-node">
-          <div class="initiation-review-node__main">
-            <strong>{{ reviewNode.nodeName || formatReviewNodeName(reviewNode.nodeKey) }}</strong>
-            <el-tag :type="reviewNodeTagType(reviewNode.nodeStatus)">{{ formatReviewNodeStatus(reviewNode.nodeStatus) }}</el-tag>
-          </div>
-          <dl class="initiation-review-node__meta">
-            <div>
-              <dt>{{ isEvaluationNode(reviewNode) ? '评价角色' : '审批角色' }}</dt>
-              <dd>{{ formatReviewNodeReviewer(reviewNode) }}</dd>
-            </div>
-            <div>
-              <dt>{{ isEvaluationNode(reviewNode) ? '评价文本' : '审批意见' }}</dt>
-              <dd>{{ reviewNode.comment || reviewNode.returnReason || '-' }}</dd>
-            </div>
-            <div>
-              <dt>操作时间</dt>
-              <dd>{{ formatDateTime(reviewNode.reviewedAt || reviewNode.submittedAt || reviewNode.invalidatedAt) }}</dd>
-            </div>
-          </dl>
-        </article>
-      </div>
-    </section>
-
     <section v-if="actionableReviewNodes.length" class="initiation-review-action-panel" aria-label="1.2 项目立项评价与最终审批操作">
       <div class="initiation-review-nodes">
         <article v-for="reviewNode in actionableReviewNodes" :key="reviewNode.nodeKey" class="initiation-review-node">
@@ -199,12 +166,7 @@ import {
   normalizeNodeGeneratedFile,
   useNodeOnlineForm
 } from '../../../composables/node/useNodeOnlineForm.js';
-import {
-  formatBusinessDepartment,
-  formatDateTime,
-  formatOrganizationRole,
-  formatUser
-} from '../../../utils/format.js';
+import { formatDateTime } from '../../../utils/format.js';
 
 const emit = defineEmits(['business-state-changed']);
 
@@ -295,18 +257,6 @@ const marketResearchDownloadPending = computed(() => Boolean(
 const approvalReview = computed(() => approvalDocument.value?.initiationReview || null);
 const approvalReviewNodes = computed(() => approvalReview.value?.nodes || []);
 const actionableReviewNodes = computed(() => approvalReviewNodes.value.filter((reviewNode) => reviewNode.canAct));
-const approvalOverallText = computed(() => {
-  if (approvalReview.value?.isComplete) {
-    return '营销评价、研发评价均已完成，总经理已审批通过。';
-  }
-
-  if (approvalReview.value?.blockedByRework) {
-    return '1.1 返工未清除，1.2 暂不能最终完成。';
-  }
-
-  return '等待营销评价、研发评价和总经理最终审批完成。';
-});
-
 const nodeComments = reactive({});
 const nodeReturnReasons = reactive({});
 const nodeReturnActions = reactive({});
@@ -374,16 +324,6 @@ function reviewNodeTagType(status) {
   if (status === 'returned_blocked_by_rework' || status === 'invalidated') return 'danger';
   if (status === 'pending') return 'warning';
   return 'info';
-}
-
-function formatReviewNodeReviewer(reviewNode) {
-  if (reviewNode.reviewerUser) {
-    return formatUser(reviewNode.reviewerUser);
-  }
-
-  const role = formatOrganizationRole(reviewNode.reviewerRole);
-  const department = reviewNode.reviewerDepartment ? formatBusinessDepartment(reviewNode.reviewerDepartment) : '';
-  return [department, role].filter(Boolean).join(' / ') || '-';
 }
 
 function isEvaluationNode(reviewNode) {

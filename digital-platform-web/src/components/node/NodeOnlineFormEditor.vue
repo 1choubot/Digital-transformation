@@ -352,6 +352,7 @@ const invalidFieldKeys = computed(() => validationAttempted.value
 watch(
   () => [
     props.form?.id || props.form?.stageDocumentId || props.form?.documentCode || null,
+    props.form?.permissions?.canEdit === true,
     props.form?.permissions?.editablePart || '',
     (props.form?.schema?.scoringSections || []).map((section) => `${section.key}:${section.editablePart || ''}`).join('|')
   ],
@@ -364,10 +365,11 @@ watch(
 
 function initializeScoringSectionExpansion() {
   const editablePart = props.form?.permissions?.editablePart;
+  const canEdit = props.form?.permissions?.canEdit === true;
   expandedScoringSections.value = Object.fromEntries(
     (props.form?.schema?.scoringSections || []).map((section) => [
       section.key,
-      !['business', 'technical'].includes(editablePart) || section.editablePart === editablePart
+      canEdit && ['business', 'technical'].includes(editablePart) && section.editablePart === editablePart
     ])
   );
 }

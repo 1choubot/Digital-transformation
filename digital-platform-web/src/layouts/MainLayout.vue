@@ -135,7 +135,11 @@
         <span class="breadcrumb-item breadcrumb-item--active">{{ currentRouteLabel }}</span>
       </div>
 
-      <el-main ref="appMainRef" class="app-main animate-content">
+      <el-main
+        ref="appMainRef"
+        class="app-main animate-content"
+        :class="{ 'app-main--workspace': route.name === 'project-detail' }"
+      >
         <slot />
       </el-main>
     </el-container>

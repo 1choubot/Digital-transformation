@@ -1,7 +1,7 @@
 <template>
   <section class="project-workspace__detail project-approval-node-page">
     <NodeOnlineFormEditor
-      v-if="activeForm"
+      v-if="activeForm && (canViewFormContent || canReviewForm)"
       :form="activeForm"
       :node-status="node?.nodeStatus || ''"
       :blocking-reasons="node?.blockingReasons || []"
@@ -11,6 +11,8 @@
       :submitting="context.onlineFormSubmitting === true"
       :generated-file="generatedFile"
       :download-pending="generatedFileDownloadPending"
+      download-button-text="查看项目立项审批表"
+      :show-form-content="canViewFormContent"
       :image-state="context.onlineFormImageState || emptyObject"
       :show-review-opinions="!hasActionableEvaluationNode"
       @save="saveOnlineForm"
@@ -24,7 +26,7 @@
       <template #generated-files>
         <GeneratedFormFileCard
           v-if="marketResearchCompleted"
-          heading="项目需求表"
+          button-text="查看项目需求表"
           :generated-file="marketResearchGeneratedFile"
           :pending="marketResearchDownloadPending"
           @download="downloadMarketResearchFile"
@@ -34,7 +36,7 @@
 
     <el-alert v-else-if="context.onlineFormErrorMessage" :description="context.onlineFormErrorMessage" type="error" show-icon :closable="false" />
 
-    <el-skeleton v-else-if="output?.formAvailable" :rows="4" animated />
+    <el-skeleton v-else-if="output?.formAvailable && context.onlineFormLoading" :rows="4" animated />
 
     <el-empty v-else :description="unavailableMessage" />
 
@@ -60,13 +62,18 @@
               :class="{ 'initiation-review-decision__options--general': !isEvaluationNode(reviewNode) }"
               :disabled="isReviewNodeBusy(reviewNode)"
             >
-              <el-radio value="approve" border>
+              <el-radio class="initiation-review-decision__option--approve" value="approve" border>
                 {{ isEvaluationNode(reviewNode) ? '提交评价' : '通过立项' }}
               </el-radio>
-              <el-radio value="return" border>
+              <el-radio class="initiation-review-decision__option--return" value="return" border>
                 {{ isEvaluationNode(reviewNode) ? '拒绝并退回' : '退回修改' }}
               </el-radio>
-              <el-radio v-if="!isEvaluationNode(reviewNode)" value="end" border>
+              <el-radio
+                v-if="!isEvaluationNode(reviewNode)"
+                class="initiation-review-decision__option--end"
+                value="end"
+                border
+              >
                 结束项目
               </el-radio>
             </el-radio-group>
@@ -114,7 +121,7 @@
               />
               <div class="initiation-review-action-form__footer">
                 <el-button
-                  type="danger"
+                  type="warning"
                   plain
                   :loading="isReviewNodePending(reviewNode, 'return')"
                   :disabled="isReviewNodeBusy(reviewNode) || !nodeReturnReasons[reviewNode.nodeKey]"
@@ -195,7 +202,7 @@
               />
               <div class="initiation-review-action-form__footer">
                 <el-button
-                  type="danger"
+                  type="warning"
                   plain
                   :loading="isReviewNodePending(reviewNode, 'return')"
                   :disabled="isReviewNodeBusy(reviewNode) || !nodeReturnReasons[reviewNode.nodeKey]"
@@ -341,6 +348,13 @@ const marketResearchDownloadPending = computed(() => Boolean(
 const approvalReview = computed(() => approvalDocument.value?.initiationReview || null);
 const approvalReviewNodes = computed(() => approvalReview.value?.nodes || []);
 const actionableReviewNodes = computed(() => approvalReviewNodes.value.filter((reviewNode) => reviewNode.canAct));
+const canReviewForm = computed(() => actionableReviewNodes.value.length > 0);
+const canViewFormContent = computed(() => {
+  const permissions = activeForm.value?.permissions || {};
+  return Boolean(permissions.editablePart)
+    || permissions.canEdit === true
+    || permissions.canSubmit === true;
+});
 const hasActionableEvaluationNode = computed(() => actionableReviewNodes.value.some(isEvaluationNode));
 const nodeComments = reactive({});
 const nodeReturnReasons = reactive({});

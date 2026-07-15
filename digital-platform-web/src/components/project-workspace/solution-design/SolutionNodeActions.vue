@@ -7,7 +7,7 @@
                 :loading="isPending(`approve:${node.nodeKey}`)" @click="$emit('approve')">审批通过</el-button></div>
         <div v-if="node.permissions?.canReturn" class="return-box"><el-input :model-value="returnReason" type="textarea"
                 :rows="3" placeholder="退回原因 *" @update:model-value="$emit('update:returnReason', $event)" /><el-button
-                type="danger" plain :loading="isPending(`return:${node.nodeKey}`)"
+                type="warning" plain :loading="isPending(`return:${node.nodeKey}`)"
                 @click="confirmReturn">审批退回</el-button></div><el-empty
             v-if="!node.permissions?.canSubmit && !node.permissions?.canApprove && !node.permissions?.canReturn"
             description="当前账号在该节点没有可执行动作" :image-size="48" />

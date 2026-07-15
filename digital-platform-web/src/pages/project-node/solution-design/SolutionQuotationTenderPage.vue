@@ -22,7 +22,9 @@
       </div>
     </section>
 
-    <SolutionQuotationForm v-if="flow?.branchType === 'quotation'" :dto="quotation.dto.value"
+    <SolutionQuotationForm v-if="flow?.branchType === 'quotation' && (canViewFormContent || canReviewForm)"
+      :dto="quotation.dto.value" :show-form-content="canViewFormContent"
+      :show-generated-file="canViewFormContent || canReviewForm"
       :form-data="quotation.formData" :loading="quotation.loading.value"
       :pending-action="quotation.pendingAction.value" :error-message="quotation.errorMessage.value"
       @save="quotation.save" @submit="quotation.submit" @download="quotation.download"
@@ -33,11 +35,12 @@
       <el-form-item label="客户不接受原因"><el-input v-model="quotationReturnReason" type="textarea" :rows="3" /></el-form-item>
       <el-form-item label="处理方式"><el-select v-model="quotationRejectAction"><el-option label="退回研发成本估算"
         value="return_to_rd_cost" /><el-option label="结束项目" value="end_project" /></el-select></el-form-item>
-      <el-button type="danger" plain :loading="isPending(`quotation:reject:${quotationRejectAction}`)"
+      <el-button :type="quotationRejectAction === 'end_project' ? 'danger' : 'warning'" plain
+        :loading="isPending(`quotation:reject:${quotationRejectAction}`)"
         @click="rejectQuotation">客户不接受并处理</el-button>
     </el-form>
 
-    <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending"
+    <SolutionNodeActions v-if="currentNode && (canViewFormContent || canReviewForm)" :node="currentNode" :is-pending="isPending"
       :return-reason="returnReasons[nodeKey] || ''" @update:return-reason="returnReasons[nodeKey] = $event"
       @submit="submitNode(nodeKey)" @approve="approveNode(nodeKey)" @return="returnNode(nodeKey)" />
   </SolutionDesignNodeLayout>
@@ -66,6 +69,10 @@ const quotation = useSolutionQuotationForm({
   authToken: computed(() => props.authToken),
   notifyChanged: page.notifyChanged
 });
+const canViewFormContent = computed(() => quotation.dto.value?.permissions?.canEditQuotationForm === true
+  || quotation.dto.value?.permissions?.canSubmitQuotationForm === true);
+const canReviewForm = computed(() => currentNode.value?.permissions?.canApprove === true
+  || currentNode.value?.permissions?.canReturn === true);
 
 watch(() => flow.value?.branchType, (branchType) => {
   if (branchType === 'quotation') quotation.load();

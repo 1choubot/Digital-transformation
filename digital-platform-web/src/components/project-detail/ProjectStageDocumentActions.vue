@@ -86,7 +86,7 @@
                 <span>将设置为适用且需返工</span>
               </label>
             </div>
-            <el-button plain
+            <el-button type="warning" plain
               :disabled="isActionPending(document.id, 'return') || !canSubmitReturn"
               @click="emitReturnDocument"
             >

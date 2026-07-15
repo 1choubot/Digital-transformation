@@ -65,7 +65,7 @@
         </div>
         <div v-if="!readOnly" class="stage-document-attachment-item__actions">
           <el-button
-            v-if="canDownloadAttachment(attachment)" plain
+            v-if="canDownloadAttachment(attachment)" type="primary" plain
             :disabled="state.downloadPendingId === attachment.id"
             @click="$emit('download', { document, attachment })"
           >

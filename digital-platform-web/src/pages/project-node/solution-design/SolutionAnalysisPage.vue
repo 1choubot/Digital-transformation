@@ -1,11 +1,12 @@
 <template>
   <SolutionDesignNodeLayout :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
     :error-message="context.solutionDesignErrorMessage" :message="localMessage" :local-error="localError">
-    <GeneratedFormFileCard :generated-file="analysisFormDto?.form?.generatedFile"
+    <GeneratedFormFileCard v-if="canViewFormContent || canReviewForm"
+      button-text="查看项目方案分析表" :generated-file="analysisFormDto?.form?.generatedFile"
       :pending="isPending('analysis:download')" @download="downloadAnalysisGeneratedFile" />
     <SolutionUploadSlots :slots="slots" :is-pending="isPending" @upload="handleUpload" @download="downloadUpload" />
 
-    <section ref="analysisFormRoot" class="analysis-section">
+    <section v-if="canViewFormContent" ref="analysisFormRoot" class="analysis-section">
 
       <el-descriptions :column="3" border>
         <el-descriptions-item label="项目编号">
@@ -47,7 +48,7 @@
               <div v-for="image in imagesFor(field.imageField)" :key="image.id" class="image-row">
                 <span>{{ image.originalFileName }}</span>
                 <div>
-                  <el-button v-if="image.permissions?.canDownload !== false" link
+                  <el-button v-if="image.permissions?.canDownload !== false" type="primary" link
                     @click="downloadAnalysisImage({ image })">
                     下载
                   </el-button>
@@ -74,7 +75,7 @@
       </div>
     </section>
 
-    <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending"
+    <SolutionNodeActions v-if="currentNode && (canViewFormContent || canReviewForm)" :node="currentNode" :is-pending="isPending"
       :submit-disabled="generatedBlocksSubmit" :return-reason="returnReasons[nodeKey] || ''"
       @update:return-reason="returnReasons[nodeKey] = $event" @submit="submitNode(nodeKey)"
       @approve="approveNode(nodeKey)" @return="returnNode(nodeKey)" />
@@ -160,6 +161,10 @@ const generatedBlocksSubmit = computed(() => {
   const file = analysisFormDto.value?.form?.generatedFile;
   return Boolean(file) && (file.status !== 'generated' || file.canDownload !== true);
 });
+const canViewFormContent = computed(() => analysisFormDto.value?.permissions?.canEditForm === true
+  || analysisFormDto.value?.permissions?.canSubmitForm === true);
+const canReviewForm = computed(() => analysisFormDto.value?.permissions?.canApprove === true
+  || analysisFormDto.value?.permissions?.canReturn === true);
 
 watch(workflow, (value) => {
   syncFromWorkflow(value, true);

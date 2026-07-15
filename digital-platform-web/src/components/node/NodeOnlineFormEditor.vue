@@ -1,16 +1,18 @@
 <template>
   <section v-if="form" ref="editorRoot" class="online-form-editor" aria-label="在线表单动作区">
-    <div class="project-workspace__detail-heading">
+    <div v-if="showFormContent" class="project-workspace__detail-heading">
         <h3>{{ form.documentName }}</h3>
     </div>
 
     <GeneratedFormFileCard
       :generated-file="generatedFile"
       :pending="downloadPending"
+      :button-text="downloadButtonText"
       @download="$emit('download-form')"
     />
     <slot name="generated-files" />
 
+    <template v-if="showFormContent">
     <el-alert v-if="blockingReasons.length" :title="`阻塞原因：${blockingReasons.join('；')}`" type="warning" show-icon
       :closable="false" />
 
@@ -256,6 +258,7 @@
         </el-button>
       </div>
     </el-form>
+    </template>
   </section>
 </template>
 
@@ -312,6 +315,14 @@ const props = defineProps({
   downloadPending: {
     type: Boolean,
     default: false
+  },
+  downloadButtonText: {
+    type: String,
+    default: '查看表单'
+  },
+  showFormContent: {
+    type: Boolean,
+    default: true
   },
   imageState: {
     type: Object,

@@ -1,6 +1,7 @@
 <template>
   <section class="solution-section" v-loading="loading">
-    <h4>报价单在线表单</h4>
+    <h4 v-if="showFormContent">报价单在线表单</h4>
+    <template v-if="showFormContent">
     <el-alert v-if="errorMessage" :title="errorMessage" type="error" show-icon :closable="false" />
     <el-form label-position="top" :disabled="!canEdit">
       <div class="quotation-meta-grid">
@@ -28,9 +29,10 @@
       <el-descriptions-item label="合计">{{ formData.totalAmount }}</el-descriptions-item>
       <el-descriptions-item label="大写">{{ formData.totalAmountUppercase }}</el-descriptions-item>
     </el-descriptions>
-    <SolutionGeneratedFile v-if="dto?.form?.generatedFile" :generated-file="dto.form.generatedFile"
+    </template>
+    <SolutionGeneratedFile v-if="showGeneratedFile && dto?.form?.generatedFile" :generated-file="dto.form.generatedFile"
       :pending="pendingAction === 'download'" @download="$emit('download')" />
-    <div class="action-row">
+    <div v-if="showFormContent" class="action-row">
       <el-button v-if="canEdit" :loading="pendingAction === 'save'" @click="$emit('save')">保存草稿</el-button>
       <el-button v-if="canSubmit" type="primary" :loading="pendingAction === 'submit'" @click="$emit('submit')">提交并生成 Word</el-button>
     </div>
@@ -43,7 +45,11 @@ import SolutionGeneratedFile from './SolutionGeneratedFile.vue';
 
 const props = defineProps({
   dto: { type: Object, default: null }, formData: { type: Object, required: true },
-  loading: Boolean, pendingAction: { type: String, default: '' }, errorMessage: { type: String, default: '' }
+  loading: Boolean,
+  pendingAction: { type: String, default: '' },
+  errorMessage: { type: String, default: '' },
+  showFormContent: { type: Boolean, default: true },
+  showGeneratedFile: { type: Boolean, default: true }
 });
 const emit = defineEmits(['save', 'submit', 'download', 'add-item', 'remove-item']);
 const canEdit = computed(() => props.dto?.permissions?.canEditQuotationForm === true);

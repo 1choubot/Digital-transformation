@@ -28,7 +28,7 @@
             :http-request="options => requestUpload(slot, options)">
             <el-button type="primary" :loading="isPending(`upload:${slot.slotKey}`)">上传/替换</el-button>
           </el-upload>
-          <el-button v-if="slot.currentFile && slot.permissions?.canDownload"
+          <el-button v-if="slot.currentFile && slot.permissions?.canDownload" type="primary"
             :loading="isPending(`download:${slot.slotKey}`)" @click="$emit('download', slot)">下载</el-button>
           <span v-if="!slot.permissions?.canUpload && !slot.permissions?.canDownload" class="inline-muted">当前无文件操作权限</span>
         </div>

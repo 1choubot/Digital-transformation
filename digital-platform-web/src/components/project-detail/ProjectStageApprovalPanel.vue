@@ -96,7 +96,7 @@
                 placeholder="填写阶段关口审批退回原因"
               />
             </label>
-            <el-button plain
+            <el-button type="warning" plain
               :disabled="isPending(stage, 'return')"
               @click="$emit('return', stage)"
             >

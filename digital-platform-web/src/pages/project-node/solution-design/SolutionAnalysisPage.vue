@@ -25,7 +25,10 @@
           :disabled="!analysisFormDto?.permissions?.canEditForm" @update="updateAnalysisFormField">
           <template #after-field="{ field }">
             <div v-if="field.imageField" :data-field-key="field.imageField.key" class="solution-form-field-images"
-              :class="{ 'online-form-field--invalid': isFieldInvalid(field.imageField.key) }">
+              :class="{
+                'online-form-field--invalid': isFieldInvalid(field.imageField.key),
+                'solution-form-field-images--full-row': field.imageField.fullRow
+              }">
               <div class="form-field-label">
                 <strong>{{ field.imageField.label }}</strong>
                 <small class="form-field-description">{{ field.imageField.description }}</small>

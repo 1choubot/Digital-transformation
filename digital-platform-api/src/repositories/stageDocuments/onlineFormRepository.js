@@ -407,30 +407,23 @@ const INITIATION_FORM_DEFINITIONS = Object.freeze({
     templateFileName: '项目立项审批表-模板.xlsx',
     sections: [
       {
-        key: 'approvalHeader',
-        title: '表头信息',
+        key: 'approvalBasicInfo',
+        title: '',
         editablePart: INITIATION_COLLABORATION_PART.BUSINESS,
         fields: [
-          { key: 'projectName', label: '项目名称', type: 'text', required: false, readOnly: true, autoFill: 'projectName' }
-        ]
-      },
-      {
-        key: 'customerBasicInfo',
-        title: '客户基本信息',
-        editablePart: INITIATION_COLLABORATION_PART.BUSINESS,
-        fields: [
+          { key: 'projectName', label: '项目名称', type: 'text', required: false, readOnly: true, autoFill: 'projectName' },
           { key: 'customerName', label: '客户名称', type: 'text', required: false, readOnly: true, autoFill: 'customerName' },
           { key: 'customerContactPerson', label: '项目联系人', type: 'text', required: false, readOnly: true, autoFill: 'customerContactPerson' },
-          { key: 'customerContact', label: '联系方式', type: 'text', required: false, readOnly: true, autoFill: 'customerContact' }
-        ]
-      },
-      {
-        key: 'projectBasicInfo',
-        title: '项目基本信息',
-        editablePart: INITIATION_COLLABORATION_PART.BUSINESS,
-        fields: [
+          { key: 'customerContact', label: '联系方式', type: 'text', required: false, readOnly: true, autoFill: 'customerContact' },
           { key: 'projectResponsiblePerson', label: '本公司商务负责人', type: 'text', required: false, readOnly: true, autoFill: 'businessResponsibleName' },
-          { key: 'projectResponsibleContact', label: '联系方式', type: 'text', required: false }
+          {
+            key: 'projectResponsibleContact',
+            label: '联系方式',
+            type: 'text',
+            required: false,
+            readOnly: false,
+            editablePart: INITIATION_COLLABORATION_PART.BUSINESS
+          }
         ]
       }
     ],

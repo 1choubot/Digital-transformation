@@ -28,7 +28,10 @@
         v-else
         :data-field-key="item.field.key"
         :label="`${item.field.label}${item.field.required ? ' *' : ''}`"
-        :class="{ 'solution-form-grid__wide': item.field.type === 'textarea' }"
+        :class="{
+          'solution-form-grid__wide': item.field.type === 'textarea',
+          'solution-form-field--emphasized': item.field.emphasized
+        }"
       >
         <el-date-picker
           v-if="item.field.type === 'date'"
@@ -47,6 +50,11 @@
           @update:model-value="update(item.field, $event)"
         />
       </el-form-item>
+      <slot
+        v-if="item.type !== 'threshold-group'"
+        name="after-field"
+        :field="item.field"
+      />
     </template>
   </el-form>
 </template>

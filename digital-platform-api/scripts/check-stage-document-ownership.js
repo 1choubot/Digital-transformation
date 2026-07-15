@@ -2197,20 +2197,20 @@ async function runInitiationReviewSmoke({
   assert.equal(initiationTemplateForm.schema.reviewOpinionSource, 'initiationReviewNodes');
   assert.deepEqual(
     initiationTemplateForm.schema.sections.map((section) => section.key),
-    ['approvalHeader', 'customerBasicInfo', 'projectBasicInfo']
+    ['approvalBasicInfo']
   );
   assert.deepEqual(
-    initiationTemplateForm.schema.sections.find((section) => section.key === 'approvalHeader').fields.map((field) => field.key),
-    ['projectName']
+    initiationTemplateForm.schema.sections[0].fields.map((field) => field.key),
+    [
+      'projectName',
+      'customerName',
+      'customerContactPerson',
+      'customerContact',
+      'projectResponsiblePerson',
+      'projectResponsibleContact'
+    ]
   );
-  assert.deepEqual(
-    initiationTemplateForm.schema.sections.find((section) => section.key === 'customerBasicInfo').fields.map((field) => field.key),
-    ['customerName', 'customerContactPerson', 'customerContact']
-  );
-  assert.deepEqual(
-    initiationTemplateForm.schema.sections.find((section) => section.key === 'projectBasicInfo').fields.map((field) => field.key),
-    ['projectResponsiblePerson', 'projectResponsibleContact']
-  );
+  assert.equal(initiationTemplateForm.schema.sections[0].title, '');
   assert.equal(
     initiationTemplateForm.schema.fields.some((field) => field.key === 'projectExecutionMode'),
     false

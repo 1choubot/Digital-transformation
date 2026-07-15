@@ -1,11 +1,12 @@
 const imageDescription = '最多 3 张 png/jpg/jpeg 图片，不支持附件、OLE、PDF 或文件平台归档。';
 
-function imageField(key, label) {
+function imageField(key, label, { fullRow = false } = {}) {
   return {
     key,
     label,
     maxImages: 3,
-    description: imageDescription
+    description: imageDescription,
+    fullRow
   };
 }
 
@@ -25,10 +26,10 @@ export const analysisSections = [
       { key: 'storageHumidityMin', label: '储存湿度最小值', description: '填写储存湿度下限，模板自动补充 %。' },
       { key: 'storageHumidityMax', label: '储存湿度最大值', description: '填写储存湿度上限，模板自动补充 %。' },
       { key: 'noiseLimitValue', label: '噪音上限', description: '只填写数值或文本值，模板固定 ≤ 和 dB。' },
-      { key: 'ipProtectionLevel', label: 'IP 防护等级', description: '只填写 IP 后面的等级值。' },
-      { key: 'antiCorrosionGrade', label: '防腐等级' },
+      { key: 'ipProtectionLevel', label: 'IP 防护等级', description: '只填写 IP 后面的等级值。', emphasized: true },
+      { key: 'antiCorrosionGrade', label: '防腐等级', emphasized: true },
       { key: 'altitudeLimitValue', label: '海拔高度上限', description: '只填写数值或文本值，模板固定 ≤ 和 m。' },
-      { key: 'explosionProofRequirement', label: '防爆要求', type: 'textarea', rows: 3 }
+      { key: 'explosionProofRequirement', label: '防爆要求', type: 'textarea', rows: 3, emphasized: true }
     ]
   },
   {
@@ -40,13 +41,14 @@ export const analysisSections = [
         label: '可用场地尺寸/场地情况说明',
         type: 'textarea',
         rows: 4,
+        emphasized: true,
         description: '填写可用场地尺寸和场地情况；如有图纸可在下方上传，生成项目方案分析表时按上传顺序嵌入。',
-        imageField: imageField('siteConditionImages', '可用场地尺寸/场地情况图片')
+        imageField: imageField('siteConditionImages', '可用场地尺寸/场地情况图片', { fullRow: true })
       },
-      { key: 'powerSupply', label: '电源' },
-      { key: 'airSupply', label: '气源' },
-      { key: 'hydraulicSource', label: '液压源' },
-      { key: 'liftingEquipment', label: '吊装设备', type: 'textarea', rows: 3 }
+      { key: 'powerSupply', label: '电源', emphasized: true },
+      { key: 'airSupply', label: '气源', emphasized: true },
+      { key: 'hydraulicSource', label: '液压源', emphasized: true },
+      { key: 'liftingEquipment', label: '吊装设备', type: 'textarea', rows: 3, emphasized: true }
     ]
   },
   {
@@ -59,6 +61,7 @@ export const analysisSections = [
         type: 'textarea',
         rows: 6,
         required: true,
+        emphasized: true,
         description: '填写工件外形尺寸、质量、材质、数量、图纸情况；如有图片可在下方上传并按顺序嵌入 Excel。',
         imageField: imageField('workpieceImages', '工件描述图片')
       }
@@ -74,6 +77,7 @@ export const analysisSections = [
         type: 'textarea',
         rows: 8,
         required: true,
+        emphasized: true,
         description: '填写做什么、怎么做和工艺文件情况；如有工艺图片可在下方上传并按顺序嵌入 Excel。',
         imageField: imageField('operationProcessImages', '作业工艺图片')
       }
@@ -89,6 +93,7 @@ export const analysisSections = [
         type: 'textarea',
         rows: 5,
         required: true,
+        emphasized: true,
         description: '填写自动化环节、节拍、人机交互模式、价格、工期；如有辅助图片可在下方上传并按顺序嵌入 Excel。',
         imageField: imageField('projectTargetImages', '目标图片')
       }

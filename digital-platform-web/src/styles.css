@@ -5949,6 +5949,11 @@ p {
   margin: 0;
   color: #17212f;
   font-size: 15px;
+  font-weight: 700;
+}
+
+.solution-form-field--emphasized .el-form-item__label {
+  font-weight: 700;
 }
 
 .solution-form-field-images {
@@ -5956,6 +5961,10 @@ p {
   gap: 10px;
   min-width: 0;
   padding-top: 2px;
+}
+
+.solution-form-field-images--full-row {
+  grid-column: 1 / -1;
 }
 
 .solution-node-page .image-row,

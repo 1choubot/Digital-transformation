@@ -2734,7 +2734,7 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 #### Scenario: 宽表格局部横向滚动
 - **WHEN** 节点内表格最小宽度超过节点业务卡片可用宽度
-- **THEN** 横向滚动 MUST 只出现在表格局部容器
+- **THEN** `1.2` 五列评分表的横向滚动 MUST 只出现在 `.online-form-score-table-wrap`
 - **AND** 表格 MUST NOT 撑宽节点卡片、项目工作区或主布局
 
 #### Scenario: 所有节点页面不超过父容器
@@ -2744,9 +2744,9 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **AND** 需要固定最小宽度的表格或复杂内容 MUST 在边界明确的局部横向滚动容器内展示
 
 #### Scenario: 窄屏恢复页面级纵向滚动
-- **WHEN** 视口宽度不超过 `900px`
+- **WHEN** 项目工作区容器实际宽度不超过 `760px`
 - **THEN** 项目工作区 MUST 恢复由主布局 `.app-main` 承担页面级纵向滚动
-- **AND** 节点业务卡片 MUST NOT 保留受限高度的嵌套纵向滚动
+- **AND** 节点业务卡片及其内容区 MUST 使用自然高度和 `overflow: visible`，不得保留受限高度的嵌套纵向滚动
 - **AND** 宽表格 MAY 继续使用局部横向滚动
 
 ### Requirement: C05 项目方案分析表前端字段

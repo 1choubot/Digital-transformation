@@ -67,10 +67,19 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#app {
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   min-width: 320px;
-  min-height: 100vh;
+  min-height: 100%;
   background:
     linear-gradient(180deg, var(--app-page-bg-soft) 0, var(--app-page-bg) 280px),
     var(--app-page-bg);
@@ -3770,39 +3779,6 @@ p {
     width: fit-content;
   }
 
-  .project-workspace__stage-nav {
-    position: static;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .project-workspace-shell {
-    display: block;
-  }
-
-  .project-process-sidebar.el-aside {
-    position: static;
-    width: 100% !important;
-    min-height: auto;
-    max-height: none;
-    overflow-y: visible;
-    overscroll-behavior: auto;
-    border-right: 0;
-    border-bottom: 1px solid #dcdfe6;
-  }
-
-  .project-workspace-main {
-    padding: 16px;
-  }
-
-  .project-process-tree {
-    position: static;
-  }
-
-  .project-workspace__node-grid,
-  .project-workspace__output-meta {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .approval-stage__badges {
     justify-content: flex-start;
   }
@@ -4405,7 +4381,8 @@ p {
 .app-shell {
   display: flex;
   flex-direction: column;
-  width: 100vw;
+  width: 100%;
+  max-width: 100%;
   height: 100vh;
   overflow: hidden;
   background: #f4f6f9;
@@ -4694,9 +4671,12 @@ p {
 }
 
 .app-shell .app-main--workspace {
+  container-type: inline-size;
+  container-name: project-workspace;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .app-shell .app-main::-webkit-scrollbar {
@@ -6629,11 +6609,9 @@ p {
     min-width: 0;
   }
 
-  .app-shell .app-main--workspace {
-    overflow-x: hidden;
-    overflow-y: auto;
-  }
+}
 
+@container project-workspace (max-width: 760px) {
   .project-workspace-screen,
   .project-workspace-shell,
   .project-workspace-main,
@@ -6641,32 +6619,53 @@ p {
   .project-node-card > .el-card__body {
     height: auto;
     max-height: none;
-    overflow-y: visible;
+    overflow: visible;
   }
 
   .project-workspace-screen {
     min-height: 100%;
-    overflow-x: hidden;
   }
 
   .project-workspace-shell {
-    overflow-x: hidden;
+    display: block;
+  }
+
+  .project-process-sidebar.el-aside,
+  .project-workspace-shell > .project-process-sidebar {
+    position: static;
+    width: 100% !important;
+    height: auto;
+    min-height: auto;
+    max-height: none;
+    overflow: visible;
+    overscroll-behavior: auto;
+    border-right: 0;
+    border-bottom: 1px solid #dcdfe6;
   }
 
   .project-workspace-main {
     width: 100%;
     grid-template-rows: auto;
     align-content: start;
-    overflow-x: hidden;
+    padding: 16px;
   }
 
-  .project-workspace-shell > .project-process-sidebar {
-    height: auto;
-    max-height: none;
+  .project-process-tree,
+  .project-workspace__stage-nav {
+    position: static;
+  }
+
+  .project-workspace__stage-nav,
+  .project-workspace__node-grid,
+  .project-workspace__output-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .project-node-card > .el-card__body {
-    overflow-x: hidden;
     overscroll-behavior: auto;
+  }
+
+  .project-node-card > .el-card__body > * {
+    overflow: visible;
   }
 }

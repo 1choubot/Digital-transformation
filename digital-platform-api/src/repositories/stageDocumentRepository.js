@@ -17,7 +17,10 @@ export {
   listMyStageDocumentTasks,
   normalizeStageDocumentTaskFilters
 } from './stageDocuments/taskRepository.js';
-export { getMyWorkbench } from './stageDocuments/workbenchRepository.js';
+export {
+  getMyPendingProjectSummary,
+  getMyWorkbench
+} from './stageDocuments/workbenchRepository.js';
 export { updateProjectStageDocumentResponsibleUser } from './stageDocuments/responsibilityRepository.js';
 export {
   completeProjectStageDocumentRevision,
@@ -47,6 +50,7 @@ export {
   returnInitiationReviewNode
 } from './stageDocuments/initiationReviewRepository.js';
 export {
+  generateStageDocumentOnlineFormFile,
   getStageDocumentGeneratedFileDownload,
   getStageDocumentGeneratedFileStatus,
   StageDocumentGeneratedFileError,

@@ -8,7 +8,7 @@
     <section v-else-if="errorMessage" class="state-panel state-panel--error">
       <h3>{{ notFound ? '项目不存在' : '项目详情加载失败' }}</h3>
       <p>{{ errorMessage }}</p>
-      <button type="button" class="primary-button" @click="navigate('/projects')">返回项目总览</button>
+      <el-button type="primary" @click="navigate('/projects')">返回项目总览</el-button>
     </section>
 
     <el-container v-else-if="detail" class="project-workspace-shell">
@@ -39,28 +39,8 @@
         <template v-else-if="workspace">
           <el-card class="project-node-card" shadow="never">
 
-            <ProjectSolutionDesignWorkflowPanel
-              v-if="isActiveSolutionWorkspaceStage"
-              ref="solutionDesignPanelRef"
-              :project-id="projectId"
-              :auth-token="authToken"
-              :current-user="currentUser"
-              :project="detail.project"
-              :workflow="solutionDesignWorkflow"
-              :uploads="solutionDesignUploads"
-              :loading="solutionDesignWorkflowLoading || solutionDesignUploadsLoading"
-              :error-message="solutionDesignWorkflowErrorMessage || solutionDesignUploadsErrorMessage"
-              :responsibility-candidates="responsibilityCandidates"
-              :responsibility-candidates-loading="responsibilityCandidatesLoading"
-              :responsibility-candidates-error-message="responsibilityCandidatesErrorMessage"
-              :selected-node-key="selectedWorkspaceNodeKey"
-              :focus-node-key="focusNodeKey"
-              hide-node-nav
-              @changed="refreshSolutionDesignState"
-            />
-
             <NodePageRouter
-              v-else
+              ref="nodePageRouterRef"
               :project-id="projectId"
               :auth-token="authToken"
               :current-user="currentUser"
@@ -74,23 +54,6 @@
             />
           </el-card>
 
-          <section
-            v-if="actionMessage"
-            class="state-panel state-panel--inline state-panel--success"
-            role="status"
-            aria-live="polite"
-          >
-            <p>{{ actionMessage }}</p>
-          </section>
-
-          <section
-            v-if="actionErrorMessage"
-            class="state-panel state-panel--inline state-panel--error"
-            role="alert"
-          >
-            <p>{{ actionErrorMessage }}</p>
-          </section>
-
         </template>
       </el-main>
     </el-container>
@@ -99,6 +62,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { ElMessage } from 'element-plus';
 import {
   approveInitiationReviewNode,
   confirmStageDocument,
@@ -115,7 +79,6 @@ import {
   // workspace API 不包含完整文档详情。删除其 UI 渲染，保留数据调用。
   getProjectStageDocumentChecklist,
   getProjectWorkspace,
-  getSolutionDesignWorkflow,
   getStageDocumentOnlineForm,
   listStageDocumentAttachments,
   listSolutionDesignUploads,
@@ -133,9 +96,8 @@ import {
 } from '../../api/projects.js';
 import { getProjectNavigation } from '../../api/navigation.js';
 import { listResponsibilityCandidates } from '../../api/users.js';
-import NodePageRouter from '../project-node/NodePageRouter.vue';
+import NodePageRouter from '../project-node/project-approval/NodePageRouter.vue';
 import ProjectProcessTree from '../../components/project-workspace/ProjectProcessTree.vue';
-import ProjectSolutionDesignWorkflowPanel from '../../components/project-workspace/ProjectSolutionDesignWorkflowPanel.vue';
 import {
   actionKey,
   getCompletionMode,
@@ -201,7 +163,7 @@ const solutionDesignWorkflow = ref(null);
 const solutionDesignUploadsLoading = ref(false);
 const solutionDesignUploadsErrorMessage = ref('');
 const solutionDesignUploads = ref(null);
-const solutionDesignPanelRef = ref(null);
+const nodePageRouterRef = ref(null);
 const selectedWorkspaceStageKey = ref('');
 const selectedWorkspaceNodeKey = ref('');
 const lastAppliedWorkspaceRouteKey = ref('');
@@ -224,6 +186,8 @@ const responsibilityCandidates = ref([]);
 /* ── 工作区操作消息状态 ── */
 const actionMessage = ref('');
 const actionErrorMessage = ref('');
+watch(actionMessage, (value) => { if (value) ElMessage.success(value); });
+watch(actionErrorMessage, (value) => { if (value) ElMessage.error(value); });
 const pendingAction = ref('');
 
 /* ── 文档操作临时状态 ── */
@@ -518,6 +482,12 @@ const nodePageContext = computed(() => ({
   responsibilityCandidates: visibleResponsibilityCandidates.value,
   responsibilityCandidatesLoading: responsibilityCandidatesLoading.value,
   responsibilityCandidatesErrorMessage: responsibilityCandidatesErrorMessage.value,
+  // 方案设计角色分配沿用拆分前的完整候选列表；不能复用其他节点的部门过滤视图。
+  solutionDesignResponsibilityCandidates: responsibilityCandidates.value,
+  solutionDesignWorkflow: solutionDesignWorkflow.value,
+  solutionDesignUploads: solutionDesignUploads.value,
+  solutionDesignLoading: solutionDesignWorkflowLoading.value || solutionDesignUploadsLoading.value,
+  solutionDesignErrorMessage: solutionDesignWorkflowErrorMessage.value || solutionDesignUploadsErrorMessage.value,
   responsibilitySelections,
   returnReasons,
   notApplicableReasons,
@@ -549,6 +519,7 @@ const nodePageContext = computed(() => ({
   downloadOnlineFormImage,
   deleteOnlineFormImage,
   downloadGeneratedFile,
+  refreshSolutionDesignState,
   handleBusinessStateChanged
 }));
 /* ── 导航状态格式化 ── */
@@ -1120,7 +1091,6 @@ async function refreshProjectWorkspaceState(options = {}) {
     loadChecklist(workspaceOptions),
     loadWorkspace(workspaceOptions),
     loadProjectNavigation(),
-    loadSolutionDesignWorkflow(),
     loadSolutionDesignUploads()
   ]);
 
@@ -1163,8 +1133,8 @@ async function focusSolutionDesignPanelFromRoute() {
   }
 
   await nextTick();
-  const panelElement = solutionDesignPanelRef.value?.$el || solutionDesignPanelRef.value;
-  panelElement?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  const nodePageElement = nodePageRouterRef.value?.$el || nodePageRouterRef.value;
+  nodePageElement?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
 }
 
 function syncSolutionWorkspaceFocusNodeFromRoute() {
@@ -1794,12 +1764,16 @@ async function loadWorkspace(options = {}) {
   const previousStageKey = selectedWorkspaceStageKey.value;
   const previousNodeKey = selectedWorkspaceNodeKey.value;
   workspaceLoading.value = true;
+  solutionDesignWorkflowLoading.value = true;
   workspaceErrorMessage.value = '';
+  solutionDesignWorkflowErrorMessage.value = '';
   workspace.value = null;
+  solutionDesignWorkflow.value = null;
   clearWorkspaceOnlineForm(options);
 
   try {
     workspace.value = await getProjectWorkspace(props.projectId, props.authToken);
+    solutionDesignWorkflow.value = workspace.value?.solutionDesignWorkflow || null;
     if (
       options.preserveSelection &&
       !hasWorkspaceRouteFocus() &&
@@ -1811,8 +1785,10 @@ async function loadWorkspace(options = {}) {
     selectWorkspaceTargetFromRoute(options);
   } catch (error) {
     workspaceErrorMessage.value = toReadableApiError(error);
+    solutionDesignWorkflowErrorMessage.value = workspaceErrorMessage.value;
   } finally {
     workspaceLoading.value = false;
+    solutionDesignWorkflowLoading.value = false;
   }
 }
 
@@ -1827,20 +1803,6 @@ async function loadProjectNavigation() {
     projectNavigationErrorMessage.value = toReadableApiError(error);
   } finally {
     projectNavigationLoading.value = false;
-  }
-}
-
-async function loadSolutionDesignWorkflow() {
-  solutionDesignWorkflowLoading.value = true;
-  solutionDesignWorkflowErrorMessage.value = '';
-
-  try {
-    solutionDesignWorkflow.value = await getSolutionDesignWorkflow(props.projectId, props.authToken);
-  } catch (error) {
-    solutionDesignWorkflowErrorMessage.value = toReadableApiError(error);
-    solutionDesignWorkflow.value = null;
-  } finally {
-    solutionDesignWorkflowLoading.value = false;
   }
 }
 
@@ -1879,9 +1841,9 @@ async function openOnlineForm(output) {
   }
 }
 
-async function saveOnlineForm() {
+async function saveOnlineForm(options = {}) {
   if (!activeOnlineForm.value) {
-    return;
+    return false;
   }
 
   onlineFormSaving.value = true;
@@ -1896,18 +1858,24 @@ async function saveOnlineForm() {
     );
     activeOnlineForm.value = response.form || response;
     syncOnlineFormData(activeOnlineForm.value);
-    actionMessage.value = '在线表单草稿已保存。';
-    await refreshProjectWorkspaceState({ preserveOnlineFormState: true });
+    if (options.showMessage !== false) {
+      actionMessage.value = '在线表单草稿已保存。';
+    }
+    if (options.refreshWorkspace !== false) {
+      await refreshProjectWorkspaceState({ preserveOnlineFormState: true });
+    }
+    return true;
   } catch (error) {
     onlineFormErrorMessage.value = toReadableApiError(error);
+    return false;
   } finally {
     onlineFormSaving.value = false;
   }
 }
 
-async function submitOnlineForm() {
+async function submitOnlineForm(options = {}) {
   if (!activeOnlineForm.value) {
-    return;
+    return false;
   }
 
   onlineFormSubmitting.value = true;
@@ -1923,9 +1891,13 @@ async function submitOnlineForm() {
     activeOnlineForm.value = response.form || response;
     syncOnlineFormData(activeOnlineForm.value);
     actionMessage.value = '在线表单已提交。';
-    await refreshProjectWorkspaceState({ preserveOnlineFormState: true });
+    if (options.refreshWorkspace !== false) {
+      await refreshProjectWorkspaceState({ preserveOnlineFormState: true });
+    }
+    return true;
   } catch (error) {
     onlineFormErrorMessage.value = toReadableApiError(error);
+    return false;
   } finally {
     onlineFormSubmitting.value = false;
   }
@@ -1982,7 +1954,6 @@ async function loadDetail() {
       loadChecklist(),
       loadWorkspace(),
       loadProjectNavigation(),
-      loadSolutionDesignWorkflow(),
       loadSolutionDesignUploads(),
       loadResponsibilityCandidates()
     ]);

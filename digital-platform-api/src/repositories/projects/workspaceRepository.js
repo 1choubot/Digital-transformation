@@ -221,6 +221,28 @@ function buildWorkspaceNode(moduleConfig, documentsByCode, generatedFilesByDocum
   };
 }
 
+function resolveAutomaticProcessNodeStatuses(nodes) {
+  return nodes.map((node, index) => {
+    if (node.nodeStatus !== 'process_node') {
+      return node;
+    }
+
+    // 过程节点没有人工提交动作，数据由系统派生。正常情况下视为已完成；
+    // 如果流程退回到了它之前的节点，则跟随前置返工状态，等待前置节点重新通过。
+    const blockedByPreviousRework = nodes
+      .slice(0, index)
+      .some((previousNode) => ['returned_for_rework', 'blocked_by_rework'].includes(previousNode.nodeStatus));
+
+    return {
+      ...node,
+      nodeStatus: blockedByPreviousRework ? 'returned_for_rework' : 'completed',
+      blockingReasons: blockedByPreviousRework
+        ? [...new Set([...(node.blockingReasons || []), '前置节点被退回，系统生成数据等待重新生成'])]
+        : node.blockingReasons
+    };
+  });
+}
+
 function buildSolutionDesignWorkflowWorkspaceNodes(solutionDesignWorkflow) {
   const workflowNodeByKey = new Map(
     (solutionDesignWorkflow?.nodes || []).map((node) => [node.nodeKey, node])
@@ -276,6 +298,7 @@ function buildWorkspaceStage(
         .map((moduleConfig) =>
           buildWorkspaceNode(moduleConfig, documentsByCode, generatedFilesByDocumentId, project)
         );
+  const resolvedNodes = isSolutionDesignStage ? nodes : resolveAutomaticProcessNodeStatuses(nodes);
 
   return {
     templateVersion: V20260629_TARGET_TEMPLATE_VERSION,
@@ -289,7 +312,7 @@ function buildWorkspaceStage(
     placeholderStatus: null,
     placeholderText: '',
     legacyChecklistAvailable: documents.length > 0,
-    nodes
+    nodes: resolvedNodes
   };
 }
 
@@ -327,6 +350,7 @@ export async function getProjectWorkspace(projectId, user) {
   return {
     project: detail.project,
     currentStage: detail.currentStage,
+    solutionDesignWorkflow,
     templateVersion: runtimeTemplateVersion,
     targetTemplateVersion: V20260629_TARGET_TEMPLATE_VERSION,
     targetTemplate: {

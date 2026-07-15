@@ -231,6 +231,11 @@ export const SOLUTION_DESIGN_ANALYSIS_FORM_DEFINITION = {
   formName: '项目方案分析表',
   templateName: '项目方案分析表-模板.xlsx',
   generatedFileNamePrefix: '项目方案分析表',
+  requiredFieldKeys: Object.freeze([
+    'workpieceDescription',
+    'operationProcessDescription',
+    'projectTargetDescription'
+  ]),
   templateMappings: [
     solutionTemplateCell('B2', 'project.projectCode', '项目编号'),
     solutionTemplateCell('E2', 'project.projectName', '项目名称', true),
@@ -482,6 +487,7 @@ export const SOLUTION_DESIGN_REVIEW_FORM_DEFINITIONS = [
     formName: '方案评审记录表（内部方案评审）',
     templateName: '方案评审记录表-模板.xlsx',
     generatedFileNamePrefix: '方案评审记录表-内部方案评审',
+    requiredFieldKeys: Object.freeze(['meetingDate', 'actionItems', 'reviewConclusion']),
     templateMappings: [
       { target: 'A2', value: '项目名称', label: '项目名称标签' },
       { target: 'B2', source: 'project.projectName', label: '项目名称', required: true },
@@ -546,6 +552,7 @@ export const SOLUTION_DESIGN_REVIEW_FORM_DEFINITIONS = [
     formName: '方案评审记录表（客户方案评审）',
     templateName: '方案评审记录表-模板.xlsx',
     generatedFileNamePrefix: '方案评审记录表-客户方案评审',
+    requiredFieldKeys: Object.freeze(['meetingDate', 'actionItems', 'reviewConclusion']),
     templateMappings: [
       { target: 'A2', value: '项目名称', label: '项目名称标签' },
       { target: 'B2', source: 'project.projectName', label: '项目名称', required: true },
@@ -619,6 +626,7 @@ export const SOLUTION_DESIGN_ERROR = {
   CONFIDENTIAL_FILE_FORBIDDEN: 'SOLUTION_DESIGN_CONFIDENTIAL_FILE_FORBIDDEN',
   INVALID_ANALYSIS_FORM: 'SOLUTION_DESIGN_INVALID_ANALYSIS_FORM',
   INVALID_REVIEW_FORM: 'SOLUTION_DESIGN_INVALID_REVIEW_FORM',
+  FORM_REQUIRED_FIELDS_MISSING: 'SOLUTION_DESIGN_FORM_REQUIRED_FIELDS_MISSING',
   INVALID_QUOTATION_FORM: 'SOLUTION_DESIGN_INVALID_QUOTATION_FORM',
   GENERATED_FILE_NOT_FOUND: 'SOLUTION_DESIGN_GENERATED_FILE_NOT_FOUND',
   GENERATED_FILE_MISSING: 'SOLUTION_DESIGN_GENERATED_FILE_MISSING',

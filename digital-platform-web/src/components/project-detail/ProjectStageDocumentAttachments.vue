@@ -7,14 +7,16 @@
 
     <div v-if="canViewAttachments && !readOnly" class="stage-document-attachment-upload">
       <template v-if="isApplicable(document) && canUploadAttachment">
-        <label class="ghost-button stage-document-attachment-upload__button">
-          <span>{{ state.uploadPending ? '上传中...' : '上传附件' }}</span>
-          <input
-            type="file"
-            :disabled="state.uploadPending"
-            @change="handleFileSelected"
-          />
-        </label>
+        <el-upload
+          class="stage-document-attachment-upload__button"
+          :show-file-list="false"
+          :disabled="state.uploadPending"
+          :http-request="handleUploadRequest"
+        >
+          <el-button type="primary" :loading="state.uploadPending" :disabled="state.uploadPending">
+            上传附件
+          </el-button>
+        </el-upload>
         <span class="inline-muted">单文件 50MB 以内，0 字节文件会被拒绝。</span>
       </template>
       <template v-else-if="isOnlineFormOnlyDocument">
@@ -62,24 +64,20 @@
           </span>
         </div>
         <div v-if="!readOnly" class="stage-document-attachment-item__actions">
-          <button
-            v-if="canDownloadAttachment(attachment)"
-            type="button"
-            class="ghost-button"
+          <el-button
+            v-if="canDownloadAttachment(attachment)" plain
             :disabled="state.downloadPendingId === attachment.id"
             @click="$emit('download', { document, attachment })"
           >
             {{ state.downloadPendingId === attachment.id ? '下载中...' : '下载' }}
-          </button>
-          <button
-            v-if="canDeleteAttachment(attachment)"
-            type="button"
-            class="ghost-button"
+          </el-button>
+          <el-button
+            v-if="canDeleteAttachment(attachment)" plain
             :disabled="state.deletePendingId === attachment.id"
             @click="$emit('delete', { document, attachment })"
           >
             {{ state.deletePendingId === attachment.id ? '删除中...' : '删除' }}
-          </button>
+          </el-button>
         </div>
       </li>
     </ul>
@@ -116,18 +114,16 @@ const props = defineProps({
   }
 });
 
-function handleFileSelected(event) {
-  const file = event.target.files?.[0] || null;
-  event.target.value = '';
-
+function handleUploadRequest({ file }) {
   if (!file) {
-    return;
+    return Promise.resolve();
   }
 
   emit('upload', {
     document: props.document,
     file
   });
+  return Promise.resolve();
 }
 
 const permissions = computed(() => props.document.permissions || {});

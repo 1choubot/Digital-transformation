@@ -55,7 +55,9 @@ export const STAGE_DOCUMENT_GENERATED_FILE_ERROR = Object.freeze({
   INVALID_STAGE_DOCUMENT_ID: 'INVALID_STAGE_DOCUMENT_ID',
   FILE_NOT_FOUND: 'GENERATED_FILE_NOT_FOUND',
   FILE_MISSING: 'GENERATED_FILE_MISSING',
-  FORBIDDEN_OPERATION: 'FORBIDDEN_OPERATION'
+  FORBIDDEN_OPERATION: 'FORBIDDEN_OPERATION',
+  TEMPLATE_NOT_AVAILABLE: 'GENERATED_FILE_TEMPLATE_NOT_AVAILABLE',
+  GENERATION_FAILED: 'GENERATED_FILE_GENERATION_FAILED'
 });
 
 export class StageDocumentGeneratedFileError extends Error {
@@ -1011,7 +1013,8 @@ export async function generateInitiationTemplateFile({
   user
 }) {
   const manifest = getInitiationTemplateManifest(documentCode);
-  if (!manifest || manifest.triggerEvent !== triggerEvent) {
+  const allowedTriggerEvents = new Set([manifest?.triggerEvent, ...(manifest?.manualTriggerEvents || [])].filter(Boolean));
+  if (!manifest || !allowedTriggerEvents.has(triggerEvent)) {
     return null;
   }
 
@@ -1233,6 +1236,43 @@ export async function getStageDocumentGeneratedFileStatus({ projectId, documentI
     return {
       generatedFile: row ? mapGeneratedFile(row, { downloadableRow }) : null
     };
+  } finally {
+    connection.release();
+  }
+}
+
+export async function generateStageDocumentOnlineFormFile({ projectId, documentId, user }) {
+  const connection = await pool.getConnection();
+  try {
+    const { document } = await assertCanViewGeneratedFile({ executor: connection, projectId, documentId, user });
+    const documentCode = String(document.document_code ?? document.documentCode ?? '');
+    const generatedFile = await generateInitiationTemplateFile({
+      projectId,
+      documentId,
+      documentCode,
+      triggerEvent: INITIATION_TEMPLATE_TRIGGER_EVENT.ONLINE_FORM_DOWNLOAD_REQUESTED,
+      user
+    });
+
+    if (!generatedFile) {
+      throw new StageDocumentGeneratedFileError(
+        STAGE_DOCUMENT_GENERATED_FILE_ERROR.TEMPLATE_NOT_AVAILABLE,
+        'Generated file template is not available for this online form',
+        404,
+        ['documentId']
+      );
+    }
+
+    if (generatedFile.status !== GENERATED_FILE_STATUS.GENERATED) {
+      throw new StageDocumentGeneratedFileError(
+        STAGE_DOCUMENT_GENERATED_FILE_ERROR.GENERATION_FAILED,
+        generatedFile.failureSummary || 'Generated file creation failed',
+        409,
+        ['documentId']
+      );
+    }
+
+    return { generatedFile };
   } finally {
     connection.release();
   }

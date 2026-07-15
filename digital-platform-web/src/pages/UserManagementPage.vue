@@ -7,14 +7,11 @@
       subtitle="维护数字化平台账号、组织角色和基础状态；不代表文件平台权限。"
     >
       <template #actions>
-        <button type="button" class="ghost-button" @click="navigate('/projects')">返回项目总览</button>
+        <el-button @click="navigate('/projects')">返回项目总览</el-button>
       </template>
     </PageHeader>
 
-    <section v-if="!canAccessUserManagement" class="state-panel state-panel--error">
-      <h3>无权限访问</h3>
-      <p>用户管理仅平台管理员可进入。该入口只保护用户管理本身，不代表项目、资料或文件权限。</p>
-    </section>
+    <el-alert v-if="!canAccessUserManagement" title="无权限访问" description="用户管理仅平台管理员可进入。该入口只保护用户管理本身，不代表项目、资料或文件权限。" type="error" show-icon :closable="false" />
 
     <template v-else>
       <section class="panel">
@@ -23,25 +20,16 @@
             <strong>用户列表</strong>
             <span>展示数字化平台用户，不读取或同步文件管理平台用户。</span>
           </div>
-          <button type="button" class="ghost-button" :disabled="loading" @click="loadUsers">
-            {{ loading ? '加载中...' : '重新加载' }}
-          </button>
+          <el-button :loading="loading" @click="loadUsers">重新加载</el-button>
         </div>
 
-        <div v-if="loading" class="state-panel state-panel--inline">
-          <p>正在加载用户列表...</p>
-        </div>
+        <el-skeleton v-if="loading" :rows="5" animated />
 
-        <div v-else-if="errorMessage" class="state-panel state-panel--error">
-          <h3>用户列表加载失败</h3>
-          <p>{{ errorMessage }}</p>
-          <button type="button" class="primary-button" @click="loadUsers">重试</button>
-        </div>
+        <el-alert v-else-if="errorMessage" title="用户列表加载失败" :description="errorMessage" type="error" show-icon :closable="false">
+          <template #default><el-button type="primary" size="small" @click="loadUsers">重试</el-button></template>
+        </el-alert>
 
-        <div v-else-if="users.length === 0" class="state-panel state-panel--inline">
-          <h3>暂无用户</h3>
-          <p>请先新增数字化平台用户。</p>
-        </div>
+        <el-empty v-else-if="users.length === 0" description="请先新增数字化平台用户。" />
 
         <div v-else class="user-table">
           <div class="user-table__head">
@@ -62,125 +50,101 @@
             <span>{{ formatOrganizationRole(user.organizationRole) }}</span>
             <span>{{ formatBusinessDepartment(user.department) }}</span>
             <span>{{ user.role }}</span>
-            <span>{{ user.isEnabled ? '启用' : '禁用' }}</span>
-            <span>{{ user.isPlatformAdmin ? '是' : '否' }}</span>
+            <el-tag :type="user.isEnabled ? 'success' : 'info'">{{ user.isEnabled ? '启用' : '禁用' }}</el-tag>
+            <el-tag :type="user.isPlatformAdmin ? 'primary' : 'info'">{{ user.isPlatformAdmin ? '是' : '否' }}</el-tag>
             <span class="mono">{{ user.filePlatformUserId || '-' }}</span>
             <div class="user-row-actions">
-              <button type="button" class="ghost-button" @click="startEdit(user)">编辑</button>
-              <button
-                type="button"
-                class="ghost-button"
+              <el-button link type="primary" @click="startEdit(user)">编辑</el-button>
+              <el-button
+                link
+                :type="user.isEnabled ? 'danger' : 'success'"
+                :loading="isActionPending(user.id, user.isEnabled ? 'disable' : 'enable')"
                 :disabled="isActionPending(user.id, user.isEnabled ? 'disable' : 'enable')"
                 @click="toggleEnabled(user)"
               >
                 {{ user.isEnabled ? '禁用' : '启用' }}
-              </button>
+              </el-button>
               <div class="user-password-reset">
-                <input
+                <el-input
                   v-model="resetPasswords[user.id]"
                   type="password"
+                  show-password
                   autocomplete="new-password"
                   placeholder="新密码"
                   :disabled="isActionPending(user.id, 'reset-password')"
                 />
-                <button
-                  type="button"
-                  class="ghost-button"
-                  :disabled="isActionPending(user.id, 'reset-password')"
+                <el-button
+                  :loading="isActionPending(user.id, 'reset-password')"
                   @click="resetPassword(user)"
                 >
                   重置密码
-                </button>
+                </el-button>
               </div>
             </div>
           </article>
         </div>
       </section>
 
-      <form class="panel form-grid" @submit.prevent="saveUser">
+      <el-form class="panel form-grid" :model="form" @submit.prevent="saveUser">
         <div class="form-grid__wide user-form-heading">
           <div>
             <span class="section-eyebrow">{{ editingUser ? '编辑用户' : '新增用户' }}</span>
             <h3>{{ editingUser ? editingUser.account : '新增数字化平台用户' }}</h3>
           </div>
-          <button v-if="editingUser" type="button" class="ghost-button" @click="resetForm">取消编辑</button>
+          <el-button v-if="editingUser" @click="resetForm">取消编辑</el-button>
         </div>
 
         <label>
           <span>账号</span>
-          <input v-model.trim="form.account" type="text" autocomplete="off" :disabled="Boolean(editingUser)" />
+          <el-input v-model.trim="form.account" autocomplete="off" :disabled="Boolean(editingUser)" />
         </label>
         <label>
           <span>姓名</span>
-          <input v-model.trim="form.displayName" type="text" autocomplete="off" />
+          <el-input v-model.trim="form.displayName" autocomplete="off" />
         </label>
         <label>
           <span>组织角色</span>
-          <select v-model="form.organizationRole" @change="handleOrganizationRoleChange">
-            <option value="">请选择组织角色</option>
-            <option v-for="option in organizationRoleOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
+          <el-select v-model="form.organizationRole" placeholder="请选择组织角色" @change="handleOrganizationRoleChange">
+            <el-option v-for="option in organizationRoleOptions" :key="option.value" :label="option.label" :value="option.value" />
+          </el-select>
         </label>
         <label>
           <span>部门</span>
-          <select
+          <el-select
             v-model="form.department"
             :disabled="isGlobalOrganizationRole(form.organizationRole)"
+            :placeholder="isGlobalOrganizationRole(form.organizationRole) ? '全局角色无部门' : '请选择部门'"
           >
-            <option value="">{{ isGlobalOrganizationRole(form.organizationRole) ? '全局角色无部门' : '请选择部门' }}</option>
-            <option v-for="option in departmentOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
+            <el-option v-for="option in departmentOptions" :key="option.value" :label="option.label" :value="option.value" />
+          </el-select>
         </label>
         <label>
           <span>岗位/职务</span>
-          <input v-model.trim="form.role" type="text" autocomplete="off" />
+          <el-input v-model.trim="form.role" autocomplete="off" />
         </label>
         <label v-if="!editingUser">
           <span>初始密码</span>
-          <input v-model="form.password" type="password" autocomplete="new-password" />
+          <el-input v-model="form.password" type="password" show-password autocomplete="new-password" />
         </label>
         <label>
           <span>文件平台用户ID</span>
-          <input v-model.trim="form.filePlatformUserId" type="text" autocomplete="off" />
+          <el-input v-model.trim="form.filePlatformUserId" autocomplete="off" />
         </label>
-        <label class="user-checkbox">
-          <input v-model="form.isEnabled" type="checkbox" />
-          <span>启用用户</span>
-        </label>
-        <label class="user-checkbox">
-          <input
-            v-model="form.isPlatformAdmin"
-            type="checkbox"
-            :disabled="form.organizationRole !== 'system_admin'"
-          />
-          <span>平台管理员</span>
-        </label>
-
-        <div v-if="clientError || operationError" class="state-panel state-panel--error form-grid__wide">
-          <p>{{ clientError || operationError }}</p>
-        </div>
-
-        <div v-if="successMessage" class="state-panel state-panel--success form-grid__wide">
-          <p>{{ successMessage }}</p>
-        </div>
+        <el-checkbox v-model="form.isEnabled">启用用户</el-checkbox>
+        <el-checkbox v-model="form.isPlatformAdmin" :disabled="form.organizationRole !== 'system_admin'">平台管理员</el-checkbox>
 
         <div class="form-actions form-grid__wide">
-          <button type="button" class="ghost-button" @click="resetForm">清空</button>
-          <button type="submit" class="primary-button" :disabled="saving">
-            {{ saving ? '保存中...' : editingUser ? '保存修改' : '新增用户' }}
-          </button>
+          <el-button @click="resetForm">清空</el-button>
+          <el-button type="primary" native-type="submit" :loading="saving">{{ editingUser ? '保存修改' : '新增用户' }}</el-button>
         </div>
-      </form>
+      </el-form>
     </template>
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   createUser,
   disableUser,
@@ -217,9 +181,6 @@ const users = ref([]);
 const loading = ref(false);
 const saving = ref(false);
 const errorMessage = ref('');
-const operationError = ref('');
-const clientError = ref('');
-const successMessage = ref('');
 const editingUser = ref(null);
 const pendingAction = ref('');
 const resetPasswords = reactive({});
@@ -290,18 +251,12 @@ function isActionPending(userId, action) {
   return pendingAction.value === buildPendingKey(userId, action);
 }
 
-function clearMessages() {
-  clientError.value = '';
-  operationError.value = '';
-  successMessage.value = '';
-}
-
 function handleRequestError(error) {
   const message = toReadableApiError(error);
-  operationError.value = message;
-
   if (error.code === 'UNAUTHENTICATED') {
     emit('auth-expired', message);
+  } else {
+    ElMessage.error(message);
   }
 }
 
@@ -325,7 +280,7 @@ async function loadUsers() {
   }
 }
 
-function resetForm({ keepMessage = false } = {}) {
+function resetForm() {
   editingUser.value = null;
   form.account = '';
   form.displayName = '';
@@ -336,9 +291,6 @@ function resetForm({ keepMessage = false } = {}) {
   form.isEnabled = true;
   form.isPlatformAdmin = false;
   form.filePlatformUserId = '';
-  if (!keepMessage) {
-    clearMessages();
-  }
 }
 
 function startEdit(user) {
@@ -352,7 +304,6 @@ function startEdit(user) {
   form.isEnabled = Boolean(user.isEnabled);
   form.isPlatformAdmin = Boolean(user.isPlatformAdmin);
   form.filePlatformUserId = user.filePlatformUserId || '';
-  clearMessages();
 }
 
 function validateForm() {
@@ -365,21 +316,20 @@ function validateForm() {
   if (!editingUser.value && !form.password) missing.push('初始密码');
 
   if (missing.length > 0) {
-    clientError.value = `请补充：${missing.join('、')}`;
+    ElMessage.error(`请补充：${missing.join('、')}`);
     return false;
   }
 
   if (isGlobalOrganizationRole(form.organizationRole) && form.department) {
-    clientError.value = '总经理、系统管理员、总经理助理不隶属于四个业务部门。';
+    ElMessage.error('总经理、系统管理员、总经理助理不隶属于四个业务部门。');
     return false;
   }
 
   if (form.organizationRole === 'system_admin' && !form.isPlatformAdmin) {
-    clientError.value = '系统管理员必须同时具备平台管理员权限。';
+    ElMessage.error('系统管理员必须同时具备平台管理员权限。');
     return false;
   }
 
-  clientError.value = '';
   return true;
 }
 
@@ -396,7 +346,6 @@ function buildBasePayload() {
 }
 
 async function saveUser() {
-  clearMessages();
 
   if (!validateForm()) {
     return;
@@ -407,7 +356,7 @@ async function saveUser() {
   try {
     if (editingUser.value) {
       await updateUser(editingUser.value.id, buildBasePayload(), props.authToken);
-      successMessage.value = '用户基础信息已保存。';
+      ElMessage.success('用户基础信息已保存。');
     } else {
       await createUser(
         {
@@ -417,8 +366,8 @@ async function saveUser() {
         },
         props.authToken
       );
-      resetForm({ keepMessage: true });
-      successMessage.value = '用户已新增。';
+      resetForm();
+      ElMessage.success('用户已新增。');
     }
 
     await loadUsers();
@@ -430,21 +379,28 @@ async function saveUser() {
 }
 
 async function toggleEnabled(user) {
-  clearMessages();
   const action = user.isEnabled ? 'disable' : 'enable';
-  pendingAction.value = buildPendingKey(user.id, action);
 
   try {
     if (user.isEnabled) {
+      await ElMessageBox.confirm(`确认禁用用户 ${user.account} 吗？`, '禁用用户', {
+        type: 'warning',
+        confirmButtonText: '禁用',
+        cancelButtonText: '取消'
+      });
+    }
+    pendingAction.value = buildPendingKey(user.id, action);
+    if (user.isEnabled) {
       await disableUser(user.id, props.authToken);
-      successMessage.value = '用户已禁用。';
+      ElMessage.success('用户已禁用。');
     } else {
       await enableUser(user.id, props.authToken);
-      successMessage.value = '用户已启用。';
+      ElMessage.success('用户已启用。');
     }
 
     await loadUsers();
   } catch (error) {
+    if (error === 'cancel' || error === 'close') return;
     handleRequestError(error);
   } finally {
     pendingAction.value = '';
@@ -452,21 +408,26 @@ async function toggleEnabled(user) {
 }
 
 async function resetPassword(user) {
-  clearMessages();
   const password = String(resetPasswords[user.id] || '');
 
   if (!password) {
-    clientError.value = '请填写新密码。';
+    ElMessage.error('请填写新密码。');
     return;
   }
 
   pendingAction.value = buildPendingKey(user.id, 'reset-password');
 
   try {
+    await ElMessageBox.confirm(`确认重置用户 ${user.account} 的密码吗？`, '重置密码', {
+      type: 'warning',
+      confirmButtonText: '重置',
+      cancelButtonText: '取消'
+    });
     await resetUserPassword(user.id, password, props.authToken);
     resetPasswords[user.id] = '';
-    successMessage.value = `已重置 ${user.account} 的密码。`;
+    ElMessage.success(`已重置 ${user.account} 的密码。`);
   } catch (error) {
+    if (error === 'cancel' || error === 'close') return;
     handleRequestError(error);
   } finally {
     pendingAction.value = '';

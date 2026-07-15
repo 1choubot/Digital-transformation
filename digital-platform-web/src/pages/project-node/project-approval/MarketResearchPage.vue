@@ -1,38 +1,43 @@
 <template>
-  <section class="project-workspace__detail project-notice-node-page">
+  <section class="project-workspace__detail market-research-node-page">
     <NodeOnlineFormEditor
       v-if="activeForm"
       :form="activeForm"
+      :node-status="node?.nodeStatus || ''"
+      :blocking-reasons="node?.blockingReasons || []"
       :form-data="context.onlineFormData || emptyObject"
       :error-message="context.onlineFormErrorMessage || ''"
       :saving="context.onlineFormSaving === true"
       :submitting="context.onlineFormSubmitting === true"
+      :generated-file="generatedFile"
+      :download-pending="generatedFileDownloadPending"
       :image-state="context.onlineFormImageState || emptyObject"
       @save="saveOnlineForm"
       @submit="submitOnlineForm"
+      @download-form="downloadOnlineFormFile"
       @update-field="invoke('updateOnlineFormField', $event)"
       @upload-image="invoke('uploadOnlineFormImage', $event)"
       @download-image="invoke('downloadOnlineFormImage', $event)"
       @delete-image="invoke('deleteOnlineFormImage', $event)"
     />
 
-    <section v-else-if="context.onlineFormErrorMessage" class="state-panel state-panel--inline state-panel--error">
-      <p>{{ context.onlineFormErrorMessage }}</p>
-    </section>
+    <el-alert
+      v-else-if="context.onlineFormErrorMessage"
+      :title="context.onlineFormErrorMessage"
+      type="error"
+      show-icon
+      :closable="false"
+    />
 
-    <section v-else-if="output?.formAvailable" class="state-panel state-panel--inline">
-      <p>{{ context.onlineFormLoading === true ? '在线表单加载中...' : '正在打开在线表单...' }}</p>
-    </section>
+    <el-skeleton v-else-if="output?.formAvailable" :rows="6" animated />
 
-    <section v-else class="state-panel state-panel--inline">
-      <p>{{ unavailableMessage }}</p>
-    </section>
+    <el-empty v-else :description="unavailableMessage" />
   </section>
 </template>
 
 <script setup>
-import NodeOnlineFormEditor from '../../components/node/NodeOnlineFormEditor.vue';
-import { useNodeOnlineForm } from '../../composables/node/useNodeOnlineForm.js';
+import NodeOnlineFormEditor from '../../../components/node/NodeOnlineFormEditor.vue';
+import { useNodeOnlineForm } from '../../../composables/node/useNodeOnlineForm.js';
 
 const emit = defineEmits(['business-state-changed']);
 
@@ -80,13 +85,16 @@ const {
   context,
   output,
   activeForm,
+  generatedFile,
+  generatedFileDownloadPending,
   unavailableMessage,
   invoke,
   saveOnlineForm,
-  submitOnlineForm
+  submitOnlineForm,
+  downloadOnlineFormFile
 } = useNodeOnlineForm({
   props,
   emit,
-  documentCode: '1.3'
+  documentCode: '1.1'
 });
 </script>

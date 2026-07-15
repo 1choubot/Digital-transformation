@@ -1,82 +1,56 @@
 <template>
-  <section class="page-stack">
+  <section class="page-stack project-create-page">
     <PageHeader
-      eyebrow="项目主数据"
-      title="新建项目"
-      :current-user="currentUser"
-      subtitle="新建项目完成后进入项目工作区，后续阶段、资料和节点产出在工作区处理。"
-    >
-      <template #actions>
-        <button type="button" class="ghost-button" @click="navigate('/projects')">返回项目总览</button>
-      </template>
+      title="新建项目">
     </PageHeader>
 
-    <section v-if="!canCreateProject" class="state-panel state-panel--error">
-      <h3>无权创建项目</h3>
-      <p>当前账号无权创建项目。项目创建仅开放给总经理和中心负责人。</p>
-      <button type="button" class="primary-button" @click="navigate('/projects')">返回项目总览</button>
-    </section>
+    <el-alert v-if="!canCreateProject" title="无权创建项目" description="当前账号无权创建项目。项目创建仅开放给总经理和中心负责人。" type="error" show-icon :closable="false">
+      <!-- <template #default><el-button type="primary" size="small" @click="navigate('/projects')">返回项目总览</el-button></template> -->
+    </el-alert>
 
-    <form v-else class="panel form-grid" @submit.prevent="submitProject">
+    <el-form v-else class="panel form-grid" :model="form" @submit.prevent="submitProject">
       <label>
         <span>项目名称</span>
-        <input v-model.trim="form.projectName" type="text" autocomplete="off" />
+        <el-input v-model.trim="form.projectName" autocomplete="off" />
       </label>
       <label>
         <span>客户</span>
-        <input v-model.trim="form.customerName" type="text" autocomplete="off" />
+        <el-input v-model.trim="form.customerName" autocomplete="off" />
       </label>
       <label>
         <span>客户联系人</span>
-        <input v-model.trim="form.customerContactPerson" type="text" autocomplete="off" />
+        <el-input v-model.trim="form.customerContactPerson" autocomplete="off" />
       </label>
       <label>
         <span>客户联系方式</span>
-        <input v-model.trim="form.customerContact" type="text" autocomplete="off" />
+        <el-input v-model.trim="form.customerContact" autocomplete="off" />
       </label>
       <label>
         <span>商务负责人</span>
-        <select v-model="form.businessResponsibleUserId" :disabled="responsibilityCandidatesLoading">
-          <option value="">请选择营销中心人员</option>
-          <option v-for="user in businessResponsibleCandidates" :key="user.id" :value="String(user.id)">
-            {{ formatCandidate(user) }}
-          </option>
-        </select>
+        <el-select v-model="form.businessResponsibleUserId" :loading="responsibilityCandidatesLoading" placeholder="请选择营销中心人员">
+          <el-option v-for="user in businessResponsibleCandidates" :key="user.id" :label="formatCandidate(user)" :value="String(user.id)" />
+        </el-select>
       </label>
       <label>
         <span>技术负责人</span>
-        <select v-model="form.technicalResponsibleUserId" :disabled="responsibilityCandidatesLoading">
-          <option value="">请选择研发中心人员</option>
-          <option v-for="user in technicalResponsibleCandidates" :key="user.id" :value="String(user.id)">
-            {{ formatCandidate(user) }}
-          </option>
-        </select>
+        <el-select v-model="form.technicalResponsibleUserId" :loading="responsibilityCandidatesLoading" placeholder="请选择研发中心人员">
+          <el-option v-for="user in technicalResponsibleCandidates" :key="user.id" :label="formatCandidate(user)" :value="String(user.id)" />
+        </el-select>
       </label>
 
-      <div v-if="responsibilityCandidatesErrorMessage" class="state-panel state-panel--error form-grid__wide">
-        <p>{{ responsibilityCandidatesErrorMessage }}</p>
-      </div>
+      <el-alert v-if="responsibilityCandidatesErrorMessage" class="form-grid__wide" :description="responsibilityCandidatesErrorMessage" type="error" show-icon :closable="false" />
 
-      <div v-if="clientError || serverError" class="state-panel state-panel--error form-grid__wide">
-        <p>{{ clientError || serverError }}</p>
+      <div class="form-actions form-grid__wide project-create-actions">
+        <el-button size="large" @click="navigate('/projects')">取消</el-button>
+        <el-button type="primary" native-type="submit" size="large" :loading="submitting" :disabled="!canCreateProject">创建项目</el-button>
       </div>
-
-      <div v-if="successMessage" class="state-panel state-panel--success form-grid__wide">
-        <p>{{ successMessage }}</p>
-      </div>
-
-      <div class="form-actions form-grid__wide">
-        <button type="button" class="ghost-button" @click="navigate('/projects')">取消</button>
-        <button type="submit" class="primary-button" :disabled="submitting || !canCreateProject">
-          {{ submitting ? '正在创建...' : '创建项目' }}
-        </button>
-      </div>
-    </form>
+    </el-form>
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
+import { ElMessage } from 'element-plus';
 import { createProject, toReadableApiError } from '../api/projects.js';
 import { listResponsibilityCandidates } from '../api/users.js';
 import PageHeader from '../components/PageHeader.vue';
@@ -112,9 +86,6 @@ const submitting = ref(false);
 const responsibilityCandidatesLoading = ref(false);
 const responsibilityCandidatesErrorMessage = ref('');
 const responsibilityCandidates = ref([]);
-const clientError = ref('');
-const serverError = ref('');
-const successMessage = ref('');
 const canCreateProject = computed(() =>
   ['general_manager', 'center_manager'].includes(props.currentUser?.organizationRole)
 );
@@ -138,11 +109,10 @@ function validateForm() {
   if (!form.technicalResponsibleUserId) missing.push('技术负责人');
 
   if (missing.length > 0) {
-    clientError.value = `请补充：${missing.join('、')}`;
+    ElMessage.error(`请补充：${missing.join('、')}`);
     return false;
   }
 
-  clientError.value = '';
   return true;
 }
 
@@ -173,17 +143,14 @@ async function loadResponsibilityCandidates() {
 }
 
 async function submitProject() {
-  serverError.value = '';
-  successMessage.value = '';
-
   if (!canCreateProject.value) {
-    serverError.value = '当前账号无权创建项目。';
+    ElMessage.error('当前账号无权创建项目。');
     return;
   }
 
   if (!props.authToken) {
-    serverError.value = '请先登录后再创建项目。';
-    emit('auth-expired', serverError.value);
+    const message = '请先登录后再创建项目。';
+    emit('auth-expired', message);
     return;
   }
 
@@ -202,13 +169,15 @@ async function submitProject() {
       },
       props.authToken
     );
-    successMessage.value = '项目创建成功。';
+    ElMessage.success('项目创建成功。');
     props.navigate(`/projects/${created.project.id}`);
   } catch (error) {
-    serverError.value =
+    const message =
       error.code === 'FORBIDDEN_OPERATION' ? '当前账号无权创建项目。' : toReadableApiError(error);
     if (error.code === 'UNAUTHENTICATED') {
-      emit('auth-expired', serverError.value);
+      emit('auth-expired', message);
+    } else {
+      ElMessage.error(message);
     }
   } finally {
     submitting.value = false;
@@ -217,14 +186,3 @@ async function submitProject() {
 
 onMounted(loadResponsibilityCandidates);
 </script>
-
-<style>
-.page-stack {
-  max-width: 1500px;
-  /* 最大宽度限制 */
-  margin: 0 auto;
-  /* 水平居中 */
-  padding: 1.5rem;
-  /* 内边距 */
-}
-</style>

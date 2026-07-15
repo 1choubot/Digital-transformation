@@ -306,6 +306,10 @@ export function toReadableApiError(error) {
     return '请补充在线表单必填字段。';
   }
 
+  if (error.code === 'SOLUTION_DESIGN_FORM_REQUIRED_FIELDS_MISSING') {
+    return '请补充方案设计表单中标红的必填字段。';
+  }
+
   if (error.code === 'FORM_RESPONSIBLE_USER_REQUIRED') {
     return '请先分配资料责任人。';
   }
@@ -439,7 +443,11 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'INVALID_CREDENTIALS') {
-    return '账号或密码错误。';
+    return '姓名、账号或密码错误。';
+  }
+
+  if (error.code === 'AMBIGUOUS_LOGIN_IDENTIFIER') {
+    return '存在同名用户，请使用账号登录。';
   }
 
   if (error.code === 'USER_DISABLED') {
@@ -520,6 +528,14 @@ export function toReadableApiError(error) {
 
   if (error.code === 'INVALID_PROJECT_ID') {
     return '请选择有效项目后再提交日报。';
+  }
+
+  if (error.code === 'GENERATED_FILE_TEMPLATE_NOT_AVAILABLE') {
+    return '当前在线表单尚未配置可下载模板。';
+  }
+
+  if (error.code === 'GENERATED_FILE_GENERATION_FAILED') {
+    return error.message ? `在线表单文件生成失败：${error.message}` : '在线表单文件生成失败，请检查表单必填项后重试。';
   }
 
   if (error.code === 'WEEKLY_REPORT_WRITER_REQUIRED') {

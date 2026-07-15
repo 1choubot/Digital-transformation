@@ -28,8 +28,15 @@ import {
   approveInitiationReviewNode,
   returnInitiationReviewNode
 } from '../../src/repositories/stageDocuments/initiationReviewRepository.js';
-import { getMyWorkbench } from '../../src/repositories/stageDocuments/workbenchRepository.js';
+import {
+  getMyPendingProjectSummary,
+  getMyWorkbench
+} from '../../src/repositories/stageDocuments/workbenchRepository.js';
 import { OPERATION_ACTION_TYPE } from '../../src/repositories/operationLogRepository.js';
+import {
+  SOLUTION_DESIGN_NODES,
+  SOLUTION_DESIGN_UPLOAD_SLOTS
+} from '../../src/domain/solutionDesignWorkflow.js';
 
 const PROJECT_ID = 9001;
 const DOCUMENT_IDS = Object.freeze({
@@ -349,6 +356,8 @@ class InitiationWorkflowFakeConnection {
     this.reviewNodes = [];
     this.formImages = [];
     this.operationLogs = [];
+    this.solutionDesignNodes = [];
+    this.solutionDesignUploadSlots = [];
     this.duplicateProjectCodes = new Set(duplicateProjectCodes);
     this.submittedNoticeRows = submittedNoticeRows;
     this.lastNoticeProjectListQueryRows = [];
@@ -1251,6 +1260,43 @@ class InitiationWorkflowFakeConnection {
       return [[]];
     }
 
+    if (text.startsWith('SELECT node_key FROM project_solution_design_nodes')) {
+      return [this.solutionDesignNodes.map((node) => ({ node_key: node.node_key }))];
+    }
+
+    if (text.startsWith('INSERT IGNORE INTO project_solution_design_nodes')) {
+      const [projectId, nodeKey, nodeName, nodeOrder, status] = params;
+      if (!this.solutionDesignNodes.some((node) => node.node_key === nodeKey)) {
+        this.solutionDesignNodes.push({
+          project_id: projectId,
+          node_key: nodeKey,
+          node_name: nodeName,
+          node_order: nodeOrder,
+          status
+        });
+      }
+      return [{ affectedRows: 1 }];
+    }
+
+    if (text.startsWith('SELECT slot_key FROM project_solution_design_upload_slots')) {
+      return [this.solutionDesignUploadSlots.map((slot) => ({ slot_key: slot.slot_key }))];
+    }
+
+    if (text.startsWith('INSERT IGNORE INTO project_solution_design_upload_slots')) {
+      const [projectId, nodeKey, slotKey, slotName, slotOrder, status] = params;
+      if (!this.solutionDesignUploadSlots.some((slot) => slot.slot_key === slotKey)) {
+        this.solutionDesignUploadSlots.push({
+          project_id: projectId,
+          node_key: nodeKey,
+          slot_key: slotKey,
+          slot_name: slotName,
+          slot_order: slotOrder,
+          status
+        });
+      }
+      return [{ affectedRows: 1 }];
+    }
+
     if (text.includes('FROM project_solution_design_')) {
       return [[]];
     }
@@ -1387,6 +1433,15 @@ function assertNoStageAdvanceTodos(workbench) {
 function assertWorkbenchHas(workbench, predicate, message) {
   assert.ok(workbench.items.some(predicate), message);
   assertNoStageAdvanceTodos(workbench);
+}
+
+async function assertPendingProjectSummaryMatchesWorkbench(currentUser, workbench) {
+  const pendingProjectSummary = await getMyPendingProjectSummary(currentUser);
+  assert.equal(pendingProjectSummary.total, workbench.summary.total);
+  assert.deepEqual(
+    [...pendingProjectSummary.projectIds].sort(),
+    [...new Set(workbench.items.map((item) => String(item.projectId)))].sort()
+  );
 }
 
 test('1.1 requirement online form submits, completes the document and unlocks 1.2 collaboration', async () => {
@@ -1620,6 +1675,8 @@ test('1.3 notice gate writes unique project code and initiation completeness aut
     assert.equal(db.connection.currentStage().stage_key, 'solution');
     assert.equal(db.connection.stageByOrder(1).stage_status, STAGE_STATUS.COMPLETED);
     assert.equal(db.connection.stageByOrder(2).stage_status, STAGE_STATUS.CURRENT);
+    assert.equal(db.connection.solutionDesignNodes.length, SOLUTION_DESIGN_NODES.length);
+    assert.equal(db.connection.solutionDesignUploadSlots.length, SOLUTION_DESIGN_UPLOAD_SLOTS.length);
     assert.ok(logActions(db).includes(OPERATION_ACTION_TYPE.PROJECT_CODE_UPDATED));
     assert.ok(logActions(db).includes(OPERATION_ACTION_TYPE.STAGE_ADVANCED));
 
@@ -1654,6 +1711,7 @@ test('workbench initiation todos cover key handlers without ordinary stage advan
 
   await withFakePool(db, async () => {
     const requirementOwnerWorkbench = await getMyWorkbench(user(db, 11));
+    await assertPendingProjectSummaryMatchesWorkbench(user(db, 11), requirementOwnerWorkbench);
     assertWorkbenchHas(
       requirementOwnerWorkbench,
       (item) => item.type === 'document_responsibility' && item.documentCode === '1.1',
@@ -1663,6 +1721,7 @@ test('workbench initiation todos cover key handlers without ordinary stage advan
     await submitRequirement(db);
 
     const businessWorkbench = await getMyWorkbench(user(db, 12));
+    await assertPendingProjectSummaryMatchesWorkbench(user(db, 12), businessWorkbench);
     assertWorkbenchHas(
       businessWorkbench,
       (item) =>
@@ -1685,6 +1744,7 @@ test('workbench initiation todos cover key handlers without ordinary stage advan
     await submitApprovalForm(db);
 
     const marketingReviewWorkbench = await getMyWorkbench(user(db, 1));
+    await assertPendingProjectSummaryMatchesWorkbench(user(db, 1), marketingReviewWorkbench);
     assertWorkbenchHas(
       marketingReviewWorkbench,
       (item) => item.type === 'initiation_review' && item.nodeKey === INITIATION_REVIEW_NODE_KEY.BUSINESS,
@@ -1702,6 +1762,7 @@ test('workbench initiation todos cover key handlers without ordinary stage advan
     await approveTechnicalReview(db);
 
     const generalWorkbench = await getMyWorkbench(user(db, 3));
+    await assertPendingProjectSummaryMatchesWorkbench(user(db, 3), generalWorkbench);
     assertWorkbenchHas(
       generalWorkbench,
       (item) => item.type === 'initiation_review' && item.nodeKey === INITIATION_REVIEW_NODE_KEY.GENERAL,

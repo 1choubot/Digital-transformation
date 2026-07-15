@@ -407,30 +407,23 @@ const INITIATION_FORM_DEFINITIONS = Object.freeze({
     templateFileName: '项目立项审批表-模板.xlsx',
     sections: [
       {
-        key: 'approvalHeader',
-        title: '表头信息',
+        key: 'approvalBasicInfo',
+        title: '',
         editablePart: INITIATION_COLLABORATION_PART.BUSINESS,
         fields: [
-          { key: 'projectName', label: '项目名称', type: 'text', required: false, readOnly: true, autoFill: 'projectName' }
-        ]
-      },
-      {
-        key: 'customerBasicInfo',
-        title: '客户基本信息',
-        editablePart: INITIATION_COLLABORATION_PART.BUSINESS,
-        fields: [
+          { key: 'projectName', label: '项目名称', type: 'text', required: false, readOnly: true, autoFill: 'projectName' },
           { key: 'customerName', label: '客户名称', type: 'text', required: false, readOnly: true, autoFill: 'customerName' },
           { key: 'customerContactPerson', label: '项目联系人', type: 'text', required: false, readOnly: true, autoFill: 'customerContactPerson' },
-          { key: 'customerContact', label: '联系方式', type: 'text', required: false, readOnly: true, autoFill: 'customerContact' }
-        ]
-      },
-      {
-        key: 'projectBasicInfo',
-        title: '项目基本信息',
-        editablePart: INITIATION_COLLABORATION_PART.BUSINESS,
-        fields: [
+          { key: 'customerContact', label: '联系方式', type: 'text', required: false, readOnly: true, autoFill: 'customerContact' },
           { key: 'projectResponsiblePerson', label: '本公司商务负责人', type: 'text', required: false, readOnly: true, autoFill: 'businessResponsibleName' },
-          { key: 'projectResponsibleContact', label: '联系方式', type: 'text', required: false }
+          {
+            key: 'projectResponsibleContact',
+            label: '联系方式',
+            type: 'text',
+            required: false,
+            readOnly: false,
+            editablePart: INITIATION_COLLABORATION_PART.BUSINESS
+          }
         ]
       }
     ],
@@ -460,7 +453,7 @@ const INITIATION_FORM_DEFINITIONS = Object.freeze({
           { key: 'projectName', label: '项目名称', type: 'text', required: false, readOnly: true, autoFill: 'projectName' },
           { key: 'customerUnit', label: '客户单位', type: 'text', required: false, readOnly: true, autoFill: 'customerName' },
           { key: 'projectExecutionMode', label: '开展模式', type: 'text', required: false, readOnly: true },
-          { key: 'initiationDate', label: '立项日期', type: 'date', required: false }
+          { key: 'initiationDate', label: '立项日期', type: 'date', required: false, readOnly: true, autoFill: 'currentBusinessDate' }
         ]
       },
       {
@@ -468,7 +461,7 @@ const INITIATION_FORM_DEFINITIONS = Object.freeze({
         title: '落款',
         fields: [
           { key: 'signerCompany', label: '落款单位', type: 'text', required: false, readOnly: true, defaultValue: NOTICE_TEMPLATE.signer },
-          { key: 'noticeDate', label: '日期', type: 'date', required: false }
+          { key: 'noticeDate', label: '日期', type: 'date', required: false, readOnly: true, autoFill: 'currentBusinessDate' }
         ]
       }
     ],
@@ -478,9 +471,9 @@ const INITIATION_FORM_DEFINITIONS = Object.freeze({
       { key: 'projectName', label: '项目名称', type: 'text', required: false, readOnly: true, autoFill: 'projectName' },
       { key: 'customerUnit', label: '客户单位', type: 'text', required: false, readOnly: true, autoFill: 'customerName' },
       { key: 'projectExecutionMode', label: '开展模式', type: 'text', required: false, readOnly: true },
-      { key: 'initiationDate', label: '立项日期', type: 'date', required: false },
+      { key: 'initiationDate', label: '立项日期', type: 'date', required: false, readOnly: true, autoFill: 'currentBusinessDate' },
       { key: 'signerCompany', label: '落款单位', type: 'text', required: false, readOnly: true, defaultValue: NOTICE_TEMPLATE.signer },
-      { key: 'noticeDate', label: '日期', type: 'date', required: false }
+      { key: 'noticeDate', label: '日期', type: 'date', required: false, readOnly: true, autoFill: 'currentBusinessDate' }
     ]
   }
 });
@@ -653,9 +646,23 @@ function getProjectAutoFillValue(project, autoFillKey) {
       return project?.business_responsible_display_name ?? project?.business_responsible_account ?? '';
     case 'technicalResponsibleName':
       return project?.technical_responsible_display_name ?? project?.technical_responsible_account ?? '';
+    case 'currentBusinessDate':
+      return getShanghaiDateString();
     default:
       return '';
   }
+}
+
+// 在线表单日期统一按业务所在的 Asia/Shanghai 时区生成，避免 UTC 跨日偏差。
+function getShanghaiDateString(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(now);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${byType.year}-${byType.month}-${byType.day}`;
 }
 
 function applySchemaDefaults(schema, formData, project) {

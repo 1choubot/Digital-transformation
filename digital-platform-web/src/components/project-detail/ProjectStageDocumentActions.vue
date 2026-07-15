@@ -14,51 +14,42 @@
       />
 
       <template v-if="!isApplicable(document)">
-        <button
-          v-if="canChangeApplicability"
-          type="button"
-          class="ghost-button"
+        <el-button
+          v-if="canChangeApplicability" plain
           :disabled="isActionPending(document.id, 'restore-applicable')"
           @click="$emit('restore-applicable', document)"
         >
           {{ isActionPending(document.id, 'restore-applicable') ? '恢复中...' : '恢复适用' }}
-        </button>
+        </el-button>
       </template>
 
       <template v-else>
-        <button
-          v-if="canSubmitDocument && canCompleteRevisionDocument && !isOnlineFormOnlyDocument"
-          type="button"
-          class="ghost-button"
+        <el-button
+          v-if="canSubmitDocument && canCompleteRevisionDocument && !isOnlineFormOnlyDocument" plain
           :disabled="isActionPending(document.id, 'complete-revision')"
           @click="$emit('complete-revision-document', document)"
         >
           {{ isActionPending(document.id, 'complete-revision') ? '处理中...' : '完成返工' }}
-        </button>
+        </el-button>
 
-        <button
-          v-else-if="canSubmitDocument && canSubmit(document) && !isOnlineFormOnlyDocument"
-          type="button"
-          class="ghost-button"
+        <el-button
+          v-else-if="canSubmitDocument && canSubmit(document) && !isOnlineFormOnlyDocument" plain
           :disabled="isActionPending(document.id, 'submit')"
           @click="$emit('submit-document', document)"
         >
           {{ isActionPending(document.id, 'submit') ? '提交中...' : submitButtonText }}
-        </button>
+        </el-button>
 
         <template v-else-if="canReview(document) && canConfirmReturnDocument">
-          <button
-            type="button"
-            class="ghost-button"
+          <el-button plain
             :disabled="isActionPending(document.id, 'confirm')"
             @click="$emit('confirm-document', document)"
           >
             {{ isActionPending(document.id, 'confirm') ? '审核中...' : '资料审核通过' }}
-          </button>
+          </el-button>
           <div class="stage-document-return">
-            <input
+            <el-input
               v-model.trim="returnReasons[document.id]"
-              type="text"
               placeholder="资料审核退回原因"
               :disabled="isActionPending(document.id, 'return')"
             />
@@ -66,9 +57,8 @@
               <strong>选择需返工资料</strong>
               <p v-if="revisionCandidates.length === 0">当前没有可选的适用返工候选。</p>
               <label v-for="candidate in revisionCandidates" :key="candidate.id">
-                <input
+                <el-checkbox
                   v-model="revisionTargetSelections[document.id]"
-                  type="checkbox"
                   :value="candidate.id"
                   :disabled="isActionPending(document.id, 'return')"
                 />
@@ -83,9 +73,8 @@
             <div v-if="isCClassReturn" class="stage-document-rework-selector">
               <strong>选择设计变更触发资料</strong>
               <label v-for="candidate in designChangeCandidates" :key="candidate.id">
-                <input
+                <el-checkbox
                   v-model="designChangeTargetSelections[document.id]"
-                  type="checkbox"
                   :value="candidate.id"
                   :disabled="isActionPending(document.id, 'return')"
                 />
@@ -97,14 +86,12 @@
                 <span>将设置为适用且需返工</span>
               </label>
             </div>
-            <button
-              type="button"
-              class="ghost-button"
+            <el-button plain
               :disabled="isActionPending(document.id, 'return') || !canSubmitReturn"
               @click="emitReturnDocument"
             >
               {{ isActionPending(document.id, 'return') ? '退回中...' : '退回资料审核' }}
-            </button>
+            </el-button>
           </div>
         </template>
 
@@ -113,20 +100,17 @@
         </span>
 
         <div v-if="canChangeApplicability" class="stage-document-applicability-action">
-          <input
+          <el-input
             v-model.trim="notApplicableReasons[document.id]"
-            type="text"
             placeholder="不适用原因"
             :disabled="isActionPending(document.id, 'mark-not-applicable')"
           />
-          <button
-            type="button"
-            class="ghost-button"
+          <el-button plain
             :disabled="isActionPending(document.id, 'mark-not-applicable')"
             @click="$emit('mark-not-applicable', document)"
           >
             {{ isActionPending(document.id, 'mark-not-applicable') ? '标记中...' : '标记不适用' }}
-          </button>
+          </el-button>
         </div>
       </template>
     </div>

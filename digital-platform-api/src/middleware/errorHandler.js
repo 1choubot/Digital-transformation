@@ -336,6 +336,18 @@ export function errorHandler(error, req, res, next) {
     return;
   }
 
+  console.error('Unhandled API error', {
+    method: req.method,
+    path: req.originalUrl || req.url,
+    userId: req.user?.id ?? null,
+    name: error?.name ?? 'Error',
+    code: error?.code ?? null,
+    errno: error?.errno ?? null,
+    sqlState: error?.sqlState ?? null,
+    sqlMessage: error?.sqlMessage ?? null,
+    stack: error?.stack ?? null
+  });
+
   res.status(500).json({
     error: {
       code: 'INTERNAL_SERVER_ERROR',

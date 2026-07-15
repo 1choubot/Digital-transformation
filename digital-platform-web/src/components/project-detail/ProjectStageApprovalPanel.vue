@@ -65,52 +65,43 @@
         </div>
 
         <div v-if="hasApprovalActions(stage)" class="approval-actions">
-          <button
-            v-if="canSubmitStageApproval(stage)"
-            type="button"
-            class="primary-button"
+          <el-button
+            v-if="canSubmitStageApproval(stage)" type="primary"
             :disabled="isPending(stage, 'submit')"
             @click="$emit('submit', stage)"
           >
             {{ isPending(stage, 'submit') ? '提交中...' : '提交阶段关口审批' }}
-          </button>
+          </el-button>
 
-          <button
-            v-if="canResubmitStageApproval(stage)"
-            type="button"
-            class="primary-button"
+          <el-button
+            v-if="canResubmitStageApproval(stage)" type="primary"
             :disabled="isPending(stage, 'resubmit')"
             @click="$emit('resubmit', stage)"
           >
             {{ isPending(stage, 'resubmit') ? '提交中...' : '重新提交阶段关口审批' }}
-          </button>
+          </el-button>
 
           <template v-if="canApproveStageApproval(stage)">
-            <button
-              type="button"
-              class="primary-button"
+            <el-button type="primary"
               :disabled="isPending(stage, 'approve')"
               @click="$emit('approve', stage)"
             >
               {{ isPending(stage, 'approve') ? '处理中...' : '阶段关口审批通过' }}
-            </button>
+            </el-button>
             <label class="approval-return">
               <span>阶段关口审批退回原因</span>
-              <input
+              <el-input
                 v-model="returnComments[stage.id]"
-                type="text"
                 maxlength="1000"
                 placeholder="填写阶段关口审批退回原因"
               />
             </label>
-            <button
-              type="button"
-              class="ghost-button"
+            <el-button plain
               :disabled="isPending(stage, 'return')"
               @click="$emit('return', stage)"
             >
               {{ isPending(stage, 'return') ? '退回中...' : '退回阶段关口审批' }}
-            </button>
+            </el-button>
           </template>
         </div>
 

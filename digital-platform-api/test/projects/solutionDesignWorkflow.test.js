@@ -13,6 +13,7 @@ import {
   SOLUTION_DESIGN_NODE_KEY,
   SOLUTION_DESIGN_NODE_STATUS,
   SOLUTION_DESIGN_NODES,
+  SOLUTION_DESIGN_UPLOAD_SLOTS,
   SOLUTION_DESIGN_QUOTATION_FORM_STATUS,
   SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS,
   SOLUTION_DESIGN_QUOTATION_REJECTED_ACTION,
@@ -121,6 +122,52 @@ function authUser(row, overrides = {}) {
     ...overrides
   };
 }
+
+test('solution form submissions reject missing required fields before database writes', async () => {
+  let connectionRequests = 0;
+  const db = {
+    async getConnection() {
+      connectionRequests += 1;
+      throw new Error('database connection must not be requested for invalid form data');
+    }
+  };
+  const user = { id: 1 };
+
+  await assert.rejects(
+    submitSolutionDesignAnalysisForm(
+      { projectId: 1, payload: { formData: {} }, user },
+      db
+    ),
+    (error) => {
+      assert.equal(error.code, SOLUTION_DESIGN_ERROR.FORM_REQUIRED_FIELDS_MISSING);
+      assert.deepEqual(error.details, [
+        'workpieceDescription',
+        'operationProcessDescription',
+        'projectTargetDescription'
+      ]);
+      return true;
+    }
+  );
+
+  await assert.rejects(
+    submitSolutionDesignReviewForm(
+      {
+        projectId: 1,
+        nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
+        payload: { formData: { meetingDate: ' ', actionItems: [], reviewConclusion: '' } },
+        user
+      },
+      db
+    ),
+    (error) => {
+      assert.equal(error.code, SOLUTION_DESIGN_ERROR.FORM_REQUIRED_FIELDS_MISSING);
+      assert.deepEqual(error.details, ['meetingDate', 'actionItems', 'reviewConclusion']);
+      return true;
+    }
+  );
+
+  assert.equal(connectionRequests, 0);
+});
 
 function baseUsers() {
   return new Map(
@@ -1424,6 +1471,7 @@ class SolutionDesignWorkflowFakeConnection {
     this.operationLogs = [];
     this.nodeInsertCount = 0;
     this.uploadSlotInsertCount = 0;
+    this.projectMaterializationLockCount = 0;
     this.nextUploadFileId = 1;
     this.nextAnalysisFormId = 1;
     this.nextReviewFormId = 1;
@@ -1577,6 +1625,11 @@ class SolutionDesignWorkflowFakeConnection {
   async execute(sql, params = []) {
     const text = normalizeSql(sql);
 
+    if (text.startsWith('SELECT id FROM projects WHERE id = ?')) {
+      this.projectMaterializationLockCount += 1;
+      return Number(params[0]) === Number(this.project.id) ? [[{ id: this.project.id }]] : [[]];
+    }
+
     if (text.startsWith('SELECT *, 0 AS has_department_responsible FROM projects')) {
       return [[{ ...this.project, has_department_responsible: 0 }]];
     }
@@ -1655,6 +1708,15 @@ class SolutionDesignWorkflowFakeConnection {
         this.nodes
           .filter((node) => node.project_id === projectId && node.node_key === nodeKey)
           .map((node) => ({ ...node }))
+      ];
+    }
+
+    if (text.startsWith('SELECT node_key FROM project_solution_design_nodes')) {
+      const [projectId] = params;
+      return [
+        this.nodes
+          .filter((node) => Number(node.project_id) === Number(projectId))
+          .map((node) => ({ node_key: node.node_key }))
       ];
     }
 
@@ -1776,6 +1838,15 @@ class SolutionDesignWorkflowFakeConnection {
         .filter((form) => form.project_id === projectId)
         .reduce((max, form) => Math.max(max, Number(form.revision ?? 0)), 0);
       return [[{ max_revision: maxRevision }]];
+    }
+
+    if (text.startsWith('SELECT slot_key FROM project_solution_design_upload_slots')) {
+      const [projectId] = params;
+      return [
+        this.uploadSlots
+          .filter((slot) => Number(slot.project_id) === Number(projectId))
+          .map((slot) => ({ slot_key: slot.slot_key }))
+      ];
     }
 
     if (text.startsWith('INSERT IGNORE INTO project_solution_design_upload_slots')) {
@@ -3097,6 +3168,7 @@ test('visible project users can query workflow and lazy initialization is idempo
   const requester = authUser(db.connection.users.get(10));
 
   const first = await getSolutionDesignWorkflow({ projectId: 100, user: requester }, db);
+  assert.equal(db.connection.projectMaterializationLockCount, 1);
   const second = await getSolutionDesignWorkflow({ projectId: 100, user: requester }, db);
 
   assert.equal(first.projectId, 100);
@@ -3110,7 +3182,10 @@ test('visible project users can query workflow and lazy initialization is idempo
   assert.equal(first.nodes[1].status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
   assert.equal(second.nodes.length, SOLUTION_DESIGN_NODES.length);
   assert.equal(db.connection.nodes.length, SOLUTION_DESIGN_NODES.length);
+  assert.equal(db.connection.uploadSlots.length, SOLUTION_DESIGN_UPLOAD_SLOTS.length);
   assert.equal(db.connection.nodeInsertCount, SOLUTION_DESIGN_NODES.length);
+  assert.equal(db.connection.uploadSlotInsertCount, SOLUTION_DESIGN_UPLOAD_SLOTS.length);
+  assert.equal(db.connection.projectMaterializationLockCount, 1);
 });
 
 test('workflow query rejects users without project visibility', async () => {
@@ -7993,7 +8068,7 @@ test('manual fallback advances completed solution workflow projects that missed 
   assert.equal(details.completenessSummary.incompleteRequiredCount, 0);
 });
 
-test('completed solution design workflow does not inflate overview pending stage document tasks', async () => {
+test('overview uses pending project summary without marking completed workflow project', async () => {
   const db = fakeDb();
   seedAssignedRoles(db.connection);
   const storage = fakeUploadStorage();
@@ -8017,16 +8092,18 @@ test('completed solution design workflow does not inflate overview pending stage
   const overview = await getProjectOverviewDashboard(
     projectManager,
     { status: null, currentStageOrder: null, keyword: '' },
-    db.connection
+    db.connection,
+    async () => ({ total: 0, projectIds: [] })
   );
 
-  assert.equal(overview.summary.myPendingStageDocumentTasks, 0);
+  assert.equal(overview.summary.myPendingTasks, 0);
   assert.equal(overview.projects[0].currentStageOrder, 3);
   assert.equal(overview.projects[0].currentStageName, '合同签订阶段');
   assert.equal(overview.projects[0].currentStageCompletenessSummary, null);
+  assert.equal(overview.projects[0].hasMyPendingTasks, false);
 });
 
-test('incomplete solution design workflow overview pending count follows derived document status', async () => {
+test('overview uses pending project summary total and deduplicated project ids', async () => {
   const db = fakeDb();
   seedAssignedRoles(db.connection);
   const technicalOwner = authUser(db.connection.users.get(12));
@@ -8036,10 +8113,12 @@ test('incomplete solution design workflow overview pending count follows derived
   const overview = await getProjectOverviewDashboard(
     technicalOwner,
     { status: null, currentStageOrder: null, keyword: '' },
-    db.connection
+    db.connection,
+    async () => ({ total: 2, projectIds: ['100'] })
   );
 
-  assert.equal(overview.summary.myPendingStageDocumentTasks, 1);
+  assert.equal(overview.summary.myPendingTasks, 2);
+  assert.equal(overview.projects[0].hasMyPendingTasks, true);
 });
 
 test('non-applicable solution design output stays not_applicable and does not block stage advance', async () => {

@@ -20,6 +20,10 @@ import { buildProjectVisibilityCondition } from './projects/visibility.js';
 
 // MySQL can return DATE values as Date objects; the API always emits YYYY-MM-DD.
 function dateOnly(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
   if (value instanceof Date) {
     const year = value.getFullYear();
     const month = String(value.getMonth() + 1).padStart(2, '0');
@@ -1150,8 +1154,8 @@ export async function getWeeklyReportEvaluationTarget({ reportId, evaluatorUser,
 }
 
 // List weekly report evaluation statuses for a center or all centers.
-export async function listWeeklyComparisonOverview({ weekStart, department, subjectRole }) {
-  const params = [weekStart];
+export async function listWeeklyComparisonOverview({ weekStart, weekEnd, department, subjectRole }) {
+  const params = [weekStart, weekEnd];
   let departmentFilter = '';
   if (department) {
     departmentFilter = ' AND u.department = ?';
@@ -1197,6 +1201,7 @@ export async function listWeeklyComparisonOverview({ weekStart, department, subj
     LEFT JOIN users approval_reviewer ON approval_reviewer.id = wr.approval_reviewed_by_user_id
     LEFT JOIN users submitted_by ON submitted_by.id = wr.submitted_by_user_id
     WHERE wr.week_start = ?
+      AND wr.week_end = ?
       ${departmentFilter}
       ${subjectRoleFilter}
     ORDER BY u.department ASC, u.display_name ASC, wr.id ASC`,

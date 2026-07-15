@@ -18,6 +18,7 @@ export const GENERATED_FILE_STATUS = Object.freeze({
 
 export const INITIATION_TEMPLATE_TRIGGER_EVENT = Object.freeze({
   ONLINE_FORM_SUBMITTED: 'online_form_submitted',
+  ONLINE_FORM_DOWNLOAD_REQUESTED: 'online_form_download_requested',
   INITIATION_REVIEW_GENERAL_APPROVED: 'initiation_review_general_approved'
 });
 
@@ -173,6 +174,7 @@ export const INITIATION_TEMPLATE_MANIFESTS = Object.freeze({
     fileType: 'xlsx',
     generatedFileNamePrefix: '项目需求表',
     triggerEvent: INITIATION_TEMPLATE_TRIGGER_EVENT.ONLINE_FORM_SUBMITTED,
+    manualTriggerEvents: [INITIATION_TEMPLATE_TRIGGER_EVENT.ONLINE_FORM_DOWNLOAD_REQUESTED],
     requiredSources: ['project.projectName', 'project.customerName', 'form.workpieceDescription', 'form.operationProcessDescription', 'form.projectTargetDescription'],
     formatRetention: ['preserve workbook sheets', 'preserve merged cells where possible', 'preserve borders/fonts/row heights/column widths'],
     mappings: [
@@ -220,6 +222,7 @@ export const INITIATION_TEMPLATE_MANIFESTS = Object.freeze({
     fileType: 'xlsx',
     generatedFileNamePrefix: '项目立项审批表',
     triggerEvent: INITIATION_TEMPLATE_TRIGGER_EVENT.INITIATION_REVIEW_GENERAL_APPROVED,
+    manualTriggerEvents: [INITIATION_TEMPLATE_TRIGGER_EVENT.ONLINE_FORM_DOWNLOAD_REQUESTED],
     requiredSources: ['project.projectName', 'project.customerName', 'form.projectExecutionMode'],
     formatRetention: ['preserve workbook sheets', 'preserve scoring table layout', 'preserve borders/fonts/row heights/column widths'],
     mappings: [
@@ -279,6 +282,7 @@ export const INITIATION_TEMPLATE_MANIFESTS = Object.freeze({
     fileType: 'docx',
     generatedFileNamePrefix: '项目立项通知',
     triggerEvent: INITIATION_TEMPLATE_TRIGGER_EVENT.ONLINE_FORM_SUBMITTED,
+    manualTriggerEvents: [INITIATION_TEMPLATE_TRIGGER_EVENT.ONLINE_FORM_DOWNLOAD_REQUESTED],
     requiredSources: ['project.projectCode', 'noticeProjectList.rows'],
     formatRetention: ['preserve document paragraphs', 'preserve table style where possible', 'preserve fonts and paragraph format'],
     mappings: [

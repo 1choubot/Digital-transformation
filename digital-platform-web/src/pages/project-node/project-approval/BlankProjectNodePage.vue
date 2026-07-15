@@ -5,7 +5,9 @@
         <span class="section-eyebrow">{{ stage?.stageName || '项目节点' }}</span>
         <h3>{{ node?.nodeName || pageTitle }}</h3>
       </div>
-      <span v-if="node?.nodeStatus" class="stage-document-pill">{{ formatNodeStatus(node.nodeStatus) }}</span>
+      <!-- <el-tag v-if="node?.nodeStatus" :type="nodeStatusTagType(node.nodeStatus)">
+        {{ formatNodeStatus(node.nodeStatus) }}
+      </el-tag> -->
     </div>
 
     <section class="state-panel state-panel--inline">
@@ -72,5 +74,13 @@ function formatNodeStatus(status) {
     not_applicable: '不适用',
     process_node: '过程节点'
   }[status] || status || '-';
+}
+
+function nodeStatusTagType(status) {
+  if (status === 'completed') return 'success';
+  if (status === 'pending_review') return 'warning';
+  if (['blocked_by_rework', 'returned_for_rework'].includes(status)) return 'danger';
+  if (['not_configured', 'not_applicable', 'process_node'].includes(status)) return 'info';
+  return 'primary';
 }
 </script>

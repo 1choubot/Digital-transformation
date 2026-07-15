@@ -789,8 +789,8 @@ function sortWorkbenchItems(items) {
   });
 }
 
-export async function getMyWorkbench(user) {
-  const groups = await Promise.all([
+async function selectMyWorkbenchTodoGroups(user) {
+  return Promise.all([
     selectDocumentResponsibilityTodos(user),
     selectInitiationApprovalCollaborationTodos(user),
     selectInitiationNoticeSyntheticTodos(user),
@@ -798,6 +798,28 @@ export async function getMyWorkbench(user) {
     selectInitiationReviewWorkbenchTodos(pool, user),
     selectSolutionDesignWorkbenchTodos(user)
   ]);
+}
+
+export async function getMyPendingProjectSummary(user) {
+  const groups = await selectMyWorkbenchTodoGroups(user);
+  const items = groups.flat();
+  const projectIds = [
+    ...new Set(
+      items
+        .map((item) => item.projectId)
+        .filter((projectId) => projectId !== null && projectId !== undefined)
+        .map(String)
+    )
+  ];
+
+  return {
+    total: items.length,
+    projectIds
+  };
+}
+
+export async function getMyWorkbench(user) {
+  const groups = await selectMyWorkbenchTodoGroups(user);
   const items = sortWorkbenchItems(groups.flat());
 
   return {

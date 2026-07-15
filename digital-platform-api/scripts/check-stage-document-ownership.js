@@ -299,6 +299,22 @@ function buildSmokeNoticeFormData(patch = {}) {
   };
 }
 
+function getSmokeShanghaiDateString(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(now);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${byType.year}-${byType.month}-${byType.day}`;
+}
+
+function formatSmokeChineseDate(dateText) {
+  const [year, month, day] = dateText.split('-').map(Number);
+  return `${year}年${month}月${day}日`;
+}
+
 function departmentUser(id, organizationRole, department) {
   return {
     id,
@@ -774,9 +790,6 @@ async function assertApprovalRevisionResubmitCycle({ projectId, sourceCode, targ
         task.revisionRequired === true
     )
   );
-  const overviewBeforeResubmit = await getProjectOverviewDashboard(user, {});
-  const pendingCountBeforeResubmit = overviewBeforeResubmit.summary.myPendingStageDocumentTasks;
-
   const resubmittedTarget = await updateProjectStageDocumentStatus({
     projectId,
     documentId: revisionTarget.id,
@@ -814,8 +827,8 @@ async function assertApprovalRevisionResubmitCycle({ projectId, sourceCode, targ
   );
   const overviewAfterResubmit = await getProjectOverviewDashboard(user, {});
   assert.equal(
-    overviewAfterResubmit.summary.myPendingStageDocumentTasks,
-    pendingCountBeforeResubmit - 1
+    overviewAfterResubmit.summary.myPendingTasks,
+    (await getMyWorkbench(user)).summary.total
   );
 
   const returnedResubmittedTarget = await updateProjectStageDocumentStatus({
@@ -2184,20 +2197,20 @@ async function runInitiationReviewSmoke({
   assert.equal(initiationTemplateForm.schema.reviewOpinionSource, 'initiationReviewNodes');
   assert.deepEqual(
     initiationTemplateForm.schema.sections.map((section) => section.key),
-    ['approvalHeader', 'customerBasicInfo', 'projectBasicInfo']
+    ['approvalBasicInfo']
   );
   assert.deepEqual(
-    initiationTemplateForm.schema.sections.find((section) => section.key === 'approvalHeader').fields.map((field) => field.key),
-    ['projectName']
+    initiationTemplateForm.schema.sections[0].fields.map((field) => field.key),
+    [
+      'projectName',
+      'customerName',
+      'customerContactPerson',
+      'customerContact',
+      'projectResponsiblePerson',
+      'projectResponsibleContact'
+    ]
   );
-  assert.deepEqual(
-    initiationTemplateForm.schema.sections.find((section) => section.key === 'customerBasicInfo').fields.map((field) => field.key),
-    ['customerName', 'customerContactPerson', 'customerContact']
-  );
-  assert.deepEqual(
-    initiationTemplateForm.schema.sections.find((section) => section.key === 'projectBasicInfo').fields.map((field) => field.key),
-    ['projectResponsiblePerson', 'projectResponsibleContact']
-  );
+  assert.equal(initiationTemplateForm.schema.sections[0].title, '');
   assert.equal(
     initiationTemplateForm.schema.fields.some((field) => field.key === 'projectExecutionMode'),
     false
@@ -2734,8 +2747,8 @@ async function runInitiationReviewSmoke({
   );
   const overviewAfterHistoricalInitiationResponsible = await getProjectOverviewDashboard(managerUser, {});
   assert.equal(
-    overviewAfterHistoricalInitiationResponsible.summary.myPendingStageDocumentTasks,
-    overviewBeforeHistoricalInitiationResponsible.summary.myPendingStageDocumentTasks
+    overviewAfterHistoricalInitiationResponsible.summary.myPendingTasks,
+    overviewBeforeHistoricalInitiationResponsible.summary.myPendingTasks
   );
   const tasksAfterHistoricalInitiationResponsible = await listMyStageDocumentTasks(
     managerUser.id,
@@ -2986,8 +2999,8 @@ async function runInitiationReviewSmoke({
   );
   const overviewAfterHistoricalNoticeResponsible = await getProjectOverviewDashboard(marketingManagerUser, {});
   assert.equal(
-    overviewAfterHistoricalNoticeResponsible.summary.myPendingStageDocumentTasks,
-    overviewBeforeHistoricalNoticeResponsible.summary.myPendingStageDocumentTasks
+    overviewAfterHistoricalNoticeResponsible.summary.myPendingTasks,
+    overviewBeforeHistoricalNoticeResponsible.summary.myPendingTasks
   );
   const tasksAfterHistoricalNoticeResponsible = await listMyStageDocumentTasks(
     marketingManagerUser.id,
@@ -3527,6 +3540,9 @@ async function runInitiationReviewSmoke({
   assert.equal(gateReadyNoticeWithProjectCode.formData.projectCode, '');
   assert.equal(gateReadyNoticeWithProjectCode.formData.projectName, projectCodeDetail.project.projectName);
   assert.equal(gateReadyNoticeWithProjectCode.formData.customerUnit, projectCodeDetail.project.customerName);
+  const expectedNoticeBusinessDate = getSmokeShanghaiDateString();
+  assert.equal(gateReadyNoticeWithProjectCode.formData.initiationDate, expectedNoticeBusinessDate);
+  assert.equal(gateReadyNoticeWithProjectCode.formData.noticeDate, expectedNoticeBusinessDate);
   await assertGeneratedFileDownloadErrorHandled({
     projectId,
     documentId: gateReadyNotice.id,
@@ -3556,8 +3572,8 @@ async function runInitiationReviewSmoke({
     noticeFormData.projectCode,
     projectDetailAfterNotice.project.projectName,
     projectDetailAfterNotice.project.customerName,
-    noticeFormData.initiationDate,
-    '2026年7月8日'
+    expectedNoticeBusinessDate,
+    formatSmokeChineseDate(expectedNoticeBusinessDate)
   ]);
   assert.equal(noticeDocumentXml.includes('2026年2月9日'), false);
   assert.equal(noticeDocumentXml.includes('2026-07-08'), false);
@@ -5685,7 +5701,10 @@ async function runProjectLifecycleSmoke() {
       ),
       false
     );
-    assert.equal(limitedOverview.summary.myPendingStageDocumentTasks, 1);
+    assert.equal(
+      limitedOverview.summary.myPendingTasks,
+      (await getMyWorkbench(limitedEmployeeUser)).summary.total
+    );
 
     const centerOverview = await getProjectOverviewDashboard(
       departmentUser(9054, ORGANIZATION_ROLE.CENTER_MANAGER, MANUFACTURING_CENTER),

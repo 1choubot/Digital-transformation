@@ -1,7 +1,5 @@
 <template>
-  <span class="status-badge" :class="`status-badge--${tone}`">
-    {{ label }}
-  </span>
+  <el-tag :type="tagType">{{ label }}</el-tag>
 </template>
 
 <script setup>
@@ -16,21 +14,15 @@ const props = defineProps({
 });
 
 const label = computed(() => formatStatus(props.status));
-const tone = computed(() => {
-  if (props.status === 'risk' || props.status === 'delayed') return 'warn';
-  if (props.status === 'returned') return 'warn';
-  if (props.status === 'returned_by_center_manager') return 'warn';
-  if (props.status === 'returned_by_general_manager') return 'warn';
-  if (props.status === 'paused') return 'paused';
-  if (props.status === 'cancelled') return 'paused';
-  if (props.status === 'ended') return 'paused';
-  if (props.status === 'confirmed') return 'done';
-  if (props.status === 'completed') return 'done';
-  if (props.status === 'approved') return 'done';
-  if (props.status === 'submitted') return 'active';
-  if (props.status === 'pending_center_manager') return 'active';
-  if (props.status === 'pending_general_manager') return 'active';
-  if (props.status === 'current' || props.status === 'normal') return 'active';
-  return 'muted';
+const tagType = computed(() => {
+  if (['risk', 'delayed', 'returned', 'returned_by_center_manager', 'returned_by_general_manager'].includes(props.status)) {
+    return 'warning';
+  }
+  if (['paused', 'cancelled', 'ended'].includes(props.status)) return 'info';
+  if (['confirmed', 'completed', 'approved'].includes(props.status)) return 'success';
+  if (['submitted', 'pending_center_manager', 'pending_general_manager', 'current', 'normal'].includes(props.status)) {
+    return 'primary';
+  }
+  return 'info';
 });
 </script>

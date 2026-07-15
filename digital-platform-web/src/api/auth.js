@@ -1,9 +1,9 @@
 import { request } from './http.js';
 
-export async function login(account, password) {
+export async function login(identifier, password) {
   return request('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ account, password })
+    body: JSON.stringify({ identifier, password })
   });
 }
 

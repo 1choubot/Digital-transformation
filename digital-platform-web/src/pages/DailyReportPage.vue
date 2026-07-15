@@ -1,15 +1,7 @@
 <template>
   <section class="page-stack daily-report-page animate-fadeIn">
     <!-- 无权限警告 -->
-    <section v-if="!canUseDailyReport" class="state-panel state-panel--error panel">
-      <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10" />
-        <line x1="12" y1="8" x2="12" y2="12" />
-        <line x1="12" y1="16" x2="12.01" y2="16" />
-      </svg>
-      <h3>无日报填写权限</h3>
-      <p>当前账号不是员工（employee），不能创建或编辑个人日报。</p>
-    </section>
+    <el-alert v-if="!canUseDailyReport" title="无日报填写权限" description="当前账号不是员工（employee），不能创建或编辑个人日报。" type="error" show-icon :closable="false" />
 
     <!-- 主表单面板 -->
     <section v-else class="panel daily-form-panel">
@@ -20,38 +12,29 @@
           <span v-else class="toolbar-subtitle">默认填写业务当天</span>
         </div>
         <div class="toolbar-actions">
-          <button
+          <el-button
             v-if="savedReport"
-            type="button"
-            class="ghost-button"
-            :disabled="exporting"
+            :loading="exporting"
             @click="downloadReportExcel"
           >
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            {{ exporting ? '正在导出' : '导出 Excel' }}
-          </button>
-          <button
+            导出 Excel
+          </el-button>
+          <el-button
             v-if="savedReport"
-            type="button"
-            class="ghost-button"
             @click="props.navigate('/daily-reports')"
           >
             返回列表
-          </button>
+          </el-button>
         </div>
       </div>
 
-      <form class="daily-form" @submit.prevent="saveDraft">
+      <el-form class="daily-form" :model="form" @submit.prevent="saveDraft">
         <!-- 筛选栏 -->
         <div class="daily-filters">
           <div class="filter-group">
             <span class="filter-label">报告日期</span>
             <div class="input-wrapper">
-              <input v-model="form.reportDate" type="date" required />
+              <el-date-picker v-model="form.reportDate" type="date" format="YYYY-MM-DD" value-format="YYYY-MM-DD" placeholder="选择报告日期" />
             </div>
           </div>
 
@@ -67,26 +50,15 @@
                   <circle cx="11" cy="11" r="8" />
                   <line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
-                <input
+                <el-input
                   ref="projectInput"
                   v-model="projectKeyword"
-                  type="search"
+                  clearable
                   placeholder="搜索并选择项目"
                   @input="onInputSearch"
+                  @clear="clearProjectSelection"
                   @focus="openDropdown"
                 />
-                <button
-                  v-if="projectKeyword"
-                  type="button"
-                  class="clear-search-btn"
-                  @mousedown.prevent="clearProjectSelection"
-                  aria-label="清空选择"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
               </div>
 
               <div v-show="showDropdown" class="project-dropdown">
@@ -111,13 +83,7 @@
         <section class="daily-section">
           <div class="daily-section__heading">
             <h3>今日完成情况</h3>
-            <button type="button" class="ghost-button" @click="addItem">
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              新增行
-            </button>
+            <el-button @click="addItem">新增行</el-button>
           </div>
 
           <div v-if="form.projectId && form.reportDate" class="daily-plan-suggestion">
@@ -132,89 +98,75 @@
             </div>
           </div>
 
-          <div class="table-container">
-            <div class="daily-edit-table daily-edit-table--items">
-              <!-- 调整后的表头顺序 -->
-              <div class="daily-edit-table__head">
-                <span>任务来源</span>
-                <span>关联周计划</span>
-                <span>工作内容</span>
-                <span>执行状态</span>
-                <span>完成进度</span>
-                <span>完成时间</span>
-                <span>负责人</span>
-                <span>偏差与纠偏</span>
-                <span class="text-right">操作</span>
-              </div>
-              <div v-for="(item, index) in form.items" :key="item.localId" class="daily-edit-table__row">
-                <!-- 任务来源 -->
-                <select
+          <div class="table-container report-table-scroll">
+            <el-table :data="form.items" row-key="localId" class="report-data-table report-data-table--daily-items">
+              <el-table-column label="任务来源" min-width="130"><template #default="{ row: item, $index: index }">
+                <el-select
                   v-model="item.sourceType"
-                  class="form-control"
                   :class="{ invalid: itemErrors[item.localId]?.sourceType }"
+                  placeholder="请选择来源"
                   @change="onItemSourceTypeChange(item)"
                 >
-                  <option value="">请选择来源</option>
-                  <option value="weekly_plan">周计划</option>
-                  <option value="ad_hoc">新增</option>
-                </select>
-                <!-- 关联周计划 -->
-                <select
+                  <el-option label="周计划" value="weekly_plan" />
+                  <el-option label="新增" value="ad_hoc" />
+                </el-select>
+              </template></el-table-column>
+              <el-table-column label="关联周计划" min-width="210"><template #default="{ row: item }">
+                <el-select
                   v-model="item.sourcePlanTaskKey"
-                  class="form-control"
                   :disabled="item.sourceType !== 'weekly_plan'"
                   :class="{ invalid: itemErrors[item.localId]?.sourcePlanTaskKey }"
+                  placeholder="请选择计划"
                   @change="applySelectedPlanToItem(item)"
                 >
-                  <option value="">请选择计划</option>
-                  <option v-for="plan in planSuggestion.items" :key="plan.taskKey" :value="plan.taskKey">
-                    {{ plan.plannedDate }}｜{{ plan.workTarget }}
-                  </option>
-                </select>
-                <!-- 工作内容 -->
-                <textarea
+                  <el-option v-for="plan in planSuggestion.items" :key="plan.taskKey" :label="`${plan.plannedDate}｜${plan.workTarget}`" :value="plan.taskKey" />
+                </el-select>
+              </template></el-table-column>
+              <el-table-column label="工作内容" min-width="210"><template #default="{ row: item }">
+                <el-input
                   v-model="item.workContent"
-                  required
-                  class="form-control form-textarea"
+                  type="textarea"
                   :class="{ invalid: itemErrors[item.localId]?.workContent }"
                 />
-                <!-- 执行状态 -->
-                <select
+              </template></el-table-column>
+              <el-table-column label="执行状态" min-width="130"><template #default="{ row: item }">
+                <el-select
                   v-model="item.executionStatus"
-                  class="form-control"
                   :class="{ invalid: itemErrors[item.localId]?.executionStatus }"
+                  placeholder="请选择状态"
                   @change="onExecutionStatusChange(item)"
                 >
-                  <option value="">请选择状态</option>
-                  <option value="completed">已完成</option>
-                  <option value="in_progress">进行中</option>
-                  <option value="not_completed">未完成</option>
-                </select>
-                <!-- 完成进度 -->
-                <input
+                  <el-option label="已完成" value="completed" />
+                  <el-option label="进行中" value="in_progress" />
+                  <el-option label="未完成" value="not_completed" />
+                </el-select>
+              </template></el-table-column>
+              <el-table-column label="完成进度" min-width="120"><template #default="{ row: item }">
+                <el-input
                   v-model="item.completionProgress"
-                  required
                   placeholder="如 100%"
-                  class="form-control"
                   :class="{ invalid: itemErrors[item.localId]?.completionProgress }"
                 />
-                <!-- 完成时间 -->
-                <input
+              </template></el-table-column>
+              <el-table-column label="完成时间" min-width="130"><template #default="{ row: item }">
+                <el-time-picker
                   v-model="item.completedAt"
-                  type="time"
-                  class="form-control"
+                  value-format="HH:mm"
+                  format="HH:mm"
+                  placeholder="完成时间"
                   :class="{ invalid: itemErrors[item.localId]?.completedAt }"
                 />
-                <!-- 负责人 -->
-                <input v-model="item.responsiblePerson" class="form-control" />
-                <!-- 偏差与纠偏 -->
-                <textarea v-model="item.deviationAndCorrectiveAction" class="form-control form-textarea" />
-                <!-- 操作 -->
-                <button type="button" class="row-btn action-btn" :disabled="form.items.length === 1" @click="removeItem(index)">
-                  删除
-                </button>
-              </div>
-            </div>
+              </template></el-table-column>
+              <el-table-column label="负责人" min-width="130"><template #default="{ row: item }">
+                <el-input v-model="item.responsiblePerson" />
+              </template></el-table-column>
+              <el-table-column label="偏差与纠偏" min-width="180"><template #default="{ row: item }">
+                <el-input v-model="item.deviationAndCorrectiveAction" type="textarea" />
+              </template></el-table-column>
+              <el-table-column label="操作" width="80" fixed="right" align="center"><template #default="{ $index: index }">
+                <el-button link type="danger" :disabled="form.items.length === 1" @click="removeItem(index)">删除</el-button>
+              </template></el-table-column>
+            </el-table>
           </div>
         </section>
 
@@ -222,24 +174,9 @@
         <section class="daily-section daily-attachments" @paste="handlePaste">
           <div class="daily-section__heading">
             <h3>进展照片</h3>
-            <label
-              class="ghost-button daily-upload-button"
-              :class="{ disabled: uploading || saving }"
-              :title="(uploading || saving) ? '上传中，请稍候' : '点击上传照片'"
-            >
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-              {{ uploading ? '上传中...' : '上传照片' }}
-              <input
-                type="file"
-                accept="image/*"
-                :disabled="uploading || saving"
-                @change="uploadAttachment"
-              />
-            </label>
+            <el-upload :show-file-list="false" accept="image/*" :disabled="uploading || saving" :http-request="uploadAttachment">
+              <el-button :loading="uploading" :disabled="saving">上传照片</el-button>
+            </el-upload>
           </div>
 
           <div v-if="savedReport">
@@ -263,8 +200,8 @@
                   <span class="attachment-name">{{ attachment.originalFileName }}</span>
                 </div>
                 <div class="attachment-actions">
-                  <button type="button" class="row-btn action-btn" @click="downloadAttachment(attachment)">下载</button>
-                  <button type="button" class="row-btn action-btn action-btn--danger" @click="removeAttachment(attachment)">删除</button>
+                  <el-button link type="primary" @click="downloadAttachment(attachment)">下载</el-button>
+                  <el-button link type="danger" @click="removeAttachment(attachment)">删除</el-button>
                 </div>
               </li>
             </ul>
@@ -277,72 +214,46 @@
         <section class="daily-section">
           <div class="daily-section__heading">
             <h3>明日工作计划</h3>
-            <button type="button" class="ghost-button" @click="addPlan">
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              新增行
-            </button>
+            <el-button @click="addPlan">新增行</el-button>
           </div>
 
-          <div class="table-container">
-            <div class="daily-edit-table daily-edit-table--plans">
-              <div class="daily-edit-table__head">
-                <span>计划内容</span>
-                <span>负责人</span>
-                <span>完成时间</span>
-                <span>协同中心</span>
-                <span>协同事项</span>
-                <span class="text-right">操作</span>
-              </div>
-              <div v-for="(plan, index) in form.plans" :key="plan.localId" class="daily-edit-table__row">
-                <textarea v-model="plan.plannedWorkContent" class="form-control form-textarea" />
-                <input v-model="plan.responsiblePerson" class="form-control" />
-                <input v-model="plan.plannedCompleteAt" type="time" class="form-control" />
-                <input v-model="plan.collaboratingCenter" class="form-control" />
-                <textarea v-model="plan.collaborationItem" class="form-control form-textarea" />
-                <button type="button" class="row-btn action-btn" :disabled="form.plans.length === 1" @click="removePlan(index)">
-                  删除
-                </button>
-              </div>
-            </div>
+          <div class="table-container report-table-scroll">
+            <el-table :data="form.plans" row-key="localId" class="report-data-table report-data-table--daily-plans">
+              <el-table-column label="计划内容" min-width="260"><template #default="{ row: plan }">
+                <el-input v-model="plan.plannedWorkContent" type="textarea" />
+              </template></el-table-column>
+              <el-table-column label="负责人" min-width="150"><template #default="{ row: plan }">
+                <el-input v-model="plan.responsiblePerson" />
+              </template></el-table-column>
+              <el-table-column label="完成时间" min-width="150"><template #default="{ row: plan }">
+                <el-time-picker v-model="plan.plannedCompleteAt" value-format="HH:mm" format="HH:mm" placeholder="完成时间" />
+              </template></el-table-column>
+              <el-table-column label="协同中心" min-width="180"><template #default="{ row: plan }">
+                <el-input v-model="plan.collaboratingCenter" />
+              </template></el-table-column>
+              <el-table-column label="协同事项" min-width="230"><template #default="{ row: plan }">
+                <el-input v-model="plan.collaborationItem" type="textarea" />
+              </template></el-table-column>
+              <el-table-column label="操作" width="80" fixed="right" align="center"><template #default="{ $index: index }">
+                <el-button link type="danger" :disabled="form.plans.length === 1" @click="removePlan(index)">删除</el-button>
+              </template></el-table-column>
+            </el-table>
           </div>
-        </section>
-
-        <!-- 消息提示 -->
-        <section v-if="message" class="state-panel state-panel--success state-panel--compact">
-          <p>{{ message }}</p>
-        </section>
-        <section v-if="errorMessage" class="state-panel state-panel--error state-panel--compact">
-          <p>{{ errorMessage }}</p>
         </section>
 
         <!-- 底部操作按钮 -->
         <div class="form-actions">
-          <button type="button" class="ghost-button" :disabled="saving" @click="saveDraft">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-              <polyline points="17 21 17 13 7 13 7 21" />
-              <polyline points="7 3 7 8 15 8" />
-            </svg>
-            {{ isSavedSubmitted ? '保存修改' : '暂存草稿' }}
-          </button>
-          <button v-if="!isSavedSubmitted" type="button" class="primary-button" :disabled="saving" @click="submitReport">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-              <polyline points="22 4 12 14.01 9 11.01" />
-            </svg>
-            正式提交
-          </button>
+          <el-button :loading="saving" @click="saveDraft">{{ isSavedSubmitted ? '保存修改' : '暂存草稿' }}</el-button>
+          <el-button v-if="!isSavedSubmitted" type="primary" :loading="saving" @click="submitReport">正式提交</el-button>
         </div>
-      </form>
+      </el-form>
     </section>
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch, onBeforeUnmount } from 'vue';
+import { ElMessage } from 'element-plus';
 import { OrganizationRole, ReportStatus } from '../constants/reports.js';
 import {
   createDailyReport,
@@ -370,6 +281,10 @@ const props = defineProps({
     type: String,
     default: ''
   },
+  initialReportDate: {
+    type: String,
+    default: ''
+  },
   navigate: {
     type: Function,
     required: true
@@ -388,6 +303,21 @@ function getLocalIsoDate() {
 }
 
 const today = getLocalIsoDate();
+
+// Accept only a real calendar date in the route's YYYY-MM-DD contract.
+function normalizeInitialReportDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || '').trim());
+  if (!match) return '';
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  const isValid = date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+  return isValid ? match[0] : '';
+}
+
+const initialReportDate = props.reportId ? '' : normalizeInitialReportDate(props.initialReportDate);
 const projectKeyword = ref('');
 const projectOptions = ref([]);
 const projectSearchMessage = ref('');
@@ -397,6 +327,8 @@ const uploading = ref(false);
 const exporting = ref(false);
 const message = ref('');
 const errorMessage = ref('');
+watch(message, (value) => { if (value) ElMessage.success(value); });
+watch(errorMessage, (value) => { if (value) ElMessage.error(value); });
 const showDropdown = ref(false);
 const projectInput = ref(null);
 const itemErrors = ref({});
@@ -436,7 +368,7 @@ const currentUserDisplayName = computed(
 );
 
 const form = reactive({
-  reportDate: today,
+  reportDate: initialReportDate || today,
   projectId: '',
   items: [createEmptyItem()],
   plans: [createEmptyPlan()]
@@ -627,6 +559,7 @@ function clearInvalidPlanTaskKeys() {
   form.items.forEach((item) => {
     if (item.sourceType === 'weekly_plan' && item.sourcePlanTaskKey && !availableTaskKeys.has(item.sourcePlanTaskKey)) {
       item.sourcePlanTaskKey = '';
+      item.workContent = '';
     }
   });
 }
@@ -635,24 +568,23 @@ function clearAllPlanTaskKeysForScopeChange() {
   form.items.forEach((item) => {
     if (item.sourceType === 'weekly_plan') {
       item.sourcePlanTaskKey = '';
+      item.workContent = '';
     }
   });
 }
 
 function onItemSourceTypeChange(item) {
-  if (item.sourceType !== 'weekly_plan') {
-    item.sourcePlanTaskKey = '';
-  }
+  item.sourcePlanTaskKey = '';
+  item.workContent = '';
 }
 
 function applySelectedPlanToItem(item) {
   const plan = planSuggestion.items.find((candidate) => candidate.taskKey === item.sourcePlanTaskKey);
   if (!plan) {
+    item.workContent = '';
     return;
   }
-  if (!String(item.workContent || '').trim()) {
-    item.workContent = plan.workTarget || plan.workTask || '';
-  }
+  item.workContent = plan.workTarget || plan.workTask || '';
 }
 
 // ===== 执行状态变更时自动填充/清空完成进度 =====
@@ -965,10 +897,8 @@ async function submitReport() {
   await saveReport(ReportStatus.SUBMITTED);
 }
 
-// 文件上传（来自 input）
-async function uploadAttachment(event) {
-  const file = event.target.files?.[0];
-  event.target.value = '';
+// el-upload 只负责选择文件，实际上传继续复用现有鉴权 API。
+async function uploadAttachment({ file }) {
   if (!file) return;
   await uploadFile(file);
 }
@@ -1040,672 +970,3 @@ onBeforeUnmount(() => {
   clearObjectURLs();
 });
 </script>
-
-<style scoped>
-/* ===== 全局页面容器 ===== */
-.page-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  padding: 1.5rem;
-  max-width: 1500px;
-  margin: 0 auto;
-  min-height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  color: #333333;
-  background: transparent;
-}
-
-/* ===== 页面进入动画 ===== */
-.animate-fadeIn {
-  animation: fadeIn 0.4s ease-out;
-}
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* ===== 面板 ===== */
-.panel {
-  background: #ffffff;
-  border-radius: 8px;
-  border: none;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.04);
-  overflow: hidden;
-}
-.panel-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid #ebeef5;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-.toolbar-info {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-.toolbar-title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #303133;
-}
-.toolbar-subtitle {
-  font-size: 0.8rem;
-  color: #909399;
-}
-.toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-/* ===== 状态标签 ===== */
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.15rem 0.6rem;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  border: 1px solid transparent;
-}
-.status-badge--draft {
-  background: #fdf6ec;
-  color: #e6a23c;
-  border-color: #faecd8;
-}
-.status-badge--done {
-  background: #f0f9eb;
-  color: #67c23a;
-  border-color: #e1f3d8;
-}
-
-/* ===== 状态面板（错误、空、加载） ===== */
-.state-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem 1.5rem;
-  text-align: center;
-  border-radius: 8px;
-}
-.state-panel--compact {
-  padding: 0.75rem 1.5rem;
-  margin: 1rem 0 0;
-}
-.state-panel--error {
-  background: #fef0f0;
-  color: #f56c6c;
-}
-.state-panel--error h3 {
-  margin: 0.5rem 0;
-  font-weight: 600;
-}
-.state-panel--success {
-  background: #f0f9eb;
-  color: #67c23a;
-}
-.state-panel p {
-  font-size: 0.9rem;
-  margin: 0;
-}
-.error-icon {
-  width: 32px;
-  height: 32px;
-  stroke: #f56c6c;
-  margin-bottom: 0.75rem;
-}
-
-/* ===== 按钮基础 ===== */
-.ghost-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  background: #ffffff;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  color: #606266;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  height: 36px;
-  white-space: nowrap;
-}
-.ghost-button:hover:not(:disabled) {
-  border-color: #c6e2ff;
-  background: #ecf5ff;
-  color: #3e63dd;
-}
-.ghost-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.ghost-button.active {
-  border-color: #3e63dd;
-  background: #ecf5ff;
-  color: #3e63dd;
-}
-.ghost-button.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-.btn-icon {
-  width: 16px;
-  height: 16px;
-  stroke: currentColor;
-  flex-shrink: 0;
-}
-
-.primary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  background: #3e63dd;
-  color: #ffffff;
-  border: none;
-  font-weight: 500;
-  padding: 0.5rem 1.25rem;
-  border-radius: 4px;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  height: 36px;
-  white-space: nowrap;
-}
-.primary-button:hover:not(:disabled) {
-  background: #5275e7;
-}
-.primary-button:disabled {
-  opacity: 0.6;
-  background: #a0cfff;
-  cursor: not-allowed;
-}
-
-/* ===== 表单筛选栏 ===== */
-.daily-form {
-  padding: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-.daily-filters {
-  display: flex;
-  gap: 1.5rem;
-  align-items: flex-end;
-  flex-wrap: wrap;
-}
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-.filter-label {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: #606266;
-}
-
-/* 项目选择器（下拉） */
-.daily-project-select {
-  flex: 1;
-  min-width: 280px;
-  position: relative;
-}
-.project-select-wrapper {
-  position: relative;
-}
-.project-select-wrapper .input-wrapper {
-  position: relative;
-}
-.search-icon {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 16px;
-  height: 16px;
-  stroke: #c0c4cc;
-  pointer-events: none;
-}
-.project-select-wrapper .input-wrapper input {
-  padding-left: 2.2rem;
-  padding-right: 2.2rem;
-}
-
-.input-wrapper {
-  position: relative;
-  border-radius: 4px;
-  border: 1px solid #dcdfe6;
-  background: #ffffff;
-  transition: border-color 0.2s ease;
-  overflow: hidden;
-}
-.input-wrapper:focus-within {
-  border-color: #3e63dd;
-}
-.input-wrapper input {
-  width: 100%;
-  padding: 0.5rem 1rem;
-  border: none;
-  background: transparent;
-  font-size: 0.9rem;
-  color: #303133;
-  outline: none;
-  height: 48px;
-  box-sizing: border-box;
-}
-.input-wrapper input[type="date"] {
-  cursor: pointer;
-}
-.input-wrapper input::placeholder {
-  color: #303133;  /* 与下拉选项文字颜色一致 */
-}
-
-/* 清空搜索按钮（自定义） */
-.clear-search-btn {
-  position: absolute;
-  right: 6px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: #909399;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: background 0.2s ease;
-}
-.clear-search-btn:hover {
-  background: #f0f0f0;
-  color: #606266;
-}
-.clear-search-btn svg {
-  width: 14px;
-  height: 14px;
-  stroke: currentColor;
-}
-
-/* 隐藏浏览器默认的搜索清除按钮 */
-.daily-project-select .input-wrapper input[type="search"]::-webkit-search-cancel-button,
-.daily-project-select .input-wrapper input[type="search"]::-webkit-search-decoration {
-  -webkit-appearance: none;
-  appearance: none;
-}
-.daily-project-select .input-wrapper input[type="search"] {
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-/* 下拉列表 */
-.project-dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  max-height: 260px;
-  overflow-y: auto;
-  background: #ffffff;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  z-index: 1000;
-  padding: 4px 0;
-}
-.project-dropdown-item {
-  padding: 0.5rem 1rem;
-  font-size: 0.85rem;
-  color: #303133;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.project-dropdown-item:hover {
-  background: #f5f7fa;
-}
-.project-dropdown-item.active {
-  background: #ecf5ff;
-  color: #3e63dd;
-}
-.project-dropdown-empty {
-  padding: 0.5rem 1rem;
-  font-size: 0.85rem;
-  color: #909399;
-  text-align: center;
-}
-
-/* ===== 动态区块（今日完成情况 / 明日计划 / 照片） ===== */
-.daily-section {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-.daily-section__heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-.daily-section__heading h3 {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #303133;
-  margin: 0;
-}
-
-.daily-plan-suggestion {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 1rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid #d9ecff;
-  border-radius: 4px;
-  background: #f5faff;
-}
-.daily-plan-suggestion__content {
-  min-width: 0;
-}
-.daily-plan-suggestion__content strong {
-  display: block;
-  margin-bottom: 0.35rem;
-  color: #303133;
-  font-size: 0.9rem;
-}
-.daily-plan-suggestion__content ul {
-  margin: 0;
-  padding-left: 1.1rem;
-  color: #606266;
-  font-size: 0.85rem;
-  line-height: 1.5;
-}
-
-.table-container {
-  overflow-x: auto;
-  width: 100%;
-}
-.daily-edit-table {
-  min-width: 1320px;
-  width: 100%;
-}
-.daily-edit-table__head {
-  display: grid;
-  padding: 0.6rem 0.75rem;
-  background: #fafafa;
-  border-bottom: 1px solid #ebeef5;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: #909399;
-  gap: 0.75rem;
-}
-/* 调整后的列宽顺序（任务来源、关联周计划、工作内容、执行状态、完成进度、完成时间、负责人、偏差与纠偏、操作） */
-.daily-edit-table--items .daily-edit-table__head {
-  grid-template-columns: 1.1fr 1.8fr 1.8fr 1.1fr 1fr 0.9fr 1fr 1.4fr 0.7fr;
-}
-.daily-edit-table--plans .daily-edit-table__head {
-  grid-template-columns: 2fr 1fr 1fr 1.2fr 1.5fr 0.8fr;
-}
-.text-right {
-  text-align: right;
-}
-
-.daily-edit-table__row {
-  display: grid;
-  padding: 0.6rem 0.75rem;
-  align-items: start;
-  border-bottom: 1px solid #f0f0f2;
-  gap: 0.75rem;
-  transition: background 0.2s ease;
-}
-/* 行内列宽与表头一致 */
-.daily-edit-table--items .daily-edit-table__row {
-  grid-template-columns: 1.1fr 1.8fr 1.8fr 1.1fr 1fr 0.9fr 1fr 1.4fr 0.7fr;
-}
-.daily-edit-table--plans .daily-edit-table__row {
-  grid-template-columns: 2fr 1fr 1fr 1.2fr 1.5fr 0.8fr;
-}
-.daily-edit-table__row:hover {
-  background: #fdfdfe;
-}
-
-/* 表单控件（输入框 / 文本域）—— 高度 48px */
-.form-control {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.9rem;
-  color: #303133;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  background: #ffffff;
-  transition: border-color 0.2s ease;
-  outline: none;
-  font-family: inherit;
-  height: 48px;
-  box-sizing: border-box;
-  line-height: 1.4;
-}
-.form-control:focus {
-  border-color: #3e63dd;
-}
-
-/* 文本域特殊处理 */
-.form-textarea {
-  height: 48px;
-  min-height: 48px;
-  resize: vertical;
-  overflow-y: auto;
-  line-height: 1.5;
-  padding-top: 0.5rem;
-  padding-bottom: 0.5rem;
-}
-
-/* 错误高亮 */
-.form-control.invalid {
-  border-color: #f56c6c;
-  background-color: #fef0f0;
-}
-.form-control.invalid:focus {
-  border-color: #f56c6c;
-  box-shadow: 0 0 0 2px rgba(245, 108, 108, 0.2);
-}
-
-.daily-edit-table__row .row-btn {
-  margin-top: 0.15rem;
-}
-
-/* 行内操作按钮 */
-.row-btn {
-  padding: 0.2rem 0.6rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  background: #ffffff;
-  border: 1px solid #dcdfe6;
-  color: #606266;
-  white-space: nowrap;
-}
-.row-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.action-btn:hover:not(:disabled) {
-  border-color: #a4b3ff;
-  color: #3e63dd;
-  background: #f0f3ff;
-}
-.action-btn--danger:hover:not(:disabled) {
-  border-color: #fbc4c4;
-  color: #f56c6c;
-  background: #fef0f0;
-}
-
-/* ===== 附件区域 ===== */
-.daily-attachments {
-  padding-top: 0.5rem;
-}
-.daily-upload-button {
-  position: relative;
-  cursor: pointer;
-  overflow: hidden;
-}
-.daily-upload-button.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-.daily-upload-button input[type="file"] {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
-}
-.daily-upload-button.disabled input[type="file"] {
-  cursor: not-allowed;
-}
-
-/* ===== 附件列表与缩略图 ===== */
-.daily-attachment-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-.daily-attachment-list li {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.5rem 0.75rem;
-  background: #fafafa;
-  border-radius: 4px;
-  border: 1px solid #ebeef5;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-.attachment-preview {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex: 1;
-  min-width: 0;
-}
-.attachment-thumbnail {
-  width: 48px;
-  height: 48px;
-  object-fit: cover;
-  border-radius: 4px;
-  border: 1px solid #dcdfe6;
-  flex-shrink: 0;
-}
-.attachment-thumbnail-placeholder {
-  width: 48px;
-  height: 48px;
-  border-radius: 4px;
-  border: 1px dashed #dcdfe6;
-  background: #f5f7fa;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.attachment-thumbnail-placeholder svg {
-  width: 24px;
-  height: 24px;
-  stroke: #c0c4cc;
-}
-.attachment-name {
-  font-size: 0.85rem;
-  color: #303133;
-  word-break: break-all;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.attachment-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-shrink: 0;
-}
-
-.inline-muted {
-  font-size: 0.85rem;
-  color: #909399;
-  margin: 0.5rem 0;
-}
-.inline-hint {
-  color: #909399;
-  font-style: italic;
-}
-
-/* ===== 底部操作按钮 ===== */
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 1rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid #ebeef5;
-  flex-wrap: wrap;
-}
-
-/* ===== 响应式 ===== */
-@media (max-width: 900px) {
-  .daily-filters {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .daily-project-select {
-    min-width: unset;
-  }
-  .daily-edit-table__head,
-  .daily-edit-table__row {
-    grid-template-columns: 1fr !important;
-    gap: 0.5rem;
-  }
-  .daily-edit-table__head {
-    display: none;
-  }
-  .daily-edit-table__row {
-    padding: 0.75rem;
-    border: 1px solid #ebeef5;
-    border-radius: 4px;
-    margin-bottom: 0.5rem;
-  }
-  .daily-edit-table__row .row-btn {
-    align-self: flex-start;
-  }
-  .panel-toolbar {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .toolbar-actions {
-    width: 100%;
-    justify-content: flex-start;
-  }
-  .attachment-preview {
-    flex-wrap: wrap;
-  }
-  .attachment-name {
-    white-space: normal;
-  }
-}
-</style>

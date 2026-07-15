@@ -19,6 +19,7 @@ import {
   downloadStageDocumentAttachmentHandler,
   downloadStageDocumentGeneratedFileHandler,
   downloadStageDocumentOnlineFormImageHandler,
+  generateStageDocumentOnlineFormFileHandler,
   getProjectDetailHandler,
   getProjectNavigationHandler,
   getProjectOverviewDashboardHandler,
@@ -340,6 +341,12 @@ projectsRouter.post(
   '/:projectId/stage-documents/:documentId/online-form/submit',
   requireAuth,
   asyncHandler(submitStageDocumentOnlineFormHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/stage-documents/:documentId/online-form/generated-file',
+  requireAuth,
+  asyncHandler(generateStageDocumentOnlineFormFileHandler)
 );
 
 projectsRouter.post(

@@ -35,36 +35,11 @@
     </RouterView>
   </MainLayout>
 
-  <Transition name="toast">
-    <div
-      v-if="toastVisible"
-      class="toast"
-      :class="{ 'toast--error': toastType === 'error', 'toast--success': toastType === 'success' }"
-    >
-      <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <template v-if="toastType === 'error'">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="12" y1="8" x2="12" y2="12" />
-          <line x1="12" y1="16" x2="12.01" y2="16" />
-        </template>
-        <template v-else>
-          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-          <polyline points="22 4 12 14.01 9 11.01" />
-        </template>
-      </svg>
-      <span>{{ toastMessage }}</span>
-      <button type="button" class="toast-close" @click="hideToast">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <line x1="18" y1="6" x2="6" y2="18" />
-          <line x1="6" y1="6" x2="18" y2="18" />
-        </svg>
-      </button>
-    </div>
-  </Transition>
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
+import { ElMessage } from 'element-plus';
 import { RouterView, useRoute, useRouter } from 'vue-router';
 import { getCurrentUser, logout as logoutRequest } from './api/auth.js';
 import {
@@ -85,10 +60,6 @@ const loggingOut = ref(false);
 const authToken = ref('');
 const currentUser = ref(null);
 const authMessage = ref('');
-const toastVisible = ref(false);
-const toastMessage = ref('');
-const toastType = ref('error');
-let toastTimer = null;
 
 function navigate(path) {
   router.push(path);
@@ -123,6 +94,11 @@ function pageProps(targetRoute) {
           routeQuery(targetRoute.query?.nodeKey)
       };
     case 'daily-report':
+      return {
+        ...commonProps,
+        reportId: routeParam(targetRoute.params?.reportId),
+        initialReportDate: routeQuery(targetRoute.query?.date)
+      };
     case 'weekly-report':
       return {
         ...commonProps,
@@ -142,25 +118,7 @@ function pageProps(targetRoute) {
 }
 
 function showToast(message, type = 'error') {
-  if (toastTimer) {
-    clearTimeout(toastTimer);
-  }
-
-  toastMessage.value = message;
-  toastType.value = type;
-  toastVisible.value = true;
-  toastTimer = setTimeout(() => {
-    toastVisible.value = false;
-    toastTimer = null;
-  }, 3000);
-}
-
-function hideToast() {
-  if (toastTimer) {
-    clearTimeout(toastTimer);
-    toastTimer = null;
-  }
-  toastVisible.value = false;
+  ElMessage[type]?.(message);
 }
 
 function setAuth(token, user) {
@@ -226,190 +184,5 @@ function handleAuthExpired(message) {
   showToast(expiredMessage, 'error');
 }
 
-onUnmounted(() => {
-  if (toastTimer) {
-    clearTimeout(toastTimer);
-  }
-});
-
 onMounted(restoreAuth);
 </script>
-
-<style scoped>
-.app-loading-screen {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f4f6f9;
-}
-
-.loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-}
-
-.loading-wave {
-  display: flex;
-  gap: 6px;
-}
-
-.wave-bar {
-  width: 4px;
-  height: 24px;
-  border-radius: 4px;
-  background: #3e63dd;
-  animation: wave 1s ease-in-out infinite;
-}
-
-.wave-bar:nth-child(2) {
-  animation-delay: 0.15s;
-}
-
-.wave-bar:nth-child(3) {
-  animation-delay: 0.3s;
-}
-
-@keyframes wave {
-  0%,
-  100% {
-    transform: scaleY(0.4);
-  }
-  50% {
-    transform: scaleY(1);
-  }
-}
-
-.app-loading-screen p {
-  color: #909399;
-  font-size: 0.9rem;
-  font-weight: 500;
-}
-
-.state-panel {
-  margin: 1.5rem;
-  border: 0;
-  border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.04);
-  padding: 5rem 2rem;
-  text-align: center;
-}
-
-.state-panel h2 {
-  margin-bottom: 0.5rem;
-  color: #303133;
-  font-size: 1.25rem;
-  font-weight: 600;
-}
-
-.state-panel p {
-  margin-bottom: 1.5rem;
-  color: #909399;
-  font-size: 0.9rem;
-}
-
-.primary-button {
-  height: 36px;
-  border: 0;
-  border-radius: 4px;
-  background: #3e63dd;
-  color: #ffffff;
-  cursor: pointer;
-  font-size: 0.875rem;
-  font-weight: 500;
-  padding: 0.5rem 1.5rem;
-  transition: all 0.2s;
-}
-
-.primary-button:hover {
-  background: #5275e7;
-}
-
-.toast {
-  position: fixed;
-  top: 2rem;
-  left: 50%;
-  z-index: 10000;
-  max-width: 90%;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  transform: translateX(-50%);
-  border: 1px solid #ebeef5;
-  border-radius: 4px;
-  background: #ffffff;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  color: #303133;
-  font-size: 0.85rem;
-  font-weight: 500;
-  padding: 0.7rem 1rem;
-}
-
-.toast--error {
-  border-left: 4px solid #f56c6c;
-}
-
-.toast--success {
-  border-left: 4px solid #67c23a;
-}
-
-.toast-icon {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-}
-
-.toast--error .toast-icon {
-  stroke: #f56c6c;
-}
-
-.toast--success .toast-icon {
-  stroke: #67c23a;
-}
-
-.toast-close {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-left: 0.5rem;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: #c0c4cc;
-  cursor: pointer;
-  padding: 0;
-  transition: background 0.2s;
-}
-
-.toast-close:hover {
-  background: #f4f4f5;
-}
-
-.toast-close svg {
-  width: 14px;
-  height: 14px;
-}
-
-.toast-enter-active,
-.toast-leave-active {
-  transition: all 0.3s ease;
-}
-
-.toast-enter-from,
-.toast-leave-to {
-  opacity: 0;
-  transform: translateX(-50%) translateY(-20px);
-}
-
-.toast-enter-to,
-.toast-leave-from {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-</style>

@@ -20,7 +20,7 @@
         @select-node="selectWorkspaceNodeFromNavigation"
       />
 
-      <el-main class="project-workspace-main">
+      <main class="project-workspace-main">
         <section v-if="workspaceLoading" class="state-panel state-panel--inline">
           <p>正在加载项目工作区...</p>
         </section>
@@ -55,7 +55,7 @@
           </el-card>
 
         </template>
-      </el-main>
+      </main>
     </el-container>
   </section>
 </template>

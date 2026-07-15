@@ -163,7 +163,7 @@
               </label>
               <label>
                 <span class="online-form-score-card__mobile-label">信息收集说明（选填）</span>
-                <el-input type="textarea" :rows="2" :model-value="formData[`${item.key}InformationNotes`]"
+                <el-input type="textarea" :rows="4" :model-value="formData[`${item.key}InformationNotes`]"
                   :disabled="isOnlineFormPartDisabled(section.editablePart)"
                   @update:model-value="$emit('update-field', { key: `${item.key}InformationNotes`, value: $event })" />
               </label>
@@ -180,9 +180,12 @@
         </div>
       </section>
 
-      <section v-if="form.reviewOpinions?.length" class="online-form-section">
-        <div class="online-form-review-opinions">
-          <article v-for="opinion in form.reviewOpinions" :key="opinion.nodeKey" class="online-form-review-opinion">
+      <section v-if="displayedReviewOpinions.length" class="online-form-section">
+        <div
+          class="online-form-review-opinions"
+          :class="{ 'online-form-review-opinions--two-column': displayedReviewOpinions.length === 2 }"
+        >
+          <article v-for="opinion in displayedReviewOpinions" :key="opinion.nodeKey" class="online-form-review-opinion">
             <strong>{{ opinion.nodeName }}</strong>
             <el-tag :type="statusTagType(opinion.nodeStatus)">
               {{ formatReviewOpinionStatus(opinion.nodeStatus) }}
@@ -273,6 +276,9 @@ const editorRoot = ref(null);
 const validationAttempted = ref(false);
 const expandedScoringSections = ref({});
 const schemaFields = computed(() => props.form?.schema?.fields || []);
+const displayedReviewOpinions = computed(() =>
+  (props.form?.reviewOpinions || []).filter((opinion) => opinion.nodeKey !== 'general_review')
+);
 const missingRequiredFields = computed(() => getMissingRequiredFields(
   schemaFields.value,
   props.formData,

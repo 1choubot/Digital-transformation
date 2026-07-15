@@ -2745,6 +2745,10 @@ p {
   align-items: stretch;
 }
 
+.online-form-review-opinions--two-column {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .online-form-section h4 {
   margin: 0;
   color: #17212f;
@@ -3284,16 +3288,14 @@ p {
   background: rgba(255, 255, 255, 0.16);
 }
 
-.project-workspace-shell {
-  min-height: calc(100vh - 124px);
-}
-
 .project-workspace-main {
+  flex: 1 1 0;
   display: grid;
   align-content: start;
   gap: 16px;
   min-width: 0;
   padding: 20px;
+  overflow: visible;
   background: #f3f6fa;
 }
 

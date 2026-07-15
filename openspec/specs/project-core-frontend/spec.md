@@ -2149,9 +2149,10 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **AND** 前端 MUST 展示技术板块 `特殊环境要求`、`行业门槛`、`技术成熟度`、`可借鉴案例` 的模板条款内容和评价标准
 - **AND** 前端 MUST NOT 只渲染评分项名称和空白评分表
 
-#### Scenario: 1.2 三方意见来自现有审批节点
-- **WHEN** 用户查看 `1.2 项目立项审批表` 的三方意见区域
-- **THEN** 前端 MUST 展示现有商务评价、技术评价、总经理审批节点产生的意见或状态
+#### Scenario: 1.2 双方评价意见来自现有审批节点
+- **WHEN** 用户查看 `1.2 项目立项审批表` 的评价意见区域
+- **THEN** 前端 MUST 只展示现有营销评价和研发评价节点产生的意见或状态
+- **AND** 前端 MUST NOT 在该意见区域展示总经理审批节点
 - **AND** 前端 MUST NOT 在普通表单里重复创建另一套商务评价、技术评价、总经理审批流
 
 #### Scenario: 渲染 1.3 通知预览
@@ -2691,6 +2692,15 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **WHEN** 用户查看项目详情页
 - **THEN** 项目详情页 SHALL NOT 要求用户通过 legacy 阶段关口审批面板完成阶段推进
 - **AND** 项目详情页 SHALL 使用阶段资料和专用 workflow 的状态展示阶段完成情况
+
+### Requirement: 页面级纵向滚动容器唯一
+项目核心前端 MUST 使用主布局 `.app-main` 作为唯一页面级纵向滚动容器；页面内容 MUST NOT 再嵌套可纵向滚动的 `el-main`。
+
+#### Scenario: 项目节点页使用统一主滚动容器
+- **WHEN** 用户查看内容超过一屏的项目节点页
+- **THEN** 页面 MUST 只由主布局 `.app-main` 承担页面级纵向滚动
+- **AND** 节点内容缩短后滚动范围 MUST 跟随实际内容高度收缩，不得在内容末尾产生可滚动的大片空白
+- **AND** 侧栏、表格、弹层和选择器 MAY 使用边界明确的局部滚动容器
 
 ### Requirement: C05 项目方案分析表前端字段
 项目核心前端 MUST 展示与 C05 项目方案分析表模板和后端保存字段一致的在线表单字段，并 MUST 对齐立项阶段项目需求表中可复用的字段命名和结构。

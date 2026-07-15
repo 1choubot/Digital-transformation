@@ -2155,6 +2155,11 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **AND** 前端 MUST NOT 在该意见区域展示总经理审批节点
 - **AND** 前端 MUST NOT 在普通表单里重复创建另一套商务评价、技术评价、总经理审批流
 
+#### Scenario: 中心负责人处理 1.2 评价任务
+- **WHEN** 当前用户存在可操作的营销评价或研发评价节点
+- **THEN** 前端 MUST NOT 展示营销评价和研发评价意见区域
+- **AND** 前端 MUST 继续展示当前用户有权执行的评价和退回操作
+
 #### Scenario: 渲染 1.3 通知预览
 - **WHEN** 营销中心负责人打开 `1.3 项目立项通知` 在线表单
 - **THEN** 前端 MUST 展示固定标题“关于确定项目名称及编号的通知”

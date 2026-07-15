@@ -180,7 +180,7 @@
         </div>
       </section>
 
-      <section v-if="displayedReviewOpinions.length" class="online-form-section">
+      <section v-if="showReviewOpinions && displayedReviewOpinions.length" class="online-form-section">
         <div
           class="online-form-review-opinions"
           :class="{ 'online-form-review-opinions--two-column': displayedReviewOpinions.length === 2 }"
@@ -268,6 +268,10 @@ const props = defineProps({
   imageState: {
     type: Object,
     default: () => ({})
+  },
+  showReviewOpinions: {
+    type: Boolean,
+    default: true
   }
 });
 

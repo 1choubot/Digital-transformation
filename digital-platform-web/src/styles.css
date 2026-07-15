@@ -2380,6 +2380,10 @@ p {
   min-width: 0;
 }
 
+.initiation-review-action-panel .initiation-review-nodes {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .initiation-review-node__main {
   display: flex;
   align-items: flex-start;

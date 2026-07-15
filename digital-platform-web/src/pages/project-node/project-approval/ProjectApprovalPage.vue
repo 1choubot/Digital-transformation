@@ -12,6 +12,7 @@
       :generated-file="generatedFile"
       :download-pending="generatedFileDownloadPending"
       :image-state="context.onlineFormImageState || emptyObject"
+      :show-review-opinions="!hasActionableEvaluationNode"
       @save="saveOnlineForm"
       @submit="submitOnlineForm"
       @download-form="downloadOnlineFormFile"
@@ -49,6 +50,7 @@
             <template v-if="isEvaluationNode(reviewNode)">
               <el-input
                 v-model.trim="nodeComments[reviewNode.nodeKey]"
+                type="textarea"
                 placeholder="评价文本"
                 :disabled="isReviewNodePending(reviewNode, 'approve')"
               />
@@ -257,6 +259,7 @@ const marketResearchDownloadPending = computed(() => Boolean(
 const approvalReview = computed(() => approvalDocument.value?.initiationReview || null);
 const approvalReviewNodes = computed(() => approvalReview.value?.nodes || []);
 const actionableReviewNodes = computed(() => approvalReviewNodes.value.filter((reviewNode) => reviewNode.canAct));
+const hasActionableEvaluationNode = computed(() => actionableReviewNodes.value.some(isEvaluationNode));
 const nodeComments = reactive({});
 const nodeReturnReasons = reactive({});
 const nodeReturnActions = reactive({});

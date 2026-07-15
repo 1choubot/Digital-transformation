@@ -19,8 +19,31 @@
       <section v-for="section in getSchemaSections(form)" :key="section.key" class="online-form-section">
         <h4 v-if="section.title">{{ section.title }}</h4>
         <div class="form-grid">
-          <label v-for="field in section.fields || []" :key="field.key" :data-field-key="field.key"
-            :class="getFieldClass(field)">
+          <template v-for="item in getDisplayItems(section.fields)" :key="item.key">
+          <section v-if="item.type === 'threshold-group'" class="threshold-field-group"
+            :class="{ 'threshold-field-group--paired': item.paired }">
+            <h5 class="threshold-field-group__heading">
+              <span>{{ item.label }}</span>
+              <small v-if="item.description" class="form-field-description">{{ item.description }}</small>
+            </h5>
+            <div class="threshold-field-group__inputs">
+              <label v-for="field in item.fields" :key="field.key" :data-field-key="field.key"
+                :class="[getFieldClass(field), 'threshold-field-input']">
+                <span class="form-field-label">
+                  <span>{{ field.limitLabel }}{{ field.required ? ' *' : '' }}</span>
+                </span>
+                <el-input :model-value="formData[field.key]" :readonly="field.readOnly"
+                  :disabled="isOnlineFormFieldDisabled(field)"
+                  @update:model-value="$emit('update-field', { key: field.key, value: $event })" />
+                <small v-if="isFieldInvalid(field.key)" class="form-field-error">
+                  {{ getFieldValidationMessage(field.key) }}
+                </small>
+              </label>
+            </div>
+          </section>
+
+          <template v-else v-for="field in [item.field]" :key="field.key">
+          <label :data-field-key="field.key" :class="getFieldClass(field)">
             <span class="form-field-label">
               <span>{{ field.label }}{{ field.required ? ' *' : '' }}</span>
               <small v-if="field.description" class="form-field-description">{{ field.description }}</small>
@@ -77,6 +100,8 @@
               {{ getFieldValidationMessage(field.key) }}
             </small>
           </label>
+          </template>
+          </template>
         </div>
       </section>
 
@@ -157,6 +182,7 @@ import { computed, nextTick, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import GeneratedFormFileCard from '../GeneratedFormFileCard.vue';
 import { getMissingRequiredFields } from '../../utils/formValidation.js';
+import { groupThresholdFields } from '../../utils/thresholdFieldGroups.js';
 
 const emit = defineEmits([
   'save',
@@ -246,6 +272,10 @@ function getSchemaSections(form) {
       fields: form?.schema?.fields || []
     }
   ];
+}
+
+function getDisplayItems(fields) {
+  return groupThresholdFields(fields || []);
 }
 
 function getFieldClass(field) {

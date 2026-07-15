@@ -3,7 +3,9 @@ import { ElMessage } from 'element-plus';
 import {
   approveSolutionDesignWorkflowNode,
   assignSolutionDesignRoles,
+  cancelSolutionDesignUploadExemption,
   downloadSolutionDesignWorkflowFile,
+  markSolutionDesignUploadExemption,
   processSolutionDesignQuotationResult,
   returnSolutionDesignWorkflowNode,
   selectSolutionDesignQuotationTenderBranch,
@@ -39,6 +41,7 @@ export function useSolutionDesignWorkflow({
   watch(localMessage, (value) => { if (value) ElMessage.success(value); });
   watch(localError, (value) => { if (value) ElMessage.error(value); });
   const returnReasons = reactive({});
+  const exemptionReasons = reactive({});
   const quotationReturnReason = ref('');
   const quotationRejectAction = ref('return_to_rd_cost');
 
@@ -125,12 +128,38 @@ export function useSolutionDesignWorkflow({
     }, `${slot.slotName}已开始下载。`, { notify: false });
   }
 
+  async function markUploadExemption(slot) {
+    const reason = String(exemptionReasons[slot.slotKey] || '').trim();
+    if (!reason) {
+      ElMessage.error('请填写无需上传原因。');
+      return;
+    }
+    const result = await runAction(
+      `exemption:mark:${slot.slotKey}`,
+      () => markSolutionDesignUploadExemption(id(), slot.slotKey, reason, token()),
+      `${slot.slotName}已标记为无需上传。`
+    );
+    if (result) delete exemptionReasons[slot.slotKey];
+  }
+
+  async function cancelUploadExemption(slot) {
+    await runAction(
+      `exemption:cancel:${slot.slotKey}`,
+      () => cancelSolutionDesignUploadExemption(id(), slot.slotKey, token()),
+      `${slot.slotName}已恢复为需要上传。`
+    );
+  }
+
   async function submitNode(nodeKey) {
     await runAction(`submit:${nodeKey}`, () => submitSolutionDesignWorkflowNode(id(), nodeKey, token()), `${getNodeName(nodeKey)}已提交。`);
   }
 
-  async function approveNode(nodeKey) {
-    await runAction(`approve:${nodeKey}`, () => approveSolutionDesignWorkflowNode(id(), nodeKey, '', token()), `${getNodeName(nodeKey)}审批已通过。`);
+  async function approveNode(nodeKey, payload = {}) {
+    await runAction(
+      `approve:${nodeKey}`,
+      () => approveSolutionDesignWorkflowNode(id(), nodeKey, payload, token()),
+      `${getNodeName(nodeKey)}审批已通过。`
+    );
   }
 
   async function returnNode(nodeKey) {
@@ -172,9 +201,10 @@ export function useSolutionDesignWorkflow({
   }
 
   return {
-    roleSelections, pendingAction, localMessage, localError, returnReasons,
+    roleSelections, pendingAction, localMessage, localError, returnReasons, exemptionReasons,
     quotationReturnReason, quotationRejectAction, isPending, clearLocalState,
     runAction, syncRoleSelections, assignRoles, handleUpload, downloadUpload,
+    markUploadExemption, cancelUploadExemption,
     submitNode, approveNode, returnNode, selectBranch, submitQuotation,
     acceptQuotation, rejectQuotation
   };

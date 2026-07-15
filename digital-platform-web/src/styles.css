@@ -5952,6 +5952,37 @@ p {
   font-weight: 700;
 }
 
+.solution-node-page .slot-exemption {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.solution-node-page .slot-exemption .el-button {
+  justify-self: start;
+}
+
+.solution-node-page .quotation-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+}
+
+.solution-node-page .quotation-table-wrap {
+  margin-bottom: 12px;
+  overflow-x: auto;
+}
+
+.solution-node-page .quotation-total {
+  margin: 16px 0;
+}
+
+@media (max-width: 760px) {
+  .solution-node-page .quotation-meta-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .solution-form-field--emphasized .el-form-item__label {
   font-weight: 700;
 }

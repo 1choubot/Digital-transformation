@@ -10,6 +10,7 @@ import SolutionDesignPage from '../pages/project-node/solution-design/SolutionDe
 import SolutionFinanceCostPage from '../pages/project-node/solution-design/SolutionFinanceCostPage.vue';
 import SolutionInternalReviewPage from '../pages/project-node/solution-design/SolutionInternalReviewPage.vue';
 import SolutionManufacturingCostPage from '../pages/project-node/solution-design/SolutionManufacturingCostPage.vue';
+import SolutionMarketingCostPage from '../pages/project-node/solution-design/SolutionMarketingCostPage.vue';
 import SolutionPreparationPage from '../pages/project-node/solution-design/SolutionPreparationPage.vue';
 import SolutionQuotationTenderPage from '../pages/project-node/solution-design/SolutionQuotationTenderPage.vue';
 
@@ -25,6 +26,7 @@ export const nodePages = {
   customer_solution_review: SolutionCustomerReviewPage,
   rd_cost_estimation: SolutionCostEstimationPage,
   manufacturing_cost_estimation: SolutionManufacturingCostPage,
+  marketing_cost_estimation: SolutionMarketingCostPage,
   finance_cost_estimation: SolutionFinanceCostPage,
   quotation_or_tender: SolutionQuotationTenderPage
 };

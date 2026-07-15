@@ -79,7 +79,6 @@ import {
   // workspace API 不包含完整文档详情。删除其 UI 渲染，保留数据调用。
   getProjectStageDocumentChecklist,
   getProjectWorkspace,
-  getSolutionDesignWorkflow,
   getStageDocumentOnlineForm,
   listStageDocumentAttachments,
   listSolutionDesignUploads,
@@ -1092,7 +1091,6 @@ async function refreshProjectWorkspaceState(options = {}) {
     loadChecklist(workspaceOptions),
     loadWorkspace(workspaceOptions),
     loadProjectNavigation(),
-    loadSolutionDesignWorkflow(),
     loadSolutionDesignUploads()
   ]);
 
@@ -1766,12 +1764,16 @@ async function loadWorkspace(options = {}) {
   const previousStageKey = selectedWorkspaceStageKey.value;
   const previousNodeKey = selectedWorkspaceNodeKey.value;
   workspaceLoading.value = true;
+  solutionDesignWorkflowLoading.value = true;
   workspaceErrorMessage.value = '';
+  solutionDesignWorkflowErrorMessage.value = '';
   workspace.value = null;
+  solutionDesignWorkflow.value = null;
   clearWorkspaceOnlineForm(options);
 
   try {
     workspace.value = await getProjectWorkspace(props.projectId, props.authToken);
+    solutionDesignWorkflow.value = workspace.value?.solutionDesignWorkflow || null;
     if (
       options.preserveSelection &&
       !hasWorkspaceRouteFocus() &&
@@ -1783,8 +1785,10 @@ async function loadWorkspace(options = {}) {
     selectWorkspaceTargetFromRoute(options);
   } catch (error) {
     workspaceErrorMessage.value = toReadableApiError(error);
+    solutionDesignWorkflowErrorMessage.value = workspaceErrorMessage.value;
   } finally {
     workspaceLoading.value = false;
+    solutionDesignWorkflowLoading.value = false;
   }
 }
 
@@ -1799,20 +1803,6 @@ async function loadProjectNavigation() {
     projectNavigationErrorMessage.value = toReadableApiError(error);
   } finally {
     projectNavigationLoading.value = false;
-  }
-}
-
-async function loadSolutionDesignWorkflow() {
-  solutionDesignWorkflowLoading.value = true;
-  solutionDesignWorkflowErrorMessage.value = '';
-
-  try {
-    solutionDesignWorkflow.value = await getSolutionDesignWorkflow(props.projectId, props.authToken);
-  } catch (error) {
-    solutionDesignWorkflowErrorMessage.value = toReadableApiError(error);
-    solutionDesignWorkflow.value = null;
-  } finally {
-    solutionDesignWorkflowLoading.value = false;
   }
 }
 
@@ -1964,7 +1954,6 @@ async function loadDetail() {
       loadChecklist(),
       loadWorkspace(),
       loadProjectNavigation(),
-      loadSolutionDesignWorkflow(),
       loadSolutionDesignUploads(),
       loadResponsibilityCandidates()
     ]);

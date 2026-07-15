@@ -350,6 +350,7 @@ export async function getProjectWorkspace(projectId, user) {
   return {
     project: detail.project,
     currentStage: detail.currentStage,
+    solutionDesignWorkflow,
     templateVersion: runtimeTemplateVersion,
     targetTemplateVersion: V20260629_TARGET_TEMPLATE_VERSION,
     targetTemplate: {

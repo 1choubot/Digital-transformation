@@ -25,6 +25,8 @@ import {
 } from './shared.js';
 import { selectProjectDetailWithConnection } from './coreRepository.js';
 import { selectProjectStagesForUpdate } from './stageRepository.js';
+import { SOLUTION_DESIGN_STAGE } from '../../domain/solutionDesignWorkflow.js';
+import { materializeSolutionDesignWorkflow } from './solutionDesignWorkflowMaterialization.js';
 
 function assertCanAdvanceProject(projectRow) {
   if (projectRow.status === PROJECT_STATUS.COMPLETED) {
@@ -301,6 +303,12 @@ async function applyProjectStageAdvance(connection, {
       WHERE id = ?`,
       [STAGE_STATUS.CURRENT, nextStage.id]
     );
+
+    if (nextStage.stage_key === SOLUTION_DESIGN_STAGE.STAGE_KEY) {
+      // The project row is already locked by advanceCurrentStageIfGateSatisfied.
+      // Keep materialization in this transaction so no partial solution stage is observable.
+      await materializeSolutionDesignWorkflow(connection, projectId, { projectAlreadyLocked: true });
+    }
   } else {
     await connection.execute('UPDATE projects SET status = ? WHERE id = ?', [PROJECT_STATUS.COMPLETED, projectId]);
   }

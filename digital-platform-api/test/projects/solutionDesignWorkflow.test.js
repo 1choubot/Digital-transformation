@@ -13,6 +13,7 @@ import {
   SOLUTION_DESIGN_NODE_KEY,
   SOLUTION_DESIGN_NODE_STATUS,
   SOLUTION_DESIGN_NODES,
+  SOLUTION_DESIGN_UPLOAD_SLOTS,
   SOLUTION_DESIGN_QUOTATION_FORM_STATUS,
   SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS,
   SOLUTION_DESIGN_QUOTATION_REJECTED_ACTION,
@@ -1470,6 +1471,7 @@ class SolutionDesignWorkflowFakeConnection {
     this.operationLogs = [];
     this.nodeInsertCount = 0;
     this.uploadSlotInsertCount = 0;
+    this.projectMaterializationLockCount = 0;
     this.nextUploadFileId = 1;
     this.nextAnalysisFormId = 1;
     this.nextReviewFormId = 1;
@@ -1623,6 +1625,11 @@ class SolutionDesignWorkflowFakeConnection {
   async execute(sql, params = []) {
     const text = normalizeSql(sql);
 
+    if (text.startsWith('SELECT id FROM projects WHERE id = ?')) {
+      this.projectMaterializationLockCount += 1;
+      return Number(params[0]) === Number(this.project.id) ? [[{ id: this.project.id }]] : [[]];
+    }
+
     if (text.startsWith('SELECT *, 0 AS has_department_responsible FROM projects')) {
       return [[{ ...this.project, has_department_responsible: 0 }]];
     }
@@ -1701,6 +1708,15 @@ class SolutionDesignWorkflowFakeConnection {
         this.nodes
           .filter((node) => node.project_id === projectId && node.node_key === nodeKey)
           .map((node) => ({ ...node }))
+      ];
+    }
+
+    if (text.startsWith('SELECT node_key FROM project_solution_design_nodes')) {
+      const [projectId] = params;
+      return [
+        this.nodes
+          .filter((node) => Number(node.project_id) === Number(projectId))
+          .map((node) => ({ node_key: node.node_key }))
       ];
     }
 
@@ -1822,6 +1838,15 @@ class SolutionDesignWorkflowFakeConnection {
         .filter((form) => form.project_id === projectId)
         .reduce((max, form) => Math.max(max, Number(form.revision ?? 0)), 0);
       return [[{ max_revision: maxRevision }]];
+    }
+
+    if (text.startsWith('SELECT slot_key FROM project_solution_design_upload_slots')) {
+      const [projectId] = params;
+      return [
+        this.uploadSlots
+          .filter((slot) => Number(slot.project_id) === Number(projectId))
+          .map((slot) => ({ slot_key: slot.slot_key }))
+      ];
     }
 
     if (text.startsWith('INSERT IGNORE INTO project_solution_design_upload_slots')) {
@@ -3143,6 +3168,7 @@ test('visible project users can query workflow and lazy initialization is idempo
   const requester = authUser(db.connection.users.get(10));
 
   const first = await getSolutionDesignWorkflow({ projectId: 100, user: requester }, db);
+  assert.equal(db.connection.projectMaterializationLockCount, 1);
   const second = await getSolutionDesignWorkflow({ projectId: 100, user: requester }, db);
 
   assert.equal(first.projectId, 100);
@@ -3156,7 +3182,10 @@ test('visible project users can query workflow and lazy initialization is idempo
   assert.equal(first.nodes[1].status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
   assert.equal(second.nodes.length, SOLUTION_DESIGN_NODES.length);
   assert.equal(db.connection.nodes.length, SOLUTION_DESIGN_NODES.length);
+  assert.equal(db.connection.uploadSlots.length, SOLUTION_DESIGN_UPLOAD_SLOTS.length);
   assert.equal(db.connection.nodeInsertCount, SOLUTION_DESIGN_NODES.length);
+  assert.equal(db.connection.uploadSlotInsertCount, SOLUTION_DESIGN_UPLOAD_SLOTS.length);
+  assert.equal(db.connection.projectMaterializationLockCount, 1);
 });
 
 test('workflow query rejects users without project visibility', async () => {

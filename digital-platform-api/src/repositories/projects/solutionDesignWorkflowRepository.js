@@ -63,6 +63,7 @@ import {
 import { canViewProject } from './visibility.js';
 import { ProjectAuthorizationError } from './shared.js';
 import { tryAutoAdvanceProjectStage } from './stageAdvanceRepository.js';
+import { materializeSolutionDesignWorkflow } from './solutionDesignWorkflowMaterialization.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
 import {
   GENERATED_DOCX_MIME_TYPE,
@@ -436,73 +437,35 @@ async function selectSolutionDesignNodeForUpdate(executor, projectId, nodeKey) {
   return rows[0] || null;
 }
 
-async function insertMissingInitialNodes(executor, projectId, existingRows = []) {
-  const existingKeys = new Set(existingRows.map((row) => row.node_key));
-  const initialNodes = buildInitialSolutionDesignNodes().filter((node) => !existingKeys.has(node.nodeKey));
+async function ensureSolutionDesignWorkflowState(executor, projectRow) {
+  let [nodes, uploadSlots] = await Promise.all([
+    selectSolutionDesignNodes(executor, projectRow.id),
+    selectSolutionDesignUploadSlots(executor, projectRow.id)
+  ]);
 
-  for (const node of initialNodes) {
-    await executor.execute(
-      `INSERT IGNORE INTO project_solution_design_nodes (
-        project_id,
-        node_key,
-        node_name,
-        node_order,
-        status,
-        activated_at
-      ) VALUES (?, ?, ?, ?, ?, ${node.status === SOLUTION_DESIGN_NODE_STATUS.PENDING ? 'CURRENT_TIMESTAMP' : 'NULL'})`,
-      [projectId, node.nodeKey, node.nodeName, node.nodeOrder, node.status]
-    );
+  const isComplete =
+    nodes.length >= SOLUTION_DESIGN_NODES.length &&
+    uploadSlots.length >= SOLUTION_DESIGN_UPLOAD_SLOTS.length;
+
+  if (shouldPersistInitialNodes(projectRow) && !isComplete) {
+    // The materializer obtains the project lock and rechecks persisted keys after
+    // waiting, so concurrent compatibility GETs cannot create partial workflows.
+    await materializeSolutionDesignWorkflow(executor, projectRow.id);
+    [nodes, uploadSlots] = await Promise.all([
+      selectSolutionDesignNodes(executor, projectRow.id),
+      selectSolutionDesignUploadSlots(executor, projectRow.id)
+    ]);
   }
+
+  return { nodes, uploadSlots };
 }
 
 async function ensureSolutionDesignNodes(executor, projectRow) {
-  const rows = await selectSolutionDesignNodes(executor, projectRow.id);
-
-  if (shouldPersistInitialNodes(projectRow) && rows.length < SOLUTION_DESIGN_NODES.length) {
-    await insertMissingInitialNodes(executor, projectRow.id, rows);
-    return selectSolutionDesignNodes(executor, projectRow.id);
-  }
-
-  return rows;
-}
-
-async function insertMissingUploadSlots(executor, projectId, existingRows = []) {
-  const existingKeys = new Set(existingRows.map((row) => row.slot_key));
-  const missingSlots = SOLUTION_DESIGN_UPLOAD_SLOTS.filter((slot) => !existingKeys.has(slot.slotKey));
-
-  for (const slot of missingSlots) {
-    await executor.execute(
-      `INSERT IGNORE INTO project_solution_design_upload_slots (
-        project_id,
-        node_key,
-        slot_key,
-        slot_name,
-        slot_order,
-        is_required,
-        revision,
-        status
-      ) VALUES (?, ?, ?, ?, ?, 1, 1, ?)`,
-      [
-        projectId,
-        slot.nodeKey,
-        slot.slotKey,
-        slot.slotName,
-        slot.slotOrder,
-        SOLUTION_DESIGN_UPLOAD_SLOT_STATUS.PENDING
-      ]
-    );
-  }
+  return (await ensureSolutionDesignWorkflowState(executor, projectRow)).nodes;
 }
 
 async function ensureSolutionDesignUploadSlots(executor, projectRow) {
-  const rows = await selectSolutionDesignUploadSlots(executor, projectRow.id);
-
-  if (shouldPersistInitialNodes(projectRow) && rows.length < SOLUTION_DESIGN_UPLOAD_SLOTS.length) {
-    await insertMissingUploadSlots(executor, projectRow.id, rows);
-    return selectSolutionDesignUploadSlots(executor, projectRow.id);
-  }
-
-  return rows;
+  return (await ensureSolutionDesignWorkflowState(executor, projectRow)).uploadSlots;
 }
 
 function buildVirtualUploadSlots() {

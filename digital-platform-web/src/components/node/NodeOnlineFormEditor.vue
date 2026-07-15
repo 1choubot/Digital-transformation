@@ -16,6 +16,53 @@
 
     <el-alert v-if="errorMessage" :description="errorMessage" type="error" show-icon :closable="false" />
     <el-form class="online-form-editor__form" :model="formData" @submit.prevent="handleSubmit">
+      <section v-if="isInitiationNotice" class="online-form-section initiation-notice-section">
+        <div class="initiation-notice-table-wrap">
+          <table class="initiation-notice-table">
+            <colgroup>
+              <col class="initiation-notice-table__code" />
+              <col class="initiation-notice-table__name" />
+              <col class="initiation-notice-table__customer" />
+              <col class="initiation-notice-table__mode" />
+              <col class="initiation-notice-table__date" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th scope="col">项目编号</th>
+                <th scope="col">项目名称</th>
+                <th scope="col">客户单位</th>
+                <th scope="col">开展模式</th>
+                <th scope="col">立项日期</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td
+                  data-field-key="projectCode"
+                  :class="{ 'online-form-field--invalid': isFieldInvalid('projectCode') }"
+                >
+                  <el-input
+                    :model-value="formData.projectCode"
+                    :readonly="projectCodeField.readOnly"
+                    :disabled="isOnlineFormFieldDisabled(projectCodeField)"
+                    aria-label="项目编号"
+                    @update:model-value="$emit('update-field', { key: 'projectCode', value: $event })"
+                  />
+                  <small v-if="isFieldInvalid('projectCode')" class="form-field-error">
+                    {{ getFieldValidationMessage('projectCode') }}
+                  </small>
+                </td>
+                <td>{{ formatInitiationNoticeValue(formData.projectName) }}</td>
+                <td>{{ formatInitiationNoticeValue(formData.customerUnit) }}</td>
+                <td>{{ formatInitiationNoticeValue(formData.projectExecutionMode) }}</td>
+                <td>{{ formatInitiationNoticeValue(formData.initiationDate) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <template v-else>
       <section v-for="section in getSchemaSections(form)" :key="section.key" class="online-form-section">
         <h4 v-if="section.title">{{ section.title }}</h4>
         <div class="form-grid">
@@ -104,6 +151,7 @@
           </template>
         </div>
       </section>
+      </template>
 
       <section
         v-for="section in form.schema?.scoringSections || []"
@@ -280,6 +328,12 @@ const editorRoot = ref(null);
 const validationAttempted = ref(false);
 const expandedScoringSections = ref({});
 const schemaFields = computed(() => props.form?.schema?.fields || []);
+const isInitiationNotice = computed(() => props.form?.documentCode === '1.3');
+const projectCodeField = computed(() => schemaFields.value.find((field) => field.key === 'projectCode') || ({
+  key: 'projectCode',
+  label: '项目编号',
+  required: true
+}));
 const displayedReviewOpinions = computed(() =>
   (props.form?.reviewOpinions || []).filter((opinion) => opinion.nodeKey !== 'general_review')
 );
@@ -354,6 +408,11 @@ function getSchemaSections(form) {
 
 function getDisplayItems(fields) {
   return groupThresholdFields(fields || []);
+}
+
+function formatInitiationNoticeValue(value) {
+  const text = String(value ?? '').trim();
+  return text || '-';
 }
 
 function getFieldClass(field) {

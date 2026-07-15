@@ -2099,10 +2099,11 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **THEN** 前端 MUST 提供拒绝入口和退回说明
 - **AND** 拒绝说明 MUST 表达退回项目市场调研
 
-#### Scenario: 总经理拒绝去向选择
-- **WHEN** 总经理处理立项审批并选择拒绝
-- **THEN** 前端 MUST 支持选择“退回项目市场调研”
-- **AND** 前端 MUST 支持选择“项目结束”
+#### Scenario: 总经理拒绝或结束项目
+- **WHEN** 总经理处理立项审批并不选择审批通过
+- **THEN** 前端 MUST 提供填写退回原因并退回项目市场调研的操作
+- **AND** 前端 MUST NOT 使用蓝底白字的“退回项目市场调研”方向选择按钮
+- **AND** 前端 MUST 另行提供“结束项目”操作
 - **AND** 前端 MUST 要求填写或选择项目结束原因
 - **AND** 原因为空时 MUST NOT 提交“项目结束”
 - **AND** 前端 MUST 清楚提示项目结束会阻止立项通知、方案设计和后续资料推进
@@ -2423,15 +2424,15 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 #### Scenario: 1.2 总经理审批通过时选择项目开展模式
 - **WHEN** 总经理审批通过 `1.2`
-- **THEN** 前端 MUST 展示项目开展模式选择控件
+- **THEN** 前端 MUST 在“总经理审批”标题下方单独一行展示项目开展模式选择控件
 - **AND** 项目开展模式选项 MUST 为自研模式和供应链模式
 - **AND** 前端 MUST 将选择值随审批通过请求提交给后端
 - **AND** 未选择时前端 MUST 阻止提交或展示后端业务错误
 
-#### Scenario: 1.2 总经理审批不通过时不展示项目开展模式
-- **WHEN** 总经理审批不通过 `1.2`
-- **THEN** 前端 MUST NOT 展示项目开展模式选择控件
-- **AND** 前端 MUST NOT 因项目开展模式为空阻止退回
+#### Scenario: 1.2 总经理结束项目操作布局
+- **WHEN** 总经理处理 `1.2` 并决定结束项目
+- **THEN** 前端 MUST 在操作区最后单独一行展示“结束项目”按钮
+- **AND** 前端 MUST NOT 因项目开展模式为空阻止结束项目
 
 #### Scenario: 1.3 项目编号可编辑必填
 - **WHEN** 营销中心负责人打开 `1.3 项目立项通知`
@@ -2445,6 +2446,15 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **AND** 该字段 MUST 来自 `1.2` 总经理审批通过时选择的 `projectExecutionMode`
 - **AND** 前端 MUST NOT 允许用户在 `1.3` 手动编辑开展模式
 - **AND** 生成或提交 `1.3` 时前端 MUST NOT 要求用户重新选择开展模式
+
+#### Scenario: 1.3 项目信息使用单行五列表格
+- **WHEN** 用户打开 `1.3 项目立项通知`
+- **THEN** 前端 MUST 以单行五列表格展示项目编号、项目名称、客户单位、开展模式和立项日期
+- **AND** 项目编号 MUST 保留字段绑定、必填校验、权限控制和错误定位能力
+- **AND** 项目名称、客户单位、开展模式和立项日期 MUST 使用纯文本展示，空值统一显示 `-`
+- **AND** 前端 MUST NOT 展示序号、落款单位、通知日期或其他通用表单字段
+- **AND** 窄屏下 MUST 保持五列结构并通过表格局部横向滚动查看
+- **AND** 前端 MUST 保留生成文件、保存草稿和提交操作
 
 ### Requirement: 方案设计阶段子节点展示
 项目核心前端 MUST 在既有 8 大阶段导航中的“方案设计阶段”下展示方案设计内部 9 个子节点。

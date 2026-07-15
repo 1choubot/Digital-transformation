@@ -2749,6 +2749,24 @@ p {
   align-items: stretch;
 }
 
+.initiation-review-general-mode {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.initiation-review-actions--general {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.initiation-review-general-end-reason,
+.initiation-review-general-end-action {
+  grid-column: 1 / -1;
+}
+
+.initiation-review-general-end-action {
+  justify-self: end;
+}
+
 .online-form-review-opinions--two-column {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -2757,6 +2775,90 @@ p {
   margin: 0;
   color: #17212f;
   font-size: 15px;
+}
+
+.initiation-notice-section {
+  overflow: hidden;
+  padding: 0;
+}
+
+.initiation-notice-table-wrap {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.initiation-notice-table {
+  width: 100%;
+  min-width: 820px;
+  table-layout: fixed;
+  border-collapse: collapse;
+  background: #ffffff;
+}
+
+.initiation-notice-table__code,
+.initiation-notice-table__customer {
+  width: 20%;
+}
+
+.initiation-notice-table__name {
+  width: 28%;
+}
+
+.initiation-notice-table__mode,
+.initiation-notice-table__date {
+  width: 16%;
+}
+
+.initiation-notice-table th,
+.initiation-notice-table td {
+  border: 1px solid #d7e0e8;
+  padding: 12px;
+  text-align: center;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.initiation-notice-table th {
+  background: #f3f6f9;
+  color: #344454;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.initiation-notice-table td {
+  color: #17212f;
+  font-size: 14px;
+}
+
+.initiation-notice-table td:first-child {
+  border-left: 0;
+}
+
+.initiation-notice-table th:first-child {
+  border-left: 0;
+}
+
+.initiation-notice-table td:last-child,
+.initiation-notice-table th:last-child {
+  border-right: 0;
+}
+
+.initiation-notice-table thead th {
+  border-top: 0;
+}
+
+.initiation-notice-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.initiation-notice-table .el-input {
+  width: 100%;
+}
+
+.initiation-notice-table .form-field-error {
+  display: block;
+  margin-top: 6px;
+  text-align: left;
 }
 
 .online-form-field--readonly input,

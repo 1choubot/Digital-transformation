@@ -46,7 +46,25 @@
             <el-tag :type="reviewNodeTagType(reviewNode.nodeStatus)">{{ formatReviewNodeStatus(reviewNode.nodeStatus) }}</el-tag>
           </div>
 
-          <div class="initiation-review-actions">
+          <div v-if="!isEvaluationNode(reviewNode)" class="initiation-review-general-mode">
+            <el-select
+              v-model="nodeProjectExecutionModes[reviewNode.nodeKey]"
+              placeholder="请选择项目开展模式"
+              :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
+            >
+              <el-option
+                v-for="option in projectExecutionModeOptions"
+                :key="option"
+                :label="option"
+                :value="option"
+              />
+            </el-select>
+          </div>
+
+          <div
+            class="initiation-review-actions"
+            :class="{ 'initiation-review-actions--general': !isEvaluationNode(reviewNode) }"
+          >
             <template v-if="isEvaluationNode(reviewNode)">
               <el-input
                 v-model.trim="nodeComments[reviewNode.nodeKey]"
@@ -90,18 +108,6 @@
                 placeholder="审批意见"
                 :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
               />
-              <el-select
-                v-model="nodeProjectExecutionModes[reviewNode.nodeKey]"
-                placeholder="请选择项目开展模式"
-                :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
-              >
-                <el-option
-                  v-for="option in projectExecutionModeOptions"
-                  :key="option"
-                  :label="option"
-                  :value="option"
-                />
-              </el-select>
               <el-button
                 type="primary"
                 :loading="isReviewNodePending(reviewNode, 'approve')"
@@ -115,39 +121,40 @@
               >
                 审批通过
               </el-button>
-              <el-radio-group
-                :model-value="getGeneralReturnAction(reviewNode)"
-                :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
-                @change="setGeneralReturnAction(reviewNode, $event)"
-              >
-                <el-radio-button value="return_to_market_research">退回项目市场调研</el-radio-button>
-                <el-radio-button value="project_end">结束项目</el-radio-button>
-              </el-radio-group>
               <el-input
-                v-if="isProjectEndReturn(reviewNode)"
-                v-model.trim="nodeEndReasons[reviewNode.nodeKey]"
-                type="textarea"
-                placeholder="项目结束原因（必填）"
-                :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
-              />
-              <el-input
-                v-else
                 v-model.trim="nodeReturnReasons[reviewNode.nodeKey]"
                 type="textarea"
                 placeholder="审批不通过原因，退回项目市场调研"
                 :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
               />
-              <small v-if="isProjectEndReturn(reviewNode)" class="inline-muted">
-                项目结束后将阻止立项通知、方案设计和后续资料推进。
-              </small>
               <el-button
                 type="danger"
                 plain
                 :loading="isReviewNodePending(reviewNode, 'return')"
-                :disabled="isReviewNodePending(reviewNode, 'return') || !canSubmitGeneralReturn(reviewNode)"
-                @click="returnNode(buildGeneralReturnPayload(reviewNode))"
+                :disabled="isReviewNodePending(reviewNode, 'return') || !nodeReturnReasons[reviewNode.nodeKey]"
+                @click="returnNode(buildGeneralMarketResearchReturnPayload(reviewNode))"
               >
-                {{ formatGeneralReturnButton(reviewNode) }}
+                审批不通过并退回市场调研
+              </el-button>
+              <el-input
+                class="initiation-review-general-end-reason"
+                v-model.trim="nodeEndReasons[reviewNode.nodeKey]"
+                type="textarea"
+                placeholder="项目结束原因（必填）"
+                :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
+              />
+              <small class="inline-muted">
+                项目结束后将阻止立项通知、方案设计和后续资料推进。
+              </small>
+              <el-button
+                class="initiation-review-general-end-action"
+                type="danger"
+                plain
+                :loading="isReviewNodePending(reviewNode, 'return')"
+                :disabled="isReviewNodePending(reviewNode, 'return') || !nodeEndReasons[reviewNode.nodeKey]"
+                @click="returnNode(buildGeneralEndPayload(reviewNode))"
+              >
+                结束项目
               </el-button>
             </template>
           </div>
@@ -262,7 +269,6 @@ const actionableReviewNodes = computed(() => approvalReviewNodes.value.filter((r
 const hasActionableEvaluationNode = computed(() => actionableReviewNodes.value.some(isEvaluationNode));
 const nodeComments = reactive({});
 const nodeReturnReasons = reactive({});
-const nodeReturnActions = reactive({});
 const nodeEndReasons = reactive({});
 const nodeProjectExecutionModes = reactive({});
 const projectExecutionModeOptions = ['自研模式', '供应链模式'];
@@ -337,40 +343,24 @@ function isReviewNodePending(reviewNode, action) {
   return isActionPending(approvalDocument.value?.id, `initiation-${reviewNode.nodeKey}-${action}`);
 }
 
-function getGeneralReturnAction(reviewNode) {
-  return nodeReturnActions[reviewNode.nodeKey] || 'return_to_market_research';
-}
-
-function setGeneralReturnAction(reviewNode, action) {
-  nodeReturnActions[reviewNode.nodeKey] = action;
-}
-
-function isProjectEndReturn(reviewNode) {
-  return getGeneralReturnAction(reviewNode) === 'project_end';
-}
-
-function getGeneralReturnReason(reviewNode) {
-  return isProjectEndReturn(reviewNode) ? nodeEndReasons[reviewNode.nodeKey] : nodeReturnReasons[reviewNode.nodeKey];
-}
-
-function canSubmitGeneralReturn(reviewNode) {
-  return String(getGeneralReturnReason(reviewNode) || '').trim() !== '';
-}
-
-function buildGeneralReturnPayload(reviewNode) {
-  const action = getGeneralReturnAction(reviewNode);
-  const reason = String(getGeneralReturnReason(reviewNode) || '').trim();
+function buildGeneralEndPayload(reviewNode) {
   return {
     document: approvalDocument.value,
     node: reviewNode,
-    returnAction: action,
-    returnReason: action === 'project_end' ? '' : reason,
-    endReason: action === 'project_end' ? reason : ''
+    returnAction: 'project_end',
+    returnReason: '',
+    endReason: String(nodeEndReasons[reviewNode.nodeKey] || '').trim()
   };
 }
 
-function formatGeneralReturnButton(reviewNode) {
-  return isProjectEndReturn(reviewNode) ? '拒绝并结束项目' : '审批不通过并退回市场调研';
+function buildGeneralMarketResearchReturnPayload(reviewNode) {
+  return {
+    document: approvalDocument.value,
+    node: reviewNode,
+    returnAction: 'return_to_market_research',
+    returnReason: String(nodeReturnReasons[reviewNode.nodeKey] || '').trim(),
+    endReason: ''
+  };
 }
 
 function isActionPending(documentId, action) {

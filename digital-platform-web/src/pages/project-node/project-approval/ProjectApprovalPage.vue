@@ -12,7 +12,7 @@
       :generated-file="generatedFile"
       :download-pending="generatedFileDownloadPending"
       download-button-text="查看项目立项审批表"
-      :show-form-content="canViewFormContent"
+      :show-form-content="canViewFormContent || canReviewForm"
       :image-state="context.onlineFormImageState || emptyObject"
       :show-review-opinions="!hasActionableEvaluationNode"
       @save="saveOnlineForm"

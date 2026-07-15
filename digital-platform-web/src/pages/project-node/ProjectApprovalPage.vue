@@ -112,21 +112,108 @@
               </button>
             </template>
             <template v-else>
-              <input
-                v-model.trim="nodeComments[reviewNode.nodeKey]"
-                type="text"
-                placeholder="审批意见"
-                :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
-              />
-              <button
-                type="button"
-                class="ghost-button"
-                :disabled="isReviewNodePending(reviewNode, 'approve')"
-                @click="approveNode({ document: approvalDocument, node: reviewNode, comment: nodeComments[reviewNode.nodeKey] || '' })"
-              >
-                {{ isReviewNodePending(reviewNode, 'approve') ? '处理中...' : '审批通过' }}
-              </button>
-              <div class="initiation-review-return-options" role="group" aria-label="审批不通过去向">
+              <template v-if="isGeneralReviewNode(reviewNode)">
+                <div class="initiation-review-return-options" role="group" aria-label="总经理审批动作">
+                  <button
+                    type="button"
+                    class="initiation-review-return-option"
+                    :class="{ 'initiation-review-return-option--active': isGeneralAction(reviewNode, 'approve') }"
+                    :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
+                    @click="setGeneralAction(reviewNode, 'approve')"
+                  >
+                    审批通过
+                  </button>
+                  <button
+                    type="button"
+                    class="initiation-review-return-option"
+                    :class="{ 'initiation-review-return-option--active': isGeneralAction(reviewNode, 'return_to_market_research') }"
+                    :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
+                    @click="setGeneralAction(reviewNode, 'return_to_market_research')"
+                  >
+                    退回项目市场调研
+                  </button>
+                  <button
+                    type="button"
+                    class="initiation-review-return-option initiation-review-return-option--danger"
+                    :class="{ 'initiation-review-return-option--active': isGeneralAction(reviewNode, 'project_end') }"
+                    :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
+                    @click="setGeneralAction(reviewNode, 'project_end')"
+                  >
+                    结束项目
+                  </button>
+                </div>
+                <template v-if="isGeneralAction(reviewNode, 'approve')">
+                  <input
+                    v-model.trim="nodeComments[reviewNode.nodeKey]"
+                    type="text"
+                    placeholder="审批意见"
+                    :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
+                  />
+                  <label class="initiation-review-mode-select">
+                    <span>项目开展模式</span>
+                    <select
+                      v-model="nodeProjectExecutionModes[reviewNode.nodeKey]"
+                      :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
+                    >
+                      <option value="">请选择</option>
+                      <option v-for="option in projectExecutionModeOptions" :key="option" :value="option">
+                        {{ option }}
+                      </option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    class="ghost-button"
+                    :disabled="!canApproveReviewNode(reviewNode)"
+                    @click="approveNode(buildApprovePayload(reviewNode))"
+                  >
+                    {{ isReviewNodePending(reviewNode, 'approve') ? '处理中...' : '审批通过' }}
+                  </button>
+                </template>
+                <template v-else>
+                  <input
+                    v-if="isProjectEndReturn(reviewNode)"
+                    v-model.trim="nodeEndReasons[reviewNode.nodeKey]"
+                    type="text"
+                    placeholder="项目结束原因（必填）"
+                    :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
+                  />
+                  <input
+                    v-else
+                    v-model.trim="nodeReturnReasons[reviewNode.nodeKey]"
+                    type="text"
+                    placeholder="审批不通过原因，退回项目市场调研"
+                    :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
+                  />
+                  <small v-if="isProjectEndReturn(reviewNode)" class="inline-muted">
+                    项目结束后将阻止立项通知、方案设计和后续资料推进。
+                  </small>
+                  <button
+                    type="button"
+                    class="ghost-button"
+                    :disabled="isReviewNodePending(reviewNode, 'return') || !canSubmitGeneralReturn(reviewNode)"
+                    @click="returnNode(buildGeneralReturnPayload(reviewNode))"
+                  >
+                    {{ isReviewNodePending(reviewNode, 'return') ? '处理中...' : formatGeneralReturnButton(reviewNode) }}
+                  </button>
+                </template>
+              </template>
+              <template v-else>
+                <input
+                  v-model.trim="nodeComments[reviewNode.nodeKey]"
+                  type="text"
+                  placeholder="审批意见"
+                  :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
+                />
+                <button
+                  type="button"
+                  class="ghost-button"
+                  :disabled="!canApproveReviewNode(reviewNode)"
+                  @click="approveNode(buildApprovePayload(reviewNode))"
+                >
+                  {{ isReviewNodePending(reviewNode, 'approve') ? '处理中...' : '审批通过' }}
+                </button>
+                <div class="initiation-review-return-options" role="group" aria-label="审批不通过去向">
                 <button
                   type="button"
                   class="initiation-review-return-option"
@@ -171,6 +258,7 @@
               >
                 {{ isReviewNodePending(reviewNode, 'return') ? '处理中...' : formatGeneralReturnButton(reviewNode) }}
               </button>
+              </template>
             </template>
           </div>
         </article>
@@ -272,7 +360,10 @@ const approvalOverallText = computed(() => {
 const nodeComments = reactive({});
 const nodeReturnReasons = reactive({});
 const nodeReturnActions = reactive({});
+const nodeGeneralActions = reactive({});
 const nodeEndReasons = reactive({});
+const nodeProjectExecutionModes = reactive({});
+const projectExecutionModeOptions = ['自研模式', '供应链模式'];
 
 function approveNode(payload) {
   invoke('approveInitiationNode', payload);
@@ -329,8 +420,39 @@ function isEvaluationNode(reviewNode) {
   return ['business_review', 'technical_review'].includes(reviewNode?.nodeKey);
 }
 
+function isGeneralReviewNode(reviewNode) {
+  return reviewNode?.nodeKey === 'general_review';
+}
+
 function isReviewNodePending(reviewNode, action) {
   return isActionPending(approvalDocument.value?.id, `initiation-${reviewNode.nodeKey}-${action}`);
+}
+
+function canApproveReviewNode(reviewNode) {
+  if (isReviewNodePending(reviewNode, 'approve')) {
+    return false;
+  }
+
+  if (isGeneralReviewNode(reviewNode)) {
+    if (!isGeneralAction(reviewNode, 'approve')) {
+      return false;
+    }
+
+    return String(nodeProjectExecutionModes[reviewNode.nodeKey] || '').trim() !== '';
+  }
+
+  return true;
+}
+
+function buildApprovePayload(reviewNode) {
+  return {
+    document: approvalDocument.value,
+    node: reviewNode,
+    comment: nodeComments[reviewNode.nodeKey] || '',
+    projectExecutionMode: isGeneralReviewNode(reviewNode)
+      ? String(nodeProjectExecutionModes[reviewNode.nodeKey] || '').trim()
+      : undefined
+  };
 }
 
 function getGeneralReturnAction(reviewNode) {
@@ -339,6 +461,22 @@ function getGeneralReturnAction(reviewNode) {
 
 function setGeneralReturnAction(reviewNode, action) {
   nodeReturnActions[reviewNode.nodeKey] = action;
+}
+
+function getGeneralAction(reviewNode) {
+  return nodeGeneralActions[reviewNode.nodeKey] || getGeneralReturnAction(reviewNode);
+}
+
+function setGeneralAction(reviewNode, action) {
+  nodeGeneralActions[reviewNode.nodeKey] = action;
+
+  if (action !== 'approve') {
+    setGeneralReturnAction(reviewNode, action);
+  }
+}
+
+function isGeneralAction(reviewNode, action) {
+  return getGeneralAction(reviewNode) === action;
 }
 
 function isProjectEndReturn(reviewNode) {

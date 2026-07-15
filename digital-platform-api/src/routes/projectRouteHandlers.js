@@ -856,7 +856,8 @@ export async function approveInitiationReviewNodeHandler(req, res) {
     documentId,
     nodeKey: req.params.nodeKey,
     user: req.auth.user,
-    comment: req.body?.comment
+    comment: req.body?.comment,
+    projectExecutionMode: req.body?.projectExecutionMode
   });
 
   res.json({

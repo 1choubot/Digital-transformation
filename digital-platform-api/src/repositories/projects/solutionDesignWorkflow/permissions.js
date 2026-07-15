@@ -49,6 +49,10 @@ function isManufacturingCenterManager(user) {
   return isCenterManagerOf(user, BUSINESS_DEPARTMENT.MANUFACTURING_CENTER);
 }
 
+function isMarketingCenterManager(user) {
+  return isCenterManagerOf(user, BUSINESS_DEPARTMENT.MARKETING_CENTER);
+}
+
 export function isFinanceCostUploadSlot(slotKey) {
   return slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.FINANCE_COST_ESTIMATION;
 }
@@ -402,6 +406,10 @@ function getSubmitNodeRoleKey(nodeKey) {
     return SOLUTION_DESIGN_ROLE_KEY.PROCUREMENT_OWNER;
   }
 
+  if (nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
+    return SOLUTION_DESIGN_ROLE_KEY.BUSINESS_OWNER;
+  }
+
   if (nodeKey === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST) {
     return SOLUTION_DESIGN_ROLE_KEY.FINANCE_ACCOUNTANT;
   }
@@ -530,6 +538,13 @@ export function canReviewSolutionDesignNode({ nodeRow, user, roleState, projectE
     );
   }
 
+  if (nodeRow?.node_key === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
+    return (
+      nodeRow.status === SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW &&
+      isMarketingCenterManager(user)
+    );
+  }
+
   if (nodeRow?.node_key === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST) {
     if (nodeRow.status === SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW) {
       return isSameId(roleState[SOLUTION_DESIGN_ROLE_KEY.FINANCE_OWNER]?.userId, user?.id);
@@ -567,6 +582,10 @@ export function canActAsReviewerForSolutionDesignNode({ nodeRow, user, roleState
 
   if (nodeRow?.node_key === SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST) {
     return isManufacturingCenterManager(user);
+  }
+
+  if (nodeRow?.node_key === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
+    return isMarketingCenterManager(user);
   }
 
   if (nodeRow?.node_key === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST) {

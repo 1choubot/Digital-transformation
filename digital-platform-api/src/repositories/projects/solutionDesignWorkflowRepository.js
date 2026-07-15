@@ -1591,6 +1591,10 @@ function getSolutionDesignSlotUploadActionText(slot) {
     return '上传/提交制造中心成本估算表';
   }
 
+  if (slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MARKETING_COST_ESTIMATION) {
+    return '上传/提交营销中心成本估算表';
+  }
+
   if (slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.FINANCE_COST_ESTIMATION) {
     return '上传/提交财务成本估算表';
   }
@@ -1639,6 +1643,10 @@ function getSolutionDesignNodeSubmitActionText(node) {
     return '提交制造成本估算';
   }
 
+  if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
+    return '提交营销成本估算';
+  }
+
   if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST) {
     return '提交财务成本估算';
   }
@@ -1669,6 +1677,10 @@ function getSolutionDesignNodeReviewActionText(node) {
 
   if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST) {
     return '审批/退回制造成本估算';
+  }
+
+  if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
+    return '审批/退回营销成本估算';
   }
 
   if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST) {
@@ -2173,6 +2185,10 @@ function getUploadLogActionType(slot) {
     return OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MANUFACTURING_COST_FILE_UPLOADED;
   }
 
+  if (slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MARKETING_COST_ESTIMATION) {
+    return OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MARKETING_COST_FILE_UPLOADED;
+  }
+
   if (slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.FINANCE_COST_ESTIMATION) {
     return OPERATION_ACTION_TYPE.SOLUTION_DESIGN_FINANCE_COST_FILE_UPLOADED;
   }
@@ -2207,6 +2223,10 @@ function buildUploadLogSummary(slot, fileRow) {
 
   if (slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MANUFACTURING_COST_ESTIMATION) {
     return `上传制造中心成本估算表：${fileRow.original_file_name}`;
+  }
+
+  if (slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MARKETING_COST_ESTIMATION) {
+    return `上传营销中心成本估算表：${fileRow.original_file_name}`;
   }
 
   if (slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.FINANCE_COST_ESTIMATION) {
@@ -2309,6 +2329,11 @@ async function insertNodeSubmitLog(executor, { projectId, actorUserId, nodeKey }
   if (nodeKey === SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST) {
     actionType = OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MANUFACTURING_COST_SUBMITTED;
     summary = '提交制造成本估算节点审批';
+  }
+
+  if (nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
+    actionType = OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MARKETING_COST_SUBMITTED;
+    summary = '提交营销成本估算节点审批';
   }
 
   if (nodeKey === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST) {
@@ -2602,6 +2627,13 @@ function getCostApproveMetadata(nodeKey, nodeStatus) {
     };
   }
 
+  if (nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
+    return {
+      actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MARKETING_COST_APPROVED,
+      summary: '营销成本估算审批通过'
+    };
+  }
+
   if (nodeKey === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST && nodeStatus === SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW) {
     return {
       actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_FINANCE_COST_FINANCE_APPROVED,
@@ -2630,6 +2662,13 @@ function getCostReturnMetadata(nodeKey, nodeStatus) {
     };
   }
 
+  if (nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
+    return {
+      actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MARKETING_COST_RETURNED,
+      summary: '营销成本估算审批退回'
+    };
+  }
+
   if (nodeKey === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST && nodeStatus === SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW) {
     return {
       actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_FINANCE_COST_FINANCE_RETURNED,
@@ -2639,7 +2678,7 @@ function getCostReturnMetadata(nodeKey, nodeStatus) {
 
   return {
     actionType: OPERATION_ACTION_TYPE.SOLUTION_DESIGN_FINANCE_COST_GENERAL_RETURNED,
-    summary: '总经理退回财务成本估算，返回研发成本估算重走三段流程'
+    summary: '总经理退回财务成本估算，返回研发成本估算重走四段流程'
   };
 }
 
@@ -4572,6 +4611,7 @@ async function returnFinanceCostToRdCost(executor, { projectId, returnReason }) 
   const nodeKeys = [
     SOLUTION_DESIGN_NODE_KEY.RD_COST,
     SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST,
+    SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
     SOLUTION_DESIGN_NODE_KEY.FINANCE_COST
   ];
 
@@ -4741,6 +4781,10 @@ function getSubmitNodeRoleKey(nodeKey) {
 
   if (nodeKey === SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST) {
     return SOLUTION_DESIGN_ROLE_KEY.PROCUREMENT_OWNER;
+  }
+
+  if (nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
+    return SOLUTION_DESIGN_ROLE_KEY.BUSINESS_OWNER;
   }
 
   if (nodeKey === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST) {
@@ -6326,6 +6370,7 @@ export async function approveSolutionDesignWorkflowNode({ projectId, nodeKey, pa
       SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
       SOLUTION_DESIGN_NODE_KEY.RD_COST,
       SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST,
+      SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
       SOLUTION_DESIGN_NODE_KEY.FINANCE_COST,
       SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER
     ].includes(node.nodeKey)
@@ -6396,6 +6441,20 @@ export async function approveSolutionDesignWorkflowNode({ projectId, nodeKey, pa
         summary: metadata.summary
       });
     } else if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST) {
+      await approveReviewNodeAndActivateNext(connection, {
+        projectId,
+        nodeKey: node.nodeKey,
+        nextNodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST
+      });
+      const metadata = getCostApproveMetadata(node.nodeKey, nodeRow.status);
+      await insertCostApprovalLog(connection, {
+        projectId,
+        actorUserId: user.id,
+        nodeKey: node.nodeKey,
+        actionType: metadata.actionType,
+        summary: metadata.summary
+      });
+    } else if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST) {
       await approveReviewNodeAndActivateNext(connection, {
         projectId,
         nodeKey: node.nodeKey,
@@ -6500,6 +6559,7 @@ export async function returnSolutionDesignWorkflowNode({ projectId, nodeKey, pay
       SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
       SOLUTION_DESIGN_NODE_KEY.RD_COST,
       SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST,
+      SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
       SOLUTION_DESIGN_NODE_KEY.FINANCE_COST,
       SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER
     ].includes(node.nodeKey)
@@ -6558,6 +6618,7 @@ export async function returnSolutionDesignWorkflowNode({ projectId, nodeKey, pay
     } else if (
       node.nodeKey === SOLUTION_DESIGN_NODE_KEY.RD_COST ||
       node.nodeKey === SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST ||
+      node.nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST ||
       (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST &&
         nodeRow.status === SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW)
     ) {

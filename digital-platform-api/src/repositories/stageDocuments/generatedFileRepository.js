@@ -13,6 +13,7 @@ import {
   INITIATION_REVIEW_NODE_KEY,
   INITIATION_REWORK_TARGET_DOCUMENT_CODE
 } from '../../domain/initiationReview.js';
+import { DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import { pool } from '../../db/pool.js';
 import { ProjectNotFoundError } from '../projects/shared.js';
 import {
@@ -675,28 +676,38 @@ async function selectNoticeProjectList(executor, currentProjectId, currentSubmit
       p.project_name,
       p.customer_name,
       f.form_data_json,
+      review_f.form_data_json AS review_form_data_json,
       f.submitted_at
     FROM project_stage_document_forms f
     INNER JOIN project_stage_documents d
       ON d.id = f.stage_document_id
     INNER JOIN projects p
       ON p.id = f.project_id
+    LEFT JOIN project_stage_documents review_d
+      ON review_d.project_id = p.id
+      AND review_d.document_code = ?
+      AND review_d.status = ?
+    LEFT JOIN project_stage_document_forms review_f
+      ON review_f.stage_document_id = review_d.id
+      AND review_f.status = 'submitted'
     WHERE d.document_code = ?
       AND f.status = 'submitted'
       AND f.submitted_at <= ?
       AND NULLIF(TRIM(COALESCE(p.project_code, '')), '') IS NOT NULL
     ORDER BY f.submitted_at ASC, p.id ASC`,
-    [INITIATION_NOTICE_DOCUMENT_CODE, currentSubmittedAt]
+    [INITIATION_REVIEW_DOCUMENT_CODE, DOCUMENT_STATUS.CONFIRMED, INITIATION_NOTICE_DOCUMENT_CODE, currentSubmittedAt]
   );
 
   const mappedRows = rows.map((row, index) => {
     const formData = parseJsonValue(row.form_data_json, {});
+    const reviewFormData = parseJsonValue(row.review_form_data_json, {});
     return {
       sequenceNumber: String(index + 1),
       projectId: row.id,
       projectCode: row.project_code ?? '',
       projectName: row.project_name ?? '',
       customerName: row.customer_name ?? '',
+      projectExecutionMode: formData?.projectExecutionMode || reviewFormData?.projectExecutionMode || '',
       initiationDate: formData?.initiationDate ?? '',
       submittedAt: row.submitted_at ?? null,
       isCurrentProject: String(row.id) === String(currentProjectId)
@@ -946,6 +957,7 @@ async function buildGenerationContext({ executor, projectId, documentId, manifes
   };
   if (manifest.documentCode === INITIATION_NOTICE_DOCUMENT_CODE) {
     formData.projectCode = form?.formData?.projectCode || project.projectCode;
+    formData.projectExecutionMode = form?.formData?.projectExecutionMode || '';
   }
 
   const snapshot = {

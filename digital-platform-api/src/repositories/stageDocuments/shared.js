@@ -878,6 +878,7 @@ function deriveCostDocument(context) {
   const nodeKeys = [
     SOLUTION_DESIGN_NODE_KEY.RD_COST,
     SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST,
+    SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
     SOLUTION_DESIGN_NODE_KEY.FINANCE_COST
   ];
   const complete =
@@ -889,7 +890,7 @@ function deriveCostDocument(context) {
     nodeKey: SOLUTION_DESIGN_NODE_KEY.FINANCE_COST,
     revision: getNodeRevision(getContextNode(context, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST)),
     isComplete: complete,
-    blockingReasons: complete ? [] : ['研发、制造、财务三段成本估算尚未全部审批通过，或成本估算 current 文件缺失']
+    blockingReasons: complete ? [] : ['研发、制造、营销、财务四段成本估算尚未全部审批通过，或成本估算 current 文件缺失']
   });
 }
 

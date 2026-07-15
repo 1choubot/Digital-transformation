@@ -1801,6 +1801,9 @@ function formatSubmitNodeLabel(node) {
   if (node.nodeKey === 'finance_cost_estimation') {
     return '提交财务成本估算审批';
   }
+  if (node.nodeKey === 'marketing_cost_estimation') {
+    return '提交营销成本估算审批';
+  }
   return '提交节点';
 }
 

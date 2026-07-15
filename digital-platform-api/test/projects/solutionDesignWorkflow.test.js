@@ -155,6 +155,13 @@ function baseUsers() {
         isPlatformAdmin: 1
       }),
       dbUser({
+        id: 5,
+        account: 'marketing_manager',
+        displayName: '营销中心负责人',
+        department: BUSINESS_DEPARTMENT.MARKETING_CENTER,
+        organizationRole: ORGANIZATION_ROLE.CENTER_MANAGER
+      }),
+      dbUser({
         id: 10,
         account: 'old_pm',
         displayName: '原项目经理',
@@ -1041,7 +1048,7 @@ async function submitManufacturingCostForReview(db, storage = fakeUploadStorage(
   );
 }
 
-async function activateFinanceCostNode(db, storage = fakeUploadStorage()) {
+async function activateMarketingCostNode(db, storage = fakeUploadStorage()) {
   const manufacturingManager = authUser(db.connection.users.get(2));
   await submitManufacturingCostForReview(db, storage);
   await approveSolutionDesignWorkflowNode(
@@ -1049,6 +1056,43 @@ async function activateFinanceCostNode(db, storage = fakeUploadStorage()) {
       projectId: 100,
       nodeKey: SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST,
       user: manufacturingManager
+    },
+    db
+  );
+  return storage;
+}
+
+async function submitMarketingCostForReview(db, storage = fakeUploadStorage()) {
+  const businessOwner = authUser(db.connection.users.get(13));
+  await activateMarketingCostNode(db, storage);
+  await uploadSolutionDesignWorkflowFile(
+    {
+      projectId: 100,
+      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MARKETING_COST_ESTIMATION,
+      file: testUploadFile('营销中心成本估算表.xlsx'),
+      user: businessOwner
+    },
+    db,
+    storage
+  );
+  return submitSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      user: businessOwner
+    },
+    db
+  );
+}
+
+async function activateFinanceCostNode(db, storage = fakeUploadStorage()) {
+  const marketingManager = authUser(db.connection.users.get(5));
+  await submitMarketingCostForReview(db, storage);
+  await approveSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      user: marketingManager
     },
     db
   );
@@ -3057,16 +3101,16 @@ test('visible project users can query workflow and lazy initialization is idempo
 
   assert.equal(first.projectId, 100);
   assert.equal(first.permissions.canViewWorkflow, true);
-  assert.equal(first.nodes.length, 9);
+  assert.equal(first.nodes.length, SOLUTION_DESIGN_NODES.length);
   assert.deepEqual(
     first.nodes.map((node) => node.nodeKey),
     SOLUTION_DESIGN_NODES.map((node) => node.nodeKey)
   );
   assert.equal(first.nodes[0].status, SOLUTION_DESIGN_NODE_STATUS.PENDING);
   assert.equal(first.nodes[1].status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
-  assert.equal(second.nodes.length, 9);
-  assert.equal(db.connection.nodes.length, 9);
-  assert.equal(db.connection.nodeInsertCount, 9);
+  assert.equal(second.nodes.length, SOLUTION_DESIGN_NODES.length);
+  assert.equal(db.connection.nodes.length, SOLUTION_DESIGN_NODES.length);
+  assert.equal(db.connection.nodeInsertCount, SOLUTION_DESIGN_NODES.length);
 });
 
 test('workflow query rejects users without project visibility', async () => {
@@ -3105,7 +3149,7 @@ test('RD center manager can assign roles and project manager stays single-source
   assert.equal(db.connection.project.project_manager_user_id, 11);
   assert.equal(db.connection.project.project_manager, '新项目经理');
   assert.equal(Object.hasOwn(db.connection.rolesRow, 'project_manager_user_id'), false);
-  assert.equal(db.connection.nodes.length, 9);
+  assert.equal(db.connection.nodes.length, SOLUTION_DESIGN_NODES.length);
   assert.deepEqual(
     workflow.nodes[0].blockingReasons,
     ['等待项目经理提交方案设计工作计划']
@@ -3124,7 +3168,7 @@ test('workflow query after solution stage does not lazily insert missing nodes',
 
   const workflow = await getSolutionDesignWorkflow({ projectId: 100, user: requester }, db);
 
-  assert.equal(workflow.nodes.length, 9);
+  assert.equal(workflow.nodes.length, SOLUTION_DESIGN_NODES.length);
   assert.equal(workflow.nodes.every((node) => node.status === SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED), true);
   assert.equal(db.connection.nodes.length, 0);
   assert.equal(db.connection.nodeInsertCount, 0);
@@ -6167,7 +6211,8 @@ test('procurement owner completes manufacturing cost estimation and manufacturin
     findWorkflowNode(approved, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).status,
     SOLUTION_DESIGN_NODE_STATUS.APPROVED
   );
-  assert.equal(findWorkflowNode(approved, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.PENDING);
+  assert.equal(findWorkflowNode(approved, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.PENDING);
+  assert.equal(findWorkflowNode(approved, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
 
   const dbReturned = fakeDb();
   seedAssignedRoles(dbReturned.connection);
@@ -6191,6 +6236,147 @@ test('procurement owner completes manufacturing cost estimation and manufacturin
     SOLUTION_DESIGN_NODE_STATUS.RETURNED
   );
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).currentRevision, 2);
+});
+
+test('business owner completes marketing cost estimation and marketing manager can approve or return it', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+  const marketingManager = authUser(db.connection.users.get(5));
+  const financeOwner = authUser(db.connection.users.get(16));
+
+  await activateMarketingCostNode(db, storage);
+  const initialUploads = await listSolutionDesignUploads({ projectId: 100, user: businessOwner }, db);
+  assert.equal(
+    findUploadSlot(initialUploads, SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MARKETING_COST_ESTIMATION).permissions.canUpload,
+    true
+  );
+  const initialWorkflow = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, db);
+  const businessTodos = buildSolutionDesignWorkbenchTodos({
+    projectRow: db.connection.projectContextRow(),
+    workflow: initialWorkflow,
+    uploads: initialUploads
+  });
+  assert.ok(
+    businessTodos.some(
+      (todo) =>
+        todo.nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST &&
+        todo.actionText === '上传/提交营销中心成本估算表'
+    )
+  );
+
+  await uploadSolutionDesignWorkflowFile(
+    {
+      projectId: 100,
+      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MARKETING_COST_ESTIMATION,
+      file: testUploadFile('营销中心成本估算表.xlsx'),
+      user: businessOwner
+    },
+    db,
+    storage
+  );
+  const readyWorkflow = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, db);
+  assert.equal(findWorkflowNode(readyWorkflow, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).permissions.canSubmit, true);
+
+  await submitSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      user: businessOwner
+    },
+    db
+  );
+  const reviewerWorkflow = await getSolutionDesignWorkflow({ projectId: 100, user: marketingManager }, db);
+  assert.equal(findWorkflowNode(reviewerWorkflow, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).permissions.canApprove, true);
+  assert.equal(findWorkflowNode(reviewerWorkflow, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).permissions.canReturn, true);
+  const reviewerUploads = await listSolutionDesignUploads({ projectId: 100, user: marketingManager }, db);
+  const reviewerTodos = buildSolutionDesignWorkbenchTodos({
+    projectRow: db.connection.projectContextRow(),
+    workflow: reviewerWorkflow,
+    uploads: reviewerUploads
+  });
+  assert.ok(
+    reviewerTodos.some(
+      (todo) =>
+        todo.nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST &&
+        todo.actionText === '审批/退回营销成本估算'
+    )
+  );
+
+  const logCountBeforeUnauthorizedReview = db.connection.operationLogs.length;
+  await assert.rejects(
+    () =>
+      approveSolutionDesignWorkflowNode(
+        {
+          projectId: 100,
+          nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+          user: financeOwner
+        },
+        db
+      ),
+    (error) => error.code === SOLUTION_DESIGN_ERROR.FORBIDDEN
+  );
+  assert.equal(db.connection.operationLogs.length, logCountBeforeUnauthorizedReview);
+
+  const approved = await approveSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      user: marketingManager
+    },
+    db
+  );
+  assert.equal(findWorkflowNode(approved, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.APPROVED);
+  assert.equal(findWorkflowNode(approved, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.PENDING);
+  assert.deepEqual(
+    db.connection.operationLogs.slice(-3).map((log) => log.action_type),
+    [
+      OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MARKETING_COST_FILE_UPLOADED,
+      OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MARKETING_COST_SUBMITTED,
+      OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MARKETING_COST_APPROVED
+    ]
+  );
+
+  const dbReturned = fakeDb();
+  seedAssignedRoles(dbReturned.connection);
+  const returnStorage = fakeUploadStorage();
+  await submitMarketingCostForReview(dbReturned, returnStorage);
+  const returned = await returnSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      payload: { returnReason: '营销成本需补充报价策略' },
+      user: marketingManager
+    },
+    dbReturned
+  );
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).currentRevision, 2);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.RD_COST).status, SOLUTION_DESIGN_NODE_STATUS.APPROVED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).status, SOLUTION_DESIGN_NODE_STATUS.APPROVED);
+
+  const returnedForBusinessOwner = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, dbReturned);
+  assert.equal(
+    findWorkflowNode(returnedForBusinessOwner, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).permissions.canSubmit,
+    true
+  );
+  const resubmitted = await submitSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      user: businessOwner
+    },
+    dbReturned
+  );
+  assert.equal(
+    findWorkflowNode(resubmitted, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status,
+    SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW
+  );
+  assert.equal(
+    dbReturned.connection.operationLogs.at(-1).action_type,
+    OPERATION_ACTION_TYPE.SOLUTION_DESIGN_MARKETING_COST_SUBMITTED
+  );
 });
 
 test('finance cost estimation uses finance owner and general manager approval with quotation branch selection', async () => {
@@ -6411,6 +6597,7 @@ test('finance owner return only reopens finance cost estimation', async () => {
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).currentRevision, 2);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).status, SOLUTION_DESIGN_NODE_STATUS.APPROVED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.APPROVED);
   const returnedForFinanceAccountant = await getSolutionDesignWorkflow({ projectId: 100, user: financeAccountant }, db);
   assert.equal(
     findWorkflowNode(returnedForFinanceAccountant, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).permissions.canSubmit,
@@ -6437,10 +6624,12 @@ test('general manager return sends cost workflow back to RD and current cost fil
   const storage = fakeUploadStorage();
   const technicalOwner = authUser(db.connection.users.get(12));
   const procurementOwner = authUser(db.connection.users.get(14));
+  const businessOwner = authUser(db.connection.users.get(13));
   const financeAccountant = authUser(db.connection.users.get(15));
   const financeOwner = authUser(db.connection.users.get(16));
   const rdManager = authUser(db.connection.users.get(1));
   const manufacturingManager = authUser(db.connection.users.get(2));
+  const marketingManager = authUser(db.connection.users.get(5));
   const generalManager = authUser(db.connection.users.get(30));
 
   await submitFinanceCostForGeneralReview(db, storage);
@@ -6457,6 +6646,8 @@ test('general manager return sends cost workflow back to RD and current cost fil
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.RD_COST).currentRevision, 2);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).currentRevision, 2);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).currentRevision, 2);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).currentRevision, 2);
   const returnedForTechnicalOwner = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
@@ -6504,12 +6695,35 @@ test('general manager return sends cost workflow back to RD and current cost fil
     },
     db
   );
-  const afterManufacturingApproval = await getSolutionDesignWorkflow({ projectId: 100, user: financeAccountant }, db);
+  const afterManufacturingApproval = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, db);
   assert.equal(
-    findWorkflowNode(afterManufacturingApproval, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status,
+    findWorkflowNode(afterManufacturingApproval, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status,
     SOLUTION_DESIGN_NODE_STATUS.PENDING
   );
-  assert.equal(findWorkflowNode(afterManufacturingApproval, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).permissions.canSubmit, true);
+  assert.equal(findWorkflowNode(afterManufacturingApproval, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).permissions.canSubmit, true);
+
+  await submitSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      user: businessOwner
+    },
+    db
+  );
+  await approveSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      user: marketingManager
+    },
+    db
+  );
+  const afterMarketingApproval = await getSolutionDesignWorkflow({ projectId: 100, user: financeAccountant }, db);
+  assert.equal(
+    findWorkflowNode(afterMarketingApproval, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status,
+    SOLUTION_DESIGN_NODE_STATUS.PENDING
+  );
+  assert.equal(findWorkflowNode(afterMarketingApproval, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).permissions.canSubmit, true);
 
   await submitSolutionDesignWorkflowNode(
     {
@@ -6546,6 +6760,19 @@ test('general manager return sends cost workflow back to RD and current cost fil
   );
   assert.equal(costDocument.isComplete, true);
   assert.equal(costDocument.completionStatus, COMPLETION_STATUS.COMPLETED);
+
+  const marketingCurrentFile = db.connection.currentUploadFileForSlot(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MARKETING_COST_ESTIMATION);
+  marketingCurrentFile.is_current = 0;
+  const rowsWithoutMarketingCurrentFile = await attachSolutionDesignDerivedCompletionToStageDocumentRows(
+    db.connection,
+    db.connection.stageDocuments.map((document) => ({ ...document }))
+  );
+  const incompleteWithoutMarketingDocument = mapDocument(
+    rowsWithoutMarketingCurrentFile.find((document) => document.document_code === 'C17')
+  );
+  assert.equal(incompleteWithoutMarketingDocument.isComplete, false);
+  assert.equal(incompleteWithoutMarketingDocument.completionStatus, COMPLETION_STATUS.INCOMPLETE);
+  marketingCurrentFile.is_current = 1;
 
   db.connection.currentUploadFileForSlot(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MANUFACTURING_COST_ESTIMATION).is_current = 0;
   const rowsWithoutManufacturingCurrentFile = await attachSolutionDesignDerivedCompletionToStageDocumentRows(
@@ -7235,6 +7462,7 @@ test('rejected quotation can return to RD cost and current cost files can be reu
   const technicalOwner = authUser(db.connection.users.get(12));
   const rdManager = authUser(db.connection.users.get(1));
   const manufacturingManager = authUser(db.connection.users.get(2));
+  const marketingManager = authUser(db.connection.users.get(5));
   const procurementOwner = authUser(db.connection.users.get(14));
   const financeAccountant = authUser(db.connection.users.get(15));
   const financeOwner = authUser(db.connection.users.get(16));
@@ -7259,6 +7487,7 @@ test('rejected quotation can return to RD cost and current cost files can be reu
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.RD_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.RD_COST).currentRevision, 2);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
   assert.equal(db.connection.quotationTenderFlow.quotation_rejected_action, SOLUTION_DESIGN_QUOTATION_REJECTED_ACTION.RETURN_TO_RD_COST);
   const returnedForTechnicalOwner = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
@@ -7306,8 +7535,26 @@ test('rejected quotation can return to RD cost and current cost files can be reu
     },
     db
   );
-  const afterManufacturingApproval = await getSolutionDesignWorkflow({ projectId: 100, user: financeAccountant }, db);
-  assert.equal(findWorkflowNode(afterManufacturingApproval, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).permissions.canSubmit, true);
+  const afterManufacturingApproval = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, db);
+  assert.equal(findWorkflowNode(afterManufacturingApproval, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).permissions.canSubmit, true);
+  await submitSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      user: businessOwner
+    },
+    db
+  );
+  await approveSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+      user: marketingManager
+    },
+    db
+  );
+  const afterMarketingApproval = await getSolutionDesignWorkflow({ projectId: 100, user: financeAccountant }, db);
+  assert.equal(findWorkflowNode(afterMarketingApproval, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).permissions.canSubmit, true);
   await submitSolutionDesignWorkflowNode(
     {
       projectId: 100,
@@ -7523,6 +7770,7 @@ test('solution design end-to-end smoke covers quotation and tender happy paths',
     SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
     SOLUTION_DESIGN_NODE_KEY.RD_COST,
     SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST,
+    SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
     SOLUTION_DESIGN_NODE_KEY.FINANCE_COST
   ]) {
     assert.equal(findWorkflowNode(readyForBranch, nodeKey).status, SOLUTION_DESIGN_NODE_STATUS.APPROVED);
@@ -7552,6 +7800,7 @@ test('solution design end-to-end smoke covers quotation and tender happy paths',
     ...SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS,
     SOLUTION_DESIGN_UPLOAD_SLOT_KEY.RD_COST_ESTIMATION,
     SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MANUFACTURING_COST_ESTIMATION,
+    SOLUTION_DESIGN_UPLOAD_SLOT_KEY.MARKETING_COST_ESTIMATION,
     SOLUTION_DESIGN_UPLOAD_SLOT_KEY.FINANCE_COST_ESTIMATION
   ]) {
     assert.ok(quotationDb.connection.currentUploadFileForSlot(slotKey), `Expected current file for ${slotKey}`);
@@ -7963,6 +8212,111 @@ test('navigation process nodes respect current, future, and completed stage boun
   assert.notEqual(currentProjectStartNoticeNode.status, NAVIGATION_STATUS.COMPLETED);
   assert.equal(completedSolutionStage.children[0].status, NAVIGATION_STATUS.COMPLETED);
   assert.equal(futureProcessNode.status, NAVIGATION_STATUS.PENDING);
+});
+
+test('navigation uses solution design workflow nodes before solution stage starts', () => {
+  const navigation = buildProjectNavigationFromWorkspace(100, {
+    project: {
+      projectName: '方案设计导航未开始项目',
+      projectCode: 'NAV-BEFORE-SOLUTION',
+      projectMode: null,
+      status: 'normal'
+    },
+    currentStage: {
+      stageKey: 'initiation',
+      stageOrder: 1,
+      stageName: '立项阶段'
+    },
+    stages: [
+      {
+        stageId: 101,
+        stageOrder: 1,
+        stageKey: 'initiation',
+        stageName: '立项阶段',
+        stageStatus: 'current',
+        isCurrent: true,
+        configured: true,
+        nodes: []
+      },
+      {
+        stageId: 102,
+        stageOrder: 2,
+        stageKey: 'solution',
+        stageName: '方案设计阶段',
+        stageStatus: 'not_started',
+        isCurrent: false,
+        configured: true,
+        nodes: [
+          { nodeKey: 'cost_price_estimation', nodeName: '成本/价格估算', nodeStatus: 'waiting_submission', outputs: [] },
+          { nodeKey: 'quotation', nodeName: '报价', nodeStatus: 'waiting_submission', outputs: [] },
+          { nodeKey: 'tender', nodeName: '投标', nodeStatus: 'waiting_submission', outputs: [] }
+        ]
+      }
+    ]
+  });
+
+  const solutionStage = navigation.children.find((stage) => stage.stageKey === 'solution');
+  const nodeKeys = solutionStage.children.map((node) => node.nodeKey);
+
+  assert.deepEqual(nodeKeys, SOLUTION_DESIGN_NODES.map((node) => node.nodeKey));
+  assert.equal(nodeKeys.includes('cost_price_estimation'), false);
+  assert.equal(nodeKeys.includes('quotation'), false);
+  assert.equal(nodeKeys.includes('tender'), false);
+  assert.equal(nodeKeys.includes(SOLUTION_DESIGN_NODE_KEY.MARKETING_COST), true);
+  assert.equal(solutionStage.children.length, 10);
+  assert.equal(solutionStage.children.every((node) => node.status === NAVIGATION_STATUS.PENDING), true);
+  assert.equal(EXPECTED_STAGE_DOCUMENT_ITEM_COUNT, 71);
+});
+
+test('navigation keeps marketing cost estimation selectable after entering solution stage', () => {
+  const navigation = buildProjectNavigationFromWorkspace(100, {
+    project: {
+      projectName: '方案设计导航营销节点项目',
+      projectCode: 'NAV-MARKETING-COST',
+      projectMode: null,
+      status: 'normal'
+    },
+    currentStage: {
+      stageKey: 'solution',
+      stageOrder: 2,
+      stageName: '方案设计阶段'
+    },
+    stages: [
+      {
+        stageId: 202,
+        stageOrder: 2,
+        stageKey: 'solution',
+        stageName: '方案设计阶段',
+        stageStatus: 'current',
+        isCurrent: true,
+        configured: true,
+        nodes: [
+          ...SOLUTION_DESIGN_NODES.map((node) => ({
+            nodeKey: node.nodeKey,
+            nodeName: node.nodeName,
+            nodeStatus:
+              node.nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST
+                ? SOLUTION_DESIGN_NODE_STATUS.PENDING
+                : SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED,
+            outputs: []
+          })),
+          { nodeKey: 'cost_price_estimation', nodeName: '成本/价格估算', nodeStatus: 'waiting_submission', outputs: [] }
+        ]
+      }
+    ]
+  });
+
+  const solutionStage = navigation.children.find((stage) => stage.stageKey === 'solution');
+  const nodeKeys = solutionStage.children.map((node) => node.nodeKey);
+  const marketingNode = solutionStage.children.find(
+    (node) => node.nodeKey === SOLUTION_DESIGN_NODE_KEY.MARKETING_COST
+  );
+
+  assert.deepEqual(nodeKeys, SOLUTION_DESIGN_NODES.map((node) => node.nodeKey));
+  assert.equal(solutionStage.children.length, 10);
+  assert.equal(nodeKeys.includes('cost_price_estimation'), false);
+  assert.equal(marketingNode.name, '营销成本估算');
+  assert.equal(marketingNode.status, NAVIGATION_STATUS.PROCESSING);
 });
 
 test('auto advance completes project after final stage gate is satisfied', async () => {

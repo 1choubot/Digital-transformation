@@ -379,11 +379,14 @@ export async function returnStageDocument(projectId, documentId, returnReason, a
   });
 }
 
-export async function approveInitiationReviewNode(projectId, documentId, nodeKey, comment, authToken) {
+export async function approveInitiationReviewNode(projectId, documentId, nodeKey, comment, authToken, options = {}) {
   return request(`/api/projects/${projectId}/stage-documents/${documentId}/initiation-review/${nodeKey}/approve`, {
     method: 'POST',
     authToken,
-    body: JSON.stringify({ comment })
+    body: JSON.stringify({
+      comment,
+      ...(options.projectExecutionMode ? { projectExecutionMode: options.projectExecutionMode } : {})
+    })
   });
 }
 

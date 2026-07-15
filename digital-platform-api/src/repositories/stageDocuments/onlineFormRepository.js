@@ -66,7 +66,7 @@ const NOTICE_TEMPLATE = Object.freeze({
     '为便于公司项目生产准备、事前申请、费用填报、成本归集、物资采购等工作开展。现将各项目的项目名称、项目编号确定如下：',
     '请各部门严格按照项目名称、项目编号进行生产准备、费用填报、事前申请、成本归集、物资采购等工作。'
   ],
-  tableColumns: ['序号', '项目编号', '项目名称', '客户单位', '立项日期'],
+  tableColumns: ['序号', '项目编号', '项目名称', '客户单位', '开展模式', '立项日期'],
   signer: '重庆凯尔夫智能测控技术有限责任公司'
 });
 
@@ -432,25 +432,6 @@ const INITIATION_FORM_DEFINITIONS = Object.freeze({
           { key: 'projectResponsiblePerson', label: '本公司商务负责人', type: 'text', required: false, readOnly: true, autoFill: 'businessResponsibleName' },
           { key: 'projectResponsibleContact', label: '联系方式', type: 'text', required: false }
         ]
-      },
-      {
-        key: 'projectExecutionModeSection',
-        title: '项目开展模式',
-        editablePart: INITIATION_COLLABORATION_PART.BUSINESS,
-        fields: [
-          {
-            key: 'projectExecutionMode',
-            label: '项目开展模式',
-            type: 'select',
-            required: true,
-            options: [
-              INITIATION_PROJECT_EXECUTION_MODE.SELF_DEVELOPED,
-              INITIATION_PROJECT_EXECUTION_MODE.SUPPLY_CHAIN
-            ],
-            editablePart: INITIATION_COLLABORATION_PART.BUSINESS,
-            description: '仅用于生成 1.2 项目立项审批表，不关联系统项目模式。'
-          }
-        ]
       }
     ],
     scoringSections: INITIATION_APPROVAL_SCORING_SECTIONS,
@@ -462,24 +443,12 @@ const INITIATION_FORM_DEFINITIONS = Object.freeze({
       { key: 'customerContact', label: '联系方式', type: 'text', required: false, readOnly: true, autoFill: 'customerContact' },
       { key: 'projectResponsiblePerson', label: '本公司商务负责人', type: 'text', required: false, readOnly: true, autoFill: 'businessResponsibleName' },
       { key: 'projectResponsibleContact', label: '项目负责人联系方式', type: 'text', required: false, editablePart: INITIATION_COLLABORATION_PART.BUSINESS },
-      {
-        key: 'projectExecutionMode',
-        label: '项目开展模式',
-        type: 'select',
-        required: true,
-        options: [
-          INITIATION_PROJECT_EXECUTION_MODE.SELF_DEVELOPED,
-          INITIATION_PROJECT_EXECUTION_MODE.SUPPLY_CHAIN
-        ],
-        editablePart: INITIATION_COLLABORATION_PART.BUSINESS,
-        description: '仅用于生成 1.2 项目立项审批表，不写入系统项目模式。'
-      },
       ...buildScoringFields(INITIATION_APPROVAL_SCORING_SECTIONS)
     ]
   },
   [INITIATION_NOTICE_DOCUMENT_CODE]: {
     formKey: 'initiation_notice',
-    templateFileName: '关于确定项目名称及编号的通知-模板.docx',
+    templateFileName: '项目立项通知-模板.docx',
     noticeTemplate: NOTICE_TEMPLATE,
     sections: [
       {
@@ -490,6 +459,7 @@ const INITIATION_FORM_DEFINITIONS = Object.freeze({
           { key: 'projectCode', label: '项目编号', type: 'text', required: true, autoFill: 'projectCode' },
           { key: 'projectName', label: '项目名称', type: 'text', required: false, readOnly: true, autoFill: 'projectName' },
           { key: 'customerUnit', label: '客户单位', type: 'text', required: false, readOnly: true, autoFill: 'customerName' },
+          { key: 'projectExecutionMode', label: '开展模式', type: 'text', required: false, readOnly: true },
           { key: 'initiationDate', label: '立项日期', type: 'date', required: false }
         ]
       },
@@ -507,6 +477,7 @@ const INITIATION_FORM_DEFINITIONS = Object.freeze({
       { key: 'projectCode', label: '项目编号', type: 'text', required: true, autoFill: 'projectCode' },
       { key: 'projectName', label: '项目名称', type: 'text', required: false, readOnly: true, autoFill: 'projectName' },
       { key: 'customerUnit', label: '客户单位', type: 'text', required: false, readOnly: true, autoFill: 'customerName' },
+      { key: 'projectExecutionMode', label: '开展模式', type: 'text', required: false, readOnly: true },
       { key: 'initiationDate', label: '立项日期', type: 'date', required: false },
       { key: 'signerCompany', label: '落款单位', type: 'text', required: false, readOnly: true, defaultValue: NOTICE_TEMPLATE.signer },
       { key: 'noticeDate', label: '日期', type: 'date', required: false }
@@ -1249,6 +1220,69 @@ async function selectFormRow(connection, documentId) {
   return rows[0] || null;
 }
 
+function isAllowedInitiationProjectExecutionMode(value) {
+  return Object.values(INITIATION_PROJECT_EXECUTION_MODE).includes(String(value || '').trim());
+}
+
+async function selectApprovedInitiationProjectExecutionMode(
+  connection,
+  projectId,
+  { required = false, forUpdate = false } = {}
+) {
+  const [rows] = await connection.execute(
+    `SELECT f.form_data_json
+    FROM project_stage_document_forms f
+    INNER JOIN project_stage_documents d
+      ON d.id = f.stage_document_id
+    WHERE d.project_id = ?
+      AND d.document_code = ?
+      AND d.status = ?
+      AND f.status = 'submitted'
+    LIMIT 1
+    ${forUpdate ? 'FOR UPDATE' : ''}`,
+    [projectId, INITIATION_REVIEW_DOCUMENT_CODE, DOCUMENT_STATUS.CONFIRMED]
+  );
+
+  const formData = parseJsonValue(rows[0]?.form_data_json, {});
+  const projectExecutionMode = String(formData?.projectExecutionMode ?? '').trim();
+  if (projectExecutionMode && isAllowedInitiationProjectExecutionMode(projectExecutionMode)) {
+    return projectExecutionMode;
+  }
+
+  if (required) {
+    throw new StageDocumentFormError(
+      'INITIATION_PROJECT_EXECUTION_MODE_REQUIRED',
+      'Project execution mode is required before submitting initiation notice form',
+      409,
+      ['projectExecutionMode']
+    );
+  }
+
+  return '';
+}
+
+async function applyInitiationNoticeProjectExecutionModeSnapshot({
+  connection,
+  projectId,
+  document,
+  formData,
+  required = false,
+  forUpdate = false
+}) {
+  if (String(getDocumentCode(document)) !== INITIATION_NOTICE_DOCUMENT_CODE) {
+    return formData;
+  }
+
+  const projectExecutionMode = await selectApprovedInitiationProjectExecutionMode(connection, projectId, {
+    required,
+    forUpdate
+  });
+  return {
+    ...formData,
+    projectExecutionMode
+  };
+}
+
 async function upsertForm({
   connection,
   projectId,
@@ -1334,10 +1368,14 @@ function mapForm({
   projectContext = null,
   blockingReasons = [],
   reviewOpinions = [],
-  images = []
+  images = [],
+  formDataOverrides = {}
 }) {
   const savedFormData = parseJsonValue(row?.form_data_json, {});
-  const formData = applySchemaDefaults(schema, omitInitiationCollaborationMetadata(savedFormData), projectContext);
+  const formData = {
+    ...applySchemaDefaults(schema, omitInitiationCollaborationMetadata(savedFormData), projectContext),
+    ...formDataOverrides
+  };
   const collaboration = isInitiationReviewFormDocument(document)
     ? getInitiationCollaboration(savedFormData)
     : null;
@@ -1576,6 +1614,12 @@ export async function getStageDocumentOnlineForm({ projectId, documentId, user }
 
     const row = await selectFormRow(connection, documentId);
     const projectContext = await selectOnlineFormProjectContext(connection, projectId);
+    const formDataOverrides =
+      String(getDocumentCode(document)) === INITIATION_NOTICE_DOCUMENT_CODE
+        ? {
+            projectExecutionMode: await selectApprovedInitiationProjectExecutionMode(connection, projectId)
+          }
+        : {};
     const reviewOpinions = await buildReviewOpinions({ connection, document, schema });
     const images = await listStageDocumentOnlineFormImagesForDocument({
       executor: connection,
@@ -1585,7 +1629,17 @@ export async function getStageDocumentOnlineForm({ projectId, documentId, user }
       project: await selectProjectPermissionContext(connection, projectId, user),
       document
     });
-    return mapForm({ document, schema, row, permissions, projectContext, blockingReasons, reviewOpinions, images });
+    return mapForm({
+      document,
+      schema,
+      row,
+      permissions,
+      projectContext,
+      blockingReasons,
+      reviewOpinions,
+      images,
+      formDataOverrides
+    });
   } finally {
     connection.release();
   }
@@ -1625,7 +1679,13 @@ export async function saveStageDocumentOnlineForm({ projectId, documentId, user,
         })
       : null;
     if (!collaborationResult) {
-      const formDataWithDefaults = applySchemaDefaults(schema, normalizedFormData, projectContext);
+      const formDataWithDefaults = await applyInitiationNoticeProjectExecutionModeSnapshot({
+        connection,
+        projectId,
+        document,
+        formData: applySchemaDefaults(schema, normalizedFormData, projectContext),
+        forUpdate: true
+      });
       await upsertForm({
         connection,
         projectId,
@@ -1725,7 +1785,14 @@ export async function submitStageDocumentOnlineForm({ projectId, documentId, use
         })
       : null;
     if (!collaborationResult) {
-      const formDataWithDefaults = applySchemaDefaults(schema, normalizedFormData, projectContext);
+      const formDataWithDefaults = await applyInitiationNoticeProjectExecutionModeSnapshot({
+        connection,
+        projectId,
+        document,
+        formData: applySchemaDefaults(schema, normalizedFormData, projectContext),
+        required: true,
+        forUpdate: true
+      });
       const noticeProjectCode =
         String(getDocumentCode(document)) === INITIATION_NOTICE_DOCUMENT_CODE
           ? normalizeInitiationProjectCode(formDataWithDefaults, { required: true })

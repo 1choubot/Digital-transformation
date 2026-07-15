@@ -133,6 +133,7 @@ export async function ensureSolutionDesignWorkflowSchema(executor) {
         'customer_solution_review',
         'rd_cost_estimation',
         'manufacturing_cost_estimation',
+        'marketing_cost_estimation',
         'finance_cost_estimation',
         'quotation_or_tender'
       ) NOT NULL,
@@ -214,6 +215,7 @@ export async function ensureSolutionDesignWorkflowSchema(executor) {
         'customer_solution_review',
         'rd_cost_estimation',
         'manufacturing_cost_estimation',
+        'marketing_cost_estimation',
         'finance_cost_estimation',
         'quotation_or_tender'
       ) NOT NULL,
@@ -230,6 +232,7 @@ export async function ensureSolutionDesignWorkflowSchema(executor) {
         'solution_ppt',
         'rd_cost_estimation_file',
         'manufacturing_cost_estimation_file',
+        'marketing_cost_estimation_file',
         'finance_cost_estimation_file',
         'quotation_file',
         'tender_business_file',
@@ -283,6 +286,7 @@ export async function ensureSolutionDesignWorkflowSchema(executor) {
         'solution_ppt',
         'rd_cost_estimation_file',
         'manufacturing_cost_estimation_file',
+        'marketing_cost_estimation_file',
         'finance_cost_estimation_file',
         'quotation_file',
         'tender_business_file',

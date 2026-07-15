@@ -2197,12 +2197,12 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **AND** 旧项目客户联系人为空时页面 MUST 不崩溃
 
 ### Requirement: 1.2 协同填写前端体验
-项目核心前端 MUST 保持 `1.2` 商务负责人和技术负责人协同填写体验，但 MUST 按新版模板移除项目编号入口并更新评分项。
+项目核心前端 MUST 保持 `1.2` 商务负责人和技术负责人协同填写体验，但 MUST 按新版模板移除项目编号入口并更新评分项，且 MUST NOT 要求商务负责人填写项目开展模式。
 
 #### Scenario: 商务负责人填写新版商务区域
 - **WHEN** 商务负责人打开 `1.2 项目立项审批表`
 - **THEN** 前端 MUST 允许填写新版商务模块
-- **AND** 前端 MUST 要求商务负责人填写项目开展模式单选字段
+- **AND** 前端 MUST NOT 要求商务负责人填写项目开展模式单选字段
 - **AND** 前端 MUST NOT 提供项目编号填写或确认入口
 
 #### Scenario: 技术负责人填写新版技术区域
@@ -2377,7 +2377,7 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **AND** 关键按钮 MUST NOT 被横向裁切
 
 ### Requirement: 新版立项编号流程前端呈现
-项目核心前端 MUST 将项目编号填写入口从 `1.2 项目立项审批表` 移到 `1.3 项目立项通知`，并 MUST 展示新版 `1.2` 商务/技术评分字段。
+项目核心前端 MUST 将项目编号填写入口从 `1.2 项目立项审批表` 移到 `1.3 项目立项通知`，并 MUST 展示新版 `1.2` 商务/技术评分字段；项目开展模式 MUST 在总经理审批通过 `1.2` 时填写。
 
 #### Scenario: 1.2 不展示项目编号字段
 - **WHEN** 用户打开 `1.2 项目立项审批表`
@@ -2387,14 +2387,13 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 #### Scenario: 1.2 展示新版商务评分项
 - **WHEN** 商务负责人打开 `1.2`
 - **THEN** 前端 MUST 展示客户企业属性、项目来源、项目定位、商务竞争条件、项目预算、付款条件
-- **AND** 前端 MUST 展示项目开展模式必填单选字段
-- **AND** 项目开展模式选项 MUST 为自研模式和供应链模式
+- **AND** 前端 MUST NOT 展示项目开展模式必填单选字段
 - **AND** 前端 MUST 保持商务负责人只能提交其职责范围内内容
 
-#### Scenario: 商务负责人未填项目开展模式不得提交
+#### Scenario: 商务负责人未填项目开展模式不阻塞商务部分提交
 - **WHEN** 商务负责人提交 `1.2` 商务部分
 - **AND** 项目开展模式为空
-- **THEN** 前端 MUST 阻止提交或展示后端业务错误
+- **THEN** 前端 MUST NOT 因项目开展模式为空阻止提交商务部分
 - **AND** 前端 MUST NOT 将该字段表达为系统项目模式
 
 #### Scenario: 1.2 展示新版技术评分项
@@ -2402,16 +2401,30 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **THEN** 前端 MUST 展示项目需求、特殊环境要求、行业门槛、技术成熟度、研发模式
 - **AND** 前端 MUST 保持技术负责人只能提交其职责范围内内容
 
+#### Scenario: 1.2 总经理审批通过时选择项目开展模式
+- **WHEN** 总经理审批通过 `1.2`
+- **THEN** 前端 MUST 展示项目开展模式选择控件
+- **AND** 项目开展模式选项 MUST 为自研模式和供应链模式
+- **AND** 前端 MUST 将选择值随审批通过请求提交给后端
+- **AND** 未选择时前端 MUST 阻止提交或展示后端业务错误
+
+#### Scenario: 1.2 总经理审批不通过时不展示项目开展模式
+- **WHEN** 总经理审批不通过 `1.2`
+- **THEN** 前端 MUST NOT 展示项目开展模式选择控件
+- **AND** 前端 MUST NOT 因项目开展模式为空阻止退回
+
 #### Scenario: 1.3 项目编号可编辑必填
 - **WHEN** 营销中心负责人打开 `1.3 项目立项通知`
 - **THEN** 前端 MUST 展示可编辑的项目编号字段
 - **AND** 项目编号为空时前端 MUST 阻止提交或展示后端阻塞原因
 - **AND** 项目编号重复时前端 MUST 展示后端业务错误
 
-#### Scenario: 1.3 生成文件状态沿用现有展示
-- **WHEN** `1.3` 已提交并触发通知生成
-- **THEN** 前端 MUST 沿用现有生成状态和下载入口展示
-- **AND** 前端 MUST NOT 展示文件平台归档或同步假状态
+#### Scenario: 1.3 展示只读开展模式
+- **WHEN** 营销中心负责人打开 `1.3 项目立项通知`
+- **THEN** 前端 MUST 展示只读“开展模式”字段
+- **AND** 该字段 MUST 来自 `1.2` 总经理审批通过时选择的 `projectExecutionMode`
+- **AND** 前端 MUST NOT 允许用户在 `1.3` 手动编辑开展模式
+- **AND** 生成或提交 `1.3` 时前端 MUST NOT 要求用户重新选择开展模式
 
 ### Requirement: 方案设计阶段子节点展示
 项目核心前端 MUST 在既有 8 大阶段导航中的“方案设计阶段”下展示方案设计内部 9 个子节点。
@@ -2754,3 +2767,23 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **AND** 用户对该产出重新上传文件且后端返回豁免已取消
 - **THEN** 前端 MUST 展示新上传文件为该产出的 current file
 - **AND** 前端 MUST 不再展示该产出仍处于无需上传豁免状态
+
+### Requirement: 方案设计营销成本估算前端节点
+项目核心前端 MUST 在方案设计 workflow 中展示营销成本估算节点和营销中心成本估算表上传/审批交互。
+
+#### Scenario: 商务负责人处理营销成本估算
+- **WHEN** 方案设计进入营销成本估算节点
+- **AND** 当前用户是商务负责人
+- **THEN** 前端 MUST 展示营销中心成本估算表上传入口和提交入口
+- **AND** 前端 MUST 展示可用的前置成本文件下载入口或后端返回的阻塞原因
+
+#### Scenario: 营销中心负责人审批营销成本估算
+- **WHEN** 营销成本估算已提交
+- **AND** 当前用户是营销中心负责人
+- **THEN** 前端 MUST 展示审批通过和退回入口
+- **AND** 退回时前端 MUST 要求填写退回原因
+
+#### Scenario: 成本链路顺序展示
+- **WHEN** 前端展示方案设计成本估算链路
+- **THEN** 前端 MUST 按研发成本估算、制造成本估算、营销成本估算、财务成本估算顺序展示
+- **AND** 前端 MUST NOT 将营销成本估算展示为新的阶段资料项

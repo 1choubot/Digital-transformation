@@ -3158,7 +3158,7 @@ p {
 .online-form-score-table__header,
 .online-form-score-card {
   display: grid;
-  grid-template-columns: 120px minmax(240px, 2fr) 110px minmax(220px, 1.2fr) 150px;
+  grid-template-columns: 120px minmax(180px, 1.2fr) 110px minmax(280px, 1.8fr) 150px;
   align-items: stretch;
 }
 
@@ -4451,7 +4451,7 @@ p {
 /* Shared generated-file status card for initiation and solution-design forms. */
 .generated-file-card {
         display: flex;
-        justify-content: flex-end;
+        justify-content: center;
         gap: var(--space-4, 16px);
         padding: var(--space-3, 12px);
         border: 1px solid #a8ccf5;

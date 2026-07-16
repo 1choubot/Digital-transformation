@@ -104,6 +104,10 @@ import {
   getSelectedResponsibleUserId,
   isInitiationOnlineFormDocument
 } from '../../components/project-detail/stageDocumentViewHelpers.js';
+import {
+  findBackendActiveNavigationTarget,
+  shouldAutoSwitchAfterNodeRefresh
+} from './flowNodeNavigation.js';
 
 const props = defineProps({
   authToken: {
@@ -721,6 +725,28 @@ function selectWorkspaceNode(stage, node) {
   props.navigate(`/projects/${props.projectId}/node/${node.nodeKey}`);
 }
 
+function findWorkspaceNode(stageKey, nodeKey) {
+  const stage = (workspaceDisplayStages.value || []).find((item) => item.stageKey === stageKey) || null;
+  const node = (stage?.nodes || []).find((item) => item.nodeKey === nodeKey) || null;
+  return stage && node ? { stage, node } : null;
+}
+
+function applyAutomaticWorkspaceSelection(target) {
+  const workspaceTarget = findWorkspaceNode(target?.stageKey, target?.nodeKey);
+  if (!workspaceTarget) {
+    return false;
+  }
+
+  workspaceRouteErrorMessage.value = '';
+  manualWorkspaceSelectionRouteKey.value = '';
+  lastAppliedWorkspaceRouteKey.value = '';
+  selectedWorkspaceStageKey.value = workspaceTarget.stage.stageKey;
+  selectedWorkspaceNodeKey.value = workspaceTarget.node.nodeKey;
+  clearOnlineFormState();
+  props.navigate(`/projects/${props.projectId}/node/${workspaceTarget.node.nodeKey}`);
+  return true;
+}
+
 function selectWorkspaceNodeFromNavigation({ stage, node }) {
   if (stage?.stageKey === 'solution' && solutionDesignWorkspaceStage.value) {
     const solutionNode = (solutionDesignWorkspaceStage.value.nodes || []).find((item) => item.nodeKey === node.nodeCode);
@@ -1104,6 +1130,10 @@ async function refreshProjectWorkspaceState(options = {}) {
 async function handleBusinessStateChanged(payload = {}) {
   const shouldClearCurrentDetail = payload.clearCurrentDetail === true;
   const shouldRefreshCurrentDetail = payload.refreshCurrentDetail === true && !shouldClearCurrentDetail;
+  const previousStageKey = selectedWorkspaceStageKey.value;
+  const previousNodeKey = selectedWorkspaceNodeKey.value;
+  const previousNodeStatus = activeWorkspaceNode.value?.nodeStatus || '';
+  const previousCurrentStageKey = currentDetailStage.value?.stageKey || '';
 
   if (shouldClearCurrentDetail) {
     clearOnlineFormState();
@@ -1112,6 +1142,21 @@ async function handleBusinessStateChanged(payload = {}) {
   await refreshProjectWorkspaceState({
     preserveOnlineFormState: shouldRefreshCurrentDetail
   });
+
+  const refreshedPreviousNode = findWorkspaceNode(previousStageKey, previousNodeKey)?.node || null;
+  if (!shouldAutoSwitchAfterNodeRefresh(previousNodeStatus, refreshedPreviousNode?.nodeStatus)) {
+    return;
+  }
+
+  const stageChanged = Boolean(
+    previousCurrentStageKey && currentDetailStage.value?.stageKey !== previousCurrentStageKey
+  );
+  const target = findBackendActiveNavigationTarget(projectNavigationDisplay.value, {
+    preferCurrentStage: stageChanged
+  });
+  if (target) {
+    applyAutomaticWorkspaceSelection(target);
+  }
 }
 
 async function refreshProjectDetailOnly() {

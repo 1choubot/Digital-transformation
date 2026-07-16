@@ -8,7 +8,9 @@
       :is-pending="isPending" @upload="handleUpload" @download="downloadUpload" />
 
     <section v-if="flow" class="quotation-section">
-      <div class="slot-heading"><h4>报价/投标</h4><el-tag>{{ flow.branchStatus || '待选择' }}</el-tag></div>
+      <div class="slot-heading">
+        <el-tag>{{ flow.branchStatus || '待选择' }}</el-tag>
+      </div>
       <div class="action-row">
         <el-button v-if="flow.permissions?.canSelectBranch" type="primary" :loading="isPending('branch:quotation')"
           @click="selectBranch('quotation')">选择报价流程</el-button>

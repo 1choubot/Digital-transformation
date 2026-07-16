@@ -2960,6 +2960,118 @@ p {
   text-align: left;
 }
 
+.requirement-template-section {
+  overflow: hidden;
+  padding: 0;
+}
+
+.requirement-template-table-wrap {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.requirement-template-table {
+  width: 100%;
+  min-width: 880px;
+  table-layout: fixed;
+  border-collapse: collapse;
+  background: #ffffff;
+}
+
+.requirement-template-table__label {
+  width: 9%;
+}
+
+.requirement-template-table__value-part {
+  width: 20.5%;
+}
+
+.requirement-template-table__value {
+  width: 41%;
+}
+
+.requirement-template-table th,
+.requirement-template-table td {
+  border: 1px solid #cfd8e2;
+  padding: 8px 10px;
+  vertical-align: middle;
+}
+
+.requirement-template-table th {
+  background: #f3f6f9;
+  color: #2f3d4b;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.requirement-template-table td {
+  color: #17212f;
+  font-size: 14px;
+}
+
+.requirement-template-table tr:first-child > * {
+  border-top: 0;
+}
+
+.requirement-template-table tr:last-child > * {
+  border-bottom: 0;
+}
+
+.requirement-template-table tr > *:first-child {
+  border-left: 0;
+}
+
+.requirement-template-table tr > *:last-child {
+  border-right: 0;
+}
+
+.requirement-template-table .el-input,
+.requirement-template-table .el-date-editor,
+.requirement-template-table .el-textarea {
+  width: 100%;
+}
+
+.requirement-template-table .el-input__wrapper,
+.requirement-template-table .el-textarea__inner {
+  box-shadow: 0 0 0 1px #d7e0e8 inset;
+}
+
+.requirement-template-table__required {
+  color: var(--el-color-danger);
+}
+
+.requirement-template-table .form-field-error {
+  display: block;
+  margin-top: 5px;
+  text-align: left;
+}
+
+.requirement-template-metric {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.requirement-template-metric > span:not([data-field-key]) {
+  flex: 0 0 auto;
+}
+
+.requirement-template-metric > span[data-field-key] {
+  flex: 1 1 58px;
+  min-width: 48px;
+}
+
+.requirement-template-metric--wide > .el-input {
+  flex: 1 1 auto;
+  min-width: 160px;
+}
+
 .online-form-field--readonly input,
 .form-grid input[readonly] {
   background: #f4f7fa;

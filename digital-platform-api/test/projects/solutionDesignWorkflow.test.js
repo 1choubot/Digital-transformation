@@ -3353,6 +3353,11 @@ test('role assignment validates enabled users and business department users', as
       name: 'technical owner outside RD center',
       payload: rolePayload({ technicalOwnerUserId: 21 }),
       code: SOLUTION_DESIGN_ERROR.INVALID_ROLE_USER
+    },
+    {
+      name: 'procurement owner outside manufacturing center',
+      payload: rolePayload({ procurementOwnerUserId: 13 }),
+      code: SOLUTION_DESIGN_ERROR.INVALID_ROLE_USER
     }
   ];
 
@@ -3369,20 +3374,46 @@ test('role assignment validates enabled users and business department users', as
   }
 });
 
-test('procurement owner accepts enabled business department users in the first slice', async () => {
+test('procurement owner accepts manufacturing center users', async () => {
   const db = fakeDb();
   const actor = authUser(db.connection.users.get(1));
 
   const workflow = await assignSolutionDesignRoles(
     {
       projectId: 100,
-      payload: rolePayload({ procurementOwnerUserId: 13 }),
+      payload: rolePayload({ procurementOwnerUserId: 14 }),
       user: actor
     },
     db
   );
 
-  assert.equal(workflow.roles.procurement_owner.userId, 13);
+  assert.equal(workflow.roles.procurement_owner.userId, 14);
+});
+
+test('project manager accepts enabled global users except system administrators', async () => {
+  for (const projectManagerUserId of [3, 18, 30]) {
+    const db = fakeDb();
+    const actor = authUser(db.connection.users.get(1));
+    const workflow = await assignSolutionDesignRoles(
+      { projectId: 100, payload: rolePayload({ projectManagerUserId }), user: actor },
+      db
+    );
+
+    assert.equal(workflow.roles.project_manager.userId, projectManagerUserId);
+  }
+
+  for (const projectManagerUserId of [4, 17]) {
+    const db = fakeDb();
+    const actor = authUser(db.connection.users.get(1));
+
+    await assert.rejects(
+      () => assignSolutionDesignRoles(
+        { projectId: 100, payload: rolePayload({ projectManagerUserId }), user: actor },
+        db
+      ),
+      (error) => error.code === SOLUTION_DESIGN_ERROR.PROJECT_MANAGER_INVALID
+    );
+  }
 });
 
 test('successful role assignment writes role history and operation log with project manager from/to', async () => {

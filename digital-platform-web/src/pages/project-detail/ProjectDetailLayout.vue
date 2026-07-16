@@ -95,7 +95,7 @@ import {
   uploadStageDocumentOnlineFormImage
 } from '../../api/projects.js';
 import { getProjectNavigation } from '../../api/navigation.js';
-import { listResponsibilityCandidates } from '../../api/users.js';
+import { listResponsibilityCandidates, listSolutionDesignRoleCandidates } from '../../api/users.js';
 import NodePageRouter from '../project-node/project-approval/NodePageRouter.vue';
 import ProjectProcessTree from '../../components/project-workspace/ProjectProcessTree.vue';
 import {
@@ -186,6 +186,9 @@ const onlineFormErrorMessage = ref('');
 const responsibilityCandidatesLoading = ref(false);
 const responsibilityCandidatesErrorMessage = ref('');
 const responsibilityCandidates = ref([]);
+const solutionDesignRoleCandidatesLoading = ref(false);
+const solutionDesignRoleCandidatesErrorMessage = ref('');
+const solutionDesignRoleCandidates = ref([]);
 
 /* ── 工作区操作消息状态 ── */
 const actionMessage = ref('');
@@ -486,8 +489,10 @@ const nodePageContext = computed(() => ({
   responsibilityCandidates: visibleResponsibilityCandidates.value,
   responsibilityCandidatesLoading: responsibilityCandidatesLoading.value,
   responsibilityCandidatesErrorMessage: responsibilityCandidatesErrorMessage.value,
-  // 方案设计角色分配沿用拆分前的完整候选列表；不能复用其他节点的部门过滤视图。
-  solutionDesignResponsibilityCandidates: responsibilityCandidates.value,
+  // 方案设计角色使用专用候选列表，避免放宽其他责任人控件的适用范围。
+  solutionDesignRoleCandidates: solutionDesignRoleCandidates.value,
+  solutionDesignRoleCandidatesLoading: solutionDesignRoleCandidatesLoading.value,
+  solutionDesignRoleCandidatesErrorMessage: solutionDesignRoleCandidatesErrorMessage.value,
   solutionDesignWorkflow: solutionDesignWorkflow.value,
   solutionDesignUploads: solutionDesignUploads.value,
   solutionDesignLoading: solutionDesignWorkflowLoading.value || solutionDesignUploadsLoading.value,
@@ -1537,9 +1542,14 @@ async function uploadAttachment({ document, file }) {
   state.errorMessage = '';
 
   try {
-    await uploadStageDocumentAttachment(props.projectId, document.id, file, props.authToken);
+    const attachment = await uploadStageDocumentAttachment(props.projectId, document.id, file, props.authToken);
+    // File operations only update the active document region. Reloading the whole
+    // workspace here collapses and rebuilds the page, which moves the user's viewport.
+    state.attachments = [
+      ...state.attachments.filter((item) => String(item.id) !== String(attachment.id)),
+      attachment
+    ];
     actionMessage.value = '资料附件已上传。';
-    await refreshProjectWorkspaceState();
   } catch (error) {
     state.errorMessage = toReadableApiError(error);
     actionErrorMessage.value = state.errorMessage;
@@ -1632,8 +1642,9 @@ async function deleteAttachment({ document, attachment }) {
 
   try {
     await deleteStageDocumentAttachment(props.projectId, document.id, attachment.id, props.authToken);
+    // Keep file mutations local; workflow actions remain responsible for workspace refreshes.
+    state.attachments = state.attachments.filter((item) => String(item.id) !== String(attachment.id));
     actionMessage.value = '资料附件已删除。';
-    await refreshProjectWorkspaceState();
   } catch (error) {
     state.errorMessage = toReadableApiError(error);
     actionErrorMessage.value = state.errorMessage;
@@ -1962,6 +1973,20 @@ async function loadResponsibilityCandidates() {
   }
 }
 
+async function loadSolutionDesignRoleCandidates() {
+  solutionDesignRoleCandidatesLoading.value = true;
+  solutionDesignRoleCandidatesErrorMessage.value = '';
+  solutionDesignRoleCandidates.value = [];
+
+  try {
+    solutionDesignRoleCandidates.value = await listSolutionDesignRoleCandidates(props.authToken);
+  } catch (error) {
+    solutionDesignRoleCandidatesErrorMessage.value = toReadableApiError(error);
+  } finally {
+    solutionDesignRoleCandidatesLoading.value = false;
+  }
+}
+
 /* ── 页面初始化 ── */
 async function loadDetail() {
   loading.value = true;
@@ -1980,6 +2005,8 @@ async function loadDetail() {
   solutionDesignUploadsErrorMessage.value = '';
   responsibilityCandidates.value = [];
   responsibilityCandidatesErrorMessage.value = '';
+  solutionDesignRoleCandidates.value = [];
+  solutionDesignRoleCandidatesErrorMessage.value = '';
   clearAttachmentStates();
   clearActionState();
   lastAppliedWorkspaceRouteKey.value = '';
@@ -2000,7 +2027,8 @@ async function loadDetail() {
       loadWorkspace(),
       loadProjectNavigation(),
       loadSolutionDesignUploads(),
-      loadResponsibilityCandidates()
+      loadResponsibilityCandidates(),
+      loadSolutionDesignRoleCandidates()
     ]);
     ensureSolutionDesignWorkspaceSelection();
   }

@@ -3,11 +3,11 @@ import { useSolutionDesignWorkflow } from './useSolutionDesignWorkflow.js';
 
 export const solutionDesignRoleDefinitions = Object.freeze([
   { roleKey: 'project_manager', label: '项目经理', payloadKey: 'projectManagerUserId' },
-  { roleKey: 'technical_owner', label: '技术负责人', payloadKey: 'technicalOwnerUserId' },
-  { roleKey: 'business_owner', label: '商务负责人', payloadKey: 'businessOwnerUserId' },
-  { roleKey: 'procurement_owner', label: '采购负责人', payloadKey: 'procurementOwnerUserId' },
-  { roleKey: 'finance_accountant', label: '财务会计', payloadKey: 'financeAccountantUserId' },
-  { roleKey: 'finance_owner', label: '财务负责人', payloadKey: 'financeOwnerUserId' }
+  { roleKey: 'technical_owner', label: '技术负责人', payloadKey: 'technicalOwnerUserId', requiredDepartment: 'rd_center' },
+  { roleKey: 'business_owner', label: '商务负责人', payloadKey: 'businessOwnerUserId', requiredDepartment: 'marketing_center' },
+  { roleKey: 'procurement_owner', label: '采购负责人', payloadKey: 'procurementOwnerUserId', requiredDepartment: 'manufacturing_center' },
+  { roleKey: 'finance_accountant', label: '财务会计', payloadKey: 'financeAccountantUserId', requiredDepartment: 'operations_center' },
+  { roleKey: 'finance_owner', label: '财务负责人', payloadKey: 'financeOwnerUserId', requiredDepartment: 'operations_center' }
 ]);
 
 export function useSolutionDesignNodePage(props, emit) {

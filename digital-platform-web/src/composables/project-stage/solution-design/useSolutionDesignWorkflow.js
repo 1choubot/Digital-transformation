@@ -111,11 +111,27 @@ export function useSolutionDesignWorkflow({
       ElMessage.error('文件无效，请选择 1 字节到 50MB 以内的文件。');
       return;
     }
-    await runAction(
+    const result = await runAction(
       `upload:${slot.slotKey}`,
       () => uploadSolutionDesignWorkflowFile(id(), slot.slotKey, file, token()),
-      `${slot.slotName}已上传。`
+      `${slot.slotName}已上传。`,
+      { notify: false }
     );
+    if (!result?.file) return;
+
+    // Uploads are file-content mutations, not workflow transitions. Merge the
+    // returned file into the current slot so the page and viewport stay stable.
+    slot.currentFile = result.file;
+    slot.hasCurrentFile = true;
+    slot.currentFileHidden = false;
+    slot.exemption = {
+      ...(slot.exemption || {}),
+      isExempted: false,
+      reason: null,
+      exemptedByUserId: null,
+      exemptedByUser: null,
+      exemptedAt: null
+    };
   }
 
   async function downloadUpload(slot) {

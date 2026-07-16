@@ -1,10 +1,10 @@
 import {
   BUSINESS_DEPARTMENT,
   ORGANIZATION_ROLE,
-  canBeProjectManagerUser,
   canBeResponsibleUser,
   isCenterManagerUser,
   isGeneralManagerUser,
+  isSystemAdminUser,
   isValidBusinessDepartment
 } from './organization.js';
 
@@ -84,7 +84,8 @@ export const SOLUTION_DESIGN_ROLE_DEFINITIONS = [
     roleKey: SOLUTION_DESIGN_ROLE_KEY.PROCUREMENT_OWNER,
     label: '采购负责人',
     requestField: 'procurementOwnerUserId',
-    columnName: 'procurement_owner_user_id'
+    columnName: 'procurement_owner_user_id',
+    requiredDepartment: BUSINESS_DEPARTMENT.MANUFACTURING_CENTER
   },
   {
     roleKey: SOLUTION_DESIGN_ROLE_KEY.FINANCE_ACCOUNTANT,
@@ -734,17 +735,8 @@ export function isProjectInSolutionDesignStage(project) {
 }
 
 export function assertAssignableRoleUser(definition, user) {
-  if (!user?.isEnabled || !canBeResponsibleUser(user)) {
-    throw new SolutionDesignWorkflowError(
-      SOLUTION_DESIGN_ERROR.INVALID_ROLE_USER,
-      `${definition.label} user is not an enabled business department user`,
-      409,
-      [definition.requestField]
-    );
-  }
-
   if (definition.roleKey === SOLUTION_DESIGN_ROLE_KEY.PROJECT_MANAGER) {
-    if (!canBeProjectManagerUser(user)) {
+    if (!user?.isEnabled || isSystemAdminUser(user)) {
       throw new SolutionDesignWorkflowError(
         SOLUTION_DESIGN_ERROR.PROJECT_MANAGER_INVALID,
         'Project manager user is not allowed',
@@ -753,6 +745,15 @@ export function assertAssignableRoleUser(definition, user) {
       );
     }
     return;
+  }
+
+  if (!user?.isEnabled || !canBeResponsibleUser(user)) {
+    throw new SolutionDesignWorkflowError(
+      SOLUTION_DESIGN_ERROR.INVALID_ROLE_USER,
+      `${definition.label} user is not an enabled business department user`,
+      409,
+      [definition.requestField]
+    );
   }
 
   if (definition.requiredDepartment && user.department !== definition.requiredDepartment) {

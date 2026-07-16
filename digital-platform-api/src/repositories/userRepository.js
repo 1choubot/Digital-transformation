@@ -139,6 +139,27 @@ export async function listResponsibilityCandidateUsers() {
   return rows.map(mapResponsibilityCandidate).filter(canBeResponsibleUser);
 }
 
+export async function listSolutionDesignRoleCandidateUsers() {
+  const [rows] = await pool.execute(
+    `SELECT
+      id,
+      account,
+      display_name,
+      department,
+      organization_role,
+      role,
+      is_enabled,
+      file_platform_user_id
+    FROM users
+    WHERE is_enabled = 1
+      AND organization_role <> ?
+    ORDER BY display_name ASC, account ASC, id ASC`,
+    [ORGANIZATION_ROLE.SYSTEM_ADMIN]
+  );
+
+  return rows.map(mapResponsibilityCandidate);
+}
+
 export async function upsertInitialUser(user) {
   assertValidUserOrganizationState(user);
   await pool.execute(

@@ -20,7 +20,7 @@
       <header class="solution-action-card__heading">
         <div>
           <strong>审批处理</strong>
-          <small>选择审批通过将直接执行；退回修改需要填写原因。</small>
+          <small>审批通过将直接执行；退回修改需要填写原因。</small>
         </div>
         <el-tag :type="resultTagType">{{ resultStatusText }}</el-tag>
       </header>
@@ -29,12 +29,17 @@
         <div class="solution-approval-field-label">
           <strong>审批决定</strong><span>*</span>
         </div>
-        <el-radio-group v-model="decision" class="solution-approval-decision__options" :disabled="busy"
-          @change="handleDecisionChange">
-          <el-radio v-if="node.permissions?.canApprove" value="approve" border
-            :disabled="approveDisabled">审批通过</el-radio>
-          <el-radio v-if="node.permissions?.canReturn" value="return" border>退回修改</el-radio>
-        </el-radio-group>
+        <div class="solution-approval-decision__options">
+          <el-button v-if="node.permissions?.canApprove" type="primary"
+            :loading="isPending(`approve:${node.nodeKey}`)" :disabled="busy || approveDisabled"
+            @click="approveDirectly">
+            审批通过
+          </el-button>
+          <el-button v-if="node.permissions?.canReturn" type="warning" plain
+            :disabled="busy" @click="decision = 'return'">
+            退回修改
+          </el-button>
+        </div>
       </div>
 
       <div v-if="decision === 'return'" class="solution-approval-form">
@@ -116,8 +121,10 @@ function formatDateTime(value) {
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('zh-CN', { hour12: false });
 }
 
-function handleDecisionChange(value) {
-  if (value !== 'approve' || props.approveDisabled || busy.value) return;
+function approveDirectly() {
+  if (props.approveDisabled || busy.value) return;
+  // 审批通过无需展开表单或二次确认；收起可能已打开的退回表单后直接请求。
+  decision.value = '';
   emit('approve');
 }
 
@@ -183,7 +190,7 @@ async function confirmReturn() {
   width: 100%;
 }
 
-.solution-approval-decision__options .el-radio.is-bordered {
+.solution-approval-decision__options .el-button {
   width: 100%;
   height: auto;
   min-height: 40px;

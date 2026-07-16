@@ -32,9 +32,10 @@
     </el-descriptions>
     <SolutionGeneratedFile v-if="dto?.form?.generatedFile" :generated-file="dto.form.generatedFile"
       :pending="pendingAction === 'download'" @download="$emit('download')" />
-    <div v-if="showFormContent" class="action-row">
-      <el-button v-if="canEdit" :loading="pendingAction === 'save'" @click="$emit('save')">保存草稿</el-button>
-      <el-button v-if="canSubmit" type="primary" :loading="pendingAction === 'submit'" @click="$emit('submit')">提交并生成 Word</el-button>
+    <div v-if="showFormContent" class="action-row node-online-form-actions">
+      <el-button v-if="canEdit" size="large" :loading="pendingAction === 'save'" @click="$emit('save')">保存草稿</el-button>
+      <el-button v-if="canSubmit" size="large" type="primary" :loading="pendingAction === 'submit'"
+        @click="$emit('submit')">提交并生成 Word</el-button>
     </div>
   </section>
 </template>

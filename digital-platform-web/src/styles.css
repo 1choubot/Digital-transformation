@@ -3307,6 +3307,38 @@ p {
   justify-content: flex-end;
 }
 
+/* Keep long node forms actionable without requiring users to scroll to the end. */
+.node-online-form-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+  margin-top: 12px;
+  padding: 6px 16px;
+  background: rgba(255, 255, 255, 0.96);
+  border-top: 1px solid #dcdfe6;
+  box-shadow: 0 -6px 18px rgba(31, 41, 55, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.node-online-form-actions .el-button + .el-button {
+  margin-left: 0;
+}
+
+@media (max-width: 640px) {
+  .node-online-form-actions {
+    gap: 8px !important;
+    padding: 6px 12px;
+  }
+
+  .node-online-form-actions > .el-button {
+    flex: 1;
+  }
+}
+
 .project-workspace__subheading {
   display: grid;
   gap: 4px;

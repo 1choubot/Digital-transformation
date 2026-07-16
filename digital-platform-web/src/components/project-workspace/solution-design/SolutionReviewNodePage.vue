@@ -18,12 +18,12 @@
         @remove-repeatable="removeRepeatableItem"
         @update-plan="updateImplementationPlanItem"
       />
-      <div class="action-row">
-        <el-button :disabled="!activeDto?.permissions?.canEditReviewForm" :loading="isPending(`review:${nodeKey}:save`)"
+      <div class="action-row node-online-form-actions">
+        <el-button size="large" :disabled="!activeDto?.permissions?.canEditReviewForm" :loading="isPending(`review:${nodeKey}:save`)"
           @click="saveReviewForm(nodeKey)">
           保存草稿
         </el-button>
-        <el-button type="primary" :disabled="!activeDto?.permissions?.canSubmitReviewForm"
+        <el-button size="large" type="primary" :disabled="!activeDto?.permissions?.canSubmitReviewForm"
           :loading="isPending(`review:${nodeKey}:submit`)" @click="handleSubmitReviewForm">
           提交表单
         </el-button>

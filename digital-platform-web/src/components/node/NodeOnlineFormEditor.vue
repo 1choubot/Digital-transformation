@@ -371,11 +371,12 @@
         </div>
       </section>
 
-      <div class="form-actions online-form-editor__actions">
-        <el-button :loading="saving" :disabled="!form.permissions?.canEdit" @click="$emit('save')">
+      <div class="form-actions online-form-editor__actions node-online-form-actions">
+        <el-button size="large" :loading="saving" :disabled="!form.permissions?.canEdit" @click="$emit('save')">
           保存草稿
         </el-button>
-        <el-button type="primary" native-type="submit" :loading="submitting" :disabled="!form.permissions?.canSubmit">
+        <el-button size="large" type="primary" native-type="submit" :loading="submitting"
+          :disabled="!form.permissions?.canSubmit">
           {{ getOnlineFormSubmitLabel() }}
         </el-button>
       </div>

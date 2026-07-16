@@ -122,12 +122,12 @@
         </SolutionFormFields>
       </section>
 
-      <div class="action-row">
-        <el-button :disabled="!analysisFormDto?.permissions?.canEditForm" :loading="isPending('analysis:save')"
+      <div class="action-row node-online-form-actions">
+        <el-button size="large" :disabled="!analysisFormDto?.permissions?.canEditForm" :loading="isPending('analysis:save')"
           @click="saveAnalysisForm">
           保存草稿
         </el-button>
-        <el-button type="primary" :disabled="!analysisFormDto?.permissions?.canSubmitForm"
+        <el-button size="large" type="primary" :disabled="!analysisFormDto?.permissions?.canSubmitForm"
           :loading="isPending('analysis:submit')" @click="handleSubmitAnalysisForm">
           提交表单
         </el-button>

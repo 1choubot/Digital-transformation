@@ -42,6 +42,7 @@ const fields = [
   { key: 'meetingDate', label: '评审时间', type: 'date', required: true },
   { key: 'meetingLocation', label: '评审地点' },
   { key: 'presenter', label: '主讲人' },
+  { key: 'recorder', label: '记录人', type: 'readonly' },
   { key: 'internalParticipants', label: '我方参与人员', type: 'textarea' },
   { key: 'customerParticipants', label: '甲方参与人员', type: 'textarea' },
   { key: 'customerRequirements', label: '项目需求分析', type: 'repeatable' },
@@ -49,8 +50,7 @@ const fields = [
   { key: 'technicalRisks', label: '项目风险评估', type: 'repeatable' },
   { key: 'solutionSuggestions', label: '项目方案建议', type: 'repeatable' },
   { key: 'actionItems', label: '项目实施计划', type: 'repeatable', required: true },
-  { key: 'reviewConclusion', label: '其他补充内容/评审结论', type: 'textarea', required: true },
-  { key: 'recorder', label: '记录人', type: 'readonly' }
+  { key: 'reviewConclusion', label: '其他补充内容/评审结论', type: 'textarea', required: true }
 ];
 
 const emit = defineEmits(['business-state-changed']);

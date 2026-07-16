@@ -20,7 +20,7 @@
       <header class="solution-action-card__heading">
         <div>
           <strong>审批处理</strong>
-          <small>请选择审批决定，再确认执行对应操作。</small>
+          <small>选择审批通过将直接执行；退回修改需要填写原因。</small>
         </div>
         <el-tag :type="resultTagType">{{ resultStatusText }}</el-tag>
       </header>
@@ -29,23 +29,15 @@
         <div class="solution-approval-field-label">
           <strong>审批决定</strong><span>*</span>
         </div>
-        <el-radio-group v-model="decision" class="solution-approval-decision__options" :disabled="busy">
-          <el-radio v-if="node.permissions?.canApprove" value="approve" border>审批通过</el-radio>
+        <el-radio-group v-model="decision" class="solution-approval-decision__options" :disabled="busy"
+          @change="handleDecisionChange">
+          <el-radio v-if="node.permissions?.canApprove" value="approve" border
+            :disabled="approveDisabled">审批通过</el-radio>
           <el-radio v-if="node.permissions?.canReturn" value="return" border>退回修改</el-radio>
         </el-radio-group>
       </div>
 
-      <div v-if="decision === 'approve'" class="solution-approval-form">
-        <p class="solution-approval-form__notice">确认后当前节点将审批通过，并按既定流程进入下一环节。</p>
-        <div class="solution-action-card__footer">
-          <el-button type="primary" :loading="isPending(`approve:${node.nodeKey}`)"
-            :disabled="busy || approveDisabled" @click="$emit('approve')">
-            确认审批通过
-          </el-button>
-        </div>
-      </div>
-
-      <div v-else-if="decision === 'return'" class="solution-approval-form">
+      <div v-if="decision === 'return'" class="solution-approval-form">
         <p class="solution-approval-form__notice">退回后当前节点资料需要按原因修改并重新提交审批。</p>
         <label class="solution-approval-field-label">
           <strong>退回原因</strong><span>*</span>
@@ -122,6 +114,11 @@ function formatDateTime(value) {
   if (!value) return '-';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('zh-CN', { hour12: false });
+}
+
+function handleDecisionChange(value) {
+  if (value !== 'approve' || props.approveDisabled || busy.value) return;
+  emit('approve');
 }
 
 async function confirmReturn() {

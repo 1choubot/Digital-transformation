@@ -4,7 +4,8 @@
     <el-alert v-if="workflow?.permissions?.canAdvanceToContract" title="方案设计已完成，可以进入合同签订阶段"
       type="success" show-icon :closable="false" />
 
-    <SolutionUploadSlots :slots="slots" :is-pending="isPending" @upload="handleUpload" @download="downloadUpload" />
+    <SolutionUploadSlots v-if="flow?.branchType === 'tender'" :slots="tenderSlots"
+      :is-pending="isPending" @upload="handleUpload" @download="downloadUpload" />
 
     <section v-if="flow" class="quotation-section">
       <div class="slot-heading"><h4>报价/投标</h4><el-tag>{{ flow.branchStatus || '待选择' }}</el-tag></div>
@@ -66,6 +67,9 @@ const {
   returnNode, selectBranch, submitQuotation, acceptQuotation, rejectQuotation
 } = page;
 const flow = computed(() => workflow.value?.quotationTender || null);
+const tenderSlotKeys = new Set(['tender_business_file', 'tender_technical_file']);
+// The finance approval fixes the branch; expose only the two documents required by the tender path.
+const tenderSlots = computed(() => slots.value.filter((slot) => tenderSlotKeys.has(slot.slotKey)));
 const quotation = useSolutionQuotationForm({
   projectId: computed(() => props.projectId),
   authToken: computed(() => props.authToken),

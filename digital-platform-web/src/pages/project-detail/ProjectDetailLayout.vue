@@ -1523,6 +1523,22 @@ async function loadAttachmentsForAllDocuments() {
   await Promise.all(documents.map((document) => loadDocumentAttachments(document)));
 }
 
+async function refreshWorkspaceAfterAttachmentMutation() {
+  const scrollX = globalThis.window?.scrollX || 0;
+  const scrollY = globalThis.window?.scrollY || 0;
+
+  // 附件变更后重新获取后端计算的资料齐套、权限和导航状态。
+  // 这里不走 business-state-changed，因此不会触发普通附件操作的自动节点切换。
+  await refreshProjectWorkspaceState({
+    preserveSelection: true,
+    preserveOnlineFormState: true
+  });
+  await nextTick();
+  globalThis.window?.requestAnimationFrame?.(() => {
+    globalThis.window?.scrollTo?.(scrollX, scrollY);
+  });
+}
+
 async function uploadAttachment({ document, file }) {
   clearActionState();
   const state = getAttachmentState(document.id);
@@ -1550,6 +1566,7 @@ async function uploadAttachment({ document, file }) {
       attachment
     ];
     actionMessage.value = '资料附件已上传。';
+    await refreshWorkspaceAfterAttachmentMutation();
   } catch (error) {
     state.errorMessage = toReadableApiError(error);
     actionErrorMessage.value = state.errorMessage;
@@ -1642,9 +1659,10 @@ async function deleteAttachment({ document, attachment }) {
 
   try {
     await deleteStageDocumentAttachment(props.projectId, document.id, attachment.id, props.authToken);
-    // Keep file mutations local; workflow actions remain responsible for workspace refreshes.
+    // Update immediately so the attachment disappears before the backend state refresh completes.
     state.attachments = state.attachments.filter((item) => String(item.id) !== String(attachment.id));
     actionMessage.value = '资料附件已删除。';
+    await refreshWorkspaceAfterAttachmentMutation();
   } catch (error) {
     state.errorMessage = toReadableApiError(error);
     actionErrorMessage.value = state.errorMessage;

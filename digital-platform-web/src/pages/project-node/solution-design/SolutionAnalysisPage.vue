@@ -256,7 +256,20 @@ function updateAnalysisEnvironmentField(key, value) {
 async function handleSubmitAnalysisForm() {
   validationAttempted.value = true;
   if (missingRequiredFields.value.length === 0) {
-    await submitAnalysisForm();
+    try {
+      await ElMessageBox.confirm(
+        '提交后将生成项目方案分析表，并在资料齐套时自动提交当前节点。确认提交？',
+        '提交确认',
+        {
+          type: 'warning',
+          confirmButtonText: '确认提交',
+          cancelButtonText: '取消'
+        }
+      );
+      await submitAnalysisForm();
+    } catch {
+      // 用户取消时不请求、不刷新，也不显示错误。
+    }
     return;
   }
 

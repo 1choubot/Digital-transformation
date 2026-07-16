@@ -30,8 +30,6 @@
       <el-descriptions-item label="总金额预览">¥{{ totalAmountPreview }}</el-descriptions-item>
       <el-descriptions-item label="大写预览">{{ totalAmountUppercasePreview }}</el-descriptions-item>
     </el-descriptions>
-    <SolutionGeneratedFile v-if="dto?.form?.generatedFile" :generated-file="dto.form.generatedFile"
-      :pending="pendingAction === 'download'" @download="$emit('download')" />
     <div v-if="showFormContent" class="action-row node-online-form-actions">
       <el-button v-if="canEdit" size="large" :loading="pendingAction === 'save'" @click="$emit('save')">保存草稿</el-button>
       <el-button v-if="canSubmit" size="large" type="primary" :loading="pendingAction === 'submit'"
@@ -42,7 +40,6 @@
 
 <script setup>
 import { computed } from 'vue';
-import SolutionGeneratedFile from './SolutionGeneratedFile.vue';
 import {
   calculateLineAmount,
   calculateTotalAmount,
@@ -54,7 +51,7 @@ const props = defineProps({
   loading: Boolean, pendingAction: { type: String, default: '' }, errorMessage: { type: String, default: '' },
   showFormContent: { type: Boolean, default: true }
 });
-const emit = defineEmits(['save', 'submit', 'download', 'add-item', 'remove-item']);
+const emit = defineEmits(['save', 'submit', 'add-item', 'remove-item']);
 const canEdit = computed(() => props.dto?.permissions?.canEditQuotationForm === true);
 const canSubmit = computed(() => props.dto?.permissions?.canSubmitQuotationForm === true);
 const totalAmountPreview = computed(() => calculateTotalAmount(props.formData.items));

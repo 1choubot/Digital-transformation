@@ -3311,7 +3311,7 @@ p {
 .node-online-form-actions {
   position: sticky;
   bottom: 0;
-  z-index: 10;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: flex-end !important;
@@ -3322,6 +3322,14 @@ p {
   border-top: 1px solid #dcdfe6;
   box-shadow: 0 -6px 18px rgba(31, 41, 55, 0.08);
   backdrop-filter: blur(8px);
+}
+
+/* Approval cards must remain above the sticky online-form action bar. */
+.solution-actions,
+.initiation-review-action-panel,
+.approval-panel {
+  position: relative;
+  z-index: 2;
 }
 
 .node-online-form-actions .el-button + .el-button {
@@ -6496,8 +6504,33 @@ p {
   overflow-x: auto;
 }
 
+/* Keep the quotation table's intrinsic column width inside the node workspace. */
+.solution-node-page .quotation-section,
+.solution-node-page .solution-section,
+.solution-node-page .solution-section > *,
+.solution-node-page .quotation-table-wrap {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
 .solution-node-page .quotation-total {
   margin: 16px 0;
+}
+
+.solution-node-page .quotation-page-bottom-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.solution-node-page .quotation-page-bottom-actions .el-button + .el-button {
+  margin-left: 0;
 }
 
 @media (max-width: 760px) {

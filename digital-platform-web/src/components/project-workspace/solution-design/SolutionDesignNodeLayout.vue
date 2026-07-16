@@ -9,6 +9,8 @@
                     </div>
                 </header>
 
+                <slot name="title-after" />
+
                 <el-alert v-if="node.returnReason" :title="`退回原因：${node.returnReason}`" type="warning" show-icon
                     :closable="false" /><el-alert v-if="node.blockingReasons?.length"
                     :title="`阻塞原因：${node.blockingReasons.join('；')}`" type="warning" show-icon :closable="false" />

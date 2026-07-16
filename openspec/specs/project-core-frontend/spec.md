@@ -2519,7 +2519,7 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **AND** 前端 MUST NOT 显示已缓存的文件名或附件明细
 
 ### Requirement: 报价投标分支 UI
-项目核心前端 MUST 将报价/投标展示为一个节点，并按后端分支状态展示未选择、报价流程或投标流程。
+项目核心前端 MUST 将报价/投标展示为一个节点，并按后端分支状态展示未选择、报价流程或投标流程；报价流程 MUST 使用报价单在线表单和三个报价结果按钮。
 
 #### Scenario: 未选择分支状态
 - **WHEN** 报价/投标节点处于未选择状态且后端返回总经理可选择
@@ -2528,26 +2528,55 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 #### Scenario: 报价流程展示
 - **WHEN** 报价/投标节点处于报价流程
-- **THEN** 前端 MUST 展示报价单上传入口和商务负责人报价结果处理状态
-- **AND** 报价单 MUST 表达为文件上传产出
-- **AND** 前端 MUST NOT 展示报价单模板生成承诺
+- **THEN** 前端 MUST 展示报价单在线表单入口、生成状态、失败原因和生成文件下载入口
+- **AND** 前端 MUST NOT 展示 `quotation_file` 上传入口
+- **AND** 前端 MUST 展示商务负责人报价结果处理状态
 
-#### Scenario: 报价未被客户接受选择展示
-- **WHEN** 商务负责人记录客户不同意报价
-- **THEN** 前端 MUST 展示商务负责人线下与总经理讨论后的退回研发成本估算和项目结束二选一处理入口
-- **AND** 选择项目结束时前端 MUST 清楚提示合同签订及后续阶段将被阻止
+#### Scenario: 报价明细金额实时预览
+- **WHEN** 商务负责人编辑报价单明细的数量或单价
+- **THEN** 前端 MUST 实时计算并只读展示当前行金额
+- **AND** 数量 MUST 按最多 4 位小数参与预览计算
+- **AND** 单价 MUST 按 2 位小数参与预览计算
+- **AND** 当前行金额 MUST 按数量乘以单价后四舍五入到 2 位
+- **AND** 数量或单价为空、非法时，当前行金额 MUST 显示为空或等价空态
+- **AND** 前端 MUST NOT 允许用户手动填写或覆盖行金额
+
+#### Scenario: 报价总金额预览不作为权威字段
+- **WHEN** 商务负责人新增、删除或编辑报价明细行
+- **THEN** 前端 MUST 按每行已四舍五入金额汇总并展示总金额预览
+- **AND** 前端 MUST 根据总金额预览实时展示人民币大写预览
+- **AND** 空行或非法行 MUST NOT 计入总金额预览
+- **AND** 前端提交报价单时 MUST NOT 将行金额、总金额或人民币大写金额作为后端权威依据
+- **AND** 报价单保存、提交和生成文件结果 MUST 以后端重新计算的金额和人民币大写金额为准
+
+#### Scenario: 报价结果三个按钮
+- **WHEN** 当前 revision 报价单在线表单已提交且生成文件成功
+- **AND** 当前用户可处理报价结果
+- **THEN** 前端 MUST 展示“客户接受报价”“结束项目”“审批不通过”三个按钮
+- **AND** 前端 MUST NOT 使用下拉菜单组合报价结果和处理动作
+
+#### Scenario: 客户接受报价按钮
+- **WHEN** 商务负责人点击“客户接受报价”
+- **THEN** 前端 MUST 提交现有 `accepted` payload
+- **AND** 前端 MUST 按后端返回刷新节点状态
+
+#### Scenario: 结束项目按钮
+- **WHEN** 商务负责人点击“结束项目”
+- **THEN** 前端 MUST 弹出确认或原因填写弹窗
+- **AND** 前端 MUST 提交现有 `rejected` + `end_project` payload
+- **AND** 前端 MUST 清楚提示合同签订及后续阶段将被阻止
+
+#### Scenario: 审批不通过按钮
+- **WHEN** 商务负责人点击“审批不通过”
+- **THEN** 前端 MUST 弹出确认或原因填写弹窗
+- **AND** 前端 MUST 提交现有 `rejected` + `return_to_rd_cost` payload
+- **AND** 前端 MUST 展示返回成本链路后的节点状态
 
 #### Scenario: 投标流程展示
 - **WHEN** 报价/投标节点处于投标流程
 - **THEN** 前端 MUST 展示投标商务标和投标技术标两个上传槽
 - **AND** 前端 MUST 展示两个上传槽都完成后才能提交总经理审批
 - **AND** 前端 MUST NOT 将报价流程和投标流程拆成两个固定大节点
-
-#### Scenario: 投标退回展示
-- **WHEN** 总经理审批不通过投标书
-- **THEN** 前端 MUST 展示投标节点退回原因
-- **AND** 前端 MUST 展示商务标和技术标重新提交入口
-- **AND** 前端 MUST NOT 默认引导回成本估算节点
 
 ### Requirement: 方案设计在线表单和生成状态展示
 项目核心前端 MUST 按方案设计阶段节点展示在线表单入口和生成文件状态，但不得伪造文件平台或 PDF 能力。
@@ -2752,7 +2781,7 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 #### Scenario: 单项产出无需上传入口
 - **WHEN** 技术负责人处理方案设计 8 个产出
 - **THEN** 前端 MUST 对每个产出展示后端允许的“无需上传”入口
-- **AND** 前端 MUST 支持填写原因或备注
+- **AND** 前端 MUST NOT 要求填写原因或备注
 - **AND** 前端 MUST 展示豁免状态、操作人和时间
 - **AND** 前端 MUST 允许仍需上传的产出继续使用上传入口
 
@@ -2787,3 +2816,68 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **WHEN** 前端展示方案设计成本估算链路
 - **THEN** 前端 MUST 按研发成本估算、制造成本估算、营销成本估算、财务成本估算顺序展示
 - **AND** 前端 MUST NOT 将营销成本估算展示为新的阶段资料项
+
+### Requirement: 方案设计在线表单提交确认和自动推进提示
+项目核心前端 MUST 在 C05、C15、C16 在线表单提交前展示确认，并 MUST 按后端自动节点提交结果展示清晰反馈。
+
+#### Scenario: 提交表单前确认
+- **WHEN** 用户点击 C05、C15 或 C16 在线表单“提交表单”
+- **THEN** 前端 MUST 弹出确认框
+- **AND** 用户取消时前端 MUST NOT 调用提交接口
+
+#### Scenario: 在线表单页面隐藏手动提交节点
+- **WHEN** 前端展示 C05、C15 或 C16 在线表单节点
+- **THEN** 前端 MUST 展示“提交表单”作为节点推进入口
+- **AND** 前端 MUST NOT 同时展示手动“提交节点”按钮
+- **AND** 前端 MUST 继续展示后端允许的审批通过和审批退回动作
+
+#### Scenario: 自动进入待审批提示
+- **WHEN** 后端返回表单提交成功、生成文件成功且节点自动提交成功
+- **THEN** 前端 MUST 展示节点已进入待审批的成功提示
+- **AND** 前端 MUST 刷新 workflow 节点状态
+
+#### Scenario: 缺项提示
+- **WHEN** 后端返回表单提交成功但节点因其他必需资料缺失未自动提交
+- **THEN** 前端 MUST 展示表单已提交和缺项提示
+- **AND** 前端 MUST NOT 将节点展示为待审批
+
+#### Scenario: 生成失败提示
+- **WHEN** 后端返回生成文件失败
+- **THEN** 前端 MUST 展示生成失败原因
+- **AND** 前端 MUST NOT 展示节点已提交成功提示
+
+### Requirement: C15 C16 结构化实施计划前端字段
+项目核心前端 MUST 将 C15/C16 项目实施计划展示为由需求、目标、风险和建议自动生成的结构化输入区。
+
+#### Scenario: 来源字段使用显式加行控件
+- **WHEN** 前端展示 C15/C16 的项目需求分析、项目目标描述、项目风险评估或项目方案建议
+- **THEN** 前端 MUST 使用显式加行控件维护来源条目
+- **AND** 前端 MUST 提供“添加需求”“添加目标”“添加风险”“添加建议”入口
+- **AND** 每个来源条目 MUST 使用独立 textarea
+- **AND** 来源条目 textarea 内回车 MUST 只作为当前条目换行，不得新增来源条目
+
+#### Scenario: 来源字段生成计划项
+- **WHEN** 用户编辑项目需求分析、项目目标描述、项目风险评估或项目方案建议
+- **THEN** 前端 MUST 按非空来源条目生成需求、目标、风险、建议计划项
+- **AND** 前端 MUST 忽略空来源条目
+- **AND** 前端 MUST 保留来源条目顺序
+- **AND** 同一 `sourceType` 的来源条目数量未变化时，前端 MUST 优先按 `sourceType + sourceIndex` 保留同位置实施计划内容
+- **AND** 来源文本编辑后出现重复 `sourceText` 时，前端 MUST NOT 因文本匹配抢占其他同文案条目的实施计划内容
+- **AND** 同一 `sourceType` 的来源条目数量发生增删时，前端 SHOULD 优先按同一 `sourceType + sourceText` 保留实施计划内容，避免删除或插入上方来源条目后串用旧计划
+- **AND** 删除来源条目后前端 MUST 移除对应计划项
+- **AND** 新增来源条目后前端 MUST 新增空实施计划输入
+
+#### Scenario: 每个计划项填写实施计划
+- **WHEN** 前端展示结构化实施计划区
+- **THEN** 每个自动生成项 MUST 展示来源标签和来源文本
+- **AND** 每个自动生成项 MUST 提供对应实施计划输入
+
+#### Scenario: 提交前校验计划项
+- **WHEN** 用户提交 C15/C16 在线表单
+- **AND** 任一自动生成计划项缺少实施计划内容
+- **THEN** 前端 MUST 阻止提交或展示后端业务错误
+
+#### Scenario: 保存草稿保留结构化计划
+- **WHEN** 用户保存 C15/C16 草稿
+- **THEN** 前端 MUST 提交 `implementationPlanItems` 或等价结构化 payload
+- **AND** 前端 MUST NOT 将结构化计划破坏为不可读 JSON 文本

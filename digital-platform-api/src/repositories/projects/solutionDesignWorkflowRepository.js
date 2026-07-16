@@ -72,6 +72,7 @@ import {
   generateSolutionDesignFormFile
 } from './solutionDesignWorkflow/generatedFiles.js';
 import {
+  assertReviewImplementationPlanItemsComplete,
   assertRequiredSolutionFormFields,
   normalizeAnalysisFormPayload,
   normalizeReviewFormPayload
@@ -307,14 +308,6 @@ function normalizeUploadExemptionReason(payload = {}) {
   const reason = String(
     payload.exemptionReason ?? payload.exemption_reason ?? payload.reason ?? payload.remark ?? ''
   ).trim();
-  if (!reason) {
-    throw new SolutionDesignWorkflowError(
-      SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
-      'Solution design upload exemption reason is required',
-      400,
-      ['exemptionReason']
-    );
-  }
 
   if (reason.length > MAX_UPLOAD_EXEMPTION_REASON_LENGTH) {
     throw new SolutionDesignWorkflowError(
@@ -325,7 +318,7 @@ function normalizeUploadExemptionReason(payload = {}) {
     );
   }
 
-  return reason;
+  return reason || null;
 }
 
 function normalizeQuotationTenderBranchType(payload = {}) {
@@ -5789,6 +5782,7 @@ async function saveOrSubmitSolutionDesignAnalysisForm(
       actorUserId: user.id
     });
 
+    let autoSubmit = null;
     if (formStatus === SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.SUBMITTED) {
       await insertAnalysisFormLog(connection, {
         projectId,
@@ -5807,6 +5801,23 @@ async function saveOrSubmitSolutionDesignAnalysisForm(
         stageDocumentRow: analysisStageDocumentRow,
         readOnlineFormImage
       });
+      if (savedFormRow.generated_file_status === SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED) {
+        autoSubmit = await attemptGeneratedFormAutoSubmitNode(connection, {
+          projectId,
+          nodeKey: SOLUTION_DESIGN_NODE_KEY.ANALYSIS,
+          user,
+          projectRow,
+          rolesRow
+        });
+      } else {
+        autoSubmit = buildAutoSubmitResult({
+          attempted: false,
+          submitted: false,
+          nodeKey: SOLUTION_DESIGN_NODE_KEY.ANALYSIS,
+          nodeStatus: analysisNode.status,
+          message: 'Solution analysis generated file failed; node was not submitted automatically'
+        });
+      }
     } else {
       await insertAnalysisFormLog(connection, {
         projectId,
@@ -5837,7 +5848,8 @@ async function saveOrSubmitSolutionDesignAnalysisForm(
       analysisFormRow: savedFormRow,
       user,
       analysisStageDocumentRow,
-      analysisImages
+      analysisImages,
+      autoSubmit
     });
   });
 }
@@ -6042,6 +6054,7 @@ async function saveOrSubmitSolutionDesignReviewForm(
   const normalized = normalizeReviewFormPayload(payload);
   if (formStatus === SOLUTION_DESIGN_REVIEW_FORM_STATUS.SUBMITTED) {
     assertRequiredSolutionFormFields(normalized.formData, definition.requiredFieldKeys);
+    assertReviewImplementationPlanItemsComplete(normalized.formData);
   }
   const storage = resolveGeneratedFileStorage(db, generatedFileStorage);
 
@@ -6087,6 +6100,7 @@ async function saveOrSubmitSolutionDesignReviewForm(
       summary: metadata.summary
     });
 
+    let autoSubmit = null;
     if (formStatus === SOLUTION_DESIGN_REVIEW_FORM_STATUS.SUBMITTED) {
       const templateUsersById = await selectUsersByIds(connection, collectRoleUserIds(projectRow, rolesRow));
       savedFormRow = await generateAndPersistReviewFormFile(connection, {
@@ -6097,6 +6111,23 @@ async function saveOrSubmitSolutionDesignReviewForm(
         storage,
         roleState: buildRoleState({ projectRow, rolesRow, usersById: templateUsersById })
       });
+      if (savedFormRow.generated_file_status === SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED) {
+        autoSubmit = await attemptGeneratedFormAutoSubmitNode(connection, {
+          projectId,
+          nodeKey: definition.nodeKey,
+          user,
+          projectRow,
+          rolesRow
+        });
+      } else {
+        autoSubmit = buildAutoSubmitResult({
+          attempted: false,
+          submitted: false,
+          nodeKey: definition.nodeKey,
+          nodeStatus: reviewNode.status,
+          message: 'Solution review generated file failed; node was not submitted automatically'
+        });
+      }
     }
 
     const refreshedNodes = await selectSolutionDesignNodes(connection, projectId);
@@ -6106,7 +6137,8 @@ async function saveOrSubmitSolutionDesignReviewForm(
       rolesRow,
       reviewFormRow: savedFormRow,
       nodeKey: definition.nodeKey,
-      user
+      user,
+      autoSubmit
     });
   });
 }
@@ -6248,6 +6280,149 @@ export async function uploadSolutionDesignWorkflowFile(
   }
 }
 
+function buildAutoSubmitResult({
+  attempted = false,
+  submitted = false,
+  nodeKey,
+  nodeStatus = null,
+  blockingReasons = [],
+  message = ''
+}) {
+  return {
+    attempted,
+    submitted,
+    nodeKey,
+    nodeStatus,
+    blockingReasons: Array.isArray(blockingReasons) ? blockingReasons : [],
+    message
+  };
+}
+
+async function submitSolutionDesignWorkflowNodeWithinTransaction(
+  executor,
+  {
+    projectId,
+    node,
+    requiredRoleKey,
+    user,
+    projectRow,
+    rolesRow
+  }
+) {
+  const roleState = buildRoleStateWithoutUserDetails(projectRow, rolesRow);
+  assertAllRolesAssigned(roleState);
+  assertProjectRoleActor(roleState, requiredRoleKey, user);
+  const nodeRow = await selectSolutionDesignNodeForUpdate(executor, projectId, node.nodeKey);
+  assertNodeProcessable(nodeRow, node.nodeKey, 'submitted');
+  await assertSubmitNodeReady(executor, { projectId, nodeKey: node.nodeKey });
+  if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.ANALYSIS) {
+    await updateAnalysisNodePendingReview(executor, {
+      projectId,
+      userId: user.id
+    });
+  } else if (getSolutionDesignReviewFormDefinition(node.nodeKey)) {
+    await updateReviewNodePendingReview(executor, {
+      projectId,
+      nodeKey: node.nodeKey
+    });
+  } else if (isCostEstimationNode(node.nodeKey)) {
+    await updateCostNodePendingReview(executor, {
+      projectId,
+      nodeKey: node.nodeKey,
+      slotKey: getCostUploadSlotKeyForNode(node.nodeKey),
+      userId: user.id
+    });
+  } else if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER) {
+    const flowRow = await selectQuotationTenderFlow(executor, projectId, { forUpdate: true });
+    if (!isTenderBranchCurrent(flowRow, nodeRow)) {
+      throw new SolutionDesignWorkflowError(
+        SOLUTION_DESIGN_ERROR.NODE_BLOCKED,
+        'Tender branch must be selected before submitting quotation/tender node',
+        409,
+        ['branchType']
+      );
+    }
+    await updateQuotationTenderNodePendingReview(executor, {
+      projectId,
+      userId: user.id
+    });
+  } else {
+    await updateNodeApprovedAndActivateNext(executor, {
+      projectId,
+      nodeKey: node.nodeKey,
+      nextNodeKey: getSubmitNodeNextNodeKey(node.nodeKey),
+      userId: user.id
+    });
+  }
+  await insertNodeSubmitLog(executor, {
+    projectId,
+    actorUserId: user.id,
+    nodeKey: node.nodeKey
+  });
+
+  const refreshedNode = await selectSolutionDesignNodeForUpdate(executor, projectId, node.nodeKey);
+  return refreshedNode;
+}
+
+async function attemptGeneratedFormAutoSubmitNode(executor, {
+  projectId,
+  nodeKey,
+  user,
+  projectRow,
+  rolesRow
+}) {
+  const node = getSolutionDesignNodeDefinition(nodeKey);
+  if (!node) {
+    throw new SolutionDesignWorkflowError(
+      SOLUTION_DESIGN_ERROR.INVALID_NODE,
+      'Invalid solution design node',
+      400,
+      ['nodeKey']
+    );
+  }
+
+  const requiredRoleKey = getSubmitNodeRoleKey(node.nodeKey);
+  if (!requiredRoleKey) {
+    throw new SolutionDesignWorkflowError(
+      SOLUTION_DESIGN_ERROR.NODE_NOT_SUBMITTABLE,
+      'Solution design node is not submittable in this backend slice',
+      409,
+      ['nodeKey']
+    );
+  }
+
+  try {
+    const refreshedNode = await submitSolutionDesignWorkflowNodeWithinTransaction(executor, {
+      projectId,
+      node,
+      requiredRoleKey,
+      user,
+      projectRow,
+      rolesRow
+    });
+    return buildAutoSubmitResult({
+      attempted: true,
+      submitted: true,
+      nodeKey: node.nodeKey,
+      nodeStatus: refreshedNode?.status ?? null,
+      message: 'Solution design node was submitted automatically'
+    });
+  } catch (error) {
+    if (error?.code !== SOLUTION_DESIGN_ERROR.NODE_BLOCKED) {
+      throw error;
+    }
+    const currentNode = await selectSolutionDesignNodeForUpdate(executor, projectId, node.nodeKey);
+    return buildAutoSubmitResult({
+      attempted: true,
+      submitted: false,
+      nodeKey: node.nodeKey,
+      nodeStatus: currentNode?.status ?? null,
+      blockingReasons: Array.isArray(error.details) ? error.details : [],
+      message: error.message
+    });
+  }
+}
+
 export async function submitSolutionDesignWorkflowNode({ projectId, nodeKey, user }, db = pool) {
   const node = getSolutionDesignNodeDefinition(nodeKey);
   if (!node) {
@@ -6277,55 +6452,14 @@ export async function submitSolutionDesignWorkflowNode({ projectId, nodeKey, use
 
     const rolesRow = await selectSolutionDesignRolesForUpdate(connection, projectId);
     await assertWorkflowViewable(connection, projectId, user, { projectRow, rolesRow });
-    const roleState = buildRoleStateWithoutUserDetails(projectRow, rolesRow);
-    assertAllRolesAssigned(roleState);
-    assertProjectRoleActor(roleState, requiredRoleKey, user);
-    const nodeRow = await selectSolutionDesignNodeForUpdate(connection, projectId, node.nodeKey);
-    assertNodeProcessable(nodeRow, node.nodeKey, 'submitted');
-    await assertSubmitNodeReady(connection, { projectId, nodeKey: node.nodeKey });
-    if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.ANALYSIS) {
-      await updateAnalysisNodePendingReview(connection, {
-        projectId,
-        userId: user.id
-      });
-    } else if (getSolutionDesignReviewFormDefinition(node.nodeKey)) {
-      await updateReviewNodePendingReview(connection, {
-        projectId,
-        nodeKey: node.nodeKey
-      });
-    } else if (isCostEstimationNode(node.nodeKey)) {
-      await updateCostNodePendingReview(connection, {
-        projectId,
-        nodeKey: node.nodeKey,
-        slotKey: getCostUploadSlotKeyForNode(node.nodeKey),
-        userId: user.id
-      });
-    } else if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER) {
-      const flowRow = await selectQuotationTenderFlow(connection, projectId, { forUpdate: true });
-      if (!isTenderBranchCurrent(flowRow, nodeRow)) {
-        throw new SolutionDesignWorkflowError(
-          SOLUTION_DESIGN_ERROR.NODE_BLOCKED,
-          'Tender branch must be selected before submitting quotation/tender node',
-          409,
-          ['branchType']
-        );
-      }
-      await updateQuotationTenderNodePendingReview(connection, {
-        projectId,
-        userId: user.id
-      });
-    } else {
-      await updateNodeApprovedAndActivateNext(connection, {
-        projectId,
-        nodeKey: node.nodeKey,
-        nextNodeKey: getSubmitNodeNextNodeKey(node.nodeKey),
-        userId: user.id
-      });
-    }
-    await insertNodeSubmitLog(connection, {
+
+    await submitSolutionDesignWorkflowNodeWithinTransaction(connection, {
       projectId,
-      actorUserId: user.id,
-      nodeKey: node.nodeKey
+      node,
+      requiredRoleKey,
+      user,
+      projectRow,
+      rolesRow
     });
 
     const refreshedProjectRow = await selectProjectContext(connection, projectId);

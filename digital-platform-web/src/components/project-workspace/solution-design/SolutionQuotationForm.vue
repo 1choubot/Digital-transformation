@@ -17,7 +17,9 @@
           <el-table-column label="单位" width="100"><template #default="{ row }"><el-input v-model="row.unit" /></template></el-table-column>
           <el-table-column label="数量" width="120"><template #default="{ row }"><el-input v-model="row.quantity" /></template></el-table-column>
           <el-table-column label="单价" width="130"><template #default="{ row }"><el-input v-model="row.unitPrice" /></template></el-table-column>
-          <el-table-column prop="amount" label="金额" width="130" />
+          <el-table-column label="金额" width="130">
+            <template #default="{ row }">{{ lineAmountText(row) }}</template>
+          </el-table-column>
           <el-table-column label="备注" min-width="160"><template #default="{ row }"><el-input v-model="row.remark" /></template></el-table-column>
           <el-table-column v-if="canEdit" label="操作" width="80"><template #default="{ $index }"><el-button link type="danger" :disabled="formData.items.length <= 1" @click="removeItem($index)">删除</el-button></template></el-table-column>
         </el-table>
@@ -25,8 +27,8 @@
       <el-button v-if="canEdit" plain @click="addItem">增加明细</el-button>
     </el-form>
     <el-descriptions :column="1" border class="quotation-total">
-      <el-descriptions-item label="合计">{{ formData.totalAmount }}</el-descriptions-item>
-      <el-descriptions-item label="大写">{{ formData.totalAmountUppercase }}</el-descriptions-item>
+      <el-descriptions-item label="总金额预览">¥{{ totalAmountPreview }}</el-descriptions-item>
+      <el-descriptions-item label="大写预览">{{ totalAmountUppercasePreview }}</el-descriptions-item>
     </el-descriptions>
     <SolutionGeneratedFile v-if="dto?.form?.generatedFile" :generated-file="dto.form.generatedFile"
       :pending="pendingAction === 'download'" @download="$emit('download')" />
@@ -40,6 +42,11 @@
 <script setup>
 import { computed } from 'vue';
 import SolutionGeneratedFile from './SolutionGeneratedFile.vue';
+import {
+  calculateLineAmount,
+  calculateTotalAmount,
+  formatRmbUppercaseFromAmount
+} from '../../../composables/project-stage/solution-design/quotationAmounts.js';
 
 const props = defineProps({
   dto: { type: Object, default: null }, formData: { type: Object, required: true },
@@ -48,7 +55,10 @@ const props = defineProps({
 const emit = defineEmits(['save', 'submit', 'download', 'add-item', 'remove-item']);
 const canEdit = computed(() => props.dto?.permissions?.canEditQuotationForm === true);
 const canSubmit = computed(() => props.dto?.permissions?.canSubmitQuotationForm === true);
+const totalAmountPreview = computed(() => calculateTotalAmount(props.formData.items));
+const totalAmountUppercasePreview = computed(() => formatRmbUppercaseFromAmount(totalAmountPreview.value));
 
 const addItem = () => emit('add-item');
 const removeItem = (index) => emit('remove-item', index);
+const lineAmountText = (row) => calculateLineAmount(row?.quantity, row?.unitPrice) || '';
 </script>

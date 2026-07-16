@@ -74,7 +74,7 @@
       </div>
     </section>
 
-    <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending"
+    <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending" hide-submit hide-when-empty
       :submit-disabled="generatedBlocksSubmit" :return-reason="returnReasons[nodeKey] || ''"
       @update:return-reason="returnReasons[nodeKey] = $event" @submit="submitNode(nodeKey)"
       @approve="approveNode(nodeKey)" @return="returnNode(nodeKey)" />
@@ -183,7 +183,20 @@ function isFieldInvalid(fieldKey) {
 async function handleSubmitAnalysisForm() {
   validationAttempted.value = true;
   if (missingRequiredFields.value.length === 0) {
-    await submitAnalysisForm();
+    try {
+      await ElMessageBox.confirm(
+        '提交后将生成项目方案分析表，并在资料齐套时自动提交当前节点。确认提交？',
+        '提交确认',
+        {
+          type: 'warning',
+          confirmButtonText: '确认提交',
+          cancelButtonText: '取消'
+        }
+      );
+      await submitAnalysisForm();
+    } catch {
+      // 用户取消时不请求后端。
+    }
     return;
   }
 

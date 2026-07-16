@@ -18,7 +18,7 @@
         </div>
         <el-alert v-else-if="slot.currentFileHidden" title="文件细节已按后端保密规则脱敏" type="info" :closable="false" />
         <div v-else-if="slot.exemption?.isExempted" class="file-meta">
-          <span>{{ slot.exemption.reason || '未填写原因' }}</span>
+          <span>已标记为无需上传</span>
           <small>{{ formatUser(slot.exemption.exemptedByUser) }} · {{ formatDateTime(slot.exemption.exemptedAt) }}</small>
         </div>
         <el-empty v-else description="暂无当前有效文件" :image-size="44" />
@@ -34,9 +34,6 @@
         </div>
 
         <div v-if="slot.permissions?.canMarkExemption" class="slot-exemption">
-          <el-input :model-value="exemptionReasons[slot.slotKey] || ''" type="textarea" :rows="2"
-            maxlength="1000" show-word-limit placeholder="请填写无需上传原因"
-            @update:model-value="value => $emit('update-exemption-reason', { slotKey: slot.slotKey, value })" />
           <el-button plain :loading="isPending(`exemption:mark:${slot.slotKey}`)"
             @click="$emit('mark-exemption', slot)">无需上传</el-button>
         </div>
@@ -51,11 +48,10 @@
 <script setup>
 import { formatFileSize, formatUser, formatDateTime } from './solutionDesignFormatters.js';
 
-const emit = defineEmits(['upload', 'download', 'mark-exemption', 'cancel-exemption', 'update-exemption-reason']);
+const emit = defineEmits(['upload', 'download', 'mark-exemption', 'cancel-exemption']);
 defineProps({
   slots: { type: Array, default: () => [] },
-  isPending: { type: Function, required: true },
-  exemptionReasons: { type: Object, default: () => ({}) }
+  isPending: { type: Function, required: true }
 });
 
 function requestUpload(slot, options) {

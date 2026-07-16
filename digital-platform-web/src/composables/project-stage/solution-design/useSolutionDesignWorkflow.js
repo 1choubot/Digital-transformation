@@ -1,5 +1,5 @@
 import { reactive, ref, toValue, watch } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   approveSolutionDesignWorkflowNode,
   assignSolutionDesignRoles,
@@ -41,9 +41,6 @@ export function useSolutionDesignWorkflow({
   watch(localMessage, (value) => { if (value) ElMessage.success(value); });
   watch(localError, (value) => { if (value) ElMessage.error(value); });
   const returnReasons = reactive({});
-  const exemptionReasons = reactive({});
-  const quotationReturnReason = ref('');
-  const quotationRejectAction = ref('return_to_rd_cost');
 
   const id = () => toValue(projectId);
   const token = () => toValue(authToken) || '';
@@ -129,17 +126,11 @@ export function useSolutionDesignWorkflow({
   }
 
   async function markUploadExemption(slot) {
-    const reason = String(exemptionReasons[slot.slotKey] || '').trim();
-    if (!reason) {
-      ElMessage.error('请填写无需上传原因。');
-      return;
-    }
-    const result = await runAction(
+    await runAction(
       `exemption:mark:${slot.slotKey}`,
-      () => markSolutionDesignUploadExemption(id(), slot.slotKey, reason, token()),
+      () => markSolutionDesignUploadExemption(id(), slot.slotKey, '', token()),
       `${slot.slotName}已标记为无需上传。`
     );
-    if (result) delete exemptionReasons[slot.slotKey];
   }
 
   async function cancelUploadExemption(slot) {
@@ -185,24 +176,43 @@ export function useSolutionDesignWorkflow({
     await runAction('quotation:accept', () => processSolutionDesignQuotationResult(id(), { result: 'accepted' }, token()), '已记录客户接受报价。');
   }
 
-  async function rejectQuotation() {
-    const reason = String(quotationReturnReason.value || '').trim();
-    if (!reason) {
-      ElMessage.error('请填写客户不接受报价后的处理原因。');
+  async function rejectQuotation(action) {
+    const normalizedAction = action === 'end_project' ? 'end_project' : 'return_to_rd_cost';
+    let reason = '';
+    try {
+      const result = await ElMessageBox.prompt(
+        normalizedAction === 'end_project'
+          ? '请填写结束项目原因。'
+          : '请填写审批不通过原因。',
+        normalizedAction === 'end_project' ? '结束项目确认' : '审批不通过确认',
+        {
+          type: 'warning',
+          inputType: 'textarea',
+          confirmButtonText: '确认提交',
+          cancelButtonText: '取消',
+          inputValidator: (value) => Boolean(String(value || '').trim()) || '请填写原因'
+        }
+      );
+      reason = String(result.value || '').trim();
+    } catch {
       return;
     }
-    const action = quotationRejectAction.value;
-    const result = await runAction(
-      `quotation:reject:${action}`,
-      () => processSolutionDesignQuotationResult(id(), { result: 'rejected', action, returnReason: reason }, token()),
-      action === 'end_project' ? '已记录客户不接受报价并结束项目。' : '已记录客户不接受报价并退回研发成本估算。'
+    await runAction(
+      `quotation:reject:${normalizedAction}`,
+      () => processSolutionDesignQuotationResult(
+        id(),
+        { result: 'rejected', action: normalizedAction, returnReason: reason },
+        token()
+      ),
+      normalizedAction === 'end_project'
+        ? '已记录客户不接受报价并结束项目。'
+        : '已记录审批不通过并退回研发成本估算。'
     );
-    if (result) quotationReturnReason.value = '';
   }
 
   return {
-    roleSelections, pendingAction, localMessage, localError, returnReasons, exemptionReasons,
-    quotationReturnReason, quotationRejectAction, isPending, clearLocalState,
+    roleSelections, pendingAction, localMessage, localError, returnReasons,
+    isPending, clearLocalState,
     runAction, syncRoleSelections, assignRoles, handleUpload, downloadUpload,
     markUploadExemption, cancelUploadExemption,
     submitNode, approveNode, returnNode, selectBranch, submitQuotation,

@@ -235,7 +235,8 @@ export function buildAnalysisFormDto({
   analysisFormRow,
   user,
   analysisStageDocumentRow = null,
-  analysisImages = []
+  analysisImages = [],
+  autoSubmit = null
 }) {
   const materializedNodes = nodes.length > 0 ? nodes : buildVirtualNodes();
   const roleState = buildRoleStateWithoutUserDetails(projectRow, rolesRow);
@@ -265,6 +266,7 @@ export function buildAnalysisFormDto({
       analysisFormRow,
       uploadSlots
     }),
+    autoSubmit,
     isProjectEnded: isSolutionDesignProjectEnded(projectRow)
   };
 }
@@ -299,7 +301,7 @@ export function buildReviewFormPermissions({ projectRow, reviewNode, roleState, 
   };
 }
 
-export function buildReviewFormDto({ projectRow, nodes, rolesRow, reviewFormRow, nodeKey, user }) {
+export function buildReviewFormDto({ projectRow, nodes, rolesRow, reviewFormRow, nodeKey, user, autoSubmit = null }) {
   const definition = getSolutionDesignReviewFormDefinition(nodeKey);
   const materializedNodes = nodes.length > 0 ? nodes : buildVirtualNodes();
   const roleState = buildRoleStateWithoutUserDetails(projectRow, rolesRow);
@@ -323,6 +325,7 @@ export function buildReviewFormDto({ projectRow, nodes, rolesRow, reviewFormRow,
       user,
       reviewFormRow
     }),
+    autoSubmit,
     isProjectEnded: isSolutionDesignProjectEnded(projectRow)
   };
 }

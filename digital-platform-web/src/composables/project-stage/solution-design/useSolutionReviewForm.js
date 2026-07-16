@@ -1,4 +1,5 @@
-import { reactive, ref, toValue } from 'vue';
+import { computed, reactive, ref, toValue } from 'vue';
+import { ElMessage } from 'element-plus';
 import {
   downloadSolutionDesignReviewGeneratedFile,
   getSolutionDesignReviewForm,
@@ -7,8 +8,12 @@ import {
   toReadableApiError
 } from '../../../api/projects.js';
 import { saveSolutionDesignBlob } from './useSolutionDesignWorkflow.js';
-
-const repeatableKeys = Object.freeze(['projectTargetDescription', 'technicalRisks', 'solutionSuggestions', 'actionItems']);
+import {
+  buildImplementationPlanItems,
+  implementationPlanSources,
+  normalizeRepeatable,
+  reviewRepeatableKeys
+} from './implementationPlanItems.js';
 
 function syncObject(target, source = {}) {
   for (const key of Object.keys(target)) delete target[key];
@@ -17,19 +22,33 @@ function syncObject(target, source = {}) {
   }
 }
 
-function normalizeRepeatable(value, keepEmptyRow = true) {
-  const rows = Array.isArray(value) ? value : value == null || value === '' ? [] : String(value).split(/\r?\n/);
-  const normalized = rows
-    .map((item) => String(item ?? ''))
-    .filter((item) => item.trim() || keepEmptyRow);
-  return normalized.length || !keepEmptyRow ? normalized : [''];
-}
-
 function normalizeForUi(source = {}, defaultRecorderName = '') {
   const normalized = { ...source };
-  for (const key of repeatableKeys) normalized[key] = normalizeRepeatable(source[key]);
+  for (const key of reviewRepeatableKeys) normalized[key] = normalizeRepeatable(source[key]);
+  normalized.implementationPlanItems = buildImplementationPlanItems(normalized);
   if (!String(normalized.recorder || '').trim() && defaultRecorderName) normalized.recorder = defaultRecorderName;
   return normalized;
+}
+
+function showSubmitResult(dto) {
+  const generatedFile = dto?.form?.generatedFile;
+  if (generatedFile?.status === 'failed') {
+    ElMessage.error(generatedFile.errorMessage || '方案评审记录表生成失败。');
+    return;
+  }
+
+  const autoSubmit = dto?.autoSubmit;
+  if (autoSubmit?.submitted) {
+    ElMessage.success('方案评审记录表已提交并生成文件，节点已自动进入待审批。');
+    return;
+  }
+
+  if (autoSubmit?.attempted) {
+    ElMessage.warning(autoSubmit.message || '方案评审记录表已提交并生成文件，节点暂未提交。');
+    return;
+  }
+
+  ElMessage.success('方案评审记录表已提交并生成文件。');
 }
 
 export function useSolutionReviewForm({ projectId, authToken, selectedNodeKey, defaultRecorderName, runAction, localError }) {
@@ -73,12 +92,52 @@ export function useSolutionReviewForm({ projectId, authToken, selectedNodeKey, d
   }
   function buildPayload() {
     const payload = { ...reviewFormData };
-    for (const key of repeatableKeys) payload[key] = normalizeRepeatable(reviewFormData[key], false);
+    for (const key of reviewRepeatableKeys) payload[key] = normalizeRepeatable(reviewFormData[key], false);
+    payload.implementationPlanItems = buildImplementationPlanItems(reviewFormData);
     payload.recorder = String(payload.recorder || recorder()).trim();
     return payload;
   }
-  function updateReviewFormField({ key, value }) { reviewFormData[key] = value; }
+  function updateReviewFormField({ key, value }) {
+    reviewFormData[key] = value;
+    if (implementationPlanSources.some((source) => source.fieldKey === key)) {
+      reviewFormData.implementationPlanItems = buildImplementationPlanItems(reviewFormData);
+    }
+  }
+  function syncImplementationPlanItems() {
+    reviewFormData.implementationPlanItems = buildImplementationPlanItems(reviewFormData);
+  }
+  function repeatableItemsFor(key) {
+    return reviewRepeatableKeys.includes(key) ? normalizeRepeatable(reviewFormData[key]) : [''];
+  }
+  function updateRepeatableItem({ key, index, value }) {
+    if (!reviewRepeatableKeys.includes(key)) return;
+    const rows = normalizeRepeatable(reviewFormData[key]);
+    rows[index] = String(value ?? '');
+    reviewFormData[key] = rows;
+    syncImplementationPlanItems();
+  }
+  function addRepeatableItem(key) {
+    if (!reviewRepeatableKeys.includes(key)) return;
+    const rows = normalizeRepeatable(reviewFormData[key]);
+    rows.push('');
+    reviewFormData[key] = rows;
+    syncImplementationPlanItems();
+  }
+  function removeRepeatableItem({ key, index }) {
+    if (!reviewRepeatableKeys.includes(key)) return;
+    const rows = normalizeRepeatable(reviewFormData[key]);
+    rows.splice(index, 1);
+    reviewFormData[key] = rows.length ? rows : [''];
+    syncImplementationPlanItems();
+  }
+  function updateImplementationPlanItem({ sourceType, sourceIndex, planText }) {
+    const items = buildImplementationPlanItems(reviewFormData);
+    const target = items.find((item) => item.sourceType === sourceType && item.sourceIndex === sourceIndex);
+    if (target) target.planText = String(planText || '');
+    reviewFormData.implementationPlanItems = items;
+  }
   function invalidateRequests() { reloadSequence += 1; }
+  const implementationPlanItems = computed(() => buildImplementationPlanItems(reviewFormData));
 
   async function loadReviewForm(nodeKey, { sequence = ++reloadSequence } = {}) {
     if (!nodeKey || !id()) return;
@@ -99,8 +158,17 @@ export function useSolutionReviewForm({ projectId, authToken, selectedNodeKey, d
     if (dto) { reviewFormDtos[nodeKey] = dto; syncObject(reviewFormData, normalizeForUi(dto.form?.formData, recorder())); }
   }
   async function submitReviewForm(nodeKey) {
-    const dto = await runAction(`review:${nodeKey}:submit`, () => submitSolutionDesignReviewForm(id(), nodeKey, buildPayload(), token()), '方案评审记录表已提交并触发模板生成。');
-    if (dto) { reviewFormDtos[nodeKey] = dto; syncObject(reviewFormData, normalizeForUi(dto.form?.formData, recorder())); }
+    const dto = await runAction(
+      `review:${nodeKey}:submit`,
+      () => submitSolutionDesignReviewForm(id(), nodeKey, buildPayload(), token()),
+      null
+    );
+    if (dto) {
+      reviewFormDtos[nodeKey] = dto;
+      syncObject(reviewFormData, normalizeForUi(dto.form?.formData, recorder()));
+      showSubmitResult(dto);
+    }
+    return dto;
   }
   async function downloadReviewGeneratedFile(nodeKey) {
     await runAction(`review:${nodeKey}:download`, async () => {
@@ -109,5 +177,24 @@ export function useSolutionReviewForm({ projectId, authToken, selectedNodeKey, d
     }, '方案评审记录表生成文件已开始下载。', { notify: false });
   }
 
-  return { reviewFormDtos, reviewFormData, reviewFormLoading, isReviewNode, activeReviewFormDto, syncFromWorkflow, loadReviewForm, invalidateRequests, updateReviewFormField, saveReviewForm, submitReviewForm, downloadReviewGeneratedFile };
+  return {
+    reviewFormDtos,
+    reviewFormData,
+    reviewFormLoading,
+    implementationPlanItems,
+    isReviewNode,
+    activeReviewFormDto,
+    syncFromWorkflow,
+    loadReviewForm,
+    invalidateRequests,
+    updateReviewFormField,
+    repeatableItemsFor,
+    updateRepeatableItem,
+    addRepeatableItem,
+    removeRepeatableItem,
+    updateImplementationPlanItem,
+    saveReviewForm,
+    submitReviewForm,
+    downloadReviewGeneratedFile
+  };
 }

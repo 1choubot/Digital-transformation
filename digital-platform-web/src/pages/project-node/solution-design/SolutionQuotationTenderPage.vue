@@ -19,6 +19,11 @@
           :loading="isPending('submit:quotation_or_tender')" @click="submitNode(nodeKey)">提交投标审批</el-button>
         <el-button v-if="flow.permissions?.canAcceptQuotation" type="success" :loading="isPending('quotation:accept')"
           @click="acceptQuotation">客户接受报价</el-button>
+        <el-button v-if="flow.permissions?.canRejectQuotationAndEndProject" type="danger" plain
+          :loading="isPending('quotation:reject:end_project')" @click="rejectQuotation('end_project')">结束项目</el-button>
+        <el-button v-if="flow.permissions?.canRejectQuotationToRdCost" type="warning" plain
+          :loading="isPending('quotation:reject:return_to_rd_cost')"
+          @click="rejectQuotation('return_to_rd_cost')">审批不通过</el-button>
       </div>
     </section>
 
@@ -27,15 +32,6 @@
       :pending-action="quotation.pendingAction.value" :error-message="quotation.errorMessage.value"
       @save="quotation.save" @submit="quotation.submit" @download="quotation.download"
       @add-item="quotation.addItem" @remove-item="quotation.removeItem" />
-
-    <el-form v-if="flow?.permissions?.canRejectQuotationToRdCost || flow?.permissions?.canRejectQuotationAndEndProject"
-      label-position="top">
-      <el-form-item label="客户不接受原因"><el-input v-model="quotationReturnReason" type="textarea" :rows="3" /></el-form-item>
-      <el-form-item label="处理方式"><el-select v-model="quotationRejectAction"><el-option label="退回研发成本估算"
-        value="return_to_rd_cost" /><el-option label="结束项目" value="end_project" /></el-select></el-form-item>
-      <el-button type="danger" plain :loading="isPending(`quotation:reject:${quotationRejectAction}`)"
-        @click="rejectQuotation">客户不接受并处理</el-button>
-    </el-form>
 
     <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending"
       :return-reason="returnReasons[nodeKey] || ''" @update:return-reason="returnReasons[nodeKey] = $event"
@@ -56,8 +52,8 @@ const emit = defineEmits(['business-state-changed']);
 const props = defineProps(solutionDesignNodePageProps);
 const page = useSolutionDesignNodePage(props, emit);
 const {
-  context, workflow, nodeKey, currentNode, slots, returnReasons, quotationReturnReason,
-  quotationRejectAction, isPending, handleUpload, downloadUpload, submitNode, approveNode,
+  context, workflow, nodeKey, currentNode, slots, returnReasons,
+  isPending, handleUpload, downloadUpload, submitNode, approveNode,
   returnNode, selectBranch, submitQuotation, acceptQuotation, rejectQuotation
 } = page;
 const flow = computed(() => workflow.value?.quotationTender || null);

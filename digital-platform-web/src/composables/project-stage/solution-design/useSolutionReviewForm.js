@@ -8,7 +8,14 @@ import {
 } from '../../../api/projects.js';
 import { saveSolutionDesignBlob } from './useSolutionDesignWorkflow.js';
 
-const repeatableKeys = Object.freeze(['projectTargetDescription', 'technicalRisks', 'solutionSuggestions', 'actionItems']);
+const repeatableKeys = Object.freeze([
+  'customerRequirements',
+  'projectTargetDescription',
+  'technicalRisks',
+  'solutionSuggestions',
+  'actionItems'
+]);
+const arrayPayloadKeys = Object.freeze(['projectTargetDescription', 'technicalRisks', 'solutionSuggestions', 'actionItems']);
 
 function syncObject(target, source = {}) {
   for (const key of Object.keys(target)) delete target[key];
@@ -73,7 +80,9 @@ export function useSolutionReviewForm({ projectId, authToken, selectedNodeKey, d
   }
   function buildPayload() {
     const payload = { ...reviewFormData };
-    for (const key of repeatableKeys) payload[key] = normalizeRepeatable(reviewFormData[key], false);
+    for (const key of arrayPayloadKeys) payload[key] = normalizeRepeatable(reviewFormData[key], false);
+    // The API/template still models project requirements as one cell; preserve that contract with newline text.
+    payload.customerRequirements = normalizeRepeatable(reviewFormData.customerRequirements, false).join('\n');
     payload.recorder = String(payload.recorder || recorder()).trim();
     return payload;
   }

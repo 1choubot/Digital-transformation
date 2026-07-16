@@ -44,11 +44,11 @@ const fields = [
   { key: 'presenter', label: '主讲人' },
   { key: 'internalParticipants', label: '我方参与人员', type: 'textarea' },
   { key: 'customerParticipants', label: '甲方参与人员', type: 'textarea' },
-  { key: 'customerRequirements', label: '项目需求分析', type: 'textarea' },
-  { key: 'projectTargetDescription', label: '项目目标描述', type: 'textarea' },
-  { key: 'technicalRisks', label: '项目风险评估', type: 'textarea' },
-  { key: 'solutionSuggestions', label: '项目方案建议', type: 'textarea' },
-  { key: 'actionItems', label: '项目实施计划', type: 'textarea', required: true },
+  { key: 'customerRequirements', label: '项目需求分析', type: 'repeatable' },
+  { key: 'projectTargetDescription', label: '项目目标描述', type: 'repeatable' },
+  { key: 'technicalRisks', label: '项目风险评估', type: 'repeatable' },
+  { key: 'solutionSuggestions', label: '项目方案建议', type: 'repeatable' },
+  { key: 'actionItems', label: '项目实施计划', type: 'repeatable', required: true },
   { key: 'reviewConclusion', label: '其他补充内容/评审结论', type: 'textarea', required: true },
   { key: 'recorder', label: '记录人', type: 'readonly' }
 ];

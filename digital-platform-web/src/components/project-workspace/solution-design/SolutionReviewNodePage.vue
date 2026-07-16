@@ -19,8 +19,7 @@
         </el-button>
       </div>
     </section>
-    <SolutionNodeActions v-if="showNodeActions" :node="currentNode" :is-pending="isPending"
-      :show-read-only-result="canReviewForm"
+    <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending"
       :return-reason="returnReasons[nodeKey] || ''" @update:return-reason="returnReasons[nodeKey] = $event"
       @submit="submitNode(nodeKey)" @approve="approveNode(nodeKey)" @return="returnNode(nodeKey)" />
   </SolutionDesignNodeLayout>
@@ -36,7 +35,7 @@ import GeneratedFormFileCard from '../../GeneratedFormFileCard.vue';
 import { solutionDesignNodePageProps, useSolutionDesignNodePage } from '../../../composables/project-stage/solution-design/useSolutionDesignNodePage.js';
 import { useSolutionReviewForm } from '../../../composables/project-stage/solution-design/useSolutionReviewForm.js';
 import { getMissingRequiredFields } from '../../../utils/formValidation.js';
-import { isSolutionDesignFormFiller, isSolutionDesignFormReviewer } from '../../../utils/onlineFormVisibility.js';
+import { isSolutionDesignFormFiller } from '../../../utils/onlineFormVisibility.js';
 
 const fields = [
   { key: 'meetingDate', label: '评审时间', type: 'date', required: true },
@@ -74,13 +73,6 @@ const {
 } = review;
 const activeDto = computed(() => review.activeReviewFormDto(workflow.value, currentNode.value));
 const canViewFormContent = computed(() => isSolutionDesignFormFiller(workflow.value, 'technical_owner', props.currentUser));
-const canReviewForm = computed(() => isSolutionDesignFormReviewer(nodeKey.value, props.currentUser));
-const showNodeActions = computed(() => Boolean(currentNode.value) && (
-  currentNode.value?.permissions?.canSubmit === true
-  || currentNode.value?.permissions?.canApprove === true
-  || currentNode.value?.permissions?.canReturn === true
-  || canReviewForm.value
-));
 const reviewFormRoot = ref(null);
 const validationAttempted = ref(false);
 const missingRequiredFields = computed(() => getMissingRequiredFields(fields, reviewFormData));

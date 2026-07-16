@@ -74,8 +74,7 @@
       </div>
     </section>
 
-    <SolutionNodeActions v-if="showNodeActions" :node="currentNode" :is-pending="isPending"
-      :show-read-only-result="canReviewForm"
+    <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending"
       :submit-disabled="generatedBlocksSubmit" :return-reason="returnReasons[nodeKey] || ''"
       @update:return-reason="returnReasons[nodeKey] = $event" @submit="submitNode(nodeKey)"
       @approve="approveNode(nodeKey)" @return="returnNode(nodeKey)" />
@@ -97,7 +96,7 @@ import {
 } from '../../../composables/project-stage/solution-design/useSolutionDesignNodePage.js';
 import { useSolutionAnalysisForm } from '../../../composables/project-stage/solution-design/useSolutionAnalysisForm.js';
 import { getMissingRequiredFields } from '../../../utils/formValidation.js';
-import { isSolutionDesignFormFiller, isSolutionDesignFormReviewer } from '../../../utils/onlineFormVisibility.js';
+import { isSolutionDesignFormFiller } from '../../../utils/onlineFormVisibility.js';
 
 const emit = defineEmits(['business-state-changed']);
 const props = defineProps(solutionDesignNodePageProps);
@@ -163,13 +162,6 @@ const generatedBlocksSubmit = computed(() => {
   return Boolean(file) && (file.status !== 'generated' || file.canDownload !== true);
 });
 const canViewFormContent = computed(() => isSolutionDesignFormFiller(workflow.value, 'technical_owner', props.currentUser));
-const canReviewForm = computed(() => isSolutionDesignFormReviewer(nodeKey.value, props.currentUser));
-const showNodeActions = computed(() => Boolean(currentNode.value) && (
-  currentNode.value?.permissions?.canSubmit === true
-  || currentNode.value?.permissions?.canApprove === true
-  || currentNode.value?.permissions?.canReturn === true
-  || canReviewForm.value
-));
 
 watch(workflow, (value) => {
   syncFromWorkflow(value, true);

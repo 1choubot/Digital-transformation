@@ -13,7 +13,8 @@
       </el-radio-group>
     </section>
 
-    <SolutionNodeActions v-if="currentNode" :node="approvalNode" :is-pending="isPending"
+    <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending"
+      :approve-disabled="requiresBranchSelection && !branchType"
       :return-reason="returnReasons[nodeKey] || ''" @update:return-reason="returnReasons[nodeKey] = $event"
       @submit="submitNode(nodeKey)" @approve="approveFinanceNode" @return="returnNode(nodeKey)" />
   </SolutionDesignNodeLayout>
@@ -38,15 +39,6 @@ const requiresBranchSelection = computed(() => (
   currentNode.value?.status === 'pending_general_review' &&
   currentNode.value?.permissions?.canApprove === true
 ));
-
-// Reuse the shared action component while preventing an invalid empty approval request.
-const approvalNode = computed(() => {
-  if (!currentNode.value || !requiresBranchSelection.value || branchType.value) return currentNode.value;
-  return {
-    ...currentNode.value,
-    permissions: { ...currentNode.value.permissions, canApprove: false }
-  };
-});
 
 async function approveFinanceNode() {
   const payload = requiresBranchSelection.value ? { branchType: branchType.value } : {};

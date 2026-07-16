@@ -41,8 +41,7 @@
         @click="rejectQuotation">客户不接受并处理</el-button>
     </el-form>
 
-    <SolutionNodeActions v-if="showNodeActions" :node="currentNode" :is-pending="isPending"
-      :show-read-only-result="canReviewForm"
+    <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending"
       :return-reason="returnReasons[nodeKey] || ''" @update:return-reason="returnReasons[nodeKey] = $event"
       @submit="submitNode(nodeKey)" @approve="approveNode(nodeKey)" @return="returnNode(nodeKey)" />
   </SolutionDesignNodeLayout>
@@ -56,7 +55,7 @@ import SolutionNodeActions from '../../../components/project-workspace/solution-
 import SolutionQuotationForm from '../../../components/project-workspace/solution-design/SolutionQuotationForm.vue';
 import { solutionDesignNodePageProps, useSolutionDesignNodePage } from '../../../composables/project-stage/solution-design/useSolutionDesignNodePage.js';
 import { useSolutionQuotationForm } from '../../../composables/project-stage/solution-design/useSolutionQuotationForm.js';
-import { isSolutionDesignFormFiller, isSolutionDesignFormReviewer } from '../../../utils/onlineFormVisibility.js';
+import { isSolutionDesignFormFiller } from '../../../utils/onlineFormVisibility.js';
 
 const emit = defineEmits(['business-state-changed']);
 const props = defineProps(solutionDesignNodePageProps);
@@ -76,13 +75,6 @@ const quotation = useSolutionQuotationForm({
   notifyChanged: page.notifyChanged
 });
 const canViewFormContent = computed(() => isSolutionDesignFormFiller(workflow.value, 'business_owner', props.currentUser));
-const canReviewForm = computed(() => isSolutionDesignFormReviewer(nodeKey.value, props.currentUser));
-const showNodeActions = computed(() => Boolean(currentNode.value) && (
-  currentNode.value?.permissions?.canSubmit === true
-  || currentNode.value?.permissions?.canApprove === true
-  || currentNode.value?.permissions?.canReturn === true
-  || canReviewForm.value
-));
 
 watch(() => flow.value?.branchType, (branchType) => {
   if (branchType === 'quotation') quotation.load();

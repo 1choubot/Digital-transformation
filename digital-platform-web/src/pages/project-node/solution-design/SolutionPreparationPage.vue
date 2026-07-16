@@ -64,12 +64,10 @@
     <SolutionUploadSlots
       :slots="slots"
       :is-pending="isPending"
-      :exemption-reasons="exemptionReasons"
       @upload="handleUpload"
       @download="downloadUpload"
       @mark-exemption="markUploadExemption"
       @cancel-exemption="cancelUploadExemption"
-      @update-exemption-reason="({ slotKey, value }) => exemptionReasons[slotKey] = value"
     />
     <SolutionNodeActions
       v-if="currentNode"
@@ -105,7 +103,6 @@ const {
   slots,
   roleSelections,
   returnReasons,
-  exemptionReasons,
   isPending,
   assignRoles,
   handleUpload,

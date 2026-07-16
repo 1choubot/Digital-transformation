@@ -3,10 +3,9 @@
     :error-message="context.solutionDesignErrorMessage" :message="localMessage" :local-error="localError">
     <GeneratedFormFileCard button-text="查看项目方案分析表" :generated-file="analysisFormDto?.form?.generatedFile"
       :pending="isPending('analysis:download')" @download="downloadAnalysisGeneratedFile" />
-    <SolutionUploadSlots :slots="slots" :is-pending="isPending" :exemption-reasons="exemptionReasons"
+    <SolutionUploadSlots :slots="slots" :is-pending="isPending"
       @upload="handleUpload" @download="downloadUpload" @mark-exemption="markUploadExemption"
-      @cancel-exemption="cancelUploadExemption"
-      @update-exemption-reason="({ slotKey, value }) => exemptionReasons[slotKey] = value" />
+      @cancel-exemption="cancelUploadExemption" />
 
     <section v-if="canViewFormContent" ref="analysisFormRoot" class="analysis-section">
 
@@ -171,7 +170,6 @@ const {
   localMessage,
   localError,
   returnReasons,
-  exemptionReasons,
   isPending,
   runAction,
   handleUpload,

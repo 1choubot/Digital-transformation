@@ -5,10 +5,9 @@
       type="success" show-icon :closable="false" />
 
     <SolutionUploadSlots v-if="flow?.branchType === 'tender'" :slots="tenderSlots"
-      :is-pending="isPending" :exemption-reasons="exemptionReasons"
+      :is-pending="isPending"
       @upload="handleUpload" @download="downloadUpload" @mark-exemption="markUploadExemption"
-      @cancel-exemption="cancelUploadExemption"
-      @update-exemption-reason="({ slotKey, value }) => exemptionReasons[slotKey] = value" />
+      @cancel-exemption="cancelUploadExemption" />
 
     <section v-if="flow" class="quotation-section">
       <div class="slot-heading"><h4>报价/投标</h4><el-tag>{{ flow.branchStatus || '待选择' }}</el-tag></div>
@@ -58,7 +57,7 @@ const emit = defineEmits(['business-state-changed']);
 const props = defineProps(solutionDesignNodePageProps);
 const page = useSolutionDesignNodePage(props, emit);
 const {
-  context, workflow, nodeKey, currentNode, slots, returnReasons, exemptionReasons,
+  context, workflow, nodeKey, currentNode, slots, returnReasons,
   isPending, handleUpload, downloadUpload, markUploadExemption, cancelUploadExemption, submitNode, approveNode,
   returnNode, selectBranch, submitQuotation, acceptQuotation, rejectQuotation
 } = page;

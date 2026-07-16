@@ -7,7 +7,6 @@
                     <div>
                         <h3>{{ node.nodeName }}</h3>
                     </div>
-                    <el-tag :type="tagType">{{ nodeStatusText[node.status] || node.status }}</el-tag>
                 </header>
 
                 <el-alert v-if="node.returnReason" :title="`退回原因：${node.returnReason}`" type="warning" show-icon

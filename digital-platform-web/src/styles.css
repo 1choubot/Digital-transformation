@@ -4514,48 +4514,80 @@ p {
     }
 
 /* Migrated from digital-platform-web/src/components/project-workspace/solution-design/SolutionUploadSlots.vue */
-.solution-node-page .solution-section,
-    .solution-node-page .slot-list,
-    .solution-node-page .slot-card,
-    .solution-node-page .file-meta {
+.solution-node-page .solution-section {
         display: grid;
         gap: var(--space-3, 12px)
     }
 
     .solution-node-page .solution-section>header,
-    .solution-node-page .slot-heading,
     .solution-node-page .slot-actions {
         display: flex;
         align-items: center;
-        justify-content: space-between;
         gap: var(--space-3, 12px)
     }
 
-    .solution-node-page .slot-card {
-        padding: var(--space-3, 12px);
-        border: 1px solid var(--color-border, #d8dde6);
-        border-radius: var(--radius-md, 8px)
-    }
-
-    .solution-node-page .slot-heading>div,
     .solution-node-page .slot-actions {
         justify-content: flex-start;
         flex-wrap: wrap
     }
 
-    .solution-node-page .file-meta small {
+    .solution-node-page .solution-upload-list {
+        overflow: hidden;
+        border: 1px solid var(--color-border, #d8dde6);
+        border-radius: var(--radius-md, 8px);
+        background: var(--el-bg-color, #fff)
+    }
+
+    .solution-node-page .solution-upload-list__head,
+    .solution-node-page .solution-upload-list__row {
+        display: grid;
+        grid-template-columns: 200px minmax(260px, 1fr) 264px;
+        align-items: center;
+        gap: var(--space-3, 12px);
+        min-height: 52px;
+        padding: 8px 14px
+    }
+
+    .solution-node-page .solution-upload-list__head {
+        min-height: 42px;
+        color: var(--color-text-secondary, #667789);
+        background: var(--app-page-bg-soft, #f5f7fa);
+        border-bottom: 1px solid var(--color-border, #d8dde6);
+        font-weight: 600
+    }
+
+    .solution-node-page .solution-upload-list__row+.solution-upload-list__row {
+        border-top: 1px solid var(--color-border, #d8dde6)
+    }
+
+    .solution-node-page .solution-upload-list__title,
+    .solution-node-page .solution-upload-list__filename {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap
+    }
+
+    .solution-node-page .solution-upload-list__filename {
         color: var(--color-text-secondary, #667789)
     }
 
     @media(max-width:640px) {
+        .solution-node-page .solution-upload-list__head,
+        .solution-node-page .solution-upload-list__row {
+            grid-template-columns: minmax(100px, .8fr) minmax(0, 1.2fr)
+        }
 
-        .solution-node-page .solution-section>header,
-        .solution-node-page .slot-heading {
-            display: grid
+        .solution-node-page .solution-upload-list__head>[role="columnheader"]:last-child {
+            display: none
+        }
+
+        .solution-node-page .solution-upload-list__row .slot-actions {
+            grid-column: 1 / -1
         }
 
         .solution-node-page .slot-actions>* {
-            width: 100%
+            width: auto
         }
     }
 
@@ -6419,16 +6451,6 @@ p {
 .solution-analysis-environment-section {
   overflow: hidden;
   padding: 0;
-}
-
-.solution-node-page .slot-exemption {
-  display: grid;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.solution-node-page .slot-exemption .el-button {
-  justify-self: start;
 }
 
 .solution-node-page .quotation-meta-grid {

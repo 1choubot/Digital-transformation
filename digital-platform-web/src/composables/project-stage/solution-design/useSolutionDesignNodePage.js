@@ -24,7 +24,12 @@ export function useSolutionDesignNodePage(props, emit) {
       workflow.value?.quotationTender?.branchType === 'quotation'
     ))
     .sort((a, b) => Number(a.slotOrder || 0) - Number(b.slotOrder || 0)));
-  const notifyChanged = () => emit('business-state-changed', { source: 'solution-design', nodeKey: nodeKey.value, changedDocumentIds: [] });
+  const notifyChanged = (payload = {}) => emit('business-state-changed', {
+    source: 'solution-design',
+    nodeKey: nodeKey.value,
+    changedDocumentIds: [],
+    ...payload
+  });
   const actions = useSolutionDesignWorkflow({
     projectId: computed(() => props.projectId),
     authToken: computed(() => props.authToken),

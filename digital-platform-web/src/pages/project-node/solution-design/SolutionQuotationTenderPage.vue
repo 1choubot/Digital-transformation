@@ -10,7 +10,6 @@
       @cancel-exemption="cancelUploadExemption" />
 
     <section v-if="flow" class="quotation-section">
-      <div class="slot-heading"><h4>报价/投标</h4><el-tag>{{ flow.branchStatus || '待选择' }}</el-tag></div>
       <div class="action-row">
         <el-button v-if="flow.permissions?.canSelectBranch" type="primary" :loading="isPending('branch:quotation')"
           @click="selectBranch('quotation')">选择报价流程</el-button>
@@ -18,8 +17,6 @@
           @click="selectBranch('tender')">选择投标流程</el-button>
         <el-button v-if="flow.permissions?.canSubmitQuotation" type="primary" :loading="isPending('quotation:submit')"
           @click="submitQuotation">提交报价单</el-button>
-        <el-button v-if="flow.permissions?.canSubmitTender" type="primary"
-          :loading="isPending('submit:quotation_or_tender')" @click="submitNode(nodeKey)">提交投标审批</el-button>
         <el-button v-if="flow.permissions?.canAcceptQuotation" type="success" :loading="isPending('quotation:accept')"
           @click="acceptQuotation">客户接受报价</el-button>
         <el-button v-if="flow.permissions?.canRejectQuotationAndEndProject" type="danger" plain

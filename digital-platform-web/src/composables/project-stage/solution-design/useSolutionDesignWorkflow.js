@@ -132,6 +132,11 @@ export function useSolutionDesignWorkflow({
       exemptedByUser: null,
       exemptedAt: null
     };
+
+    // The upload response only contains file state. Refresh through the shared
+    // workspace protocol so backend-derived readiness and canSubmit permissions
+    // can reveal the node submission card without reloading the browser page.
+    notifyChanged?.({ changeType: 'upload', slotKey: slot.slotKey });
   }
 
   async function downloadUpload(slot) {

@@ -6416,6 +6416,11 @@ p {
   font-weight: 700;
 }
 
+.solution-analysis-environment-section {
+  overflow: hidden;
+  padding: 0;
+}
+
 .solution-node-page .slot-exemption {
   display: grid;
   gap: 10px;

@@ -3,7 +3,10 @@
     :error-message="context.solutionDesignErrorMessage" :message="localMessage" :local-error="localError">
     <GeneratedFormFileCard button-text="查看项目方案分析表" :generated-file="analysisFormDto?.form?.generatedFile"
       :pending="isPending('analysis:download')" @download="downloadAnalysisGeneratedFile" />
-    <SolutionUploadSlots :slots="slots" :is-pending="isPending" @upload="handleUpload" @download="downloadUpload" />
+    <SolutionUploadSlots :slots="slots" :is-pending="isPending" :exemption-reasons="exemptionReasons"
+      @upload="handleUpload" @download="downloadUpload" @mark-exemption="markUploadExemption"
+      @cancel-exemption="cancelUploadExemption"
+      @update-exemption-reason="({ slotKey, value }) => exemptionReasons[slotKey] = value" />
 
     <section v-if="canViewFormContent" ref="analysisFormRoot" class="analysis-section">
 
@@ -132,7 +135,7 @@
       </div>
     </section>
 
-    <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending"
+    <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending" hide-submit hide-when-empty
       :submit-disabled="generatedBlocksSubmit" :return-reason="returnReasons[nodeKey] || ''"
       @update:return-reason="returnReasons[nodeKey] = $event" @submit="submitNode(nodeKey)"
       @approve="approveNode(nodeKey)" @return="returnNode(nodeKey)" />
@@ -168,10 +171,13 @@ const {
   localMessage,
   localError,
   returnReasons,
+  exemptionReasons,
   isPending,
   runAction,
   handleUpload,
   downloadUpload,
+  markUploadExemption,
+  cancelUploadExemption,
   submitNode,
   approveNode,
   returnNode

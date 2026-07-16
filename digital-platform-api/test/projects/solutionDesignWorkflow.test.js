@@ -154,14 +154,14 @@ test('solution form submissions reject missing required fields before database w
       {
         projectId: 1,
         nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
-        payload: { formData: { meetingDate: ' ', actionItems: [], reviewConclusion: '' } },
+        payload: { formData: { meetingDate: ' ', implementationPlanItems: [], reviewConclusion: '' } },
         user
       },
       db
     ),
     (error) => {
       assert.equal(error.code, SOLUTION_DESIGN_ERROR.FORM_REQUIRED_FIELDS_MISSING);
-      assert.deepEqual(error.details, ['meetingDate', 'actionItems', 'reviewConclusion']);
+      assert.deepEqual(error.details, ['meetingDate', 'reviewConclusion']);
       return true;
     }
   );
@@ -671,17 +671,60 @@ function analysisFormPayload(overrides = {}) {
   };
 }
 
-function reviewFormPayload(overrides = {}) {
-  return {
-    formData: {
-      meetingDate: '2026-07-08',
-      projectTargetDescription: ['项目目标描述默认第一行'],
-      technicalRisks: ['项目风险评估默认第一行'],
-      solutionSuggestions: ['项目方案建议默认第一行'],
-      actionItems: ['按评审意见完善方案'],
-      reviewConclusion: '评审通过，进入下一节点',
-      ...overrides
+const reviewPlanSources = Object.freeze([
+  { sourceType: 'requirement', sourceLabel: '需求', fieldKey: 'customerRequirements' },
+  { sourceType: 'target', sourceLabel: '目标', fieldKey: 'projectTargetDescription' },
+  { sourceType: 'risk', sourceLabel: '风险', fieldKey: 'technicalRisks' },
+  { sourceType: 'suggestion', sourceLabel: '建议', fieldKey: 'solutionSuggestions' }
+]);
+
+function normalizeTestReviewLines(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item ?? '').trim()).filter(Boolean);
+  }
+  return String(value ?? '')
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function buildTestReviewImplementationPlanItems(formData) {
+  const legacyPlanTexts = normalizeTestReviewLines(formData.actionItems);
+  let legacyIndex = 0;
+  const items = [];
+  for (const source of reviewPlanSources) {
+    const sourceLines = normalizeTestReviewLines(formData[source.fieldKey]);
+    for (const [index, sourceText] of sourceLines.entries()) {
+      const sourceIndex = index + 1;
+      const legacyPlanText = legacyPlanTexts[legacyIndex] || '';
+      legacyIndex += 1;
+      items.push({
+        sourceType: source.sourceType,
+        sourceLabel: source.sourceLabel,
+        sourceIndex,
+        sourceText,
+        planText: legacyPlanText || `${source.sourceLabel}${sourceIndex}实施计划`
+      });
     }
+  }
+  return items;
+}
+
+function reviewFormPayload(overrides = {}) {
+  const formData = {
+    meetingDate: '2026-07-08',
+    projectTargetDescription: ['项目目标描述默认第一行'],
+    technicalRisks: ['项目风险评估默认第一行'],
+    solutionSuggestions: ['项目方案建议默认第一行'],
+    actionItems: ['按评审意见完善方案'],
+    reviewConclusion: '评审通过，进入下一节点',
+    ...overrides
+  };
+  if (!Object.hasOwn(formData, 'implementationPlanItems')) {
+    formData.implementationPlanItems = buildTestReviewImplementationPlanItems(formData);
+  }
+  return {
+    formData
   };
 }
 
@@ -970,7 +1013,7 @@ async function submitReviewNodeForReview(db, nodeKey, storage = fakeUploadStorag
     await submitSolutionDesignOutputs(db, storage);
   }
 
-  await submitSolutionDesignReviewForm(
+  const submittedForm = await submitSolutionDesignReviewForm(
     {
       projectId: 100,
       nodeKey,
@@ -979,14 +1022,8 @@ async function submitReviewNodeForReview(db, nodeKey, storage = fakeUploadStorag
     },
     db
   );
-  return submitSolutionDesignWorkflowNode(
-    {
-      projectId: 100,
-      nodeKey,
-      user: technicalOwner
-    },
-    db
-  );
+  assert.equal(submittedForm.autoSubmit.submitted, true);
+  return getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
 }
 
 async function activateCustomerReviewNode(db, storage = fakeUploadStorage()) {
@@ -1007,7 +1044,7 @@ async function activateRdCostNode(db, storage = fakeUploadStorage()) {
   const technicalOwner = authUser(db.connection.users.get(12));
   const rdManager = authUser(db.connection.users.get(1));
   await activateCustomerReviewNode(db, storage);
-  await submitSolutionDesignReviewForm(
+  const submittedForm = await submitSolutionDesignReviewForm(
     {
       projectId: 100,
       nodeKey: SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
@@ -1016,14 +1053,7 @@ async function activateRdCostNode(db, storage = fakeUploadStorage()) {
     },
     db
   );
-  await submitSolutionDesignWorkflowNode(
-    {
-      projectId: 100,
-      nodeKey: SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
-      user: technicalOwner
-    },
-    db
-  );
+  assert.equal(submittedForm.autoSubmit.submitted, true);
   await approveSolutionDesignWorkflowNode(
     {
       projectId: 100,
@@ -3825,6 +3855,14 @@ test('technical owner can save and submit solution analysis form', async () => {
   assert.equal(Object.hasOwn(submitted.form.formData, 'technicalRisks'), false);
   assert.equal(Object.hasOwn(submitted.form.formData, 'solutionScope'), false);
   assert.equal(submitted.images.length, 4);
+  assert.equal(submitted.autoSubmit.attempted, true);
+  assert.equal(submitted.autoSubmit.submitted, false);
+  assert.equal(submitted.autoSubmit.nodeKey, SOLUTION_DESIGN_NODE_KEY.ANALYSIS);
+  assert.equal(submitted.autoSubmit.nodeStatus, SOLUTION_DESIGN_NODE_STATUS.PENDING);
+  assert.equal(
+    submitted.autoSubmit.blockingReasons.includes(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PRODUCT_FUNCTION_DIAGRAM),
+    true
+  );
   assert.equal(submitted.permissions.canSubmitNode, false);
   assert.equal(db.generatedFileStorage.written.length, 1);
   const analysisGeneratedKey = submitted.form.generatedFile.storageKey ?? db.generatedFileStorage.written[0].storageKey;
@@ -3923,6 +3961,7 @@ test('technical owner can save and submit solution analysis form', async () => {
   assert.equal(actionTypes.includes(OPERATION_ACTION_TYPE.SOLUTION_DESIGN_ANALYSIS_FORM_SUBMITTED), true);
   assert.equal(actionTypes.includes(OPERATION_ACTION_TYPE.SOLUTION_DESIGN_ANALYSIS_FORM_GENERATED), true);
   assert.equal(actionTypes.includes(OPERATION_ACTION_TYPE.SOLUTION_DESIGN_ANALYSIS_FORM_GENERATION_FAILED), false);
+  assert.equal(actionTypes.includes(OPERATION_ACTION_TYPE.SOLUTION_DESIGN_ANALYSIS_SUBMITTED), false);
 });
 
 test('solution analysis images support legacy C05 anchors and invalidate generated files after changes', async () => {
@@ -4194,6 +4233,8 @@ test('solution analysis generated file failure blocks node submit and cleans par
     db
   );
   assert.equal(submitted.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.FAILED);
+  assert.equal(submitted.autoSubmit.attempted, false);
+  assert.equal(submitted.autoSubmit.submitted, false);
   assert.match(submitted.form.generatedFile.errorMessage, /FAKE_GENERATED_FILE_WRITE_FAILED/);
   assert.equal(generatedStorage.files.size, 0);
   assert.equal(generatedStorage.cleaned.length, 1);
@@ -4422,14 +4463,6 @@ test('technical owner submits complete solution analysis node for RD manager rev
   const rdManager = authUser(db.connection.users.get(1));
 
   await activateAnalysisNode(db, storage);
-  await submitSolutionDesignAnalysisForm(
-    {
-      projectId: 100,
-      payload: analysisFormPayload(),
-      user: technicalOwner
-    },
-    db
-  );
   await uploadSolutionDesignWorkflowFile(
     {
       projectId: 100,
@@ -4440,17 +4473,21 @@ test('technical owner submits complete solution analysis node for RD manager rev
     db,
     storage
   );
-  const readyWorkflow = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
-  assert.equal(findWorkflowNode(readyWorkflow, SOLUTION_DESIGN_NODE_KEY.ANALYSIS).permissions.canSubmit, true);
-
-  const workflow = await submitSolutionDesignWorkflowNode(
+  const submittedForm = await submitSolutionDesignAnalysisForm(
     {
       projectId: 100,
-      nodeKey: SOLUTION_DESIGN_NODE_KEY.ANALYSIS,
+      payload: analysisFormPayload(),
       user: technicalOwner
     },
     db
   );
+  assert.equal(submittedForm.autoSubmit.attempted, true);
+  assert.equal(submittedForm.autoSubmit.submitted, true);
+  assert.equal(submittedForm.autoSubmit.nodeKey, SOLUTION_DESIGN_NODE_KEY.ANALYSIS);
+  assert.equal(submittedForm.autoSubmit.nodeStatus, SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW);
+  assert.deepEqual(submittedForm.autoSubmit.blockingReasons, []);
+
+  const workflow = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
   assert.equal(
     findWorkflowNode(workflow, SOLUTION_DESIGN_NODE_KEY.ANALYSIS).status,
     SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW
@@ -4557,7 +4594,7 @@ test('RD manager returns solution analysis node and reuses current product diagr
   );
   assert.equal(db.connection.operationLogs.length, logCountBeforeOldRevisionSubmit);
 
-  await submitSolutionDesignAnalysisForm(
+  const resubmittedForm = await submitSolutionDesignAnalysisForm(
     {
       projectId: 100,
       payload: analysisFormPayload({
@@ -4586,17 +4623,9 @@ test('RD manager returns solution analysis node and reuses current product diagr
   );
   assert.equal(Object.hasOwn(JSON.parse(db.connection.currentAnalysisForm().form_data_json), 'technicalRisks'), false);
   const readyAgain = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
-  assert.equal(findWorkflowNode(readyAgain, SOLUTION_DESIGN_NODE_KEY.ANALYSIS).permissions.canSubmit, true);
-  const resubmitted = await submitSolutionDesignWorkflowNode(
-    {
-      projectId: 100,
-      nodeKey: SOLUTION_DESIGN_NODE_KEY.ANALYSIS,
-      user: technicalOwner
-    },
-    db
-  );
+  assert.equal(resubmittedForm.autoSubmit.submitted, true);
   assert.equal(
-    findWorkflowNode(resubmitted, SOLUTION_DESIGN_NODE_KEY.ANALYSIS).status,
+    findWorkflowNode(readyAgain, SOLUTION_DESIGN_NODE_KEY.ANALYSIS).status,
     SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW
   );
   assert.equal(db.connection.analysisForms.at(-1).revision, 2);
@@ -4879,6 +4908,12 @@ test('technical owner can save and submit internal review form', async () => {
       payload: reviewFormPayload({
         meetingDate: '2026-07-18',
         meetingLocation: '内部评审会议室',
+        customerRequirements: [
+          '内部需求第一行',
+          '内部需求第二行',
+          '内部需求第三行',
+          '内部需求第四行'
+        ],
         projectTargetDescription: ['内部目标第一行', '内部目标第二行'],
         technicalRisks: ['内部风险第一行', '内部风险第二行'],
         solutionSuggestions: ['内部方案建议第一行', '内部方案建议第二行'],
@@ -4893,12 +4928,17 @@ test('technical owner can save and submit internal review form', async () => {
   assert.equal(submitted.form.status, SOLUTION_DESIGN_REVIEW_FORM_STATUS.SUBMITTED);
   assert.equal(submitted.form.revision, 1);
   assert.deepEqual(submitted.form.formData.projectTargetDescription, ['内部目标第一行', '内部目标第二行']);
-  assert.deepEqual(submitted.form.formData.actionItems, ['内部实施计划第一行', '内部实施计划第二行']);
+  const internalTargetPlanItem = submitted.form.formData.implementationPlanItems.find(
+    (item) => item.sourceType === 'target' && item.sourceIndex === 1
+  );
+  assert.equal(internalTargetPlanItem.planText, '目标1实施计划');
+  assert.equal(submitted.form.formData.actionItems[0], '需求1：内部实施计划第一行');
   assert.equal(submitted.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED);
   assert.equal(submitted.form.generatedFile.templateName, '方案评审记录表-模板.xlsx');
   assert.equal(submitted.form.generatedFile.canDownload, true);
   assert.match(submitted.form.generatedFile.fileName, /^C15-方案评审记录表-内部方案评审-/);
-  assert.equal(submitted.permissions.canSubmitNode, true);
+  assert.equal(submitted.autoSubmit.submitted, true);
+  assert.equal(submitted.permissions.canSubmitNode, false);
   const internalReviewGeneratedKey = db.generatedFileStorage.written.at(-1).storageKey;
   assertGeneratedXlsxCellEquals(db.generatedFileStorage, internalReviewGeneratedKey, 'A2', '项目名称');
   assertGeneratedXlsxCellEquals(db.generatedFileStorage, internalReviewGeneratedKey, 'D2', '客户名称');
@@ -4916,6 +4956,13 @@ test('technical owner can save and submit internal review form', async () => {
   assertGeneratedXlsxCellUsesTextFont(db.generatedFileStorage, internalReviewGeneratedKey, 'B3', '宋体');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, internalReviewGeneratedKey, 'B5', '内部评审会议室');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, internalReviewGeneratedKey, 'G5', '2026-07-18');
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, internalReviewGeneratedKey, 'B9', '内部需求第一行');
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, internalReviewGeneratedKey, 'B10', '内部需求第二行');
+  assertGeneratedXlsxCellIncludes(db.generatedFileStorage, internalReviewGeneratedKey, 'B11', '内部需求第三行');
+  assertGeneratedXlsxCellIncludes(db.generatedFileStorage, internalReviewGeneratedKey, 'B11', '内部需求第四行');
+  assertGeneratedXlsxCellUsesTextFont(db.generatedFileStorage, internalReviewGeneratedKey, 'B9', '宋体');
+  assertGeneratedXlsxCellUsesTextFont(db.generatedFileStorage, internalReviewGeneratedKey, 'B10', '宋体');
+  assertGeneratedXlsxCellUsesTextFont(db.generatedFileStorage, internalReviewGeneratedKey, 'B11', '宋体');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, internalReviewGeneratedKey, 'B12', '内部目标第一行');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, internalReviewGeneratedKey, 'B13', '内部目标第二行');
   assertGeneratedXlsxCellUsesTextFont(db.generatedFileStorage, internalReviewGeneratedKey, 'B12', '宋体');
@@ -4958,10 +5005,196 @@ test('technical owner can save and submit internal review form', async () => {
     actionTypes.includes(OPERATION_ACTION_TYPE.SOLUTION_DESIGN_INTERNAL_REVIEW_FORM_GENERATED),
     true
   );
+  assert.equal(actionTypes.includes(OPERATION_ACTION_TYPE.SOLUTION_DESIGN_INTERNAL_REVIEW_SUBMITTED), true);
   assert.equal(
     actionTypes.includes(OPERATION_ACTION_TYPE.SOLUTION_DESIGN_INTERNAL_REVIEW_FORM_GENERATION_FAILED),
     false
   );
+});
+
+test('review implementation plan items normalize sources, require plans and render ordered labels', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const technicalOwner = authUser(db.connection.users.get(12));
+
+  await submitSolutionDesignOutputs(db, storage);
+  const structuredPayload = reviewFormPayload({
+    customerRequirements: ['需求第一行', ' ', '需求第二行'],
+    projectTargetDescription: ['目标第一行', ' ', '目标第二行'],
+    technicalRisks: '风险第一行\n\n风险第二行',
+    solutionSuggestions: ['建议第一行', '', '建议第二行'],
+    actionItems: [],
+    implementationPlanItems: [
+      { sourceType: 'requirement', sourceIndex: 1, planText: '需求第一项计划' },
+      { sourceType: 'requirement', sourceIndex: 2, planText: '需求第二项计划' },
+      { sourceType: 'target', sourceIndex: 1, planText: '目标第一项计划' },
+      { sourceType: 'target', sourceIndex: 2, planText: '目标第二项计划' },
+      { sourceType: 'risk', sourceIndex: 1, planText: '风险第一项计划' },
+      { sourceType: 'risk', sourceIndex: 2, planText: '风险第二项计划' },
+      { sourceType: 'suggestion', sourceIndex: 1, planText: '建议第一项计划' },
+      { sourceType: 'suggestion', sourceIndex: 2, planText: '建议第二项计划' },
+      { sourceType: 'suggestion', sourceIndex: 9, planText: '不存在来源的计划' }
+    ],
+    reviewConclusion: '结构化实施计划评审通过'
+  });
+  const draft = await saveSolutionDesignReviewForm(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
+      payload: structuredPayload,
+      user: technicalOwner
+    },
+    db
+  );
+
+  assert.deepEqual(draft.form.formData.customerRequirements, ['需求第一行', '需求第二行']);
+  assert.deepEqual(
+    draft.form.formData.implementationPlanItems.map((item) => `${item.sourceLabel}${item.sourceIndex}:${item.sourceText}`),
+    [
+      '需求1:需求第一行',
+      '需求2:需求第二行',
+      '目标1:目标第一行',
+      '目标2:目标第二行',
+      '风险1:风险第一行',
+      '风险2:风险第二行',
+      '建议1:建议第一行',
+      '建议2:建议第二行'
+    ]
+  );
+  assert.equal(draft.form.formData.implementationPlanItems[0].planText, '需求第一项计划');
+  assert.equal(
+    draft.form.formData.implementationPlanItems.some((item) => item.sourceType === 'suggestion' && item.sourceIndex === 9),
+    false
+  );
+
+  await assert.rejects(
+    () =>
+      submitSolutionDesignReviewForm(
+        {
+          projectId: 100,
+          nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
+          payload: reviewFormPayload({
+            ...structuredPayload.formData,
+            actionItems: [
+              '旧需求第一项计划',
+              '旧需求第二项计划',
+              '旧目标第一项计划',
+              '旧目标第二项计划',
+              '旧风险第一项计划',
+              '旧风险第二项计划',
+              '旧建议第一项计划',
+              '旧建议第二项计划'
+            ],
+            implementationPlanItems: structuredPayload.formData.implementationPlanItems.map((item) =>
+              item.sourceType === 'requirement' && item.sourceIndex === 1
+                ? { ...item, planText: '' }
+                : item
+            )
+          }),
+          user: technicalOwner
+        },
+        db
+      ),
+    (error) =>
+      error.code === SOLUTION_DESIGN_ERROR.FORM_REQUIRED_FIELDS_MISSING &&
+      error.details.includes('implementationPlanItems') &&
+      error.details.includes('requirement:1')
+  );
+
+  const shiftedDraft = await saveSolutionDesignReviewForm(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
+      payload: reviewFormPayload({
+        ...draft.form.formData,
+        customerRequirements: '需求第二行',
+        implementationPlanItems: draft.form.formData.implementationPlanItems
+      }),
+      user: technicalOwner
+    },
+    db
+  );
+  const shiftedRequirementItem = shiftedDraft.form.formData.implementationPlanItems.find(
+    (item) => item.sourceType === 'requirement' && item.sourceIndex === 1
+  );
+  assert.equal(shiftedRequirementItem.sourceText, '需求第二行');
+  assert.equal(shiftedRequirementItem.planText, '需求第二项计划');
+
+  const duplicateTargetDraft = await saveSolutionDesignReviewForm(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
+      payload: reviewFormPayload({
+        ...draft.form.formData,
+        projectTargetDescription: ['目标第二行', '目标第二行'],
+        implementationPlanItems: draft.form.formData.implementationPlanItems
+      }),
+      user: technicalOwner
+    },
+    db
+  );
+  assert.deepEqual(
+    duplicateTargetDraft.form.formData.implementationPlanItems
+      .filter((item) => item.sourceType === 'target')
+      .map((item) => `${item.sourceText}:${item.planText}`),
+    ['目标第二行:目标第一项计划', '目标第二行:目标第二项计划']
+  );
+
+  await assert.rejects(
+    () =>
+      submitSolutionDesignReviewForm(
+        {
+          projectId: 100,
+          nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
+          payload: reviewFormPayload({
+            ...structuredPayload.formData,
+            implementationPlanItems: structuredPayload.formData.implementationPlanItems.map((item) =>
+              item.sourceType === 'suggestion' && item.sourceIndex === 2
+                ? { ...item, planText: ' ' }
+                : item
+            )
+          }),
+          user: technicalOwner
+        },
+        db
+      ),
+    (error) =>
+      error.code === SOLUTION_DESIGN_ERROR.FORM_REQUIRED_FIELDS_MISSING &&
+      error.details.includes('implementationPlanItems') &&
+      error.details.includes('suggestion:2')
+  );
+
+  const submitted = await submitSolutionDesignReviewForm(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
+      payload: structuredPayload,
+      user: technicalOwner
+    },
+    db
+  );
+
+  assert.equal(submitted.autoSubmit.submitted, true);
+  assert.deepEqual(submitted.form.formData.actionItems, [
+    '需求1：需求第一项计划',
+    '需求2：需求第二项计划',
+    '目标1：目标第一项计划',
+    '目标2：目标第二项计划',
+    '风险1：风险第一项计划',
+    '风险2：风险第二项计划',
+    '建议1：建议第一项计划',
+    '建议2：建议第二项计划'
+  ]);
+  const generatedKey = submitted.form.generatedFile.storageKey ?? db.generatedFileStorage.written.at(-1).storageKey;
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, generatedKey, 'B30', '需求1：需求第一项计划');
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, generatedKey, 'B31', '需求2：需求第二项计划');
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, generatedKey, 'B32', '目标1：目标第一项计划');
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, generatedKey, 'B33', '目标2：目标第二项计划');
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, generatedKey, 'B34', '风险1：风险第一项计划');
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, generatedKey, 'B35', '风险2：风险第二项计划');
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, generatedKey, 'B36', '建议1：建议第一项计划');
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, generatedKey, 'B37', '建议2：建议第二项计划');
 });
 
 test('review form generated file recorder falls back to submitter display name', async () => {
@@ -5019,6 +5252,7 @@ test('technical owner can save and submit customer review form', async () => {
       payload: reviewFormPayload({
         meetingDate: '2026-07-19',
         meetingLocation: '客户评审会议室',
+        customerRequirements: ['客户需求第一行', '客户需求第二行'],
         projectTargetDescription: ['客户目标第一行', '客户目标第二行'],
         technicalRisks: ['客户风险第一行'],
         solutionSuggestions: ['客户方案建议第一行', '客户方案建议第二行'],
@@ -5033,10 +5267,15 @@ test('technical owner can save and submit customer review form', async () => {
   assert.equal(submitted.form.status, SOLUTION_DESIGN_REVIEW_FORM_STATUS.SUBMITTED);
   assert.equal(submitted.form.reviewType, 'customer');
   assert.deepEqual(submitted.form.formData.projectTargetDescription, ['客户目标第一行', '客户目标第二行']);
-  assert.deepEqual(submitted.form.formData.actionItems, ['客户实施计划第一行', '客户实施计划第二行']);
+  const customerTargetPlanItem = submitted.form.formData.implementationPlanItems.find(
+    (item) => item.sourceType === 'target' && item.sourceIndex === 1
+  );
+  assert.equal(customerTargetPlanItem.planText, '目标1实施计划');
+  assert.equal(submitted.form.formData.actionItems[0], '需求1：客户实施计划第一行');
   assert.equal(submitted.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED);
   assert.match(submitted.form.generatedFile.fileName, /^C16-方案评审记录表-客户方案评审-/);
-  assert.equal(submitted.permissions.canSubmitNode, true);
+  assert.equal(submitted.autoSubmit.submitted, true);
+  assert.equal(submitted.permissions.canSubmitNode, false);
 
   const internalForm = db.connection.reviewForms.find(
     (form) => form.node_key === SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW && form.is_current === 1
@@ -5070,6 +5309,12 @@ test('technical owner can save and submit customer review form', async () => {
   assertGeneratedXlsxCellUsesTextFont(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B3', '宋体');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B5', '客户评审会议室');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, customerForm.generated_file_storage_key, 'G5', '2026-07-19');
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B9', '客户需求第一行');
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B10', '客户需求第二行');
+  assertGeneratedXlsxCellEquals(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B11', '');
+  assertGeneratedXlsxCellUsesTextFont(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B9', '宋体');
+  assertGeneratedXlsxCellUsesTextFont(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B10', '宋体');
+  assertGeneratedXlsxCellUsesTextFont(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B11', '宋体');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B12', '客户目标第一行');
   assertGeneratedXlsxCellIncludes(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B13', '客户目标第二行');
   assertGeneratedXlsxCellUsesTextFont(db.generatedFileStorage, customerForm.generated_file_storage_key, 'B12', '宋体');
@@ -5134,6 +5379,7 @@ test('technical owner can save and submit customer review form', async () => {
     actionTypes.includes(OPERATION_ACTION_TYPE.SOLUTION_DESIGN_CUSTOMER_REVIEW_FORM_GENERATED),
     true
   );
+  assert.equal(actionTypes.includes(OPERATION_ACTION_TYPE.SOLUTION_DESIGN_CUSTOMER_REVIEW_SUBMITTED), true);
   assert.equal(
     actionTypes.includes(OPERATION_ACTION_TYPE.SOLUTION_DESIGN_CUSTOMER_REVIEW_FORM_GENERATION_FAILED),
     false
@@ -5147,20 +5393,11 @@ test('review generated file download accepts generated form revision above node 
   const technicalOwner = authUser(internalDb.connection.users.get(12));
 
   await submitSolutionDesignOutputs(internalDb, internalUploadStorage);
-  await submitSolutionDesignReviewForm(
-    {
-      projectId: 100,
-      nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
-      payload: reviewFormPayload({ reviewConclusion: '内部评审第一版' }),
-      user: technicalOwner
-    },
-    internalDb
-  );
   const internalSubmitted = await submitSolutionDesignReviewForm(
     {
       projectId: 100,
       nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
-      payload: reviewFormPayload({ reviewConclusion: '内部评审第二版' }),
+      payload: reviewFormPayload({ reviewConclusion: '内部评审下载规则' }),
       user: technicalOwner
     },
     internalDb
@@ -5169,7 +5406,8 @@ test('review generated file download accepts generated form revision above node 
   const internalNode = internalDb.connection.nodes.find(
     (node) => node.node_key === SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW
   );
-  assert.equal(internalSubmitted.form.revision, 2);
+  assert.equal(internalSubmitted.autoSubmit.submitted, true);
+  internalForm.revision = 2;
   assert.equal(internalForm.revision, 2);
   assert.equal(internalNode.current_revision, 1);
   const internalDownload = await getSolutionDesignReviewGeneratedFileDownload(
@@ -5202,20 +5440,11 @@ test('review generated file download accepts generated form revision above node 
   const customerUploadStorage = fakeUploadStorage();
   await activateCustomerReviewNode(customerDb, customerUploadStorage);
   const customerTechnicalOwner = authUser(customerDb.connection.users.get(12));
-  await submitSolutionDesignReviewForm(
-    {
-      projectId: 100,
-      nodeKey: SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
-      payload: reviewFormPayload({ reviewConclusion: '客户评审第一版' }),
-      user: customerTechnicalOwner
-    },
-    customerDb
-  );
   const customerSubmitted = await submitSolutionDesignReviewForm(
     {
       projectId: 100,
       nodeKey: SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
-      payload: reviewFormPayload({ reviewConclusion: '客户评审第二版' }),
+      payload: reviewFormPayload({ reviewConclusion: '客户评审下载规则' }),
       user: customerTechnicalOwner
     },
     customerDb
@@ -5224,7 +5453,8 @@ test('review generated file download accepts generated form revision above node 
   const customerNode = customerDb.connection.nodes.find(
     (node) => node.node_key === SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW
   );
-  assert.equal(customerSubmitted.form.revision, 2);
+  assert.equal(customerSubmitted.autoSubmit.submitted, true);
+  customerForm.revision = 2;
   assert.equal(customerForm.revision, 2);
   assert.equal(customerNode.current_revision, 1);
   const customerDownload = await getSolutionDesignReviewGeneratedFileDownload(
@@ -5411,6 +5641,8 @@ test('review form generated file failure blocks review node submission', async (
     db
   );
   assert.equal(submittedForm.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.FAILED);
+  assert.equal(submittedForm.autoSubmit.attempted, false);
+  assert.equal(submittedForm.autoSubmit.submitted, false);
   assert.equal(failingGeneratedStorage.files.size, 0);
   assert.equal(failingGeneratedStorage.cleaned.length, 1);
 
@@ -5444,7 +5676,7 @@ test('internal review node submits for review and RD manager approval activates 
   const rdManager = authUser(db.connection.users.get(1));
 
   await submitSolutionDesignOutputs(db, storage);
-  await submitSolutionDesignReviewForm(
+  const submittedForm = await submitSolutionDesignReviewForm(
     {
       projectId: 100,
       nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
@@ -5453,23 +5685,14 @@ test('internal review node submits for review and RD manager approval activates 
     },
     db
   );
+  assert.equal(submittedForm.autoSubmit.submitted, true);
   const readyWorkflow = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
-  assert.equal(findWorkflowNode(readyWorkflow, SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW).permissions.canSubmit, true);
-
-  const submitted = await submitSolutionDesignWorkflowNode(
-    {
-      projectId: 100,
-      nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
-      user: technicalOwner
-    },
-    db
-  );
   assert.equal(
-    findWorkflowNode(submitted, SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW).status,
+    findWorkflowNode(readyWorkflow, SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW).status,
     SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW
   );
   assert.equal(
-    findWorkflowNode(submitted, SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW).permissions.canEditReviewForm,
+    findWorkflowNode(readyWorkflow, SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW).permissions.canEditReviewForm,
     false
   );
   const reviewerWorkflow = await getSolutionDesignWorkflow({ projectId: 100, user: rdManager }, db);
@@ -5709,20 +5932,17 @@ test('technical owner can exempt one C07-C14 output and invalid exemption operat
       ),
     (error) => error.code === SOLUTION_DESIGN_ERROR.INVALID_UPLOAD_SLOT
   );
-  await assert.rejects(
-    () =>
-      markSolutionDesignUploadExemption(
-        {
-          projectId: 100,
-          slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.LAYOUT_DIAGRAM,
-          payload: { exemptionReason: '' },
-          user: technicalOwner
-        },
-        db
-      ),
-    (error) => error.code === SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE && error.statusCode === 400
+  const emptyReasonUploads = await markSolutionDesignUploadExemption(
+    {
+      projectId: 100,
+      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.LAYOUT_DIAGRAM,
+      payload: { exemptionReason: '' },
+      user: technicalOwner
+    },
+    db
   );
-  assert.equal(db.connection.operationLogs.length, logCountBeforeRejected);
+  assert.equal(findUploadSlot(emptyReasonUploads, SOLUTION_DESIGN_UPLOAD_SLOT_KEY.LAYOUT_DIAGRAM).exemption.reason, null);
+  assert.equal(db.connection.operationLogs.length, logCountBeforeRejected + 1);
 });
 
 test('uploaded or exempted C07-C14 outputs can submit and derive complete without changing document count', async () => {
@@ -5933,7 +6153,7 @@ test('customer review node submits for review and RD manager approval activates 
   const rdManager = authUser(db.connection.users.get(1));
 
   await activateCustomerReviewNode(db, storage);
-  await submitSolutionDesignReviewForm(
+  const submittedForm = await submitSolutionDesignReviewForm(
     {
       projectId: 100,
       nodeKey: SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
@@ -5942,14 +6162,8 @@ test('customer review node submits for review and RD manager approval activates 
     },
     db
   );
-  const submitted = await submitSolutionDesignWorkflowNode(
-    {
-      projectId: 100,
-      nodeKey: SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
-      user: technicalOwner
-    },
-    db
-  );
+  assert.equal(submittedForm.autoSubmit.submitted, true);
+  const submitted = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
   assert.equal(
     findWorkflowNode(submitted, SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW).status,
     SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW
@@ -5985,7 +6199,7 @@ test('customer review return forces design resubmission and prevents bypassing p
   const rdManager = authUser(db.connection.users.get(1));
 
   await activateCustomerReviewNode(db, storage);
-  await submitSolutionDesignReviewForm(
+  const submittedForm = await submitSolutionDesignReviewForm(
     {
       projectId: 100,
       nodeKey: SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
@@ -5994,14 +6208,7 @@ test('customer review return forces design resubmission and prevents bypassing p
     },
     db
   );
-  await submitSolutionDesignWorkflowNode(
-    {
-      projectId: 100,
-      nodeKey: SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW,
-      user: technicalOwner
-    },
-    db
-  );
+  assert.equal(submittedForm.autoSubmit.submitted, true);
 
   const returned = await returnSolutionDesignWorkflowNode(
     {
@@ -8291,55 +8498,6 @@ test('navigation process nodes respect current, future, and completed stage boun
   assert.notEqual(currentProjectStartNoticeNode.status, NAVIGATION_STATUS.COMPLETED);
   assert.equal(completedSolutionStage.children[0].status, NAVIGATION_STATUS.COMPLETED);
   assert.equal(futureProcessNode.status, NAVIGATION_STATUS.PENDING);
-});
-
-test('navigation keeps initiation notice pending until every preceding node completes', () => {
-  const buildWorkspace = (approvalStatus) => ({
-    project: {
-      projectName: '立项通知顺序门禁项目',
-      projectCode: 'NAV-INITIATION-GATE',
-      projectMode: null,
-      status: 'normal'
-    },
-    currentStage: {
-      stageKey: 'initiation',
-      stageOrder: 1,
-      stageName: '立项阶段'
-    },
-    stages: [
-      {
-        stageId: 101,
-        stageOrder: 1,
-        stageKey: 'initiation',
-        stageName: '立项阶段',
-        stageStatus: 'current',
-        isCurrent: true,
-        configured: true,
-        nodes: [
-          { nodeKey: 'market_research', nodeName: '项目市场调研', nodeStatus: 'completed', outputs: [] },
-          { nodeKey: 'initiation_approval', nodeName: '项目立项审批', nodeStatus: approvalStatus, outputs: [] },
-          { nodeKey: 'initiation_notice', nodeName: '项目立项通知', nodeStatus: 'waiting_submission', outputs: [] }
-        ]
-      }
-    ]
-  });
-
-  const beforeApproval = buildProjectNavigationFromWorkspace(100, buildWorkspace('in_progress'));
-  const beforeApprovalNodes = beforeApproval.children[0].children;
-  assert.equal(
-    beforeApprovalNodes.find((node) => node.nodeKey === 'initiation_approval').status,
-    NAVIGATION_STATUS.PROCESSING
-  );
-  assert.equal(
-    beforeApprovalNodes.find((node) => node.nodeKey === 'initiation_notice').status,
-    NAVIGATION_STATUS.PENDING
-  );
-
-  const afterApproval = buildProjectNavigationFromWorkspace(100, buildWorkspace('completed'));
-  assert.equal(
-    afterApproval.children[0].children.find((node) => node.nodeKey === 'initiation_notice').status,
-    NAVIGATION_STATUS.PROCESSING
-  );
 });
 
 test('navigation uses solution design workflow nodes before solution stage starts', () => {

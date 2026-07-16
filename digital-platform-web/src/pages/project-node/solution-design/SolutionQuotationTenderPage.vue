@@ -5,12 +5,13 @@
       type="success" show-icon :closable="false" />
 
     <SolutionUploadSlots v-if="flow?.branchType === 'tender'" :slots="tenderSlots"
-      :is-pending="isPending" @upload="handleUpload" @download="downloadUpload" />
+      :is-pending="isPending" :exemption-reasons="exemptionReasons"
+      @upload="handleUpload" @download="downloadUpload" @mark-exemption="markUploadExemption"
+      @cancel-exemption="cancelUploadExemption"
+      @update-exemption-reason="({ slotKey, value }) => exemptionReasons[slotKey] = value" />
 
     <section v-if="flow" class="quotation-section">
-      <div class="slot-heading">
-        <el-tag>{{ flow.branchStatus || '待选择' }}</el-tag>
-      </div>
+      <div class="slot-heading"><h4>报价/投标</h4><el-tag>{{ flow.branchStatus || '待选择' }}</el-tag></div>
       <div class="action-row">
         <el-button v-if="flow.permissions?.canSelectBranch" type="primary" :loading="isPending('branch:quotation')"
           @click="selectBranch('quotation')">选择报价流程</el-button>
@@ -22,26 +23,20 @@
           :loading="isPending('submit:quotation_or_tender')" @click="submitNode(nodeKey)">提交投标审批</el-button>
         <el-button v-if="flow.permissions?.canAcceptQuotation" type="success" :loading="isPending('quotation:accept')"
           @click="acceptQuotation">客户接受报价</el-button>
+        <el-button v-if="flow.permissions?.canRejectQuotationAndEndProject" type="danger" plain
+          :loading="isPending('quotation:reject:end_project')" @click="rejectQuotation('end_project')">结束项目</el-button>
+        <el-button v-if="flow.permissions?.canRejectQuotationToRdCost" type="warning" plain
+          :loading="isPending('quotation:reject:return_to_rd_cost')"
+          @click="rejectQuotation('return_to_rd_cost')">审批不通过</el-button>
       </div>
     </section>
 
-    <SolutionQuotationForm v-if="flow?.branchType === 'quotation'"
-      :dto="quotation.dto.value" :show-form-content="canViewFormContent"
-      :show-generated-file="true"
+    <SolutionQuotationForm v-if="flow?.branchType === 'quotation'" :dto="quotation.dto.value"
+      :show-form-content="canViewFormContent"
       :form-data="quotation.formData" :loading="quotation.loading.value"
       :pending-action="quotation.pendingAction.value" :error-message="quotation.errorMessage.value"
       @save="quotation.save" @submit="quotation.submit" @download="quotation.download"
       @add-item="quotation.addItem" @remove-item="quotation.removeItem" />
-
-    <el-form v-if="flow?.permissions?.canRejectQuotationToRdCost || flow?.permissions?.canRejectQuotationAndEndProject"
-      label-position="top">
-      <el-form-item label="客户不接受原因"><el-input v-model="quotationReturnReason" type="textarea" :rows="3" /></el-form-item>
-      <el-form-item label="处理方式"><el-select v-model="quotationRejectAction"><el-option label="退回研发成本估算"
-        value="return_to_rd_cost" /><el-option label="结束项目" value="end_project" /></el-select></el-form-item>
-      <el-button :type="quotationRejectAction === 'end_project' ? 'danger' : 'warning'" plain
-        :loading="isPending(`quotation:reject:${quotationRejectAction}`)"
-        @click="rejectQuotation">客户不接受并处理</el-button>
-    </el-form>
 
     <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending"
       :return-reason="returnReasons[nodeKey] || ''" @update:return-reason="returnReasons[nodeKey] = $event"
@@ -63,20 +58,19 @@ const emit = defineEmits(['business-state-changed']);
 const props = defineProps(solutionDesignNodePageProps);
 const page = useSolutionDesignNodePage(props, emit);
 const {
-  context, workflow, nodeKey, currentNode, slots, returnReasons, quotationReturnReason,
-  quotationRejectAction, isPending, handleUpload, downloadUpload, submitNode, approveNode,
+  context, workflow, nodeKey, currentNode, slots, returnReasons, exemptionReasons,
+  isPending, handleUpload, downloadUpload, markUploadExemption, cancelUploadExemption, submitNode, approveNode,
   returnNode, selectBranch, submitQuotation, acceptQuotation, rejectQuotation
 } = page;
 const flow = computed(() => workflow.value?.quotationTender || null);
 const tenderSlotKeys = new Set(['tender_business_file', 'tender_technical_file']);
-// The finance approval fixes the branch; expose only the two documents required by the tender path.
 const tenderSlots = computed(() => slots.value.filter((slot) => tenderSlotKeys.has(slot.slotKey)));
+const canViewFormContent = computed(() => isSolutionDesignFormFiller(workflow.value, 'business_owner', props.currentUser));
 const quotation = useSolutionQuotationForm({
   projectId: computed(() => props.projectId),
   authToken: computed(() => props.authToken),
   notifyChanged: page.notifyChanged
 });
-const canViewFormContent = computed(() => isSolutionDesignFormFiller(workflow.value, 'business_owner', props.currentUser));
 
 watch(() => flow.value?.branchType, (branchType) => {
   if (branchType === 'quotation') quotation.load();

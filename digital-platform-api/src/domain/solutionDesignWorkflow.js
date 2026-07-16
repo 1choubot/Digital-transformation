@@ -487,7 +487,7 @@ export const SOLUTION_DESIGN_REVIEW_FORM_DEFINITIONS = [
     formName: '方案评审记录表（内部方案评审）',
     templateName: '方案评审记录表-模板.xlsx',
     generatedFileNamePrefix: '方案评审记录表-内部方案评审',
-    requiredFieldKeys: Object.freeze(['meetingDate', 'actionItems', 'reviewConclusion']),
+    requiredFieldKeys: Object.freeze(['meetingDate', 'reviewConclusion']),
     templateMappings: [
       { target: 'A2', value: '项目名称', label: '项目名称标签' },
       { target: 'B2', source: 'project.projectName', label: '项目名称', required: true },
@@ -510,7 +510,12 @@ export const SOLUTION_DESIGN_REVIEW_FORM_DEFINITIONS = [
       { target: 'A7', value: '甲方参与人员', label: '甲方参与人员标签' },
       { target: 'B7', source: 'form.customerParticipants', label: '甲方参与人员' },
       { target: 'A9', value: '项目需求分析', label: '项目需求分析标签' },
-      { target: 'B9', source: 'form.customerRequirements', label: '项目需求分析' },
+      {
+        source: 'form.customerRequirements',
+        label: '项目需求分析',
+        repeatRows: { column: 'B', startRow: 9, endRow: 11 },
+        textFont: '宋体'
+      },
       { target: 'A12', value: '项目目标描述', label: '项目目标描述标签' },
       {
         source: 'form.projectTargetDescription',
@@ -552,7 +557,7 @@ export const SOLUTION_DESIGN_REVIEW_FORM_DEFINITIONS = [
     formName: '方案评审记录表（客户方案评审）',
     templateName: '方案评审记录表-模板.xlsx',
     generatedFileNamePrefix: '方案评审记录表-客户方案评审',
-    requiredFieldKeys: Object.freeze(['meetingDate', 'actionItems', 'reviewConclusion']),
+    requiredFieldKeys: Object.freeze(['meetingDate', 'reviewConclusion']),
     templateMappings: [
       { target: 'A2', value: '项目名称', label: '项目名称标签' },
       { target: 'B2', source: 'project.projectName', label: '项目名称', required: true },
@@ -575,7 +580,12 @@ export const SOLUTION_DESIGN_REVIEW_FORM_DEFINITIONS = [
       { target: 'A7', value: '甲方参与人员', label: '甲方参与人员标签' },
       { target: 'B7', source: 'form.customerParticipants', label: '甲方参与人员' },
       { target: 'A9', value: '项目需求分析', label: '项目需求分析标签' },
-      { target: 'B9', source: 'form.customerRequirements', label: '项目需求分析' },
+      {
+        source: 'form.customerRequirements',
+        label: '项目需求分析',
+        repeatRows: { column: 'B', startRow: 9, endRow: 11 },
+        textFont: '宋体'
+      },
       { target: 'A12', value: '项目目标描述', label: '项目目标描述标签' },
       {
         source: 'form.projectTargetDescription',

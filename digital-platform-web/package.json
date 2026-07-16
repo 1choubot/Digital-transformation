@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "vite build"
+    "test:implementation-plan": "node --test test/implementationPlanItems.test.js",
+    "test:quotation-amounts": "node --test test/quotationAmounts.test.js",
+    "test:flow-navigation": "node --test test/flowNodeNavigation.test.js",
+    "check": "vite build && node --test test/implementationPlanItems.test.js test/quotationAmounts.test.js test/flowNodeNavigation.test.js"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",

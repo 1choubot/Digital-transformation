@@ -1,6 +1,6 @@
 <template>
   <section v-if="showModule" class="solution-actions">
-    <article v-if="node.permissions?.canSubmit" class="solution-action-card">
+    <article v-if="canShowSubmit" class="solution-action-card">
       <header class="solution-action-card__heading">
         <div>
           <strong>节点提交</strong>
@@ -80,7 +80,9 @@ const props = defineProps({
   isPending: { type: Function, required: true },
   returnReason: { type: String, default: '' },
   submitDisabled: Boolean,
-  approveDisabled: Boolean
+  approveDisabled: Boolean,
+  hideSubmit: Boolean,
+  hideWhenEmpty: Boolean
 });
 const emit = defineEmits(['submit', 'approve', 'return', 'update:returnReason']);
 const decision = ref('');
@@ -90,9 +92,9 @@ const approvalResultStatuses = new Set([
   'pending_review', 'pending_general_review', 'approved', 'returned', 'ended', 'skipped'
 ]);
 const showReadOnlyResult = computed(() => approvalResultStatuses.has(props.node.status));
-const showModule = computed(() => props.node.permissions?.canSubmit === true
-  || hasApprovalAction.value
-  || showReadOnlyResult.value);
+const canShowSubmit = computed(() => props.node.permissions?.canSubmit === true && !props.hideSubmit);
+const hasVisibleContent = computed(() => canShowSubmit.value || hasApprovalAction.value || showReadOnlyResult.value);
+const showModule = computed(() => hasVisibleContent.value || !props.hideWhenEmpty);
 const busy = computed(() => props.isPending(`submit:${props.node.nodeKey}`)
   || props.isPending(`approve:${props.node.nodeKey}`)
   || props.isPending(`return:${props.node.nodeKey}`));

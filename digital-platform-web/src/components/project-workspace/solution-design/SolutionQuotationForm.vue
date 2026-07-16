@@ -1,9 +1,8 @@
 <template>
   <section class="solution-section" v-loading="loading">
     <h4 v-if="showFormContent">报价单在线表单</h4>
-    <template v-if="showFormContent">
     <el-alert v-if="errorMessage" :title="errorMessage" type="error" show-icon :closable="false" />
-    <el-form label-position="top" :disabled="!canEdit">
+    <el-form v-if="showFormContent" label-position="top" :disabled="!canEdit">
       <div class="quotation-meta-grid">
         <el-form-item label="收件人"><el-input v-model="formData.recipientName" /></el-form-item>
         <el-form-item label="称谓"><el-select v-model="formData.recipientTitle" clearable><el-option label="先生" value="先生" /><el-option label="女士" value="女士" /></el-select></el-form-item>
@@ -18,19 +17,20 @@
           <el-table-column label="单位" width="100"><template #default="{ row }"><el-input v-model="row.unit" /></template></el-table-column>
           <el-table-column label="数量" width="120"><template #default="{ row }"><el-input v-model="row.quantity" /></template></el-table-column>
           <el-table-column label="单价" width="130"><template #default="{ row }"><el-input v-model="row.unitPrice" /></template></el-table-column>
-          <el-table-column prop="amount" label="金额" width="130" />
+          <el-table-column label="金额" width="130">
+            <template #default="{ row }">{{ lineAmountText(row) }}</template>
+          </el-table-column>
           <el-table-column label="备注" min-width="160"><template #default="{ row }"><el-input v-model="row.remark" /></template></el-table-column>
           <el-table-column v-if="canEdit" label="操作" width="80"><template #default="{ $index }"><el-button link type="danger" :disabled="formData.items.length <= 1" @click="removeItem($index)">删除</el-button></template></el-table-column>
         </el-table>
       </div>
       <el-button v-if="canEdit" plain @click="addItem">增加明细</el-button>
     </el-form>
-    <el-descriptions :column="1" border class="quotation-total">
-      <el-descriptions-item label="合计">{{ formData.totalAmount }}</el-descriptions-item>
-      <el-descriptions-item label="大写">{{ formData.totalAmountUppercase }}</el-descriptions-item>
+    <el-descriptions v-if="showFormContent" :column="1" border class="quotation-total">
+      <el-descriptions-item label="总金额预览">¥{{ totalAmountPreview }}</el-descriptions-item>
+      <el-descriptions-item label="大写预览">{{ totalAmountUppercasePreview }}</el-descriptions-item>
     </el-descriptions>
-    </template>
-    <SolutionGeneratedFile v-if="showGeneratedFile && dto?.form?.generatedFile" :generated-file="dto.form.generatedFile"
+    <SolutionGeneratedFile v-if="dto?.form?.generatedFile" :generated-file="dto.form.generatedFile"
       :pending="pendingAction === 'download'" @download="$emit('download')" />
     <div v-if="showFormContent" class="action-row">
       <el-button v-if="canEdit" :loading="pendingAction === 'save'" @click="$emit('save')">保存草稿</el-button>
@@ -42,19 +42,24 @@
 <script setup>
 import { computed } from 'vue';
 import SolutionGeneratedFile from './SolutionGeneratedFile.vue';
+import {
+  calculateLineAmount,
+  calculateTotalAmount,
+  formatRmbUppercaseFromAmount
+} from '../../../composables/project-stage/solution-design/quotationAmounts.js';
 
 const props = defineProps({
   dto: { type: Object, default: null }, formData: { type: Object, required: true },
-  loading: Boolean,
-  pendingAction: { type: String, default: '' },
-  errorMessage: { type: String, default: '' },
-  showFormContent: { type: Boolean, default: true },
-  showGeneratedFile: { type: Boolean, default: true }
+  loading: Boolean, pendingAction: { type: String, default: '' }, errorMessage: { type: String, default: '' },
+  showFormContent: { type: Boolean, default: true }
 });
 const emit = defineEmits(['save', 'submit', 'download', 'add-item', 'remove-item']);
 const canEdit = computed(() => props.dto?.permissions?.canEditQuotationForm === true);
 const canSubmit = computed(() => props.dto?.permissions?.canSubmitQuotationForm === true);
+const totalAmountPreview = computed(() => calculateTotalAmount(props.formData.items));
+const totalAmountUppercasePreview = computed(() => formatRmbUppercaseFromAmount(totalAmountPreview.value));
 
 const addItem = () => emit('add-item');
 const removeItem = (index) => emit('remove-item', index);
+const lineAmountText = (row) => calculateLineAmount(row?.quantity, row?.unitPrice) || '';
 </script>

@@ -1,4 +1,5 @@
 import { reactive, ref, toValue } from 'vue';
+import { ElMessage } from 'element-plus';
 import {
   deleteStageDocumentOnlineFormImage,
   downloadSolutionDesignAnalysisGeneratedFile,
@@ -18,6 +19,30 @@ function syncObject(target, source = {}) {
   for (const [key, value] of Object.entries(source || {})) {
     target[key] = Array.isArray(value) ? [...value] : value ?? '';
   }
+}
+
+function showSubmitResult(dto) {
+  const generatedFile = dto?.form?.generatedFile;
+  if (generatedFile?.status === 'failed') {
+    ElMessage.error(generatedFile.errorMessage || '项目方案分析表生成失败。');
+    return;
+  }
+
+  const autoSubmit = dto?.autoSubmit;
+  if (autoSubmit?.submitted) {
+    ElMessage.success('项目方案分析表已提交并生成文件，节点已自动进入待审批。');
+    return;
+  }
+
+  if (autoSubmit?.attempted) {
+    const blockingText = Array.isArray(autoSubmit.blockingReasons) && autoSubmit.blockingReasons.length
+      ? `仍缺：${autoSubmit.blockingReasons.join('、')}`
+      : autoSubmit.message || '仍有资料未满足提交门禁。';
+    ElMessage.warning(`项目方案分析表已提交并生成文件，节点暂未提交。${blockingText}`);
+    return;
+  }
+
+  ElMessage.success('项目方案分析表已提交并生成文件。');
 }
 
 export function useSolutionAnalysisForm({ projectId, authToken, runAction, localMessage, localError }) {
@@ -81,8 +106,17 @@ export function useSolutionAnalysisForm({ projectId, authToken, runAction, local
     if (dto) { analysisFormDto.value = dto; syncObject(analysisFormData, dto.form?.formData); }
   }
   async function submitAnalysisForm() {
-    const dto = await runAction('analysis:submit', () => submitSolutionDesignAnalysisForm(id(), { ...analysisFormData }, token()), '项目方案分析表已提交并触发模板生成。');
-    if (dto) { analysisFormDto.value = dto; syncObject(analysisFormData, dto.form?.formData); }
+    const dto = await runAction(
+      'analysis:submit',
+      () => submitSolutionDesignAnalysisForm(id(), { ...analysisFormData }, token()),
+      null
+    );
+    if (dto) {
+      analysisFormDto.value = dto;
+      syncObject(analysisFormData, dto.form?.formData);
+      showSubmitResult(dto);
+    }
+    return dto;
   }
   async function downloadAnalysisGeneratedFile() {
     await runAction('analysis:download', async () => {

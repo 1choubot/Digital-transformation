@@ -1,7 +1,10 @@
 <template>
   <SolutionDesignNodeLayout :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
     :error-message="context.solutionDesignErrorMessage">
-    <SolutionUploadSlots :slots="slots" :is-pending="isPending" @upload="handleUpload" @download="downloadUpload" />
+    <SolutionUploadSlots :slots="slots" :is-pending="isPending" :exemption-reasons="exemptionReasons"
+      @upload="handleUpload" @download="downloadUpload" @mark-exemption="markUploadExemption"
+      @cancel-exemption="cancelUploadExemption"
+      @update-exemption-reason="({ slotKey, value }) => exemptionReasons[slotKey] = value" />
 
     <section v-if="requiresBranchSelection" class="solution-section">
       <h4>审批通过后流程</h4>
@@ -31,8 +34,9 @@ const emit = defineEmits(['business-state-changed']);
 const props = defineProps(solutionDesignNodePageProps);
 const branchType = ref('');
 const {
-  context, workflow, nodeKey, currentNode, slots, returnReasons, isPending,
-  handleUpload, downloadUpload, submitNode, approveNode, returnNode
+  context, workflow, nodeKey, currentNode, slots, returnReasons, exemptionReasons, isPending,
+  handleUpload, downloadUpload, markUploadExemption, cancelUploadExemption,
+  submitNode, approveNode, returnNode
 } = useSolutionDesignNodePage(props, emit);
 
 const requiresBranchSelection = computed(() => (

@@ -179,9 +179,18 @@ function buildStage(projectId, stage) {
     ? normalizeSolutionDesignStageNodes(stage.nodes || [])
     : stage.nodes || [];
   const firstWaitingSubmissionIndex = stageNodes.findIndex((node) => node.nodeStatus === 'waiting_submission');
+  const firstWaitingSubmissionIsReachable =
+    firstWaitingSubmissionIndex >= 0 &&
+    stageNodes
+      .slice(0, firstWaitingSubmissionIndex)
+      .every((node) => ['completed', 'not_applicable'].includes(node.nodeStatus));
   const children = stageNodes.map((node, index) =>
     buildNode(projectId, stage, node, {
-      isFirstWaitingSubmission: index === firstWaitingSubmissionIndex
+      // A waiting node becomes active only after every preceding node in the
+      // same stage has completed. This prevents downstream forms from showing
+      // as processing while an earlier approval is still underway.
+      isFirstWaitingSubmission:
+        firstWaitingSubmissionIsReachable && index === firstWaitingSubmissionIndex
     })
   );
   return {

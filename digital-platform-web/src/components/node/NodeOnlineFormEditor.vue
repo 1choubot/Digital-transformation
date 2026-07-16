@@ -1,6 +1,6 @@
 <template>
   <section v-if="form" ref="editorRoot" class="online-form-editor" aria-label="在线表单动作区">
-    <div v-if="showFormContent" class="project-workspace__detail-heading">
+    <div class="project-workspace__detail-heading">
         <h3>{{ form.documentName }}</h3>
     </div>
 

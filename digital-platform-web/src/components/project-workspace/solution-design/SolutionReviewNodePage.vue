@@ -1,5 +1,5 @@
 <template>
-  <GeneratedFormFileCard v-if="canViewFormContent || canReviewForm" button-text="查看方案评审记录表"
+  <GeneratedFormFileCard button-text="查看方案评审记录表"
     :generated-file="activeDto?.form?.generatedFile"
     :pending="isPending(`review:${nodeKey}:download`)" @download="downloadReviewGeneratedFile(nodeKey)" />
   <SolutionDesignNodeLayout :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
@@ -19,7 +19,8 @@
         </el-button>
       </div>
     </section>
-    <SolutionNodeActions v-if="currentNode && (canViewFormContent || canReviewForm)" :node="currentNode" :is-pending="isPending"
+    <SolutionNodeActions v-if="showNodeActions" :node="currentNode" :is-pending="isPending"
+      :show-read-only-result="canReviewForm"
       :return-reason="returnReasons[nodeKey] || ''" @update:return-reason="returnReasons[nodeKey] = $event"
       @submit="submitNode(nodeKey)" @approve="approveNode(nodeKey)" @return="returnNode(nodeKey)" />
   </SolutionDesignNodeLayout>
@@ -35,6 +36,7 @@ import GeneratedFormFileCard from '../../GeneratedFormFileCard.vue';
 import { solutionDesignNodePageProps, useSolutionDesignNodePage } from '../../../composables/project-stage/solution-design/useSolutionDesignNodePage.js';
 import { useSolutionReviewForm } from '../../../composables/project-stage/solution-design/useSolutionReviewForm.js';
 import { getMissingRequiredFields } from '../../../utils/formValidation.js';
+import { isSolutionDesignFormFiller, isSolutionDesignFormReviewer } from '../../../utils/onlineFormVisibility.js';
 
 const fields = [
   { key: 'meetingDate', label: '评审时间', type: 'date', required: true },
@@ -71,10 +73,14 @@ const {
   updateReviewFormField, saveReviewForm, submitReviewForm, downloadReviewGeneratedFile
 } = review;
 const activeDto = computed(() => review.activeReviewFormDto(workflow.value, currentNode.value));
-const canViewFormContent = computed(() => activeDto.value?.permissions?.canEditReviewForm === true
-  || activeDto.value?.permissions?.canSubmitReviewForm === true);
-const canReviewForm = computed(() => activeDto.value?.permissions?.canApprove === true
-  || activeDto.value?.permissions?.canReturn === true);
+const canViewFormContent = computed(() => isSolutionDesignFormFiller(workflow.value, 'technical_owner', props.currentUser));
+const canReviewForm = computed(() => isSolutionDesignFormReviewer(nodeKey.value, props.currentUser));
+const showNodeActions = computed(() => Boolean(currentNode.value) && (
+  currentNode.value?.permissions?.canSubmit === true
+  || currentNode.value?.permissions?.canApprove === true
+  || currentNode.value?.permissions?.canReturn === true
+  || canReviewForm.value
+));
 const reviewFormRoot = ref(null);
 const validationAttempted = ref(false);
 const missingRequiredFields = computed(() => getMissingRequiredFields(fields, reviewFormData));

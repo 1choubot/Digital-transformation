@@ -1,8 +1,7 @@
 <template>
   <SolutionDesignNodeLayout :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
     :error-message="context.solutionDesignErrorMessage" :message="localMessage" :local-error="localError">
-    <GeneratedFormFileCard v-if="canViewFormContent || canReviewForm"
-      button-text="查看项目方案分析表" :generated-file="analysisFormDto?.form?.generatedFile"
+    <GeneratedFormFileCard button-text="查看项目方案分析表" :generated-file="analysisFormDto?.form?.generatedFile"
       :pending="isPending('analysis:download')" @download="downloadAnalysisGeneratedFile" />
     <SolutionUploadSlots :slots="slots" :is-pending="isPending" @upload="handleUpload" @download="downloadUpload" />
 
@@ -75,7 +74,8 @@
       </div>
     </section>
 
-    <SolutionNodeActions v-if="currentNode && (canViewFormContent || canReviewForm)" :node="currentNode" :is-pending="isPending"
+    <SolutionNodeActions v-if="showNodeActions" :node="currentNode" :is-pending="isPending"
+      :show-read-only-result="canReviewForm"
       :submit-disabled="generatedBlocksSubmit" :return-reason="returnReasons[nodeKey] || ''"
       @update:return-reason="returnReasons[nodeKey] = $event" @submit="submitNode(nodeKey)"
       @approve="approveNode(nodeKey)" @return="returnNode(nodeKey)" />
@@ -97,6 +97,7 @@ import {
 } from '../../../composables/project-stage/solution-design/useSolutionDesignNodePage.js';
 import { useSolutionAnalysisForm } from '../../../composables/project-stage/solution-design/useSolutionAnalysisForm.js';
 import { getMissingRequiredFields } from '../../../utils/formValidation.js';
+import { isSolutionDesignFormFiller, isSolutionDesignFormReviewer } from '../../../utils/onlineFormVisibility.js';
 
 const emit = defineEmits(['business-state-changed']);
 const props = defineProps(solutionDesignNodePageProps);
@@ -161,10 +162,14 @@ const generatedBlocksSubmit = computed(() => {
   const file = analysisFormDto.value?.form?.generatedFile;
   return Boolean(file) && (file.status !== 'generated' || file.canDownload !== true);
 });
-const canViewFormContent = computed(() => analysisFormDto.value?.permissions?.canEditForm === true
-  || analysisFormDto.value?.permissions?.canSubmitForm === true);
-const canReviewForm = computed(() => analysisFormDto.value?.permissions?.canApprove === true
-  || analysisFormDto.value?.permissions?.canReturn === true);
+const canViewFormContent = computed(() => isSolutionDesignFormFiller(workflow.value, 'technical_owner', props.currentUser));
+const canReviewForm = computed(() => isSolutionDesignFormReviewer(nodeKey.value, props.currentUser));
+const showNodeActions = computed(() => Boolean(currentNode.value) && (
+  currentNode.value?.permissions?.canSubmit === true
+  || currentNode.value?.permissions?.canApprove === true
+  || currentNode.value?.permissions?.canReturn === true
+  || canReviewForm.value
+));
 
 watch(workflow, (value) => {
   syncFromWorkflow(value, true);

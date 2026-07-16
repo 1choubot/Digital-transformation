@@ -1,7 +1,7 @@
 <template>
   <section class="project-workspace__detail project-notice-node-page">
     <NodeOnlineFormEditor
-      v-if="activeForm && canViewFormContent"
+      v-if="activeForm"
       :form="activeForm"
       :node-status="node?.nodeStatus || ''"
       :blocking-reasons="node?.blockingReasons || []"
@@ -12,6 +12,7 @@
       :generated-file="generatedFile"
       :download-pending="generatedFileDownloadPending"
       download-button-text="查看项目立项通知"
+      :show-form-content="canViewFormContent"
       :image-state="context.onlineFormImageState || emptyObject"
       @save="saveOnlineForm"
       @submit="submitOnlineForm"
@@ -40,6 +41,7 @@
 import { computed } from 'vue';
 import NodeOnlineFormEditor from '../../../components/node/NodeOnlineFormEditor.vue';
 import { useNodeOnlineForm } from '../../../composables/node/useNodeOnlineForm.js';
+import { isInitiationNoticeFormFiller } from '../../../utils/onlineFormVisibility.js';
 
 const emit = defineEmits(['business-state-changed']);
 
@@ -100,10 +102,5 @@ const {
   documentCode: '1.3'
 });
 
-const canViewFormContent = computed(() => {
-  const permissions = activeForm.value?.permissions || {};
-  return String(output.value?.responsibleUserId || '') === String(props.currentUser?.id || '')
-    || permissions.canEdit === true
-    || permissions.canSubmit === true;
-});
+const canViewFormContent = computed(() => isInitiationNoticeFormFiller(props.currentUser));
 </script>

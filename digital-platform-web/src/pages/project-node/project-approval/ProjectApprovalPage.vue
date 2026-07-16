@@ -1,7 +1,7 @@
 <template>
   <section class="project-workspace__detail project-approval-node-page">
     <NodeOnlineFormEditor
-      v-if="activeForm && (canViewFormContent || canReviewForm)"
+      v-if="activeForm"
       :form="activeForm"
       :node-status="node?.nodeStatus || ''"
       :blocking-reasons="node?.blockingReasons || []"
@@ -12,7 +12,7 @@
       :generated-file="generatedFile"
       :download-pending="generatedFileDownloadPending"
       download-button-text="查看项目立项审批表"
-      :show-form-content="canViewFormContent || canReviewForm"
+      :show-form-content="canViewFormContent || isApprovalViewer"
       :image-state="context.onlineFormImageState || emptyObject"
       :show-review-opinions="!hasActionableEvaluationNode"
       @save="saveOnlineForm"
@@ -245,6 +245,33 @@
       </div>
     </section>
 
+    <section
+      v-if="completedReviewNodesForCurrentUser.length"
+      class="initiation-review-action-panel"
+      aria-label="已完成的项目立项审批结果"
+    >
+      <div class="initiation-review-nodes">
+        <article
+          v-for="reviewNode in completedReviewNodesForCurrentUser"
+          :key="`completed-${reviewNode.nodeKey}`"
+          class="initiation-review-node"
+        >
+          <div class="initiation-review-node__main">
+            <div class="initiation-review-node__heading">
+              <strong>{{ reviewNode.nodeName || formatReviewNodeName(reviewNode.nodeKey) }}</strong>
+              <small>审批结果（只读）</small>
+            </div>
+            <el-tag :type="reviewNodeTagType(reviewNode.nodeStatus)">
+              {{ formatReviewNodeStatus(reviewNode.nodeStatus) }}
+            </el-tag>
+          </div>
+          <p v-if="reviewNode.comment">审批意见：{{ reviewNode.comment }}</p>
+          <p v-if="reviewNode.returnReason">退回原因：{{ reviewNode.returnReason }}</p>
+          <small v-if="reviewNode.reviewedAt">处理时间：{{ formatReviewDateTime(reviewNode.reviewedAt) }}</small>
+        </article>
+      </div>
+    </section>
+
     <el-empty v-else-if="!approvalReview" description="审批记录尚未生成。" />
   </section>
 </template>
@@ -258,6 +285,10 @@ import {
   normalizeNodeGeneratedFile,
   useNodeOnlineForm
 } from '../../../composables/node/useNodeOnlineForm.js';
+import {
+  isInitiationApprovalFormFiller,
+  isInitiationReviewNodeReviewer
+} from '../../../utils/onlineFormVisibility.js';
 
 const emit = defineEmits(['business-state-changed']);
 
@@ -348,13 +379,13 @@ const marketResearchDownloadPending = computed(() => Boolean(
 const approvalReview = computed(() => approvalDocument.value?.initiationReview || null);
 const approvalReviewNodes = computed(() => approvalReview.value?.nodes || []);
 const actionableReviewNodes = computed(() => approvalReviewNodes.value.filter((reviewNode) => reviewNode.canAct));
-const canReviewForm = computed(() => actionableReviewNodes.value.length > 0);
-const canViewFormContent = computed(() => {
-  const permissions = activeForm.value?.permissions || {};
-  return Boolean(permissions.editablePart)
-    || permissions.canEdit === true
-    || permissions.canSubmit === true;
-});
+const completedReviewNodesForCurrentUser = computed(() => approvalReviewNodes.value.filter((reviewNode) => {
+  return reviewNode.canAct !== true && isInitiationReviewNodeReviewer(reviewNode, props.currentUser);
+}));
+const isApprovalViewer = computed(() => approvalReviewNodes.value.some(
+  (reviewNode) => isInitiationReviewNodeReviewer(reviewNode, props.currentUser)
+));
+const canViewFormContent = computed(() => isInitiationApprovalFormFiller(activeForm.value));
 const hasActionableEvaluationNode = computed(() => actionableReviewNodes.value.some(isEvaluationNode));
 const nodeComments = reactive({});
 const nodeReturnReasons = reactive({});
@@ -427,6 +458,12 @@ function reviewNodeTagType(status) {
 
 function isEvaluationNode(reviewNode) {
   return ['business_review', 'technical_review'].includes(reviewNode?.nodeKey);
+}
+
+function formatReviewDateTime(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('zh-CN', { hour12: false });
 }
 
 function reviewNodeDescription(reviewNode) {

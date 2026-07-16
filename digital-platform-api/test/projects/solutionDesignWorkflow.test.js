@@ -8293,6 +8293,55 @@ test('navigation process nodes respect current, future, and completed stage boun
   assert.equal(futureProcessNode.status, NAVIGATION_STATUS.PENDING);
 });
 
+test('navigation keeps initiation notice pending until every preceding node completes', () => {
+  const buildWorkspace = (approvalStatus) => ({
+    project: {
+      projectName: '立项通知顺序门禁项目',
+      projectCode: 'NAV-INITIATION-GATE',
+      projectMode: null,
+      status: 'normal'
+    },
+    currentStage: {
+      stageKey: 'initiation',
+      stageOrder: 1,
+      stageName: '立项阶段'
+    },
+    stages: [
+      {
+        stageId: 101,
+        stageOrder: 1,
+        stageKey: 'initiation',
+        stageName: '立项阶段',
+        stageStatus: 'current',
+        isCurrent: true,
+        configured: true,
+        nodes: [
+          { nodeKey: 'market_research', nodeName: '项目市场调研', nodeStatus: 'completed', outputs: [] },
+          { nodeKey: 'initiation_approval', nodeName: '项目立项审批', nodeStatus: approvalStatus, outputs: [] },
+          { nodeKey: 'initiation_notice', nodeName: '项目立项通知', nodeStatus: 'waiting_submission', outputs: [] }
+        ]
+      }
+    ]
+  });
+
+  const beforeApproval = buildProjectNavigationFromWorkspace(100, buildWorkspace('in_progress'));
+  const beforeApprovalNodes = beforeApproval.children[0].children;
+  assert.equal(
+    beforeApprovalNodes.find((node) => node.nodeKey === 'initiation_approval').status,
+    NAVIGATION_STATUS.PROCESSING
+  );
+  assert.equal(
+    beforeApprovalNodes.find((node) => node.nodeKey === 'initiation_notice').status,
+    NAVIGATION_STATUS.PENDING
+  );
+
+  const afterApproval = buildProjectNavigationFromWorkspace(100, buildWorkspace('completed'));
+  assert.equal(
+    afterApproval.children[0].children.find((node) => node.nodeKey === 'initiation_notice').status,
+    NAVIGATION_STATUS.PROCESSING
+  );
+});
+
 test('navigation uses solution design workflow nodes before solution stage starts', () => {
   const navigation = buildProjectNavigationFromWorkspace(100, {
     project: {

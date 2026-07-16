@@ -7,6 +7,33 @@ function isSameUserId(left, right) {
   return Boolean(left) && Boolean(right) && String(left) === String(right);
 }
 
+const REWORK_NODE_STATUSES = new Set([
+  'returned',
+  'returned_for_rework',
+  'blocked_by_rework',
+  'returned_blocked_by_rework',
+  'invalidated'
+]);
+
+const HIDDEN_NODE_STATUSES = new Set([
+  'submitted',
+  'pending',
+  'pending_review',
+  'pending_general_review',
+  'approved',
+  'completed',
+  'ended',
+  'skipped'
+]);
+
+// Online forms disappear after submission and only return when the workflow
+// explicitly reopens the node for rework. Editing remains permission-driven.
+export function isOnlineFormContentVisible({ nodeStatus = '', formStatus = '' } = {}) {
+  if (REWORK_NODE_STATUSES.has(nodeStatus)) return true;
+  if (formStatus === 'submitted') return false;
+  return !HIDDEN_NODE_STATUSES.has(nodeStatus);
+}
+
 export function isStageDocumentFormFiller(output, currentUser) {
   return isSameUserId(output?.responsibleUserId, currentUser?.id);
 }

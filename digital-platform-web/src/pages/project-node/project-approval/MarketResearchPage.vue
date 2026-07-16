@@ -41,7 +41,7 @@
 import { computed } from 'vue';
 import NodeOnlineFormEditor from '../../../components/node/NodeOnlineFormEditor.vue';
 import { useNodeOnlineForm } from '../../../composables/node/useNodeOnlineForm.js';
-import { isStageDocumentFormFiller } from '../../../utils/onlineFormVisibility.js';
+import { isOnlineFormContentVisible, isStageDocumentFormFiller } from '../../../utils/onlineFormVisibility.js';
 
 const emit = defineEmits(['business-state-changed']);
 
@@ -102,5 +102,11 @@ const {
   documentCode: '1.1'
 });
 
-const canViewFormContent = computed(() => isStageDocumentFormFiller(output.value, props.currentUser));
+const canViewFormContent = computed(() =>
+  isStageDocumentFormFiller(output.value, props.currentUser)
+  && isOnlineFormContentVisible({
+    nodeStatus: output.value?.status || props.node?.nodeStatus,
+    formStatus: activeForm.value?.status || output.value?.baseStatus
+  })
+);
 </script>

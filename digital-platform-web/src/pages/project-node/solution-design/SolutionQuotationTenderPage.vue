@@ -60,7 +60,7 @@ import SolutionQuotationForm from '../../../components/project-workspace/solutio
 import SolutionGeneratedFile from '../../../components/project-workspace/solution-design/SolutionGeneratedFile.vue';
 import { solutionDesignNodePageProps, useSolutionDesignNodePage } from '../../../composables/project-stage/solution-design/useSolutionDesignNodePage.js';
 import { useSolutionQuotationForm } from '../../../composables/project-stage/solution-design/useSolutionQuotationForm.js';
-import { isSolutionDesignFormFiller } from '../../../utils/onlineFormVisibility.js';
+import { isOnlineFormContentVisible, isSolutionDesignFormFiller } from '../../../utils/onlineFormVisibility.js';
 
 const emit = defineEmits(['business-state-changed']);
 const props = defineProps(solutionDesignNodePageProps);
@@ -73,7 +73,13 @@ const {
 const flow = computed(() => workflow.value?.quotationTender || null);
 const tenderSlotKeys = new Set(['tender_business_file', 'tender_technical_file']);
 const tenderSlots = computed(() => slots.value.filter((slot) => tenderSlotKeys.has(slot.slotKey)));
-const canViewFormContent = computed(() => isSolutionDesignFormFiller(workflow.value, 'business_owner', props.currentUser));
+const canViewFormContent = computed(() =>
+  isSolutionDesignFormFiller(workflow.value, 'business_owner', props.currentUser)
+  && isOnlineFormContentVisible({
+    nodeStatus: quotation.dto.value?.nodeStatus || currentNode.value?.status,
+    formStatus: quotation.dto.value?.form?.status
+  })
+);
 const quotation = useSolutionQuotationForm({
   projectId: computed(() => props.projectId),
   authToken: computed(() => props.authToken),

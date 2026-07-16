@@ -1,21 +1,5 @@
 <template>
   <section v-if="showModule" class="solution-actions">
-    <article v-if="canShowSubmit" class="solution-action-card">
-      <header class="solution-action-card__heading">
-        <div>
-          <strong>节点提交</strong>
-          <small>完成当前节点资料后提交，进入后续审批。</small>
-        </div>
-        <el-tag type="info">待提交</el-tag>
-      </header>
-      <div class="solution-action-card__footer">
-        <el-button type="primary" :loading="isPending(`submit:${node.nodeKey}`)"
-          :disabled="busy || submitDisabled" @click="$emit('submit')">
-          提交节点
-        </el-button>
-      </div>
-    </article>
-
     <article v-if="hasApprovalAction" class="solution-action-card">
       <header class="solution-action-card__heading">
         <div>
@@ -68,6 +52,13 @@
       <p v-if="node.returnReason">退回原因：{{ node.returnReason }}</p>
       <small v-if="resultTime">处理时间：{{ formatDateTime(resultTime) }}</small>
     </article>
+
+    <div v-if="canShowSubmit" class="solution-node-submit-action">
+      <el-button type="primary" size="large" :loading="isPending(`submit:${node.nodeKey}`)"
+        :disabled="busy || submitDisabled" @click="$emit('submit')">
+        提交节点
+      </el-button>
+    </div>
   </section>
 </template>
 
@@ -179,6 +170,11 @@ async function confirmReturn() {
 .solution-action-card__heading small,
 .solution-approval-result > small {
   color: #667789;
+}
+
+.solution-node-submit-action {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .solution-approval-field-label span {

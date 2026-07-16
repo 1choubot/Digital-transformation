@@ -2564,6 +2564,11 @@ async function insertReviewApprovalLog(executor, {
       returnReason,
       returnToNodeKey: returnReason ? SOLUTION_DESIGN_NODE_KEY.DESIGN : null,
       resubmitScope: returnReason ? SOLUTION_DESIGN_OUTPUT_UPLOAD_SLOT_KEYS : [],
+      affectedNodeKeys: returnReason
+        ? nodeKey === SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW
+          ? [SOLUTION_DESIGN_NODE_KEY.DESIGN, SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW, nodeKey]
+          : [SOLUTION_DESIGN_NODE_KEY.DESIGN, nodeKey]
+        : [],
       resubmitScopeDescription: returnReason ? '方案设计 8 个产出需整体重新提交' : null
     }
   });
@@ -2647,7 +2652,8 @@ async function insertCostApprovalLog(executor, {
   summary,
   returnReason = null,
   returnToNodeKey = null,
-  resubmitScope = []
+  resubmitScope = [],
+  affectedNodeKeys = []
 }) {
   await insertOperationLog(executor, {
     projectId,
@@ -2663,6 +2669,7 @@ async function insertCostApprovalLog(executor, {
       returnReason,
       returnToNodeKey,
       resubmitScope,
+      affectedNodeKeys,
       confidentialFileDetailsFiltered: nodeKey === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST
     }
   });
@@ -4573,9 +4580,6 @@ async function returnFinanceCostToRdCost(executor, { projectId, returnReason }) 
   ];
 
   for (const costNodeKey of nodeKeys) {
-    const returnedStatus = costNodeKey === SOLUTION_DESIGN_NODE_KEY.RD_COST
-      ? SOLUTION_DESIGN_NODE_STATUS.RETURNED
-      : SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED;
     const nextRevision = await getNextCostNodeRevisionAfterReturn(executor, projectId, costNodeKey);
     const [updateResult] = await executor.execute(
       `UPDATE project_solution_design_nodes
@@ -4588,7 +4592,7 @@ async function returnFinanceCostToRdCost(executor, { projectId, returnReason }) 
         AND node_key = ?
         AND status IN (?, ?, ?, ?)`,
       [
-        returnedStatus,
+        SOLUTION_DESIGN_NODE_STATUS.RETURNED,
         returnReason,
         nextRevision,
         projectId,
@@ -5458,7 +5462,14 @@ export async function processSolutionDesignQuotationResult({ projectId, payload,
           quotationRejectedAction: normalized.action,
           returnReason: normalized.returnReason,
           returnToNodeKey: SOLUTION_DESIGN_NODE_KEY.RD_COST,
-          resubmitScope: SOLUTION_DESIGN_COST_UPLOAD_SLOT_KEYS
+          resubmitScope: SOLUTION_DESIGN_COST_UPLOAD_SLOT_KEYS,
+          affectedNodeKeys: [
+            SOLUTION_DESIGN_NODE_KEY.RD_COST,
+            SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST,
+            SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+            SOLUTION_DESIGN_NODE_KEY.FINANCE_COST,
+            SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER
+          ]
         }
       });
     } else {
@@ -6744,7 +6755,8 @@ export async function returnSolutionDesignWorkflowNode({ projectId, nodeKey, pay
         summary: metadata.summary,
         returnReason,
         returnToNodeKey: node.nodeKey,
-        resubmitScope: [getCostUploadSlotKeyForNode(node.nodeKey)]
+        resubmitScope: [getCostUploadSlotKeyForNode(node.nodeKey)],
+        affectedNodeKeys: [node.nodeKey]
       });
     } else if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.FINANCE_COST) {
       await returnFinanceCostToRdCost(connection, { projectId, returnReason });
@@ -6757,7 +6769,13 @@ export async function returnSolutionDesignWorkflowNode({ projectId, nodeKey, pay
         summary: metadata.summary,
         returnReason,
         returnToNodeKey: SOLUTION_DESIGN_NODE_KEY.RD_COST,
-        resubmitScope: SOLUTION_DESIGN_COST_UPLOAD_SLOT_KEYS
+        resubmitScope: SOLUTION_DESIGN_COST_UPLOAD_SLOT_KEYS,
+        affectedNodeKeys: [
+          SOLUTION_DESIGN_NODE_KEY.RD_COST,
+          SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST,
+          SOLUTION_DESIGN_NODE_KEY.MARKETING_COST,
+          SOLUTION_DESIGN_NODE_KEY.FINANCE_COST
+        ]
       });
     } else if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER) {
       const flowRow = await selectQuotationTenderFlow(connection, projectId, { forUpdate: true });

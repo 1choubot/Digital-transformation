@@ -6957,11 +6957,11 @@ test('general manager return sends cost workflow back to RD and current cost fil
   );
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.RD_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.RD_COST).currentRevision, 2);
-  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).currentRevision, 2);
-  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).currentRevision, 2);
-  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).currentRevision, 2);
   const returnedForTechnicalOwner = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
   assert.equal(
@@ -7799,9 +7799,9 @@ test('rejected quotation can return to RD cost and current cost files can be reu
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER).currentRevision, 2);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.RD_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.RD_COST).currentRevision, 2);
-  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
-  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
-  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
   assert.equal(db.connection.quotationTenderFlow.quotation_rejected_action, SOLUTION_DESIGN_QUOTATION_REJECTED_ACTION.RETURN_TO_RD_COST);
   const returnedForTechnicalOwner = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
   assert.equal(

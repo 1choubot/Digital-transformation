@@ -156,7 +156,7 @@ import {
 } from '../../../composables/project-stage/solution-design/useSolutionDesignNodePage.js';
 import { useSolutionAnalysisForm } from '../../../composables/project-stage/solution-design/useSolutionAnalysisForm.js';
 import { getMissingRequiredFields } from '../../../utils/formValidation.js';
-import { isSolutionDesignFormFiller } from '../../../utils/onlineFormVisibility.js';
+import { isOnlineFormContentVisible, isSolutionDesignFormFiller } from '../../../utils/onlineFormVisibility.js';
 
 const emit = defineEmits(['business-state-changed']);
 const props = defineProps(solutionDesignNodePageProps);
@@ -226,7 +226,13 @@ const generatedBlocksSubmit = computed(() => {
   const file = analysisFormDto.value?.form?.generatedFile;
   return Boolean(file) && (file.status !== 'generated' || file.canDownload !== true);
 });
-const canViewFormContent = computed(() => isSolutionDesignFormFiller(workflow.value, 'technical_owner', props.currentUser));
+const canViewFormContent = computed(() =>
+  isSolutionDesignFormFiller(workflow.value, 'technical_owner', props.currentUser)
+  && isOnlineFormContentVisible({
+    nodeStatus: analysisFormDto.value?.nodeStatus || currentNode.value?.status,
+    formStatus: analysisFormDto.value?.form?.status
+  })
+);
 
 watch(workflow, (value) => {
   syncFromWorkflow(value, true);

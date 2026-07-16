@@ -45,7 +45,7 @@ import GeneratedFormFileCard from '../../GeneratedFormFileCard.vue';
 import { solutionDesignNodePageProps, useSolutionDesignNodePage } from '../../../composables/project-stage/solution-design/useSolutionDesignNodePage.js';
 import { useSolutionReviewForm } from '../../../composables/project-stage/solution-design/useSolutionReviewForm.js';
 import { getMissingRequiredFields } from '../../../utils/formValidation.js';
-import { isSolutionDesignFormFiller } from '../../../utils/onlineFormVisibility.js';
+import { isOnlineFormContentVisible, isSolutionDesignFormFiller } from '../../../utils/onlineFormVisibility.js';
 
 const fields = [
   { key: 'meetingDate', label: '评审时间', type: 'date', required: true },
@@ -85,7 +85,13 @@ const {
   saveReviewForm, submitReviewForm, downloadReviewGeneratedFile
 } = review;
 const activeDto = computed(() => review.activeReviewFormDto(workflow.value, currentNode.value));
-const canViewFormContent = computed(() => isSolutionDesignFormFiller(workflow.value, 'technical_owner', props.currentUser));
+const canViewFormContent = computed(() =>
+  isSolutionDesignFormFiller(workflow.value, 'technical_owner', props.currentUser)
+  && isOnlineFormContentVisible({
+    nodeStatus: activeDto.value?.nodeStatus || currentNode.value?.status,
+    formStatus: activeDto.value?.form?.status
+  })
+);
 const reviewFormRoot = ref(null);
 const validationAttempted = ref(false);
 const missingRequiredFields = computed(() => getMissingRequiredFields(fields, reviewFormData));

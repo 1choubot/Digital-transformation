@@ -1,16 +1,5 @@
 <template>
   <section class="page-stack">
-    <PageHeader
-      eyebrow="基础配置"
-      title="用户管理"
-      :current-user="currentUser"
-      subtitle="维护数字化平台账号、组织角色和基础状态；不代表文件平台权限。"
-    >
-      <template #actions>
-        <el-button @click="navigate('/projects')">返回项目总览</el-button>
-      </template>
-    </PageHeader>
-
     <el-alert v-if="!canAccessUserManagement" title="无权限访问" description="用户管理仅平台管理员可进入。该入口只保护用户管理本身，不代表项目、资料或文件权限。" type="error" show-icon :closable="false" />
 
     <template v-else>
@@ -154,7 +143,6 @@ import {
   updateUser
 } from '../api/users.js';
 import { toReadableApiError } from '../api/http.js';
-import PageHeader from '../components/PageHeader.vue';
 import {
   formatBusinessDepartment,
   formatOrganizationRole

@@ -1,15 +1,5 @@
 <template>
   <section class="project-workspace__detail initiation-node-page">
-    <div class="project-workspace__detail-heading">
-      <div>
-        <!-- <span class="section-eyebrow">立项阶段</span> -->
-        <h3>项目输入</h3>
-      </div>
-      <!-- <el-tag :type="workspaceStatusTagType(node?.nodeStatus)">
-        {{ formatWorkspaceStatus(node?.nodeStatus) }}
-      </el-tag> -->
-    </div>
-
     <dl class="stage-document-meta">
       <div>
         <dt>项目名称</dt>
@@ -112,23 +102,4 @@ function formatUser(user) {
   return user.name || user.displayName || user.account || `用户 ${user.id}`;
 }
 
-function formatWorkspaceStatus(status) {
-  return {
-    completed: '已完成',
-    in_progress: '处理中',
-    waiting_submission: '待提交',
-    pending_review: '待处理',
-    blocked_by_rework: '返工阻塞',
-    returned_for_rework: '需重填',
-    process_node: '过程节点'
-  }[status] || status || '-';
-}
-
-function workspaceStatusTagType(status) {
-  if (status === 'completed') return 'success';
-  if (status === 'pending_review') return 'warning';
-  if (['blocked_by_rework', 'returned_for_rework'].includes(status)) return 'danger';
-  if (['not_configured', 'not_applicable', 'process_node'].includes(status)) return 'info';
-  return 'primary';
-}
 </script>

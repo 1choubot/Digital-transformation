@@ -1,12 +1,5 @@
 <template>
   <section class="page-stack stage-document-tasks-page">
-    <PageHeader
-      title="我的资料任务">
-      <template #actions>
-        <!-- <el-button :loading="loading" @click="loadWorkbench">重新加载</el-button> -->
-      </template>
-    </PageHeader>
-
     <section class="panel task-filter-panel">
       <div class="stage-advance-summary">
         <div>
@@ -122,7 +115,6 @@ import { computed, onMounted, ref } from 'vue';
 import { getMyWorkbench } from '../api/me.js';
 import { toReadableApiError } from '../api/http.js';
 import { getProjectNavigation } from '../api/navigation.js';
-import PageHeader from '../components/PageHeader.vue';
 import {
   formatCompletionMode,
   formatCompletionStatus,

@@ -243,8 +243,7 @@ p {
   overflow-wrap: anywhere;
 }
 
-.current-user span,
-.page-user {
+.current-user span {
   color: #6c7b8c;
   font-size: 13px;
   overflow-wrap: anywhere;
@@ -350,45 +349,6 @@ p {
   :root {
     --app-content-gutter: 16px;
   }
-}
-
-.page-header,
-.page-title-row {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  min-width: 0;
-}
-
-.page-header__content {
-  display: grid;
-  gap: 0;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.page-title-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.page-header h2,
-.page-title-row h2 {
-  margin-top: 4px;
-  color: var(--app-text-primary);
-  font-size: 22px;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-}
-
-.page-user {
-  display: block;
-  margin-top: 6px;
 }
 
 .panel {
@@ -2631,27 +2591,17 @@ p {
   min-width: 0;
 }
 
-.project-workspace__section-heading,
-.project-workspace__detail-heading {
+.project-workspace__section-heading {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   align-items: start;
 }
 
-.project-workspace__section-heading h3,
-.project-workspace__detail-heading h3 {
+.project-workspace__section-heading h3 {
   margin-top: 4px;
   color: #17212f;
   font-size: 18px;
-}
-
-.online-form-editor__heading-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 
 .project-workspace__node-grid {
@@ -3764,8 +3714,6 @@ p {
   }
 
   .app-header__inner,
-  .page-header,
-  .page-title-row,
   .panel-toolbar {
     align-items: stretch;
     flex-direction: column;
@@ -3877,10 +3825,6 @@ p {
     flex-direction: column;
   }
 
-  .project-workspace__detail-heading {
-    display: grid;
-  }
-
   .legacy-compatibility-section__summary {
     align-items: flex-start;
     flex-direction: column;
@@ -3942,22 +3886,13 @@ p {
     padding: 18px 16px;
   }
 
-  .app-header__inner,
-  .page-header,
-  .page-title-row {
+  .app-header__inner {
     gap: 12px;
   }
 
   .app-header h1 {
     font-size: 21px;
     overflow-wrap: anywhere;
-  }
-
-  .page-header h2,
-  .page-title-row h2 {
-    font-size: 20px;
-    overflow-wrap: anywhere;
-    word-break: break-word;
   }
 
   .app-main {
@@ -4338,23 +4273,6 @@ p {
     .solution-node-page .solution-node-card {
         display: grid;
         gap: var(--space-4, 16px)
-    }
-
-    .solution-node-page .solution-node-header {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: var(--space-3, 12px)
-    }
-
-    .solution-node-page .solution-node-header h3 {
-        margin: 0
-    }
-
-    @media(max-width:640px) {
-        .solution-node-page .solution-node-header {
-            display: grid
-        }
     }
 
 /* Migrated from digital-platform-web/src/components/project-workspace/solution-design/SolutionFormFields.vue */

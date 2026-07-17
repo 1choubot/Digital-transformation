@@ -1,6 +1,5 @@
 <template>
   <section class="page-stack weekly-report-page animate-fadeIn">
-    <!-- 删除了 page-header 区域 -->
 
     <!-- 筛选栏 -->
     <section class="panel overview-filter-panel">

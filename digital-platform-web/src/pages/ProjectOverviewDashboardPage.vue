@@ -1,11 +1,5 @@
 <template>
   <section class="page-stack project-overview-dashboard-page">
-    <PageHeader title="项目总览">
-      <template #actions>
-        <!-- <el-button :loading="loading" @click="loadDashboard">重新加载</el-button> -->
-      </template>
-    </PageHeader>
-
     <el-row class="overview-summary-grid" :gutter="12" aria-label="项目总览指标">
       <el-col :xs="24" :sm="12" :md="8" :lg="5">
         <el-card class="overview-metric-card" shadow="never">
@@ -162,7 +156,6 @@ import { computed, onMounted, ref } from 'vue';
 import { getProjectOverviewDashboard } from '../api/projects.js';
 import { getProjectNavigation } from '../api/navigation.js';
 import { toReadableApiError } from '../api/http.js';
-import PageHeader from '../components/PageHeader.vue';
 import StatusBadge from '../components/StatusBadge.vue';
 import { formatDate, formatProjectCode } from '../utils/format.js';
 import { findProjectNavigationTarget } from '../utils/projectNavigation.js';

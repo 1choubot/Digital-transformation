@@ -1,9 +1,5 @@
 <template>
   <section v-if="form" ref="editorRoot" class="online-form-editor" aria-label="在线表单动作区">
-    <div class="project-workspace__detail-heading">
-        <h3>{{ form.documentName }}</h3>
-    </div>
-
     <GeneratedFormFileCard
       :generated-file="generatedFile"
       :pending="downloadPending"

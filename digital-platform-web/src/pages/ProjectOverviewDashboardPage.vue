@@ -70,83 +70,114 @@
         </template>
       </el-alert>
 
-      <el-table
+      <div
         v-else
         v-loading="loading"
-        class="overview-project-table"
-        :data="sortedProjects"
-        :row-key="projectRowKey"
-        border
-        stripe
-        empty-text="当前筛选条件下没有可展示的项目。"
-        @row-click="handleProjectRowClick"
+        class="overview-project-list"
+        :class="{ 'overview-project-list--loading': loading }"
+        role="table"
+        aria-label="项目总览列表"
+        :aria-busy="loading"
       >
-        <el-table-column label="项目编号" width="136" fixed="left" show-overflow-tooltip>
-          <template #default="{ row }">
-            <span class="overview-project-table__code mono">{{ formatProjectCode(row.projectCode) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="项目名称" width="210" fixed="left">
-          <template #default="{ row }">
-            <el-tooltip :content="row.projectName || '-'" placement="top" :show-after="300">
-              <el-button
-                class="overview-project-table__project-link"
-                link
-                type="primary"
-                :loading="String(navigatingProjectId) === String(row.projectId)"
-                @click="navigateToProject(row)"
-              >{{ row.projectName || '-' }}</el-button>
-            </el-tooltip>
-          </template>
-        </el-table-column>
-        <el-table-column prop="customerName" label="客户名称" width="180" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.customerName || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="商务负责" width="120" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.businessResponsibleUser?.name || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="项目经理" width="120" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.projectManagerUser?.name || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="技术负责人" width="130" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.technicalResponsibleUser?.name || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="项目状态" width="100" align="center">
-          <template #default="{ row }"><StatusBadge :status="row.status" /></template>
-        </el-table-column>
-        <el-table-column label="当前阶段" min-width="230">
-          <template #default="{ row }">
-            <el-tooltip :content="formatCurrentStage(row)" placement="top" :show-after="300">
-              <strong class="overview-project-table__stage-name">{{ formatCurrentStage(row) }}</strong>
-            </el-tooltip>
-            <small v-if="row.currentStageIssue" class="overview-project-table__stage-note">
-              {{ formatStageIssue(row.currentStageIssue) }}
-            </small>
-            <small v-else-if="row.status === 'ended'" class="overview-project-table__stage-note">
-              结束原因：{{ row.endedReason || '-' }}
-            </small>
-          </template>
-        </el-table-column>
-        <el-table-column label="立项日期" width="120" align="center">
-          <template #default="{ row }">{{ row.initiationDate ? formatDate(row.initiationDate) : '-' }}</template>
-        </el-table-column>
-        <el-table-column label="待办提醒" width="112" fixed="right" align="center">
-          <template #default="{ row }">
-            <el-tooltip
-              v-if="row.hasMyPendingTasks"
-              content="当前项目存在待填写资料或待处理事项"
-              placement="left"
-            >
-              <span
-                class="overview-project-table__pending-badge"
-                role="img"
-                aria-label="当前项目存在待填写资料或待处理事项"
-              ><span aria-hidden="true">★</span> 待办</span>
-            </el-tooltip>
-            <span v-else class="overview-project-table__no-pending" aria-label="无待办事项">-</span>
-          </template>
-        </el-table-column>
-      </el-table>
+        <div class="overview-project-list__header" role="row">
+          <span role="columnheader">项目编号</span>
+          <span role="columnheader">项目名称</span>
+          <span role="columnheader">客户名称</span>
+          <span role="columnheader">商务负责</span>
+          <span role="columnheader">项目经理</span>
+          <span role="columnheader">技术负责人</span>
+          <span class="overview-project-list__cell--center" role="columnheader">项目状态</span>
+          <span role="columnheader">当前阶段</span>
+          <span class="overview-project-list__cell--center" role="columnheader">立项日期</span>
+          <span class="overview-project-list__cell--center" role="columnheader">待办提醒</span>
+        </div>
+
+        <div class="overview-project-list__body" role="rowgroup">
+          <div
+            v-for="row in sortedProjects"
+            :key="row.projectId"
+            class="overview-project-card"
+            role="row"
+            tabindex="0"
+            :aria-label="`打开项目：${row.projectName || formatProjectCode(row.projectCode)}`"
+            @click="handleProjectCardClick(row, $event)"
+            @keydown.enter.self.prevent="navigateToProject(row)"
+            @keydown.space.self.prevent="navigateToProject(row)"
+          >
+            <div class="overview-project-list__cell" role="cell">
+              <el-tooltip :content="formatProjectCode(row.projectCode)" placement="top" :show-after="300">
+                <span class="overview-project-list__code mono">{{ formatProjectCode(row.projectCode) }}</span>
+              </el-tooltip>
+            </div>
+            <div class="overview-project-list__cell" role="cell">
+              <el-tooltip :content="row.projectName || '-'" placement="top" :show-after="300">
+                <el-button
+                  class="overview-project-list__project-link"
+                  link
+                  type="primary"
+                  :loading="String(navigatingProjectId) === String(row.projectId)"
+                  @click.stop="navigateToProject(row)"
+                >{{ row.projectName || '-' }}</el-button>
+              </el-tooltip>
+            </div>
+            <div class="overview-project-list__cell" role="cell">
+              <el-tooltip :content="row.customerName || '-'" placement="top" :show-after="300">
+                <span>{{ row.customerName || '-' }}</span>
+              </el-tooltip>
+            </div>
+            <div class="overview-project-list__cell" role="cell">
+              <el-tooltip :content="row.businessResponsibleUser?.name || '-'" placement="top" :show-after="300">
+                <span>{{ row.businessResponsibleUser?.name || '-' }}</span>
+              </el-tooltip>
+            </div>
+            <div class="overview-project-list__cell" role="cell">
+              <el-tooltip :content="row.projectManagerUser?.name || '-'" placement="top" :show-after="300">
+                <span>{{ row.projectManagerUser?.name || '-' }}</span>
+              </el-tooltip>
+            </div>
+            <div class="overview-project-list__cell" role="cell">
+              <el-tooltip :content="row.technicalResponsibleUser?.name || '-'" placement="top" :show-after="300">
+                <span>{{ row.technicalResponsibleUser?.name || '-' }}</span>
+              </el-tooltip>
+            </div>
+            <div class="overview-project-list__cell overview-project-list__cell--center" role="cell">
+              <StatusBadge :status="row.status" />
+            </div>
+            <div class="overview-project-list__cell" role="cell">
+              <el-tooltip :content="formatCurrentStage(row)" placement="top" :show-after="300">
+                <strong class="overview-project-list__stage-name">{{ formatCurrentStage(row) }}</strong>
+              </el-tooltip>
+              <small v-if="row.currentStageIssue" class="overview-project-list__stage-note">
+                {{ formatStageIssue(row.currentStageIssue) }}
+              </small>
+              <small v-else-if="row.status === 'ended'" class="overview-project-list__stage-note">
+                结束原因：{{ row.endedReason || '-' }}
+              </small>
+            </div>
+            <div class="overview-project-list__cell overview-project-list__cell--center" role="cell">
+              {{ row.initiationDate ? formatDate(row.initiationDate) : '-' }}
+            </div>
+            <div class="overview-project-list__cell overview-project-list__cell--center" role="cell">
+              <el-tooltip
+                v-if="row.hasMyPendingTasks"
+                content="当前项目存在待填写资料或待处理事项"
+                placement="left"
+              >
+                <span
+                  class="overview-project-list__pending-badge"
+                  role="img"
+                  aria-label="当前项目存在待填写资料或待处理事项"
+                ><span aria-hidden="true">★</span> 待办</span>
+              </el-tooltip>
+              <span v-else class="overview-project-list__no-pending" aria-label="无待办事项">-</span>
+            </div>
+          </div>
+
+          <div v-if="!loading && sortedProjects.length === 0" class="overview-project-list__empty" role="status">
+            当前筛选条件下没有可展示的项目。
+          </div>
+        </div>
+      </div>
     </el-card>
   </section>
 </template>
@@ -282,11 +313,7 @@ function isInteractiveElement(element) {
   );
 }
 
-function projectRowKey(project) {
-  return project.projectId;
-}
-
-async function handleProjectRowClick(project, _column, event) {
+async function handleProjectCardClick(project, event) {
   if (isInteractiveElement(event.target)) {
     return;
   }

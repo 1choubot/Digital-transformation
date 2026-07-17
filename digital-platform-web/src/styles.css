@@ -800,66 +800,159 @@ p {
   align-self: end;
 }
 
-.overview-list-panel {
-  overflow: hidden;
+.overview-list-panel.el-card {
+  overflow: visible;
 }
 
-.overview-project-table {
-  --el-table-border-color: #d9e1e8;
-  --el-table-header-bg-color: #eef3f7;
-  --el-table-header-text-color: #344454;
-  --el-table-row-hover-bg-color: #edf6ff;
+.overview-project-list {
+  --overview-project-columns:
+    minmax(0, 0.9fr) minmax(0, 1.4fr) minmax(0, 1.15fr) minmax(0, 0.8fr)
+    minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 0.75fr) minmax(0, 1.65fr)
+    minmax(0, 0.85fr) minmax(0, 0.8fr);
+  position: relative;
   width: 100%;
+  min-width: 0;
   font-size: 14px;
 }
 
-.overview-project-table .el-table__header th.el-table__cell {
-  height: 40px;
-  padding: 6px 0;
+.overview-project-list--loading {
+  min-height: 160px;
+}
+
+.overview-project-list__header,
+.overview-project-card {
+  display: grid;
+  grid-template-columns: var(--overview-project-columns);
+  gap: 12px;
+  align-items: center;
+}
+
+.overview-project-list__header {
+  position: sticky;
+  z-index: 3;
+  top: 0;
+  margin-bottom: 10px;
+  border: 1px solid #d9e1e8;
+  border-radius: 8px;
   background: #eef3f7;
+  padding: 10px 14px;
+  color: #344454;
   font-weight: 700;
+  box-shadow: 0 2px 5px rgba(30, 43, 58, 0.05);
 }
 
-.overview-project-table .el-table__body td.el-table__cell {
-  height: 44px;
-  padding: 5px 0;
-}
-
-.overview-project-table .el-table__row {
-  cursor: pointer;
-}
-
-.overview-project-table .el-table__row:hover > td.el-table__cell {
-  background: #edf6ff;
-}
-
-.overview-project-table .el-table-fixed-column--left,
-.overview-project-table .el-table-fixed-column--right {
-  background: inherit;
-}
-
-.overview-project-table__code {
-  color: #526577;
-  font-weight: 700;
-}
-
-.overview-project-table__project-link.el-button {
-  display: block;
-  max-width: 100%;
+.overview-project-list__header > span {
   min-width: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-project-list__body {
+  display: grid;
+  gap: 10px;
+}
+
+.overview-project-card {
+  min-height: 68px;
+  border: 1px solid #dfe6ed;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    background-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.overview-project-card:hover {
+  border-color: #b9d4eb;
+  background: #f8fbfe;
+  box-shadow: 0 3px 10px rgba(30, 43, 58, 0.06);
+}
+
+.overview-project-card:focus-visible {
+  border-color: #409eff;
+  outline: 2px solid rgba(64, 158, 255, 0.3);
+  outline-offset: 2px;
+}
+
+.overview-project-list__cell {
+  min-width: 0;
+  overflow: hidden;
+  color: #344454;
+}
+
+.overview-project-list__cell > span:not(.overview-project-list__pending-badge):not(.el-tag) {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-project-list__cell--center {
+  min-width: 0;
+  text-align: center;
+}
+
+.overview-project-list__cell--center .el-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+}
+
+.overview-project-list__cell--center .el-tag__content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  line-height: 1;
+}
+
+.overview-project-list__code {
+  display: block;
+  overflow: hidden;
+  color: #526577;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.overview-project-table__project-link.el-button:focus-visible {
+.overview-project-list__project-link.el-button {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  font-weight: 700;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-project-list__project-link.el-button > span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-project-list__project-link.el-button:focus-visible {
   border-radius: 3px;
   outline: 2px solid #409eff;
   outline-offset: 2px;
 }
 
-.overview-project-table__stage-name {
+.overview-project-list__stage-name {
   display: block;
   overflow: hidden;
   color: #17212f;
@@ -868,7 +961,7 @@ p {
   white-space: nowrap;
 }
 
-.overview-project-table__stage-note {
+.overview-project-list__stage-note {
   display: block;
   margin-top: 2px;
   overflow: hidden;
@@ -879,7 +972,7 @@ p {
   white-space: nowrap;
 }
 
-.overview-project-table__pending-badge {
+.overview-project-list__pending-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -893,8 +986,53 @@ p {
   white-space: nowrap;
 }
 
-.overview-project-table__no-pending {
+.overview-project-list__no-pending {
   color: #aab4bf;
+}
+
+.overview-project-list__empty {
+  border: 1px dashed #d9e1e8;
+  border-radius: 8px;
+  padding: 28px 16px;
+  color: #7a8998;
+  text-align: center;
+}
+
+@media (max-width: 1200px) {
+  .overview-project-list__header,
+  .overview-project-card {
+    gap: 7px;
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  .overview-project-list {
+    font-size: 12px;
+  }
+
+  .overview-project-list__pending-badge {
+    gap: 2px;
+    padding: 2px 5px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 900px) {
+  .overview-project-list__header,
+  .overview-project-card {
+    gap: 4px;
+    padding-right: 7px;
+    padding-left: 7px;
+  }
+
+  .overview-project-list {
+    font-size: 11px;
+  }
+
+  .overview-project-list__pending-badge {
+    padding: 2px 3px;
+    font-size: 10px;
+  }
 }
 
 .user-form-heading {

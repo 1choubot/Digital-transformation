@@ -344,13 +344,13 @@ export const V20260629_TARGET_TEMPLATE_OUTPUTS = Object.freeze([
     targetOutputCode: 'C20',
     stageOrder: 3,
     nodeKey: 'prepare_technical_agreement',
-    documentName: '技术协议草稿（合同签订阶段）',
+    documentName: '技术协议',
     sourceNode: '准备技术协议',
     outputKind: OUTPUT_KIND.DRAFT,
     responsibleRole: '研发中心',
     ownerDepartment: RD_CENTER,
     completionMode: COMPLETION_MODE.APPROVAL_REQUIRED,
-    notes: '4 个流程图漏画草稿修正之一，当前不创建资料记录。'
+    notes: '合同签订 workflow 准备协议和合同节点的技术协议线，保留 C20 稳定编码。'
   }),
   targetOutput({
     targetOutputCode: 'C21',
@@ -368,14 +368,14 @@ export const V20260629_TARGET_TEMPLATE_OUTPUTS = Object.freeze([
     targetOutputCode: 'C22',
     stageOrder: 3,
     nodeKey: 'prepare_sales_contract',
-    documentName: '销售合同草稿',
+    documentName: '销售合同',
     sourceNode: '准备销售合同',
     outputKind: OUTPUT_KIND.DRAFT,
     responsibleRole: '营销、研发、制造、运营/财务/法务、总经理',
     ownerDepartment: MARKETING_CENTER,
     reviewDepartment: OPERATIONS_CENTER,
     completionMode: COMPLETION_MODE.APPROVAL_REQUIRED,
-    notes: '4 个流程图漏画草稿修正之一，当前不创建资料记录。'
+    notes: '合同签订 workflow 准备协议和合同节点的销售合同线，保留 C22 稳定编码。'
   }),
   targetOutput({
     targetOutputCode: 'C23',
@@ -406,9 +406,9 @@ export const V20260629_TARGET_TEMPLATE_OUTPUTS = Object.freeze([
     targetOutputCode: 'C25',
     stageOrder: 4,
     nodeKey: 'project_kickoff_meeting',
-    documentName: '项目启动书',
+    documentName: '项目启动通知',
     legacyDocumentCode: '4.1',
-    sourceNode: '召开项目启动会',
+    sourceNode: '项目启动通知',
     responsibleRole: '制造中心',
     ownerDepartment: MANUFACTURING_CENTER,
     reviewDepartment: MANUFACTURING_CENTER,
@@ -1064,8 +1064,13 @@ export const V20260629_WORKSPACE_BLUE_MODULES = Object.freeze([
     notes: '旧模板兼容资料，当前运行 64 项覆盖用，不计入 v20260629 71 项目标模板。'
   }),
   blueModule({ stageOrder: 3, nodeKey: 'advance_payment_invoice', nodeName: '项目预付款交付', outputCodes: ['C24'] }),
-  blueModule({ stageOrder: 3, nodeKey: 'project_start_notice', nodeName: '项目启动通知', notes: '过程节点，第一版不形成目标资料。' }),
-  blueModule({ stageOrder: 4, nodeKey: 'project_kickoff_meeting', nodeName: '召开项目启动会', outputCodes: ['C25'] }),
+  blueModule({
+    stageOrder: 3,
+    nodeKey: 'project_start_notice',
+    nodeName: '项目启动通知',
+    outputCodes: ['C25'],
+    notes: 'C25 由合同签订 workflow 的项目启动通知节点承载，不在详细设计阶段另暴露主流程入口。'
+  }),
   blueModule({ stageOrder: 4, nodeKey: 'detailed_design_preparation', nodeName: '详细设计准备', outputCodes: ['C26'] }),
   blueModule({ stageOrder: 4, nodeKey: 'detailed_design', nodeName: '详细设计', outputCodes: ['C27', 'C28', 'C29', 'C30', 'C31', 'C32', 'C33', 'C34', 'C35'] }),
   blueModule({ stageOrder: 4, nodeKey: 'internal_design_review', nodeName: '内部设计评审', outputCodes: ['C36'] }),

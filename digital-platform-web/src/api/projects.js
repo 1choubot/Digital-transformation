@@ -64,6 +64,75 @@ export async function getSolutionDesignWorkflow(projectId, authToken = '') {
   return request(`/api/projects/${projectId}/solution-design-workflow`, { authToken });
 }
 
+export async function getContractSigningWorkflow(projectId, authToken = '') {
+  return request(`/api/projects/${projectId}/contract-signing-workflow`, { authToken });
+}
+
+export async function uploadContractSigningWorkflowFile(projectId, slotKey, file, authToken = '') {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  return request(`/api/projects/${projectId}/contract-signing-workflow/uploads/${slotKey}`, {
+    method: 'POST',
+    authToken,
+    body: formData
+  });
+}
+
+export async function downloadContractSigningWorkflowFile(projectId, slotKey, authToken = '') {
+  return requestBlob(`/api/projects/${projectId}/contract-signing-workflow/uploads/${slotKey}/download`, {
+    authToken
+  });
+}
+
+export async function approveContractSigningPreparationFile(projectId, slotKey, authToken = '') {
+  return request(`/api/projects/${projectId}/contract-signing-workflow/uploads/${slotKey}/approve`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({})
+  });
+}
+
+export async function returnContractSigningPreparationFile(projectId, slotKey, returnReason, authToken = '') {
+  return request(`/api/projects/${projectId}/contract-signing-workflow/uploads/${slotKey}/return`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ returnReason })
+  });
+}
+
+export async function confirmContractSigningScanFile(projectId, slotKey, payload, authToken = '') {
+  return request(`/api/projects/${projectId}/contract-signing-workflow/uploads/${slotKey}/signing-result`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function completeContractSigningAdvancePayment(projectId, authToken = '') {
+  return request(`/api/projects/${projectId}/contract-signing-workflow/payment/complete`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({})
+  });
+}
+
+export async function requestContractSigningPaymentRelease(projectId, authToken = '') {
+  return request(`/api/projects/${projectId}/contract-signing-workflow/payment/request-general-manager-release`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({})
+  });
+}
+
+export async function approveContractSigningPaymentRelease(projectId, authToken = '') {
+  return request(`/api/projects/${projectId}/contract-signing-workflow/payment/approve-release`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({})
+  });
+}
+
 export async function assignSolutionDesignRoles(projectId, payload, authToken = '') {
   return request(`/api/projects/${projectId}/solution-design-workflow/roles`, {
     method: 'PUT',

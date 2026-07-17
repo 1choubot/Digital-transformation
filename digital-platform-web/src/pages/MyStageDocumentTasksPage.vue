@@ -80,12 +80,12 @@
               <small>第 {{ item.stageOrder }} 阶段</small>
             </div>
             <div>
-              <span>{{ isSolutionDesignTodo(item) ? '节点' : '资料项' }}</span>
+              <span>{{ isWorkflowTodo(item) ? '节点' : '资料项' }}</span>
               <strong>{{ formatTodoSubject(item) }}</strong>
               <small class="mono">{{ formatTodoSubjectCode(item) }}</small>
             </div>
             <div>
-              <span>{{ isSolutionDesignTodo(item) ? '版本' : '完成规则' }}</span>
+              <span>{{ isWorkflowTodo(item) ? '版本' : '完成规则' }}</span>
               <strong>{{ formatTodoRule(item) }}</strong>
             </div>
             <div>
@@ -150,7 +150,8 @@ const emit = defineEmits(['auth-expired']);
 const typeOptions = [
   { value: 'document_responsibility', label: '待我填写资料' },
   { value: 'document_review', label: '待我评价/审批' },
-  { value: 'solution_design_workflow', label: '方案设计待办' }
+  { value: 'solution_design_workflow', label: '方案设计待办' },
+  { value: 'contract_signing_workflow', label: '合同签订待办' }
 ];
 
 const solutionDesignStatusText = {
@@ -162,6 +163,19 @@ const solutionDesignStatusText = {
   approved: '已通过',
   skipped: '已跳过',
   ended: '已结束'
+};
+
+const contractSigningStatusText = {
+  not_started: '未开始',
+  pending: '处理中',
+  pending_review: '待审批',
+  waiting_general_manager: '待总经理审批',
+  uploaded: '待确认',
+  submitted: '待审批',
+  approved: '已通过',
+  returned: '已退回',
+  completed: '已完成',
+  released: '已放行'
 };
 
 const selectedType = ref('all');
@@ -229,16 +243,24 @@ function isSolutionDesignTodo(item) {
   return item?.type === 'solution_design_workflow' || item?.taskType === 'solution_design_workflow';
 }
 
+function isContractSigningTodo(item) {
+  return item?.type === 'contract_signing_workflow' || item?.taskType === 'contract_signing_workflow';
+}
+
+function isWorkflowTodo(item) {
+  return isSolutionDesignTodo(item) || isContractSigningTodo(item);
+}
+
 function formatTodoSubject(item) {
-  return isSolutionDesignTodo(item) ? item.nodeName || item.nodeKey || '-' : item.documentName || '-';
+  return isWorkflowTodo(item) ? item.nodeName || item.nodeKey || '-' : item.documentName || '-';
 }
 
 function formatTodoSubjectCode(item) {
-  return isSolutionDesignTodo(item) ? item.nodeKey || '-' : item.documentCode || '-';
+  return isWorkflowTodo(item) ? item.nodeKey || '-' : item.documentCode || '-';
 }
 
 function formatTodoRule(item) {
-  return isSolutionDesignTodo(item)
+  return isWorkflowTodo(item)
     ? `v${item.revision || 1}`
     : item.completionMode
       ? formatCompletionMode(item.completionMode)
@@ -254,6 +276,10 @@ function formatTodoStatus(item) {
     return solutionDesignStatusText[item.status] || formatStatus(item.status);
   }
 
+  if (isContractSigningTodo(item)) {
+    return contractSigningStatusText[item.status] || formatStatus(item.status);
+  }
+
   return formatStatus(item.status);
 }
 
@@ -262,7 +288,7 @@ function taskTone(item) {
     return 'stage';
   }
 
-  if (isSolutionDesignTodo(item)) {
+  if (isWorkflowTodo(item)) {
     return 'solution';
   }
 

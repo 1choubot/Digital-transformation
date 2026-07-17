@@ -7,12 +7,18 @@ import {
   assertProjectViewable,
   advanceProjectStage,
   assignSolutionDesignRoles,
+  approveContractSigningPreparationFile,
+  approveContractSigningPaymentRelease,
+  confirmContractSigningScanFile,
+  getContractSigningWorkflow,
   approveSolutionDesignWorkflowNode,
   approveStageApproval,
   createProject,
+  completeContractSigningAdvancePayment,
   getProjectDetail,
   getProjectOverviewDashboard,
   getProjectWorkspace,
+  getContractSigningUploadDownload,
   getSolutionDesignAnalysisGeneratedFileDownload,
   getSolutionDesignAnalysisForm,
   getSolutionDesignQuotationForm,
@@ -31,6 +37,8 @@ import {
   ProjectNotFoundError,
   projectExists,
   resubmitStageApproval,
+  returnContractSigningPreparationFile,
+  requestContractSigningPaymentRelease,
   returnSolutionDesignWorkflowNode,
   returnStageApproval,
   saveSolutionDesignAnalysisForm,
@@ -45,6 +53,7 @@ import {
   submitStageApproval,
   cancelSolutionDesignUploadExemption,
   updateProjectCode,
+  uploadContractSigningWorkflowFile,
   uploadSolutionDesignWorkflowFile
 } from '../repositories/projectRepository.js';
 import {
@@ -80,6 +89,7 @@ import {
   uploadStageDocumentAttachment
 } from '../repositories/stageDocumentAttachmentRepository.js';
 import { readMultipartFile } from '../middleware/multipartFile.js';
+import { CONTRACT_SIGNING_UPLOAD_MAX_FILE_SIZE } from '../storage/contractSigningUploadStorage.js';
 import { SOLUTION_DESIGN_UPLOAD_MAX_FILE_SIZE } from '../storage/solutionDesignUploadStorage.js';
 import { STAGE_DOCUMENT_ONLINE_FORM_IMAGE_MAX_FILE_SIZE } from '../storage/stageDocumentOnlineFormImageStorage.js';
 import { searchActiveProjectsForDailyReports } from '../repositories/dailyReportRepository.js';
@@ -314,6 +324,142 @@ export async function getProjectNavigationHandler(req, res) {
 export async function getSolutionDesignWorkflowHandler(req, res) {
   const projectId = parseProjectId(req.params.projectId);
   const workflow = await getSolutionDesignWorkflow({
+    projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function getContractSigningWorkflowHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await getContractSigningWorkflow({
+    projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function uploadContractSigningWorkflowFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const file = await readMultipartFile(req, {
+    maxFileSize: CONTRACT_SIGNING_UPLOAD_MAX_FILE_SIZE
+  });
+  const result = await uploadContractSigningWorkflowFile({
+    projectId,
+    slotKey: req.params.slotKey,
+    file,
+    user: req.auth.user
+  });
+
+  res.status(201).json({
+    data: result
+  });
+}
+
+export async function downloadContractSigningWorkflowFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const download = await getContractSigningUploadDownload({
+    projectId,
+    slotKey: req.params.slotKey,
+    user: req.auth.user
+  });
+
+  await new Promise((resolve, reject) => {
+    res.download(
+      download.filePath,
+      download.originalFileName,
+      {
+        headers: {
+          'Content-Type': download.mimeType,
+          'Content-Length': String(download.fileSize)
+        }
+      },
+      (error) => {
+        if (error && !res.headersSent) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      }
+    );
+  });
+}
+
+export async function approveContractSigningPreparationFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await approveContractSigningPreparationFile({
+    projectId,
+    slotKey: req.params.slotKey,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function returnContractSigningPreparationFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await returnContractSigningPreparationFile({
+    projectId,
+    slotKey: req.params.slotKey,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function confirmContractSigningScanFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await confirmContractSigningScanFile({
+    projectId,
+    slotKey: req.params.slotKey,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function completeContractSigningAdvancePaymentHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await completeContractSigningAdvancePayment({
+    projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function requestContractSigningPaymentReleaseHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await requestContractSigningPaymentRelease({
+    projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function approveContractSigningPaymentReleaseHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await approveContractSigningPaymentRelease({
     projectId,
     user: req.auth.user
   });

@@ -7,6 +7,7 @@ import {
   ensureProjectWorkspaceSchema,
   inspectProjectWorkspaceSchema
 } from '../src/db/projectWorkspaceSchema.js';
+import { ensureContractSigningWorkflowSchema } from '../src/db/contractSigningWorkflowSchema.js';
 import { ensureSolutionDesignWorkflowSchema } from '../src/db/solutionDesignWorkflowSchema.js';
 import { ensureStageDocumentSchema } from '../src/db/stageDocumentSchema.js';
 import {
@@ -115,6 +116,8 @@ const {
 } = BUSINESS_DEPARTMENT;
 
 const LEGACY_CONTRACT_REVIEW_COMPATIBILITY_OUTPUT_CODES = new Set(['LC33', 'LC54']);
+const CONTRACT_SIGNING_WORKFLOW_DOCUMENT_CODES = new Set(['C20', 'C21', 'C22', 'C23', 'C25']);
+const CONTRACT_STAGE_NON_WORKFLOW_BLUEPRINT_OUTPUT_CODES = new Set(['C24']);
 const EXCLUDED_V20260629_PROJECT_DOCUMENT_CODES = new Set(['3.3', '5.4', 'LC33', 'LC54']);
 const V20260629_TARGET_ONLY_DOCUMENT_CODES = STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260629
   .filter((item) => item.documentCode === item.targetOutputCode)
@@ -2048,7 +2051,10 @@ async function runInitiationReviewSmoke({
     .flatMap((node) => node.outputs || []);
   const workspaceOutputCodes = new Set(workspaceOutputs.map((output) => output.targetOutputCode));
   const workspaceManagedOutputCount =
-    V20260629_TARGET_TEMPLATE_OUTPUT_COUNT - SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES.length;
+    V20260629_TARGET_TEMPLATE_OUTPUT_COUNT -
+    SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES.length -
+    CONTRACT_SIGNING_WORKFLOW_DOCUMENT_CODES.size -
+    CONTRACT_STAGE_NON_WORKFLOW_BLUEPRINT_OUTPUT_CODES.size;
   assert.equal(
     workspaceOutputCodes.size,
     workspaceManagedOutputCount
@@ -2062,6 +2068,20 @@ async function runInitiationReviewSmoke({
       workspaceOutputCodes.has(dedicatedDocumentCode),
       false,
       `Solution design dedicated document must not be exposed as a workspace output: ${dedicatedDocumentCode}`
+    );
+  }
+  for (const contractWorkflowDocumentCode of CONTRACT_SIGNING_WORKFLOW_DOCUMENT_CODES) {
+    assert.equal(
+      workspaceOutputCodes.has(contractWorkflowDocumentCode),
+      false,
+      `Contract signing workflow document must not be exposed as an old blueprint output: ${contractWorkflowDocumentCode}`
+    );
+  }
+  for (const nonWorkflowContractOutputCode of CONTRACT_STAGE_NON_WORKFLOW_BLUEPRINT_OUTPUT_CODES) {
+    assert.equal(
+      workspaceOutputCodes.has(nonWorkflowContractOutputCode),
+      false,
+      `Contract stage ordinary/conditional document must not be counted as a contract workflow document: ${nonWorkflowContractOutputCode}`
     );
   }
   for (const compatibilityOutputCode of LEGACY_CONTRACT_REVIEW_COMPATIBILITY_OUTPUT_CODES) {
@@ -5980,7 +6000,7 @@ assert.deepEqual(
     reviewDepartment: byCode.get('4.1').reviewDepartment
   },
   {
-    documentName: '项目启动书',
+    documentName: '项目启动通知',
     ownerDepartment: MANUFACTURING_CENTER,
     reviewDepartment: MANUFACTURING_CENTER
   }
@@ -6508,6 +6528,7 @@ assert.deepEqual(projectWorkspaceSchemaStatus, {
 });
 await ensureStageDocumentSchema(pool);
 await ensureSolutionDesignWorkflowSchema(pool);
+await ensureContractSigningWorkflowSchema(pool);
 await upsertStageDocumentTemplates(pool, items);
 await initializeInitiationReviewNodesForExistingProjects(pool);
 

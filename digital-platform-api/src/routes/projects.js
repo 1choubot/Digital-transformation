@@ -4,9 +4,13 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 import {
   advanceProjectStageHandler,
   assignSolutionDesignRolesHandler,
+  approveContractSigningPreparationFileHandler,
+  approveContractSigningPaymentReleaseHandler,
   approveInitiationReviewNodeHandler,
   approveSolutionDesignWorkflowNodeHandler,
   approveStageApprovalHandler,
+  confirmContractSigningScanFileHandler,
+  completeContractSigningAdvancePaymentHandler,
   confirmStageDocumentHandler,
   completeStageDocumentRevisionHandler,
   createProjectHandler,
@@ -15,11 +19,13 @@ import {
   downloadSolutionDesignReviewGeneratedFileHandler,
   deleteStageDocumentAttachmentHandler,
   deleteStageDocumentOnlineFormImageHandler,
+  downloadContractSigningWorkflowFileHandler,
   downloadSolutionDesignWorkflowFileHandler,
   downloadStageDocumentAttachmentHandler,
   downloadStageDocumentGeneratedFileHandler,
   downloadStageDocumentOnlineFormImageHandler,
   generateStageDocumentOnlineFormFileHandler,
+  getContractSigningWorkflowHandler,
   getProjectDetailHandler,
   getProjectNavigationHandler,
   getProjectOverviewDashboardHandler,
@@ -41,6 +47,8 @@ import {
   markSolutionDesignUploadExemptionHandler,
   processSolutionDesignQuotationResultHandler,
   restoreStageDocumentApplicableHandler,
+  returnContractSigningPreparationFileHandler,
+  requestContractSigningPaymentReleaseHandler,
   returnStageApprovalHandler,
   returnInitiationReviewNodeHandler,
   returnSolutionDesignWorkflowNodeHandler,
@@ -61,6 +69,7 @@ import {
   submitStageDocumentOnlineFormHandler,
   submitStageApprovalHandler,
   updateProjectCodeHandler,
+  uploadContractSigningWorkflowFileHandler,
   updateStageDocumentResponsibleUserHandler,
   uploadSolutionDesignWorkflowFileHandler,
   uploadStageDocumentAttachmentHandler,
@@ -119,6 +128,60 @@ projectsRouter.get(
   '/:projectId/solution-design-workflow',
   requireAuth,
   asyncHandler(getSolutionDesignWorkflowHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/contract-signing-workflow',
+  requireAuth,
+  asyncHandler(getContractSigningWorkflowHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/contract-signing-workflow/uploads/:slotKey/download',
+  requireAuth,
+  asyncHandler(downloadContractSigningWorkflowFileHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/uploads/:slotKey',
+  requireAuth,
+  asyncHandler(uploadContractSigningWorkflowFileHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/uploads/:slotKey/approve',
+  requireAuth,
+  asyncHandler(approveContractSigningPreparationFileHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/uploads/:slotKey/return',
+  requireAuth,
+  asyncHandler(returnContractSigningPreparationFileHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/uploads/:slotKey/signing-result',
+  requireAuth,
+  asyncHandler(confirmContractSigningScanFileHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/payment/complete',
+  requireAuth,
+  asyncHandler(completeContractSigningAdvancePaymentHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/payment/request-general-manager-release',
+  requireAuth,
+  asyncHandler(requestContractSigningPaymentReleaseHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/payment/approve-release',
+  requireAuth,
+  asyncHandler(approveContractSigningPaymentReleaseHandler)
 );
 
 projectsRouter.put(

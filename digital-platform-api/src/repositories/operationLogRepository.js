@@ -112,6 +112,22 @@ export const OPERATION_ACTION_TYPE = {
   SOLUTION_DESIGN_TENDER_APPROVED: 'solution_design.tender_approved',
   SOLUTION_DESIGN_TENDER_RETURNED: 'solution_design.tender_returned',
   SOLUTION_DESIGN_READY_FOR_CONTRACT: 'solution_design.ready_for_contract',
+  CONTRACT_SIGNING_TECHNICAL_AGREEMENT_UPLOADED: 'contract_signing.technical_agreement_uploaded',
+  CONTRACT_SIGNING_TECHNICAL_AGREEMENT_APPROVED: 'contract_signing.technical_agreement_approved',
+  CONTRACT_SIGNING_TECHNICAL_AGREEMENT_RETURNED: 'contract_signing.technical_agreement_returned',
+  CONTRACT_SIGNING_SALES_CONTRACT_UPLOADED: 'contract_signing.sales_contract_uploaded',
+  CONTRACT_SIGNING_SALES_CONTRACT_APPROVED: 'contract_signing.sales_contract_approved',
+  CONTRACT_SIGNING_SALES_CONTRACT_RETURNED: 'contract_signing.sales_contract_returned',
+  CONTRACT_SIGNING_TECHNICAL_AGREEMENT_SCAN_UPLOADED: 'contract_signing.technical_agreement_scan_uploaded',
+  CONTRACT_SIGNING_TECHNICAL_AGREEMENT_SCAN_CONFIRMED: 'contract_signing.technical_agreement_scan_confirmed',
+  CONTRACT_SIGNING_TECHNICAL_AGREEMENT_SCAN_RETURNED: 'contract_signing.technical_agreement_scan_returned',
+  CONTRACT_SIGNING_SALES_CONTRACT_SCAN_UPLOADED: 'contract_signing.sales_contract_scan_uploaded',
+  CONTRACT_SIGNING_SALES_CONTRACT_SCAN_CONFIRMED: 'contract_signing.sales_contract_scan_confirmed',
+  CONTRACT_SIGNING_SALES_CONTRACT_SCAN_RETURNED: 'contract_signing.sales_contract_scan_returned',
+  CONTRACT_SIGNING_ADVANCE_PAYMENT_COMPLETED: 'contract_signing.advance_payment_completed',
+  CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_REQUESTED: 'contract_signing.advance_payment_release_requested',
+  CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED: 'contract_signing.advance_payment_release_approved',
+  CONTRACT_SIGNING_PROJECT_KICKOFF_NOTICE_UPLOADED: 'contract_signing.project_kickoff_notice_uploaded',
   STAGE_ADVANCED: 'stage.advanced',
   PROJECT_COMPLETED: 'project.completed'
 };
@@ -123,7 +139,8 @@ export const OPERATION_TARGET_TYPE = {
   STAGE_DOCUMENT: 'stage_document',
   INITIATION_REVIEW: 'initiation_review',
   ONLINE_FORM: 'online_form',
-  SOLUTION_DESIGN_WORKFLOW: 'solution_design_workflow'
+  SOLUTION_DESIGN_WORKFLOW: 'solution_design_workflow',
+  CONTRACT_SIGNING_WORKFLOW: 'contract_signing_workflow'
 };
 
 export class OperationLogLimitError extends Error {

@@ -20,6 +20,12 @@ import {
   SOLUTION_DESIGN_UPLOAD_SLOT_KEY,
   SOLUTION_DESIGN_UPLOAD_SLOT_STATUS
 } from '../../domain/solutionDesignWorkflow.js';
+import {
+  CONTRACT_SIGNING_NODE_KEY,
+  CONTRACT_SIGNING_NODE_STATUS,
+  CONTRACT_SIGNING_UPLOAD_SLOT_KEY,
+  CONTRACT_SIGNING_UPLOAD_SLOT_STATUS
+} from '../../domain/contractSigningWorkflow.js';
 
 export class StageDocumentNotFoundError extends Error {
   constructor(projectId, documentId) {
@@ -70,6 +76,7 @@ export const COMPLETION_STATUS = {
 };
 
 const SOLUTION_DESIGN_DERIVED_SOURCE = 'solution_design_workflow';
+const CONTRACT_SIGNING_DERIVED_SOURCE = 'contract_signing_workflow';
 const SOLUTION_DESIGN_LEGACY_DOCUMENT_CODE_BY_TARGET_CODE = Object.freeze({
   C04: '2.1',
   C05: '2.2',
@@ -97,6 +104,49 @@ const SOLUTION_DESIGN_DOCUMENT_CODES = new Set([
   ...SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES,
   ...Object.values(SOLUTION_DESIGN_LEGACY_DOCUMENT_CODE_BY_TARGET_CODE)
 ]);
+const CONTRACT_SIGNING_LEGACY_DOCUMENT_CODE_BY_TARGET_CODE = Object.freeze({
+  C21: '3.1',
+  C23: '3.2',
+  C25: '4.1'
+});
+const CONTRACT_SIGNING_TARGET_DOCUMENT_CODE_BY_LEGACY_CODE = new Map(
+  Object.entries(CONTRACT_SIGNING_LEGACY_DOCUMENT_CODE_BY_TARGET_CODE).map(([targetCode, legacyCode]) => [
+    legacyCode,
+    targetCode
+  ])
+);
+const CONTRACT_SIGNING_DERIVED_DOCUMENT_CODES = Object.freeze(['C20', 'C21', 'C22', 'C23', 'C25']);
+const CONTRACT_SIGNING_DOCUMENT_CODES = new Set([
+  ...CONTRACT_SIGNING_DERIVED_DOCUMENT_CODES,
+  ...Object.values(CONTRACT_SIGNING_LEGACY_DOCUMENT_CODE_BY_TARGET_CODE)
+]);
+const CONTRACT_SIGNING_DOCUMENT_SLOT_MAP = Object.freeze({
+  C20: {
+    nodeKey: CONTRACT_SIGNING_NODE_KEY.CONTRACT_PREPARATION,
+    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT,
+    blockingReason: '技术协议未审批通过，或 current 文件缺失'
+  },
+  C21: {
+    nodeKey: CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING,
+    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN,
+    blockingReason: '技术协议扫描件未确认线下签署结果通过，或 current 文件缺失'
+  },
+  C22: {
+    nodeKey: CONTRACT_SIGNING_NODE_KEY.CONTRACT_PREPARATION,
+    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT,
+    blockingReason: '销售合同未审批通过，或 current 文件缺失'
+  },
+  C23: {
+    nodeKey: CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING,
+    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN,
+    blockingReason: '销售合同扫描件未确认线下签署结果通过，或 current 文件缺失'
+  },
+  C25: {
+    nodeKey: CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE,
+    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE,
+    blockingReason: '项目启动通知未上传完成'
+  }
+});
 const SOLUTION_DESIGN_WORKFLOW_ANCHOR_DOCUMENT_CODES = new Set(
   SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES.filter((documentCode) => documentCode !== 'C18' && documentCode !== 'C19')
 );
@@ -182,6 +232,10 @@ function normalizeSolutionDesignDocumentCode(documentCode) {
   return SOLUTION_DESIGN_TARGET_DOCUMENT_CODE_BY_LEGACY_CODE.get(documentCode) || documentCode;
 }
 
+function normalizeContractSigningDocumentCode(documentCode) {
+  return CONTRACT_SIGNING_TARGET_DOCUMENT_CODE_BY_LEGACY_CODE.get(documentCode) || documentCode;
+}
+
 function isLegacySolutionDesignDocumentCode(documentCode) {
   return SOLUTION_DESIGN_TARGET_DOCUMENT_CODE_BY_LEGACY_CODE.has(documentCode);
 }
@@ -207,6 +261,31 @@ function getSolutionDesignDerivedCompletion(document) {
   };
 }
 
+function getContractSigningDerivedCompletion(document) {
+  const direct = document?.contractSigningDerivedCompletion ?? document?.contract_signing_derived_completion ?? null;
+  if (direct) {
+    return direct;
+  }
+
+  const source = document?.derivedCompletionSource ?? document?.derived_completion_source ?? null;
+  if (source !== CONTRACT_SIGNING_DERIVED_SOURCE) {
+    return null;
+  }
+
+  return {
+    source,
+    isComplete: document?.isComplete === true || document?.is_complete === true,
+    completionStatus: document?.completionStatus ?? document?.completion_status ?? null,
+    derivedCompletionStatus: document?.derivedCompletionStatus ?? document?.derived_completion_status ?? null,
+    derivedBlockingReasons: document?.derivedBlockingReasons ?? document?.derived_blocking_reasons ?? [],
+    derivedNotApplicable: document?.derivedNotApplicable === true || document?.derived_not_applicable === true
+  };
+}
+
+function getWorkflowDerivedCompletion(document) {
+  return getSolutionDesignDerivedCompletion(document) || getContractSigningDerivedCompletion(document);
+}
+
 export function deriveStageDocumentCompletion(document) {
   const completionMode = getDocumentCompletionMode(document);
   const status = document?.status ?? DOCUMENT_STATUS.NOT_SUBMITTED;
@@ -223,25 +302,25 @@ export function deriveStageDocumentCompletion(document) {
     };
   }
 
-  const solutionDesignDerivedCompletion = getSolutionDesignDerivedCompletion(document);
-  if (solutionDesignDerivedCompletion) {
+  const workflowDerivedCompletion = getWorkflowDerivedCompletion(document);
+  if (workflowDerivedCompletion) {
     const derivedNotApplicable =
-      solutionDesignDerivedCompletion.derivedNotApplicable === true ||
-      solutionDesignDerivedCompletion.derived_not_applicable === true;
+      workflowDerivedCompletion.derivedNotApplicable === true ||
+      workflowDerivedCompletion.derived_not_applicable === true;
     const completionStatus = derivedNotApplicable
       ? COMPLETION_STATUS.NOT_APPLICABLE
-      : solutionDesignDerivedCompletion.completionStatus ??
-        solutionDesignDerivedCompletion.completion_status ??
-        solutionDesignDerivedCompletion.derivedCompletionStatus ??
-        solutionDesignDerivedCompletion.derived_completion_status ??
-        (solutionDesignDerivedCompletion.isComplete === true
+      : workflowDerivedCompletion.completionStatus ??
+        workflowDerivedCompletion.completion_status ??
+        workflowDerivedCompletion.derivedCompletionStatus ??
+        workflowDerivedCompletion.derived_completion_status ??
+        (workflowDerivedCompletion.isComplete === true
           ? COMPLETION_STATUS.COMPLETED
           : COMPLETION_STATUS.INCOMPLETE);
 
     return {
       completionMode,
       isApplicable,
-      isComplete: solutionDesignDerivedCompletion.isComplete === true || derivedNotApplicable,
+      isComplete: workflowDerivedCompletion.isComplete === true || derivedNotApplicable,
       completionStatus
     };
   }
@@ -363,6 +442,8 @@ function mapRevisionSourceDocument(row) {
 
 export function mapReworkCandidate(document) {
   const solutionDesignDerivedCompletion = getSolutionDesignDerivedCompletion(document);
+  const contractSigningDerivedCompletion = getContractSigningDerivedCompletion(document);
+  const workflowDerivedCompletion = getWorkflowDerivedCompletion(document);
   return {
     id: document.id,
     documentCode: document.documentCode ?? document.document_code,
@@ -375,9 +456,11 @@ export function mapReworkCandidate(document) {
     isComplete: deriveStageDocumentCompletion(document).isComplete,
     isApplicable: document.isApplicable ?? (document.is_applicable === undefined ? true : Boolean(document.is_applicable)),
     solutionDesignDerivedCompletion,
-    derivedCompletionStatus: solutionDesignDerivedCompletion?.derivedCompletionStatus ?? null,
-    derivedBlockingReasons: solutionDesignDerivedCompletion?.derivedBlockingReasons ?? [],
-    derivedNotApplicable: solutionDesignDerivedCompletion?.derivedNotApplicable === true
+    contractSigningDerivedCompletion,
+    derivedCompletionSource: workflowDerivedCompletion?.source ?? null,
+    derivedCompletionStatus: workflowDerivedCompletion?.derivedCompletionStatus ?? null,
+    derivedBlockingReasons: workflowDerivedCompletion?.derivedBlockingReasons ?? [],
+    derivedNotApplicable: workflowDerivedCompletion?.derivedNotApplicable === true
   };
 }
 
@@ -408,6 +491,8 @@ export function mapDocument(row) {
   const completion = deriveStageDocumentCompletion(row);
   const revisionRequired = isRevisionRequired(row);
   const solutionDesignDerivedCompletion = getSolutionDesignDerivedCompletion(row);
+  const contractSigningDerivedCompletion = getContractSigningDerivedCompletion(row);
+  const workflowDerivedCompletion = getWorkflowDerivedCompletion(row);
 
   return {
     id: row.id,
@@ -434,10 +519,11 @@ export function mapDocument(row) {
     isComplete: completion.isComplete,
     completionStatus: completion.completionStatus,
     solutionDesignDerivedCompletion,
-    derivedCompletionSource: solutionDesignDerivedCompletion?.source ?? null,
-    derivedCompletionStatus: solutionDesignDerivedCompletion?.derivedCompletionStatus ?? null,
-    derivedBlockingReasons: solutionDesignDerivedCompletion?.derivedBlockingReasons ?? [],
-    derivedNotApplicable: solutionDesignDerivedCompletion?.derivedNotApplicable === true,
+    contractSigningDerivedCompletion,
+    derivedCompletionSource: workflowDerivedCompletion?.source ?? null,
+    derivedCompletionStatus: workflowDerivedCompletion?.derivedCompletionStatus ?? null,
+    derivedBlockingReasons: workflowDerivedCompletion?.derivedBlockingReasons ?? [],
+    derivedNotApplicable: workflowDerivedCompletion?.derivedNotApplicable === true,
     revisionRequired,
     revisionReason: row.revision_reason ?? null,
     revisionSourceDocumentId: row.revision_source_document_id ?? null,
@@ -473,6 +559,8 @@ export function mapStageDocumentTask(row) {
   const completion = deriveStageDocumentCompletion(row);
   const revisionRequired = isRevisionRequired(row);
   const solutionDesignDerivedCompletion = getSolutionDesignDerivedCompletion(row);
+  const contractSigningDerivedCompletion = getContractSigningDerivedCompletion(row);
+  const workflowDerivedCompletion = getWorkflowDerivedCompletion(row);
 
   return {
     documentId: row.document_id,
@@ -493,10 +581,11 @@ export function mapStageDocumentTask(row) {
     isComplete: completion.isComplete,
     completionStatus: completion.completionStatus,
     solutionDesignDerivedCompletion,
-    derivedCompletionSource: solutionDesignDerivedCompletion?.source ?? null,
-    derivedCompletionStatus: solutionDesignDerivedCompletion?.derivedCompletionStatus ?? null,
-    derivedBlockingReasons: solutionDesignDerivedCompletion?.derivedBlockingReasons ?? [],
-    derivedNotApplicable: solutionDesignDerivedCompletion?.derivedNotApplicable === true,
+    contractSigningDerivedCompletion,
+    derivedCompletionSource: workflowDerivedCompletion?.source ?? null,
+    derivedCompletionStatus: workflowDerivedCompletion?.derivedCompletionStatus ?? null,
+    derivedBlockingReasons: workflowDerivedCompletion?.derivedBlockingReasons ?? [],
+    derivedNotApplicable: workflowDerivedCompletion?.derivedNotApplicable === true,
     revisionRequired,
     revisionReason: row.revision_reason ?? null,
     revisionSourceDocumentId: row.revision_source_document_id ?? null,
@@ -519,6 +608,8 @@ export function mapGateDocument(row) {
   const completion = deriveStageDocumentCompletion(row);
   const revisionRequired = isRevisionRequired(row);
   const solutionDesignDerivedCompletion = getSolutionDesignDerivedCompletion(row);
+  const contractSigningDerivedCompletion = getContractSigningDerivedCompletion(row);
+  const workflowDerivedCompletion = getWorkflowDerivedCompletion(row);
 
   return {
     id: row.id,
@@ -532,10 +623,11 @@ export function mapGateDocument(row) {
     isComplete: completion.isComplete,
     completionStatus: completion.completionStatus,
     solutionDesignDerivedCompletion,
-    derivedCompletionSource: solutionDesignDerivedCompletion?.source ?? null,
-    derivedCompletionStatus: solutionDesignDerivedCompletion?.derivedCompletionStatus ?? null,
-    derivedBlockingReasons: solutionDesignDerivedCompletion?.derivedBlockingReasons ?? [],
-    derivedNotApplicable: solutionDesignDerivedCompletion?.derivedNotApplicable === true,
+    contractSigningDerivedCompletion,
+    derivedCompletionSource: workflowDerivedCompletion?.source ?? null,
+    derivedCompletionStatus: workflowDerivedCompletion?.derivedCompletionStatus ?? null,
+    derivedBlockingReasons: workflowDerivedCompletion?.derivedBlockingReasons ?? [],
+    derivedNotApplicable: workflowDerivedCompletion?.derivedNotApplicable === true,
     revisionRequired,
     revisionReason: row.revision_reason ?? null,
     revisionSourceDocumentId: row.revision_source_document_id ?? null,
@@ -563,22 +655,22 @@ export function buildStageCompletenessSummary(documents) {
       derivedCompletionSource:
         document.derivedCompletionSource ??
         document.derived_completion_source ??
-        getSolutionDesignDerivedCompletion(document)?.source ??
+        getWorkflowDerivedCompletion(document)?.source ??
         null,
       derivedCompletionStatus:
         document.derivedCompletionStatus ??
         document.derived_completion_status ??
-        getSolutionDesignDerivedCompletion(document)?.derivedCompletionStatus ??
+        getWorkflowDerivedCompletion(document)?.derivedCompletionStatus ??
         null,
       derivedBlockingReasons:
         document.derivedBlockingReasons ??
         document.derived_blocking_reasons ??
-        getSolutionDesignDerivedCompletion(document)?.derivedBlockingReasons ??
+        getWorkflowDerivedCompletion(document)?.derivedBlockingReasons ??
         [],
       derivedNotApplicable:
         document.derivedNotApplicable === true ||
         document.derived_not_applicable === true ||
-        getSolutionDesignDerivedCompletion(document)?.derivedNotApplicable === true,
+        getWorkflowDerivedCompletion(document)?.derivedNotApplicable === true,
       revisionRequired: isRevisionRequired(document),
       revisionReason: document.revisionReason ?? document.revision_reason ?? null,
       revisionSourceDocumentId: document.revisionSourceDocumentId ?? document.revision_source_document_id ?? null,
@@ -793,7 +885,8 @@ function buildDerivedCompletion({
   revision = null,
   isComplete,
   blockingReasons = [],
-  notApplicable = false
+  notApplicable = false,
+  source = SOLUTION_DESIGN_DERIVED_SOURCE
 }) {
   const completionStatus = notApplicable
     ? COMPLETION_STATUS.NOT_APPLICABLE
@@ -802,7 +895,7 @@ function buildDerivedCompletion({
       : COMPLETION_STATUS.INCOMPLETE;
 
   return {
-    source: SOLUTION_DESIGN_DERIVED_SOURCE,
+    source,
     documentCode,
     nodeKey,
     revision,
@@ -1047,6 +1140,50 @@ function deriveSolutionDesignDocumentCompletion(context, documentCode) {
   return null;
 }
 
+function getContractSigningNode(context, nodeKey) {
+  return context.nodesByKey.get(nodeKey) || null;
+}
+
+function getContractSigningSlot(context, slotKey) {
+  return context.slotsByKey.get(slotKey) || null;
+}
+
+function getContractSigningRevision({ node, slot }) {
+  const revision = Math.max(
+    Number(node?.current_revision ?? 0),
+    Number(slot?.revision ?? 0),
+    Number(slot?.current_file_revision ?? 0)
+  );
+  return Number.isSafeInteger(revision) && revision > 0 ? revision : 1;
+}
+
+function isContractSigningSlotApprovedWithCurrentFile(slot) {
+  return Boolean(slot?.current_file_id) &&
+    slot?.status === CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.APPROVED;
+}
+
+function deriveContractSigningDocumentCompletion(context, documentCode) {
+  const mapping = CONTRACT_SIGNING_DOCUMENT_SLOT_MAP[documentCode];
+  if (!mapping) {
+    return null;
+  }
+
+  const node = getContractSigningNode(context, mapping.nodeKey);
+  const slot = getContractSigningSlot(context, mapping.slotKey);
+  const complete =
+    node?.status === CONTRACT_SIGNING_NODE_STATUS.APPROVED &&
+    isContractSigningSlotApprovedWithCurrentFile(slot);
+
+  return buildDerivedCompletion({
+    documentCode,
+    nodeKey: mapping.nodeKey,
+    revision: getContractSigningRevision({ node, slot }),
+    isComplete: complete,
+    blockingReasons: complete ? [] : [mapping.blockingReason],
+    source: CONTRACT_SIGNING_DERIVED_SOURCE
+  });
+}
+
 async function selectSolutionDesignDerivedContexts(executor, projectIds) {
   if (projectIds.length === 0) {
     return new Map();
@@ -1130,7 +1267,54 @@ async function selectSolutionDesignDerivedContexts(executor, projectIds) {
   ]));
 }
 
-export async function attachSolutionDesignDerivedCompletionToStageDocumentRows(executor, rows) {
+async function selectContractSigningDerivedContexts(executor, projectIds) {
+  if (projectIds.length === 0) {
+    return new Map();
+  }
+
+  const placeholders = buildPlaceholders(projectIds);
+  const [nodeRows] = await executor.execute(
+    `SELECT *
+    FROM project_contract_signing_nodes
+    WHERE project_id IN (${placeholders})
+    ORDER BY project_id ASC, node_order ASC`,
+    projectIds
+  );
+  const [slotRows] = await executor.execute(
+    `SELECT
+      s.*,
+      f.id AS current_file_id,
+      f.revision AS current_file_revision,
+      f.original_file_name AS current_file_original_file_name,
+      f.mime_type AS current_file_mime_type,
+      f.file_size AS current_file_size,
+      f.uploaded_by_user_id AS current_file_uploaded_by_user_id,
+      f.uploaded_at AS current_file_uploaded_at
+    FROM project_contract_signing_upload_slots s
+    LEFT JOIN project_contract_signing_upload_files f
+      ON f.slot_id = s.id AND f.is_current = 1
+    WHERE s.project_id IN (${placeholders})
+    ORDER BY s.project_id ASC, s.slot_order ASC`,
+    projectIds
+  );
+
+  const nodesByProject = mapRowsByProjectAndKey(nodeRows, 'node_key');
+  const slotsByProject = mapRowsByProjectAndKey(slotRows, 'slot_key');
+
+  return new Map(projectIds.map((projectId) => [
+    projectId,
+    {
+      nodesByKey: nodesByProject.get(projectId) || new Map(),
+      slotsByKey: slotsByProject.get(projectId) || new Map()
+    }
+  ]));
+}
+
+function hasContractSigningWorkflowContext(context) {
+  return Boolean(context?.nodesByKey?.size);
+}
+
+async function attachSolutionDesignDerivedCompletionOnly(executor, rows) {
   const solutionDesignRows = rows.filter((row) => SOLUTION_DESIGN_DOCUMENT_CODES.has(getDocumentCode(row)));
   if (solutionDesignRows.length === 0) {
     return rows;
@@ -1176,6 +1360,47 @@ export async function attachSolutionDesignDerivedCompletionToStageDocumentRows(e
       solutionDesignDerivedCompletion
     };
   });
+}
+
+async function attachContractSigningDerivedCompletionToStageDocumentRows(executor, rows) {
+  const contractSigningRows = rows.filter((row) =>
+    CONTRACT_SIGNING_DOCUMENT_CODES.has(getDocumentCode(row))
+  );
+  if (contractSigningRows.length === 0) {
+    return rows;
+  }
+
+  const projectIds = [...groupByProjectId(contractSigningRows).keys()];
+  const contextsByProjectId = await selectContractSigningDerivedContexts(executor, projectIds);
+
+  return rows.map((row) => {
+    const documentCode = normalizeContractSigningDocumentCode(getDocumentCode(row));
+    if (!CONTRACT_SIGNING_DERIVED_DOCUMENT_CODES.includes(documentCode)) {
+      return row;
+    }
+
+    const projectId = Number(row.project_id ?? row.projectId);
+    const context = contextsByProjectId.get(projectId);
+    const contractSigningDerivedCompletion = hasContractSigningWorkflowContext(context)
+      ? deriveContractSigningDocumentCompletion(context, documentCode)
+      : buildDerivedCompletion({
+          documentCode,
+          nodeKey: CONTRACT_SIGNING_DOCUMENT_SLOT_MAP[documentCode]?.nodeKey ?? null,
+          isComplete: false,
+          blockingReasons: ['合同签订 workflow 派生上下文缺失'],
+          source: CONTRACT_SIGNING_DERIVED_SOURCE
+        });
+
+    return {
+      ...row,
+      contractSigningDerivedCompletion
+    };
+  });
+}
+
+export async function attachSolutionDesignDerivedCompletionToStageDocumentRows(executor, rows) {
+  const rowsWithSolutionDesign = await attachSolutionDesignDerivedCompletionOnly(executor, rows);
+  return attachContractSigningDerivedCompletionToStageDocumentRows(executor, rowsWithSolutionDesign);
 }
 
 export async function selectProjectStageDocumentForUpdate(connection, projectId, documentId) {

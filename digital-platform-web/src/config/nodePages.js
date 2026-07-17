@@ -13,6 +13,10 @@ import SolutionManufacturingCostPage from '../pages/project-node/solution-design
 import SolutionMarketingCostPage from '../pages/project-node/solution-design/SolutionMarketingCostPage.vue';
 import SolutionPreparationPage from '../pages/project-node/solution-design/SolutionPreparationPage.vue';
 import SolutionQuotationTenderPage from '../pages/project-node/solution-design/SolutionQuotationTenderPage.vue';
+import ContractAdvancePaymentPage from '../pages/project-node/contract-signing/ContractAdvancePaymentPage.vue';
+import ContractKickoffNoticePage from '../pages/project-node/contract-signing/ContractKickoffNoticePage.vue';
+import ContractPreparationPage from '../pages/project-node/contract-signing/ContractPreparationPage.vue';
+import ContractSigningPage from '../pages/project-node/contract-signing/ContractSigningPage.vue';
 
 export const nodePages = {
   project_input: ProjectInputPage,
@@ -28,7 +32,11 @@ export const nodePages = {
   manufacturing_cost_estimation: SolutionManufacturingCostPage,
   marketing_cost_estimation: SolutionMarketingCostPage,
   finance_cost_estimation: SolutionFinanceCostPage,
-  quotation_or_tender: SolutionQuotationTenderPage
+  quotation_or_tender: SolutionQuotationTenderPage,
+  contract_preparation: ContractPreparationPage,
+  contract_signing: ContractSigningPage,
+  advance_payment: ContractAdvancePaymentPage,
+  project_kickoff_notice: ContractKickoffNoticePage
 };
 
 export function resolveNodePage(nodeCode) {

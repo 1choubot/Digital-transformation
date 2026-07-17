@@ -1390,13 +1390,13 @@ function buildNavigationWorkspaceFromConnection(connection) {
       nodes: stage.stage_key === 'contract'
         ? [
             {
-              nodeKey: 'prepare_technical_agreement',
-              nodeName: '准备技术协议',
-              nodeStatus: 'waiting_submission',
+              nodeKey: 'contract_preparation',
+              nodeName: '准备协议和合同',
+              nodeStatus: 'pending',
               outputs: []
             },
             {
-              nodeKey: 'project_start_notice',
+              nodeKey: 'project_kickoff_notice',
               nodeName: '项目启动通知',
               nodeStatus: 'process_node',
               outputs: []
@@ -1490,6 +1490,9 @@ class SolutionDesignWorkflowFakeConnection {
     this.nodes = [];
     this.uploadSlots = [];
     this.uploadFiles = [];
+    this.contractNodes = [];
+    this.contractUploadSlots = [];
+    this.contractPaymentFlows = [];
     this.analysisForms = [];
     this.reviewForms = [];
     this.quotationForms = [];
@@ -1501,6 +1504,9 @@ class SolutionDesignWorkflowFakeConnection {
     this.operationLogs = [];
     this.nodeInsertCount = 0;
     this.uploadSlotInsertCount = 0;
+    this.contractNodeInsertCount = 0;
+    this.contractUploadSlotInsertCount = 0;
+    this.contractPaymentFlowInsertCount = 0;
     this.projectMaterializationLockCount = 0;
     this.nextUploadFileId = 1;
     this.nextAnalysisFormId = 1;
@@ -1777,6 +1783,103 @@ class SolutionDesignWorkflowFakeConnection {
         updated_at: '2026-07-08 10:00:00'
       });
       this.nodeInsertCount += 1;
+      return [{ affectedRows: 1 }];
+    }
+
+    if (text.startsWith('SELECT node_key FROM project_contract_signing_nodes')) {
+      const [projectId] = params;
+      return [
+        this.contractNodes
+          .filter((node) => Number(node.project_id) === Number(projectId))
+          .map((node) => ({ node_key: node.node_key }))
+      ];
+    }
+
+    if (text.startsWith('INSERT IGNORE INTO project_contract_signing_nodes')) {
+      const [projectId, nodeKey, nodeName, nodeOrder, status] = params;
+      if (this.contractNodes.some((node) => node.project_id === projectId && node.node_key === nodeKey)) {
+        return [{ affectedRows: 0 }];
+      }
+
+      this.contractNodes.push({
+        id: this.contractNodes.length + 1,
+        project_id: projectId,
+        node_key: nodeKey,
+        node_name: nodeName,
+        node_order: nodeOrder,
+        status,
+        return_reason: null,
+        current_revision: 1,
+        activated_at: text.includes('CURRENT_TIMESTAMP') ? '2026-07-08 10:00:00' : null,
+        submitted_at: null,
+        approved_at: null,
+        returned_at: null,
+        created_at: '2026-07-08 10:00:00',
+        updated_at: '2026-07-08 10:00:00'
+      });
+      this.contractNodeInsertCount += 1;
+      return [{ affectedRows: 1 }];
+    }
+
+    if (text.startsWith('SELECT slot_key FROM project_contract_signing_upload_slots')) {
+      const [projectId] = params;
+      return [
+        this.contractUploadSlots
+          .filter((slot) => Number(slot.project_id) === Number(projectId))
+          .map((slot) => ({ slot_key: slot.slot_key }))
+      ];
+    }
+
+    if (text.startsWith('INSERT IGNORE INTO project_contract_signing_upload_slots')) {
+      const [projectId, nodeKey, slotKey, slotName, slotOrder, status] = params;
+      if (this.contractUploadSlots.some((slot) => slot.project_id === projectId && slot.slot_key === slotKey)) {
+        return [{ affectedRows: 0 }];
+      }
+
+      this.contractUploadSlots.push({
+        id: this.contractUploadSlots.length + 1,
+        project_id: projectId,
+        node_key: nodeKey,
+        slot_key: slotKey,
+        slot_name: slotName,
+        slot_order: slotOrder,
+        is_required: 1,
+        revision: 1,
+        status,
+        review_status: null,
+        confirmation_status: null,
+        return_reason: null,
+        submitted_by_user_id: null,
+        submitted_at: null,
+        reviewed_by_user_id: null,
+        reviewed_at: null,
+        confirmed_by_user_id: null,
+        confirmed_at: null,
+        created_at: '2026-07-08 10:00:00',
+        updated_at: '2026-07-08 10:00:00'
+      });
+      this.contractUploadSlotInsertCount += 1;
+      return [{ affectedRows: 1 }];
+    }
+
+    if (text.startsWith('INSERT IGNORE INTO project_contract_signing_payment_flows')) {
+      const [projectId, status] = params;
+      if (this.contractPaymentFlows.some((flow) => flow.project_id === projectId)) {
+        return [{ affectedRows: 0 }];
+      }
+
+      this.contractPaymentFlows.push({
+        id: this.contractPaymentFlows.length + 1,
+        project_id: projectId,
+        status,
+        requested_by_user_id: null,
+        requested_at: null,
+        approved_by_user_id: null,
+        approved_at: null,
+        created_at: '2026-07-08 10:00:00',
+        updated_at: '2026-07-08 10:00:00'
+      });
+      this.contractPaymentFlowInsertCount += 1;
       return [{ affectedRows: 1 }];
     }
 
@@ -8395,16 +8498,15 @@ test('tender path derives stage gate complete and auto advances to contract stag
     buildNavigationWorkspaceFromConnection(db.connection)
   );
   const contractStage = navigation.children.find((stage) => stage.stageKey === 'contract');
-  const prepareTechnicalAgreementNode = contractStage.children.find(
-    (node) => node.nodeKey === 'prepare_technical_agreement'
-  );
-  const projectStartNoticeNode = contractStage.children.find((node) => node.nodeKey === 'project_start_notice');
+  const contractPreparationNode = contractStage.children.find((node) => node.nodeKey === 'contract_preparation');
+  const projectKickoffNoticeNode = contractStage.children.find((node) => node.nodeKey === 'project_kickoff_notice');
 
   assert.equal(navigation.currentStageKey, 'contract');
   assert.equal(contractStage.status, NAVIGATION_STATUS.PROCESSING);
-  assert.equal(prepareTechnicalAgreementNode.status, NAVIGATION_STATUS.PROCESSING);
-  assert.notEqual(prepareTechnicalAgreementNode.status, NAVIGATION_STATUS.PENDING);
-  assert.notEqual(projectStartNoticeNode.status, NAVIGATION_STATUS.COMPLETED);
+  assert.equal(contractStage.children.length, 4);
+  assert.equal(contractPreparationNode.status, NAVIGATION_STATUS.PROCESSING);
+  assert.notEqual(contractPreparationNode.status, NAVIGATION_STATUS.PENDING);
+  assert.notEqual(projectKickoffNoticeNode.status, NAVIGATION_STATUS.COMPLETED);
 });
 
 test('navigation process nodes respect current, future, and completed stage boundaries', () => {
@@ -8448,15 +8550,15 @@ test('navigation process nodes respect current, future, and completed stage boun
         configured: true,
         nodes: [
           {
-            nodeKey: 'prepare_technical_agreement',
-            nodeName: '准备技术协议',
-            nodeStatus: 'waiting_submission',
+            nodeKey: 'contract_preparation',
+            nodeName: '准备协议和合同',
+            nodeStatus: 'pending',
             outputs: []
           },
           {
-            nodeKey: 'project_start_notice',
+            nodeKey: 'project_kickoff_notice',
             nodeName: '项目启动通知',
-            nodeStatus: 'process_node',
+            nodeStatus: 'not_started',
             outputs: []
           }
         ]
@@ -8471,9 +8573,9 @@ test('navigation process nodes respect current, future, and completed stage boun
         configured: true,
         nodes: [
           {
-            nodeKey: 'project_kickoff_meeting',
-            nodeName: '召开项目启动会',
-            nodeStatus: 'process_node',
+            nodeKey: 'detailed_design_preparation',
+            nodeName: '详细设计准备',
+            nodeStatus: 'waiting_submission',
             outputs: []
           }
         ]
@@ -8484,18 +8586,18 @@ test('navigation process nodes respect current, future, and completed stage boun
   const completedSolutionStage = navigation.children.find((stage) => stage.stageKey === 'solution');
   const contractStage = navigation.children.find((stage) => stage.stageKey === 'contract');
   const futureDetailedDesignStage = navigation.children.find((stage) => stage.stageKey === 'detailedDesign');
-  const prepareTechnicalAgreementNode = contractStage.children.find(
-    (node) => node.nodeKey === 'prepare_technical_agreement'
+  const contractPreparationNode = contractStage.children.find((node) => node.nodeKey === 'contract_preparation');
+  const currentProjectKickoffNoticeNode = contractStage.children.find(
+    (node) => node.nodeKey === 'project_kickoff_notice'
   );
-  const currentProjectStartNoticeNode = contractStage.children.find((node) => node.nodeKey === 'project_start_notice');
-  const futureProcessNode = futureDetailedDesignStage.children.find((node) => node.nodeKey === 'project_kickoff_meeting');
+  const futureProcessNode = futureDetailedDesignStage.children.find((node) => node.nodeKey === 'detailed_design_preparation');
 
   assert.equal(navigation.currentStageKey, 'contract');
   assert.equal(contractStage.status, NAVIGATION_STATUS.PROCESSING);
-  assert.equal(prepareTechnicalAgreementNode.status, NAVIGATION_STATUS.PROCESSING);
-  assert.notEqual(prepareTechnicalAgreementNode.status, NAVIGATION_STATUS.PENDING);
-  assert.equal(currentProjectStartNoticeNode.status, NAVIGATION_STATUS.PROCESSING);
-  assert.notEqual(currentProjectStartNoticeNode.status, NAVIGATION_STATUS.COMPLETED);
+  assert.equal(contractPreparationNode.status, NAVIGATION_STATUS.PROCESSING);
+  assert.notEqual(contractPreparationNode.status, NAVIGATION_STATUS.PENDING);
+  assert.equal(currentProjectKickoffNoticeNode.status, NAVIGATION_STATUS.PENDING);
+  assert.notEqual(currentProjectKickoffNoticeNode.status, NAVIGATION_STATUS.COMPLETED);
   assert.equal(completedSolutionStage.children[0].status, NAVIGATION_STATUS.COMPLETED);
   assert.equal(futureProcessNode.status, NAVIGATION_STATUS.PENDING);
 });

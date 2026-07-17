@@ -8,11 +8,14 @@
     :focus-stage-id="focusStageId"
     :focus-node-key="focusNodeKey"
     :navigate="navigate"
+    @breadcrumb-change="$emit('breadcrumb-change', $event)"
   />
 </template>
 
 <script setup>
 import ProjectDetailLayout from './ProjectDetailLayout.vue';
+
+defineEmits(['breadcrumb-change']);
 
 defineProps({
   authToken: {

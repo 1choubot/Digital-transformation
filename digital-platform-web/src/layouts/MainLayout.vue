@@ -130,9 +130,12 @@
 
     <el-container class="main-wrapper">
       <div class="page-breadcrumb-bar">
-        <span class="breadcrumb-item">数字化管理平台</span>
-        <span class="breadcrumb-separator">/</span>
-        <span class="breadcrumb-item breadcrumb-item--active">{{ currentRouteLabel }}</span>
+        <template v-for="(item, index) in breadcrumbLabels" :key="`${index}-${item}`">
+          <span v-if="index" class="breadcrumb-separator">/</span>
+          <span class="breadcrumb-item" :class="{ 'breadcrumb-item--active': index === breadcrumbLabels.length - 1 }">
+            {{ item }}
+          </span>
+        </template>
       </div>
 
       <el-main
@@ -171,6 +174,10 @@ const props = defineProps({
   route: {
     type: Object,
     required: true
+  },
+  breadcrumbItems: {
+    type: Array,
+    default: () => []
   },
   loggingOut: {
     type: Boolean,
@@ -216,6 +223,13 @@ const currentRouteLabel = computed(() => {
     default:
       return '管理驾驶舱';
   }
+});
+const breadcrumbLabels = computed(() => {
+  if (props.route.name === 'project-detail' && props.breadcrumbItems.length) {
+    return ['数字化管理平台', '项目总览', ...props.breadcrumbItems];
+  }
+
+  return ['数字化管理平台', currentRouteLabel.value];
 });
 
 function isModuleLoading(code) {

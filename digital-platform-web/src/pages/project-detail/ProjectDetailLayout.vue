@@ -143,6 +143,7 @@ const props = defineProps({
     required: true
   }
 });
+const emit = defineEmits(['breadcrumb-change']);
 
 /* ── 页面加载状态 ── */
 const loading = ref(false);
@@ -462,6 +463,16 @@ const activeNavigationStage = computed(
 );
 const activeNavigationNode = computed(
   () => (activeNavigationStage.value?.children || []).find((node) => node.nodeCode === selectedWorkspaceNodeKey.value) || null
+);
+watch(
+  () => [
+    activeWorkspaceDisplayStage.value?.stageName || activeNavigationStage.value?.name || '',
+    activeWorkspaceNode.value?.nodeName || activeNavigationNode.value?.name || ''
+  ],
+  ([stageName, nodeName]) => {
+    emit('breadcrumb-change', [stageName, nodeName].filter(Boolean));
+  },
+  { immediate: true }
 );
 const currentNavigationStatus = computed(
   () => activeNavigationNode.value?.status || activeNavigationStage.value?.status || projectNavigation.value?.projectStatus || ''

@@ -3811,6 +3811,7 @@ test('technical owner can save and submit solution analysis form', async () => {
   });
   const initial = await getSolutionDesignAnalysisForm({ projectId: 100, user: technicalOwner }, db);
   assert.equal(initial.nodeStatus, SOLUTION_DESIGN_NODE_STATUS.PENDING);
+  assert.equal(initial.permissions.canEdit, true);
   assert.equal(initial.permissions.canEditForm, true);
   assert.equal(initial.permissions.canSubmitForm, true);
   assert.equal(initial.permissions.canSubmitNode, false);
@@ -4915,6 +4916,7 @@ test('technical owner can save and submit internal review form', async () => {
   assert.equal(initial.reviewType, 'internal');
   assert.equal(initial.documentCode, 'C15');
   assert.equal(initial.templateName, '方案评审记录表-模板.xlsx');
+  assert.equal(initial.permissions.canEdit, true);
   assert.equal(initial.permissions.canEditReviewForm, true);
   assert.equal(initial.permissions.canSubmitReviewForm, true);
   assert.equal(initial.permissions.canSubmitNode, false);
@@ -7349,9 +7351,11 @@ test('business owner saves and submits quotation form, accepted quotation approv
   );
 
   const initialForm = await getSolutionDesignQuotationForm({ projectId: 100, user: businessOwner }, db);
+  assert.equal(initialForm.permissions.canEdit, true);
   assert.equal(initialForm.permissions.canEditQuotationForm, true);
   assert.equal(initialForm.permissions.canSubmitQuotationForm, true);
-  assert.equal(initialForm.form, null);
+  assert.equal(initialForm.form.status, SOLUTION_DESIGN_QUOTATION_FORM_STATUS.DRAFT);
+  assert.equal(initialForm.form.revision, initialForm.nodeRevision);
 
   const saved = await saveSolutionDesignQuotationForm(
     {
@@ -7893,6 +7897,11 @@ test('rejected quotation can return to RD cost and current cost files can be reu
     },
     db
   );
+  const reopenedQuotation = await getSolutionDesignQuotationForm({ projectId: 100, user: businessOwner }, db);
+  assert.equal(reopenedQuotation.permissions.canEdit, true);
+  assert.equal(reopenedQuotation.form.status, SOLUTION_DESIGN_QUOTATION_FORM_STATUS.DRAFT);
+  assert.equal(reopenedQuotation.form.revision, reopenedQuotation.nodeRevision);
+  assert.equal(reopenedQuotation.form.formData.recipientName, '王客户');
   const reselectedUploads = await listSolutionDesignUploads({ projectId: 100, user: businessOwner }, db);
   assert.equal(
     reselectedUploads.slots.some((slot) => slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE),
@@ -7918,6 +7927,7 @@ test('rejected quotation can return to RD cost and current cost files can be reu
     db
   );
   assert.equal(resubmittedQuotation.form.revision, 2);
+  assert.equal(resubmittedQuotation.permissions.canEdit, false);
   assert.equal(resubmittedQuotation.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED);
 });
 

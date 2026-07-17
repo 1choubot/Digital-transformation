@@ -64,77 +64,95 @@
     <el-card class="overview-list-panel" shadow="never">
       <template #header>
         <div>
-          <strong>项目总览列表</strong>
-          <span>共 {{ projects.length }} 个项目，按项目编号和项目 ID 稳定排序。</span>
+          <strong>项目总览列表  </strong>
+          <span>共 {{ projects.length }} 个项目</span>
         </div>
       </template>
 
-      <el-skeleton v-if="loading" :rows="5" animated />
-
-      <el-alert v-else-if="errorMessage" title="项目总览加载失败" :description="errorMessage" type="error" show-icon
+      <el-alert v-if="errorMessage" title="项目总览加载失败" :description="errorMessage" type="error" show-icon
         :closable="false">
         <template #default>
           <el-button type="primary" size="small" @click="loadDashboard">重试</el-button>
         </template>
       </el-alert>
 
-      <el-empty v-else-if="projects.length === 0" description="当前筛选条件下没有可展示的项目。" />
-
-      <div v-else class="overview-list">
-        <el-card v-for="project in projects" :key="project.projectId" class="overview-project" shadow="never"
-          @click="handleProjectCardClick($event, project)">
-          <div class="overview-project__main">
-
-            <div class="overview-project__identity">
-              <span class="mono">{{ formatProjectCode(project.projectCode) }}</span>
-              <strong :title="project.projectName">{{ project.projectName }}</strong>
-            </div>
-
-            <div class="overview-project__dates">
-              <span>客户名称</span>
-              <strong :title="project.customerName || '-'">{{ project.customerName || '-' }}</strong>
-            </div>
-
-            <div class="overview-project__dates">
-              <span>商务负责</span>
-              <strong>{{ project.businessResponsibleUser?.name || '-' }}</strong>
-            </div>
-
-            <div class="overview-project__dates">
-              <span>项目经理</span>
-              <strong>{{ project.projectManagerUser?.name || '-' }}</strong>
-            </div>
-
-            <div class="overview-project__dates">
-              <span>技术负责人</span>
-              <strong>{{ project.technicalResponsibleUser?.name || '-' }}</strong>
-            </div>
-
-            <StatusBadge :status="project.status" />
-
-            <div class="overview-project__stage">
-              <span>当前阶段</span>
-              <strong :title="formatCurrentStage(project)">{{ formatCurrentStage(project) }}</strong>
-              <small v-if="project.currentStageIssue">{{ formatStageIssue(project.currentStageIssue) }}</small>
-              <small v-else-if="project.status === 'ended'">结束原因：{{ project.endedReason || '-' }}</small>
-            </div>
-
-            <div class="overview-project__dates">
-              <span>立项日期</span>
-              <strong>{{ project.initiationDate ? formatDate(project.initiationDate) : '-' }}</strong>
-            </div>
-
-            <span
-              v-if="project.hasMyPendingTasks"
-              class="overview-project__pending-star"
-              role="img"
-              aria-label="当前项目存在待填写资料或待处理事项"
-              title="当前项目存在待填写资料或待处理事项"
-            >★</span>
-          </div>
-
-        </el-card>
-      </div>
+      <el-table
+        v-else
+        v-loading="loading"
+        class="overview-project-table"
+        :data="sortedProjects"
+        :row-key="projectRowKey"
+        border
+        stripe
+        empty-text="当前筛选条件下没有可展示的项目。"
+        @row-click="handleProjectRowClick"
+      >
+        <el-table-column label="项目编号" width="136" fixed="left" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="overview-project-table__code mono">{{ formatProjectCode(row.projectCode) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="项目名称" width="210" fixed="left">
+          <template #default="{ row }">
+            <el-tooltip :content="row.projectName || '-'" placement="top" :show-after="300">
+              <el-button
+                class="overview-project-table__project-link"
+                link
+                type="primary"
+                :loading="String(navigatingProjectId) === String(row.projectId)"
+                @click="navigateToProject(row)"
+              >{{ row.projectName || '-' }}</el-button>
+            </el-tooltip>
+          </template>
+        </el-table-column>
+        <el-table-column prop="customerName" label="客户名称" width="180" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.customerName || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="商务负责" width="120" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.businessResponsibleUser?.name || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="项目经理" width="120" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.projectManagerUser?.name || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="技术负责人" width="130" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.technicalResponsibleUser?.name || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="项目状态" width="100" align="center">
+          <template #default="{ row }"><StatusBadge :status="row.status" /></template>
+        </el-table-column>
+        <el-table-column label="当前阶段" min-width="230">
+          <template #default="{ row }">
+            <el-tooltip :content="formatCurrentStage(row)" placement="top" :show-after="300">
+              <strong class="overview-project-table__stage-name">{{ formatCurrentStage(row) }}</strong>
+            </el-tooltip>
+            <small v-if="row.currentStageIssue" class="overview-project-table__stage-note">
+              {{ formatStageIssue(row.currentStageIssue) }}
+            </small>
+            <small v-else-if="row.status === 'ended'" class="overview-project-table__stage-note">
+              结束原因：{{ row.endedReason || '-' }}
+            </small>
+          </template>
+        </el-table-column>
+        <el-table-column label="立项日期" width="120" align="center">
+          <template #default="{ row }">{{ row.initiationDate ? formatDate(row.initiationDate) : '-' }}</template>
+        </el-table-column>
+        <el-table-column label="待办提醒" width="112" fixed="right" align="center">
+          <template #default="{ row }">
+            <el-tooltip
+              v-if="row.hasMyPendingTasks"
+              content="当前项目存在待填写资料或待处理事项"
+              placement="left"
+            >
+              <span
+                class="overview-project-table__pending-badge"
+                role="img"
+                aria-label="当前项目存在待填写资料或待处理事项"
+              ><span aria-hidden="true">★</span> 待办</span>
+            </el-tooltip>
+            <span v-else class="overview-project-table__no-pending" aria-label="无待办事项">-</span>
+          </template>
+        </el-table-column>
+      </el-table>
     </el-card>
   </section>
 </template>
@@ -147,6 +165,7 @@ import { toReadableApiError } from '../api/http.js';
 import PageHeader from '../components/PageHeader.vue';
 import StatusBadge from '../components/StatusBadge.vue';
 import { formatDate, formatProjectCode } from '../utils/format.js';
+import { findProjectNavigationTarget } from '../utils/projectNavigation.js';
 
 const props = defineProps({
   authToken: {
@@ -207,6 +226,10 @@ const dashboard = ref({
 
 const summary = computed(() => dashboard.value.summary || emptySummary);
 const projects = computed(() => dashboard.value.projects || []);
+// Only promote pending projects; Array#sort is stable, so each group keeps the backend order.
+const sortedProjects = computed(() => [...projects.value].sort(
+  (left, right) => Number(Boolean(right.hasMyPendingTasks)) - Number(Boolean(left.hasMyPendingTasks))
+));
 
 function formatCurrentStage(project) {
   if (project.currentStageName) {
@@ -230,37 +253,6 @@ function formatStageIssue(issue) {
   return stageIssueText[issue] || '';
 }
 
-function findCurrentNavigationStage(project, navigation) {
-  const stages = Array.isArray(navigation?.children) ? navigation.children : [];
-  return stages.find((stage) => String(stage.stageId) === String(project.currentStageId))
-    || stages.find((stage) => Number(stage.stageOrder) === Number(project.currentStageOrder))
-    || stages.find((stage) => stage.isCurrent)
-    || null;
-}
-
-function findActiveNavigationNode(stage) {
-  const nodes = Array.isArray(stage?.children) ? stage.children : [];
-  const statusPriority = ['RETURNED', 'WAIT_APPROVAL', 'PROCESSING', 'FAILED', 'PENDING', 'COMPLETED'];
-
-  for (const status of statusPriority) {
-    const node = nodes.find((item) => item.status === status && (item.route || item.nodeKey || item.nodeCode));
-    if (node) {
-      return node;
-    }
-  }
-
-  return null;
-}
-
-function buildNodeRoute(projectId, node) {
-  if (node?.route) {
-    return node.route;
-  }
-
-  const nodeKey = node?.nodeKey || node?.nodeCode;
-  return nodeKey ? `/projects/${projectId}/node/${encodeURIComponent(nodeKey)}` : '';
-}
-
 async function navigateToProject(project) {
   const fallbackRoute = `/projects/${project.projectId}`;
   if (!project.currentStageId || ['completed', 'ended'].includes(project.status)) {
@@ -276,9 +268,11 @@ async function navigateToProject(project) {
 
   try {
     const navigation = await getProjectNavigation(project.projectId, props.authToken);
-    const currentStage = findCurrentNavigationStage(project, navigation);
-    const activeNode = findActiveNavigationNode(currentStage);
-    props.navigate(buildNodeRoute(project.projectId, activeNode) || fallbackRoute);
+    const target = findProjectNavigationTarget(navigation, {
+      stageId: project.currentStageId,
+      stageOrder: project.currentStageOrder
+    });
+    props.navigate(target?.route || fallbackRoute);
   } catch (error) {
     // 导航定位失败不应阻止用户进入项目，退回工作区默认定位逻辑。
     props.navigate(fallbackRoute);
@@ -295,7 +289,11 @@ function isInteractiveElement(element) {
   );
 }
 
-async function handleProjectCardClick(event, project) {
+function projectRowKey(project) {
+  return project.projectId;
+}
+
+async function handleProjectRowClick(project, _column, event) {
   if (isInteractiveElement(event.target)) {
     return;
   }

@@ -106,8 +106,9 @@ import {
 } from '../../components/project-detail/stageDocumentViewHelpers.js';
 import {
   findBackendActiveNavigationTarget,
+  findNavigationStageTarget,
   shouldAutoSwitchAfterNodeRefresh
-} from './flowNodeNavigation.js';
+} from '../../utils/projectNavigation.js';
 
 const props = defineProps({
   authToken: {
@@ -708,25 +709,6 @@ function canDeleteDocumentAttachment(document, attachment) {
   return typeof value === 'boolean' ? value : documentPermission(document, 'canDeleteAttachment', false);
 }
 
-/* ── 在阶段内查找活跃节点（阶段是导航目录，不需要独立页面） ── */
-function findActiveNodeInStage(stage) {
-  const nodes = stage.nodes || [];
-  // 优先处理真实待办状态，过程节点仅作为兜底，避免阶段切换后默认落到说明性节点。
-  const priorityStatuses = [
-    'returned_for_rework',
-    'blocked_by_rework',
-    'pending_review',
-    'in_progress',
-    'waiting_submission'
-  ];
-  const activeNode = nodes.find((node) => priorityStatuses.includes(node.nodeStatus));
-  const incompleteNode = nodes.find(
-    (node) => !['completed', 'not_applicable', 'process_node'].includes(node.nodeStatus)
-  );
-  const processNode = nodes.find((node) => node.nodeStatus === 'process_node');
-  return activeNode || incompleteNode || processNode || nodes[nodes.length - 1] || null;
-}
-
 /* ── 工作区节点选择（阶段是导航目录，只有节点才驱动内容更新） ── */
 function selectWorkspaceNode(stage, node) {
   if (!stage || !node) {
@@ -781,21 +763,16 @@ function selectWorkspaceNodeFromNavigation({ stage, node }) {
   if (workspaceNode) {
     selectWorkspaceNode(workspaceStage, workspaceNode);
   } else {
-    /* 导航有节点但工作区数据缺失——回退到该阶段第一个活跃节点 */
-    const fallbackNode = findActiveNodeInStage(workspaceStage);
-    if (fallbackNode) {
-      selectWorkspaceNode(workspaceStage, fallbackNode);
-    }
+    // Routing fallback must remain navigation-driven even if workspace data is incomplete.
+    const fallbackTarget = findNavigationStageTarget(stage);
+    if (fallbackTarget) applyAutomaticWorkspaceSelection(fallbackTarget);
   }
 }
 
 function selectCurrentWorkspaceNode() {
-  /* 打开项目详情时自动跳转到当前阶段和当前节点：
-   * 1. 用项目的 currentStage（而非硬编码 initiation）作为默认阶段
-   * 2. 在该阶段内找第一个「非完成」节点作为活跃节点（阶段只是目录，不停留）
-   * 3. 更新 URL hash 以便刷新后仍定位到同一节点 */
+  /* 打开项目详情时，以后端导航投影选择当前阶段内的活跃节点。 */
   const currentStageKey = currentDetailStage.value?.stageKey;
-  const stages = workspaceDisplayStages.value || [];
+  const stages = projectNavigationDisplay.value?.children || [];
 
   const targetStage = currentStageKey
     ? stages.find((stage) => stage.stageKey === currentStageKey)
@@ -807,15 +784,19 @@ function selectCurrentWorkspaceNode() {
     return;
   }
 
-  selectedWorkspaceStageKey.value = targetStage.stageKey;
-
-  const targetNode = findActiveNodeInStage(targetStage);
-  if (targetNode) {
-    selectedWorkspaceNodeKey.value = targetNode.nodeKey;
-    props.navigate(`/projects/${props.projectId}/node/${targetNode.nodeKey}`);
-  } else {
+  const target = findNavigationStageTarget(targetStage);
+  if (!target || !applyAutomaticWorkspaceSelection(target)) {
+    selectedWorkspaceStageKey.value = targetStage.stageKey;
     selectedWorkspaceNodeKey.value = '';
   }
+}
+
+function findNavigationNodeStatus(stageKey, nodeKey) {
+  const stage = (projectNavigationDisplay.value?.children || []).find((item) => item.stageKey === stageKey);
+  const node = (stage?.children || []).find(
+    (item) => String(item.nodeCode || item.nodeKey || '') === String(nodeKey || '')
+  );
+  return node?.status || '';
 }
 
 function restoreWorkspaceSelection(stageKey, nodeKey) {
@@ -1148,7 +1129,7 @@ async function handleBusinessStateChanged(payload = {}) {
   const shouldRefreshCurrentDetail = payload.refreshCurrentDetail === true && !shouldClearCurrentDetail;
   const previousStageKey = selectedWorkspaceStageKey.value;
   const previousNodeKey = selectedWorkspaceNodeKey.value;
-  const previousNodeStatus = activeWorkspaceNode.value?.nodeStatus || '';
+  const previousNavigationStatus = findNavigationNodeStatus(previousStageKey, previousNodeKey);
   const previousCurrentStageKey = currentDetailStage.value?.stageKey || '';
 
   if (shouldClearCurrentDetail) {
@@ -1159,8 +1140,8 @@ async function handleBusinessStateChanged(payload = {}) {
     preserveOnlineFormState: shouldRefreshCurrentDetail
   });
 
-  const refreshedPreviousNode = findWorkspaceNode(previousStageKey, previousNodeKey)?.node || null;
-  if (!shouldAutoSwitchAfterNodeRefresh(previousNodeStatus, refreshedPreviousNode?.nodeStatus)) {
+  const refreshedNavigationStatus = findNavigationNodeStatus(previousStageKey, previousNodeKey);
+  if (!shouldAutoSwitchAfterNodeRefresh(previousNavigationStatus, refreshedNavigationStatus)) {
     return;
   }
 

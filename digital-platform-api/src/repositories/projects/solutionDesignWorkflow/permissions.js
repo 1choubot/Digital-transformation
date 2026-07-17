@@ -186,7 +186,16 @@ export function assertQuotationTenderSlotProcessable({ slot, nodeRow, flowRow })
   }
 }
 
-export function canProcessQuotationForm({ projectEnded, inSolutionStage, roleState, user, nodeRow, flowRow }) {
+function isFormEditableForNodeRevision(formRow, nodeRow, submittedStatus) {
+  if (!formRow) return true;
+  if (Number(formRow.revision ?? 0) < Number(nodeRow?.current_revision ?? 1)) return true;
+  return !(
+    formRow.form_status === submittedStatus &&
+    formRow.generated_file_status === SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED
+  );
+}
+
+export function canProcessQuotationForm({ projectEnded, inSolutionStage, roleState, user, nodeRow, flowRow, formRow }) {
   return (
     !projectEnded &&
     inSolutionStage &&
@@ -194,7 +203,8 @@ export function canProcessQuotationForm({ projectEnded, inSolutionStage, roleSta
     isSameId(roleState[SOLUTION_DESIGN_ROLE_KEY.BUSINESS_OWNER]?.userId, user?.id) &&
     isNodeProcessableStatus(nodeRow?.status) &&
     isQuotationBranchCurrent(flowRow, nodeRow) &&
-    flowRow.branch_status === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED
+    flowRow.branch_status === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_STATUS.SELECTED &&
+    isFormEditableForNodeRevision(formRow, nodeRow, SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED)
   );
 }
 
@@ -286,25 +296,27 @@ export function isTechnicalOwner(roleState, user) {
   return isSameId(roleState[SOLUTION_DESIGN_ROLE_KEY.TECHNICAL_OWNER]?.userId, user?.id);
 }
 
-export function canProcessAnalysisForm({ projectEnded, inSolutionStage, roleState, user, analysisNode }) {
+export function canProcessAnalysisForm({ projectEnded, inSolutionStage, roleState, user, analysisNode, formRow }) {
   return (
     !projectEnded &&
     inSolutionStage &&
     areAllRolesAssigned(roleState) &&
     isTechnicalOwner(roleState, user) &&
     analysisNode?.node_key === SOLUTION_DESIGN_NODE_KEY.ANALYSIS &&
-    isNodeProcessableStatus(analysisNode?.status)
+    isNodeProcessableStatus(analysisNode?.status) &&
+    isFormEditableForNodeRevision(formRow, analysisNode, SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.SUBMITTED)
   );
 }
 
-export function canProcessReviewForm({ projectEnded, inSolutionStage, roleState, user, reviewNode }) {
+export function canProcessReviewForm({ projectEnded, inSolutionStage, roleState, user, reviewNode, formRow }) {
   return (
     !projectEnded &&
     inSolutionStage &&
     areAllRolesAssigned(roleState) &&
     isTechnicalOwner(roleState, user) &&
     Boolean(getSolutionDesignReviewFormDefinition(reviewNode?.node_key)) &&
-    isNodeProcessableStatus(reviewNode?.status)
+    isNodeProcessableStatus(reviewNode?.status) &&
+    isFormEditableForNodeRevision(formRow, reviewNode, SOLUTION_DESIGN_REVIEW_FORM_STATUS.SUBMITTED)
   );
 }
 

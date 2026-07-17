@@ -5,20 +5,26 @@
       @upload="handleUpload" @download="downloadUpload" @mark-exemption="markUploadExemption"
       @cancel-exemption="cancelUploadExemption" />
 
-    <section v-if="requiresBranchSelection" class="solution-section">
-      <h4>审批通过后流程</h4>
-      <el-alert title="总经理通过财务成本估算时，必须同时确定后续进入报价流程或投标流程。"
-        type="info" show-icon :closable="false" />
-      <el-radio-group v-model="branchType" :disabled="isPending(`approve:${nodeKey}`)">
-        <el-radio-button value="quotation">报价流程</el-radio-button>
-        <el-radio-button value="tender">投标流程</el-radio-button>
-      </el-radio-group>
-    </section>
-
     <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending"
+      :approve-requires-confirmation="requiresBranchSelection"
       :approve-disabled="requiresBranchSelection && !branchType"
       :return-reason="returnReasons[nodeKey] || ''" @update:return-reason="returnReasons[nodeKey] = $event"
-      @submit="submitNode(nodeKey)" @approve="approveFinanceNode" @return="returnNode(nodeKey)" />
+      @submit="submitNode(nodeKey)" @approve="approveFinanceNode" @return="returnNode(nodeKey)">
+      <template #approve-form="{ busy }">
+        <div class="finance-approval-flow">
+          <label class="finance-approval-flow__label" id="finance-approval-flow-title">
+            <strong>后续流程</strong>
+            <span>*</span>
+            <small>审批通过前必须选择</small>
+          </label>
+          <el-radio-group v-model="branchType" class="finance-approval-flow__options"
+            aria-labelledby="finance-approval-flow-title" aria-required="true" :disabled="busy">
+            <el-radio value="quotation" border>报价流程</el-radio>
+            <el-radio value="tender" border>投标流程</el-radio>
+          </el-radio-group>
+        </div>
+      </template>
+    </SolutionNodeActions>
   </SolutionDesignNodeLayout>
 </template>
 
@@ -49,3 +55,67 @@ async function approveFinanceNode() {
   await approveNode(nodeKey.value, payload);
 }
 </script>
+
+<style scoped>
+.finance-approval-flow {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.finance-approval-flow__label {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  color: #334252;
+  font-size: 13px;
+}
+
+.finance-approval-flow__label > span {
+  color: var(--el-color-danger);
+}
+
+.finance-approval-flow__label small {
+  color: #7a8998;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.finance-approval-flow__options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.finance-approval-flow__options :deep(.el-radio.is-bordered) {
+  width: 100%;
+  height: auto;
+  min-height: 40px;
+  margin: 0;
+  padding: 8px 12px;
+}
+
+.finance-approval-flow__options :deep(.el-radio__label) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.finance-approval-flow__options :deep(.el-radio:hover:not(.is-disabled)),
+.finance-approval-flow__options :deep(.el-radio.is-checked:not(.is-disabled)) {
+  border-color: var(--el-color-primary);
+  color: var(--el-color-primary);
+}
+
+.finance-approval-flow__options :deep(.el-radio.is-checked:not(.is-disabled)) {
+  background: var(--el-color-primary-light-9);
+}
+
+@media (max-width: 640px) {
+  .finance-approval-flow__options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+</style>

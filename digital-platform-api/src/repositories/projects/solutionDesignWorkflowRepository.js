@@ -78,6 +78,7 @@ import {
   normalizeReviewFormPayload
 } from './solutionDesignWorkflow/formPayloads.js';
 import {
+  buildDefaultQuotationFormData,
   buildQuotationFormDto,
   generateSolutionDesignQuotationFormFile,
   mapQuotationForm,
@@ -1451,11 +1452,13 @@ function buildQuotationFormPermissions({ projectRow, quotationNode, rolesRow, us
     roleState,
     user,
     nodeRow: quotationNode,
-    flowRow: quotationTenderFlow
+    flowRow: quotationTenderFlow,
+    formRow: quotationFormRow
   });
 
   return {
     canViewQuotationForm: true,
+    canEdit: canProcessForm,
     canEditQuotationForm: canProcessForm,
     canSubmitQuotationForm: canProcessForm,
     canSubmitQuotation: canSubmitQuotation({
@@ -3197,6 +3200,74 @@ async function saveQuotationFormVersion(executor, {
   });
 }
 
+function assertCurrentFormWritableForNode({ formRow, nodeRow, submittedStatus, detailKey }) {
+  if (
+    formRow?.form_status === submittedStatus &&
+    Number(formRow.revision ?? 0) >= Number(nodeRow?.current_revision ?? 1) &&
+    formRow.generated_file_status === SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED
+  ) {
+    throw new SolutionDesignWorkflowError(
+      SOLUTION_DESIGN_ERROR.NODE_NOT_PROCESSABLE,
+      'Current online form revision has already been submitted',
+      409,
+      [detailKey]
+    );
+  }
+}
+
+async function ensureAnalysisDraftForCurrentCycle(executor, { projectId, actorUserId }) {
+  const nodeRow = await selectSolutionDesignNodeForUpdate(executor, projectId, SOLUTION_DESIGN_NODE_KEY.ANALYSIS);
+  const currentFormRow = await selectCurrentAnalysisForm(executor, projectId, { forUpdate: true });
+  if (
+    currentFormRow?.form_status === SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.DRAFT &&
+    Number(currentFormRow.revision ?? 0) >= Number(nodeRow.current_revision ?? 1)
+  ) return currentFormRow;
+  return saveAnalysisFormVersion(executor, {
+    projectId,
+    nodeRevision: nodeRow.current_revision,
+    currentFormRow,
+    formStatus: SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.DRAFT,
+    formDataJson: currentFormRow?.form_data_json || '{}',
+    actorUserId
+  });
+}
+
+async function ensureReviewDraftForCurrentCycle(executor, { projectId, nodeKey, actorUserId }) {
+  const definition = getSolutionDesignReviewFormDefinition(nodeKey);
+  const nodeRow = await selectSolutionDesignNodeForUpdate(executor, projectId, nodeKey);
+  const currentFormRow = await selectCurrentReviewForm(executor, projectId, nodeKey, { forUpdate: true });
+  if (
+    currentFormRow?.form_status === SOLUTION_DESIGN_REVIEW_FORM_STATUS.DRAFT &&
+    Number(currentFormRow.revision ?? 0) >= Number(nodeRow.current_revision ?? 1)
+  ) return currentFormRow;
+  return saveReviewFormVersion(executor, {
+    projectId,
+    nodeKey,
+    reviewType: definition.reviewType,
+    nodeRevision: nodeRow.current_revision,
+    currentFormRow,
+    formStatus: SOLUTION_DESIGN_REVIEW_FORM_STATUS.DRAFT,
+    formDataJson: currentFormRow?.form_data_json || '{}',
+    actorUserId
+  });
+}
+
+async function ensureQuotationDraftForCurrentCycle(executor, { projectId, nodeRow, actorUserId }) {
+  const currentFormRow = await selectCurrentQuotationForm(executor, projectId, { forUpdate: true });
+  if (
+    currentFormRow?.form_status === SOLUTION_DESIGN_QUOTATION_FORM_STATUS.DRAFT &&
+    Number(currentFormRow.revision ?? 0) >= Number(nodeRow.current_revision ?? 1)
+  ) return currentFormRow;
+  return saveQuotationFormVersion(executor, {
+    projectId,
+    nodeRevision: nodeRow.current_revision,
+    currentFormRow,
+    formStatus: SOLUTION_DESIGN_QUOTATION_FORM_STATUS.DRAFT,
+    formDataJson: currentFormRow?.form_data_json || JSON.stringify(buildDefaultQuotationFormData()),
+    actorUserId
+  });
+}
+
 async function markAnalysisFormGenerated(executor, {
   formId,
   storageKey,
@@ -4472,7 +4543,7 @@ async function returnTender(executor, { projectId, returnReason, actorUserId }) 
   }
 }
 
-async function returnAnalysisNode(executor, { projectId, returnReason }) {
+async function returnAnalysisNode(executor, { projectId, returnReason, actorUserId }) {
   const [updateResult] = await executor.execute(
     `UPDATE project_solution_design_nodes
     SET status = ?,
@@ -4503,6 +4574,7 @@ async function returnAnalysisNode(executor, { projectId, returnReason }) {
       }
     );
   }
+  await ensureAnalysisDraftForCurrentCycle(executor, { projectId, actorUserId });
 }
 
 async function getNextReviewNodeRevisionAfterReturn(executor, projectId, nodeKey) {
@@ -4623,7 +4695,7 @@ async function returnFinanceCostToRdCost(executor, { projectId, returnReason }) 
   }
 }
 
-async function returnReviewNodeToSolutionDesign(executor, { projectId, nodeKey, returnReason }) {
+async function returnReviewNodeToSolutionDesign(executor, { projectId, nodeKey, returnReason, actorUserId }) {
   const nextReviewRevision = await getNextReviewNodeRevisionAfterReturn(executor, projectId, nodeKey);
   const nextDesignRevision = await getNextDesignNodeRevisionAfterReviewReturn(executor, projectId);
   const [reviewUpdateResult] = await executor.execute(
@@ -4716,6 +4788,15 @@ async function returnReviewNodeToSolutionDesign(executor, { projectId, nodeKey, 
         allowedStatuses: [SOLUTION_DESIGN_NODE_STATUS.APPROVED, SOLUTION_DESIGN_NODE_STATUS.RETURNED]
       }
     );
+  }
+
+  await ensureReviewDraftForCurrentCycle(executor, { projectId, nodeKey, actorUserId });
+  if (nodeKey === SOLUTION_DESIGN_NODE_KEY.CUSTOMER_REVIEW) {
+    await ensureReviewDraftForCurrentCycle(executor, {
+      projectId,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.INTERNAL_REVIEW,
+      actorUserId
+    });
   }
 }
 
@@ -5109,6 +5190,13 @@ export async function selectSolutionDesignQuotationTenderBranch({ projectId, pay
       actorUserId: user.id,
       existingFlow
     });
+    if (branchType === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION) {
+      await ensureQuotationDraftForCurrentCycle(connection, {
+        projectId,
+        nodeRow,
+        actorUserId: user.id
+      });
+    }
     await insertQuotationTenderBranchSelectionLog(connection, {
       projectId,
       branchType,
@@ -5200,6 +5288,12 @@ async function saveOrSubmitSolutionDesignQuotationForm(
     }
 
     const currentFormRow = await selectCurrentQuotationForm(connection, projectId, { forUpdate: true });
+    assertCurrentFormWritableForNode({
+      formRow: currentFormRow,
+      nodeRow: quotationNode,
+      submittedStatus: SOLUTION_DESIGN_QUOTATION_FORM_STATUS.SUBMITTED,
+      detailKey: 'quotationFormRevision'
+    });
     let savedFormRow = await saveQuotationFormVersion(connection, {
       projectId,
       nodeRevision: quotationNode.current_revision,
@@ -5778,6 +5872,12 @@ async function saveOrSubmitSolutionDesignAnalysisForm(
     assertNodeProcessable(analysisNode, SOLUTION_DESIGN_NODE_KEY.ANALYSIS, 'processed');
 
     const currentFormRow = await selectCurrentAnalysisForm(connection, projectId, { forUpdate: true });
+    assertCurrentFormWritableForNode({
+      formRow: currentFormRow,
+      nodeRow: analysisNode,
+      submittedStatus: SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.SUBMITTED,
+      detailKey: 'analysisFormRevision'
+    });
     const analysisStageDocumentRow = await selectProjectStageDocumentByAnyCode(
       connection,
       projectId,
@@ -6090,6 +6190,12 @@ async function saveOrSubmitSolutionDesignReviewForm(
 
     const currentFormRow = await selectCurrentReviewForm(connection, projectId, definition.nodeKey, {
       forUpdate: true
+    });
+    assertCurrentFormWritableForNode({
+      formRow: currentFormRow,
+      nodeRow: reviewNode,
+      submittedStatus: SOLUTION_DESIGN_REVIEW_FORM_STATUS.SUBMITTED,
+      detailKey: 'reviewFormRevision'
     });
     let savedFormRow = await saveReviewFormVersion(connection, {
       projectId,
@@ -6606,6 +6712,13 @@ export async function approveSolutionDesignWorkflowNode({ projectId, nodeKey, pa
           actorUserId: user.id,
           existingFlow
         });
+        if (branchType === SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.QUOTATION) {
+          await ensureQuotationDraftForCurrentCycle(connection, {
+            projectId,
+            nodeRow: quotationTenderNode,
+            actorUserId: user.id
+          });
+        }
         await insertQuotationTenderBranchSelectionLog(connection, {
           projectId,
           branchType,
@@ -6710,7 +6823,7 @@ export async function returnSolutionDesignWorkflowNode({ projectId, nodeKey, pay
     });
 
     if (node.nodeKey === SOLUTION_DESIGN_NODE_KEY.ANALYSIS) {
-      await returnAnalysisNode(connection, { projectId, returnReason });
+      await returnAnalysisNode(connection, { projectId, returnReason, actorUserId: user.id });
       await insertAnalysisReviewLog(connection, {
         projectId,
         actorUserId: user.id,
@@ -6722,7 +6835,8 @@ export async function returnSolutionDesignWorkflowNode({ projectId, nodeKey, pay
       await returnReviewNodeToSolutionDesign(connection, {
         projectId,
         nodeKey: node.nodeKey,
-        returnReason
+        returnReason,
+        actorUserId: user.id
       });
       const metadata = getReviewReturnMetadata(node.nodeKey);
       await insertReviewApprovalLog(connection, {

@@ -1,26 +1,28 @@
 <template>
-  <GeneratedFormFileCard :generated-file="activeDto?.form?.generatedFile"
-    :pending="isPending(`review:${nodeKey}:download`)" @download="downloadReviewGeneratedFile(nodeKey)" />
+  <div class="review-generated-files">
+
+    <GeneratedFormFileCard :generated-file="activeDto?.form?.generatedFile"
+      :pending="isPending(`review:${nodeKey}:download`)" :button-text="activeDownloadButtonText"
+      @download="downloadReviewGeneratedFile(nodeKey)" />
+
+    <GeneratedFormFileCard v-if="isCustomerReview" :generated-file="internalReviewGeneratedFile"
+      :pending="isPending('review:internal_solution_review:download')" button-text="查看内部方案审评表"
+      @download="downloadReviewGeneratedFile('internal_solution_review')" />
+
+  </div>
   <SolutionDesignNodeLayout :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
     :error-message="context.solutionDesignErrorMessage">
     <section v-if="canViewFormContent" ref="reviewFormRoot" class="review-section">
 
-      <SolutionReviewFormTable
-        :model="reviewFormData"
-        :repeatable-field-configs="tableRepeatableFieldConfigs"
-        :implementation-plan-items="implementationPlanItems"
-        :invalid-field-keys="invalidFieldKeys"
-        :invalid-plan-keys="invalidPlanKeys"
-        :disabled="!activeDto?.permissions?.canEditReviewForm"
-        @update-field="updateReviewFormField"
-        @update-repeatable="updateRepeatableItem"
-        @add-repeatable="addRepeatableItem"
-        @remove-repeatable="removeRepeatableItem"
-        @update-plan="updateImplementationPlanItem"
-      />
+      <SolutionReviewFormTable :model="reviewFormData" :repeatable-field-configs="tableRepeatableFieldConfigs"
+        :implementation-plan-items="implementationPlanItems" :invalid-field-keys="invalidFieldKeys"
+        :invalid-plan-keys="invalidPlanKeys" :disabled="!activeDto?.permissions?.canEditReviewForm"
+        @update-field="updateReviewFormField" @update-repeatable="updateRepeatableItem"
+        @add-repeatable="addRepeatableItem" @remove-repeatable="removeRepeatableItem"
+        @update-plan="updateImplementationPlanItem" />
       <div class="action-row node-online-form-actions">
-        <el-button size="large" :disabled="!activeDto?.permissions?.canEditReviewForm" :loading="isPending(`review:${nodeKey}:save`)"
-          @click="saveReviewForm(nodeKey)">
+        <el-button size="large" :disabled="!activeDto?.permissions?.canEditReviewForm"
+          :loading="isPending(`review:${nodeKey}:save`)" @click="saveReviewForm(nodeKey)">
           保存草稿
         </el-button>
         <el-button size="large" type="primary" :disabled="!activeDto?.permissions?.canSubmitReviewForm"
@@ -45,7 +47,6 @@ import GeneratedFormFileCard from '../../GeneratedFormFileCard.vue';
 import { solutionDesignNodePageProps, useSolutionDesignNodePage } from '../../../composables/project-stage/solution-design/useSolutionDesignNodePage.js';
 import { useSolutionReviewForm } from '../../../composables/project-stage/solution-design/useSolutionReviewForm.js';
 import { getMissingRequiredFields } from '../../../utils/formValidation.js';
-import { isOnlineFormContentVisible, isSolutionDesignFormFiller } from '../../../utils/onlineFormVisibility.js';
 
 const fields = [
   { key: 'meetingDate', label: '评审时间', type: 'date', required: true },
@@ -85,13 +86,15 @@ const {
   saveReviewForm, submitReviewForm, downloadReviewGeneratedFile
 } = review;
 const activeDto = computed(() => review.activeReviewFormDto(workflow.value, currentNode.value));
-const canViewFormContent = computed(() =>
-  isSolutionDesignFormFiller(workflow.value, 'technical_owner', props.currentUser)
-  && isOnlineFormContentVisible({
-    nodeStatus: activeDto.value?.nodeStatus || currentNode.value?.status,
-    formStatus: activeDto.value?.form?.status
-  })
+const isCustomerReview = computed(() => nodeKey.value === 'customer_solution_review');
+const internalReviewGeneratedFile = computed(() =>
+  workflow.value?.reviewForms?.internal_solution_review?.generatedFile || null
 );
+const activeDownloadButtonText = computed(() => isCustomerReview.value
+  ? '查看客户方案审评表'
+  : '查看内部方案审评表'
+);
+const canViewFormContent = computed(() => activeDto.value?.permissions?.canEdit === true);
 const reviewFormRoot = ref(null);
 const validationAttempted = ref(false);
 const missingRequiredFields = computed(() => getMissingRequiredFields(fields, reviewFormData));
@@ -160,5 +163,10 @@ async function handleSubmitReviewForm() {
 <style scoped>
 .review-section {
   min-width: 0;
+}
+
+.review-generated-files {
+  display: grid;
+  gap: 12px;
 }
 </style>

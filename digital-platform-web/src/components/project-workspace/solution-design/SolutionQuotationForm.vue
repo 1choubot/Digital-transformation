@@ -4,24 +4,32 @@
     <el-alert v-if="errorMessage" :title="errorMessage" type="error" show-icon :closable="false" />
     <el-form v-if="showFormContent" label-position="top" :disabled="!canEdit">
       <div class="quotation-meta-grid">
+        <el-form-item label="报价日期"><el-date-picker v-model="formData.quotationDate" type="date"
+            value-format="YYYY-MM-DD" /></el-form-item>
         <el-form-item label="收件人"><el-input v-model="formData.recipientName" /></el-form-item>
-        <el-form-item label="称谓"><el-select v-model="formData.recipientTitle" clearable><el-option label="先生" value="先生" /><el-option label="女士" value="女士" /></el-select></el-form-item>
-        <el-form-item label="联系人"><el-input v-model="formData.contactName" /></el-form-item>
+        <el-form-item label="公司联系人"><el-input v-model="formData.contactName" /></el-form-item>
         <el-form-item label="联系电话"><el-input v-model="formData.contactPhone" /></el-form-item>
-        <el-form-item label="报价日期"><el-date-picker v-model="formData.quotationDate" type="date" value-format="YYYY-MM-DD" /></el-form-item>
+
       </div>
       <div class="quotation-table-wrap">
         <el-table :data="formData.items" border>
           <el-table-column type="index" label="序号" width="60" />
-          <el-table-column label="名称" min-width="160"><template #default="{ row }"><el-input v-model="row.name" /></template></el-table-column>
-          <el-table-column label="单位" width="100"><template #default="{ row }"><el-input v-model="row.unit" /></template></el-table-column>
-          <el-table-column label="数量" width="120"><template #default="{ row }"><el-input v-model="row.quantity" /></template></el-table-column>
-          <el-table-column label="单价" width="130"><template #default="{ row }"><el-input v-model="row.unitPrice" /></template></el-table-column>
+          <el-table-column label="名称" min-width="160"><template #default="{ row }"><el-input
+                v-model="row.name" /></template></el-table-column>
+          <el-table-column label="单位" width="100"><template #default="{ row }"><el-input
+                v-model="row.unit" /></template></el-table-column>
+          <el-table-column label="数量" width="120"><template #default="{ row }"><el-input
+                v-model="row.quantity" /></template></el-table-column>
+          <el-table-column label="单价" width="130"><template #default="{ row }"><el-input
+                v-model="row.unitPrice" /></template></el-table-column>
           <el-table-column label="金额" width="130">
             <template #default="{ row }">{{ lineAmountText(row) }}</template>
           </el-table-column>
-          <el-table-column label="备注" min-width="160"><template #default="{ row }"><el-input v-model="row.remark" /></template></el-table-column>
-          <el-table-column v-if="canEdit" label="操作" width="80"><template #default="{ $index }"><el-button link type="danger" :disabled="formData.items.length <= 1" @click="removeItem($index)">删除</el-button></template></el-table-column>
+          <el-table-column label="备注" min-width="160"><template #default="{ row }"><el-input
+                v-model="row.remark" /></template></el-table-column>
+          <el-table-column v-if="canEdit" label="操作" width="80"><template #default="{ $index }"><el-button link
+                type="danger" :disabled="formData.items.length <= 1"
+                @click="removeItem($index)">删除</el-button></template></el-table-column>
         </el-table>
       </div>
       <el-button v-if="canEdit" plain @click="addItem">增加明细</el-button>

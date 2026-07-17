@@ -13,7 +13,18 @@
         <div class="solution-approval-field-label">
           <strong>审批决定</strong><span>*</span>
         </div>
-        <div class="solution-approval-decision__options">
+        <el-radio-group v-if="approveRequiresConfirmation" v-model="decision"
+          class="solution-approval-decision__choices" :disabled="busy">
+          <el-radio v-if="node.permissions?.canApprove" class="solution-approval-decision__choice--approve"
+            value="approve" border>
+            审批通过
+          </el-radio>
+          <el-radio v-if="node.permissions?.canReturn" class="solution-approval-decision__choice--return"
+            value="return" border>
+            退回修改
+          </el-radio>
+        </el-radio-group>
+        <div v-else class="solution-approval-decision__options">
           <el-button v-if="node.permissions?.canApprove" type="primary"
             :loading="isPending(`approve:${node.nodeKey}`)" :disabled="busy || approveDisabled"
             @click="approveDirectly">
@@ -22,6 +33,16 @@
           <el-button v-if="node.permissions?.canReturn" type="warning" plain
             :disabled="busy" @click="decision = 'return'">
             退回修改
+          </el-button>
+        </div>
+      </div>
+
+      <div v-if="approveRequiresConfirmation && decision === 'approve'" class="solution-approval-form">
+        <slot name="approve-form" :busy="busy" />
+        <div class="solution-action-card__footer">
+          <el-button type="primary" :loading="isPending(`approve:${node.nodeKey}`)"
+            :disabled="busy || approveDisabled" @click="confirmApprove">
+            确认审批通过
           </el-button>
         </div>
       </div>
@@ -62,6 +83,7 @@ const props = defineProps({
   returnReason: { type: String, default: '' },
   submitDisabled: Boolean,
   approveDisabled: Boolean,
+  approveRequiresConfirmation: Boolean,
   hideSubmit: Boolean,
   hideWhenEmpty: Boolean
 });
@@ -97,6 +119,11 @@ function approveDirectly() {
   if (props.approveDisabled || busy.value) return;
   // 审批通过无需展开表单或二次确认；收起可能已打开的退回表单后直接请求。
   decision.value = '';
+  emit('approve');
+}
+
+function confirmApprove() {
+  if (props.approveDisabled || busy.value) return;
   emit('approve');
 }
 
@@ -166,6 +193,52 @@ async function confirmReturn() {
   width: 100%;
 }
 
+.solution-approval-decision__choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.solution-approval-decision__choices .el-radio.is-bordered {
+  width: 100%;
+  height: auto;
+  min-height: 40px;
+  margin: 0;
+  padding: 8px 12px;
+}
+
+.solution-approval-decision__choices :deep(.el-radio__label) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.solution-approval-decision__choice--return:not(.is-disabled) {
+  --el-color-primary: var(--el-color-warning);
+}
+
+.solution-approval-decision__choice--approve:hover:not(.is-disabled),
+.solution-approval-decision__choice--approve.is-checked:not(.is-disabled) {
+  border-color: var(--el-color-primary);
+  color: var(--el-color-primary);
+}
+
+.solution-approval-decision__choice--approve.is-checked:not(.is-disabled) {
+  background: var(--el-color-primary-light-9);
+}
+
+.solution-approval-decision__choice--return:hover:not(.is-disabled),
+.solution-approval-decision__choice--return.is-checked:not(.is-disabled) {
+  border-color: var(--el-color-warning);
+  color: var(--el-color-warning);
+}
+
+.solution-approval-decision__choice--return.is-checked:not(.is-disabled) {
+  background: var(--el-color-warning-light-9);
+}
+
 .solution-approval-decision__options .el-button {
   width: 100%;
   height: auto;
@@ -197,6 +270,10 @@ async function confirmReturn() {
   }
 
   .solution-approval-decision__options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .solution-approval-decision__choices {
     grid-template-columns: minmax(0, 1fr);
   }
 

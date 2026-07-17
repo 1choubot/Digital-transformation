@@ -4732,6 +4732,10 @@ p {
   background: #f4f6f9;
 }
 
+.app-shell .app-main:not(.app-main--workspace) {
+  padding-top: 24px;
+}
+
 .app-shell .app-main--workspace {
   container-type: inline-size;
   container-name: project-workspace;
@@ -4969,6 +4973,10 @@ p {
 
   .app-shell .page-breadcrumb-bar {
     padding: 0.8rem 1rem;
+  }
+
+  .app-shell .app-main:not(.app-main--workspace) {
+    padding-top: 16px;
   }
 
   .app-shell .user-info,

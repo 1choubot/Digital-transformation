@@ -9,6 +9,7 @@ import {
   assignSolutionDesignRoles,
   approveSolutionDesignWorkflowNode,
   approveStageApproval,
+  canViewFinanceCostApprovalComment,
   createProject,
   getProjectDetail,
   getProjectOverviewDashboard,
@@ -275,7 +276,11 @@ export async function listProjectOperationLogsHandler(req, res) {
 
   await assertProjectAuditViewable(projectId, req.auth.user);
   const limit = normalizeOperationLogLimit(req.query.limit);
-  const logs = await listProjectOperationLogs(projectId, limit);
+  const includeFinanceApprovalComments = await canViewFinanceCostApprovalComment({
+    projectId,
+    user: req.auth.user
+  });
+  const logs = await listProjectOperationLogs(projectId, limit, { includeFinanceApprovalComments });
 
   res.json({
     data: logs
@@ -733,7 +738,12 @@ export async function submitStageApprovalHandler(req, res) {
 
 export async function approveStageApprovalHandler(req, res) {
   const { projectId, stageId } = parseApprovalRouteIds(req);
-  const result = await approveStageApproval({ projectId, stageId, user: req.auth.user });
+  const result = await approveStageApproval({
+    projectId,
+    stageId,
+    user: req.auth.user,
+    comment: req.body?.comment
+  });
 
   res.json({
     data: result

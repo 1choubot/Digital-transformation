@@ -35,8 +35,9 @@
       @add-item="quotation.addItem" @remove-item="quotation.removeItem" />
 
     <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending"
-      :return-reason="returnReasons[nodeKey] || ''" @update:return-reason="returnReasons[nodeKey] = $event"
-      @submit="submitNode(nodeKey)" @approve="approveNode(nodeKey)" @return="returnNode(nodeKey)" />
+      :comment="returnReasons[nodeKey] || ''" @update:comment="returnReasons[nodeKey] = $event"
+      @submit="submitNode(nodeKey)" @approve="approveNode(nodeKey, { comment: $event })"
+      @return="returnNode(nodeKey)" />
 
     <div v-if="flow && (flow.permissions?.canAcceptQuotation
       || flow.permissions?.canRejectQuotationAndEndProject

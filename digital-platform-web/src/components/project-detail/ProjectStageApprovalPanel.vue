@@ -81,48 +81,23 @@
             {{ isPending(stage, 'resubmit') ? '提交中...' : '重新提交阶段关口审批' }}
           </el-button>
 
-          <section v-if="canApproveStageApproval(stage)" class="stage-approval-review approval-review-card">
-            <header class="approval-review-card__heading">
-              <div>
-                <strong>阶段关口审批</strong>
-                <small>请选择处理决定，再确认提交审批结果。</small>
-              </div>
-              <el-tag type="warning">待审批</el-tag>
-            </header>
-
-            <div class="approval-review-card__decision">
-              <div class="approval-review-card__field-label">
-                <strong>审批决定</strong><span>*</span>
-              </div>
-              <el-radio-group v-model="stageDecisions[stage.id]" class="approval-review-card__options"
-                :disabled="isStageReviewBusy(stage)">
-                <el-radio class="approval-review-card__option approval-review-card__option--approve"
-                  value="approve" border>审批通过</el-radio>
-                <el-radio class="approval-review-card__option approval-review-card__option--return"
-                  value="return" border>退回修改</el-radio>
-              </el-radio-group>
-            </div>
-
-            <div v-if="stageDecisions[stage.id]" class="approval-review-card__form">
-              <template v-if="stageDecisions[stage.id] === 'return'">
-                <p class="approval-review-card__notice">退回后项目经理需要按要求整改并重新提交阶段审批。</p>
-                <label class="approval-review-card__field-label">
-                  <strong>退回原因</strong><span>*</span>
-                </label>
-                <el-input v-model="returnComments[stage.id]" type="textarea" :rows="3" maxlength="1000"
-                  placeholder="请明确填写退回原因和整改要求" :disabled="isStageReviewBusy(stage)" />
-              </template>
-              <div class="approval-review-card__footer">
-                <el-button :type="stageDecisions[stage.id] === 'return' ? 'warning' : 'primary'"
-                  :plain="stageDecisions[stage.id] === 'return'"
-                  :loading="isPending(stage, stageDecisions[stage.id])"
-                  :disabled="isStageReviewBusy(stage) || (stageDecisions[stage.id] === 'return' && !normalizedReturnComment(stage))"
-                  @click="$emit(stageDecisions[stage.id], stage)">
-                  {{ stageDecisions[stage.id] === 'return' ? '确认退回修改' : '确认审批通过' }}
-                </el-button>
-              </div>
-            </div>
-          </section>
+          <ApprovalActionCard
+            v-if="canApproveStageApproval(stage)"
+            class="stage-approval-review"
+            title="审批处理"
+            :description="`${stage.stageName} · 阶段关口审批`"
+            status-text="待审批"
+            status-type="warning"
+            :comment="returnComments[stage.id] || ''"
+            :comment-max-length="1000"
+            :can-approve="true"
+            :can-return="true"
+            :busy="isStageReviewBusy(stage)"
+            :pending-action="pendingReviewAction(stage)"
+            @update:comment="returnComments[stage.id] = $event"
+            @approve="$emit('approve', stage, $event)"
+            @return="$emit('return', stage, $event)"
+          />
         </div>
 
         <details v-if="showApprovalHistory" class="approval-history">
@@ -157,7 +132,7 @@
 </template>
 
 <script setup>
-import { reactive, watch } from 'vue';
+import ApprovalActionCard from '../approval/ApprovalActionCard.vue';
 import StatusBadge from '../StatusBadge.vue';
 import {
   formatApprovalAction,
@@ -228,18 +203,6 @@ const props = defineProps({
 });
 
 defineEmits(['submit', 'resubmit', 'approve', 'return']);
-
-const stageDecisions = reactive({});
-
-watch(
-  () => props.stages.map(stage => `${stage.id || stage.stageKey}:${stage.approvalStatus || ''}`).join('|'),
-  () => {
-    Object.keys(stageDecisions).forEach((stageId) => {
-      const stage = props.stages.find(item => String(item.id) === String(stageId));
-      if (!stage || !props.canApproveStageApproval(stage)) delete stageDecisions[stageId];
-    });
-  }
-);
 
 const staticApprovalCenters = {
   initiation: 'marketing_center',
@@ -324,8 +287,10 @@ function isStageReviewBusy(stage) {
   return isPending(stage, 'approve') || isPending(stage, 'return');
 }
 
-function normalizedReturnComment(stage) {
-  return String(props.returnComments[stage.id] || '').trim();
+function pendingReviewAction(stage) {
+  if (isPending(stage, 'approve')) return 'approve';
+  if (isPending(stage, 'return')) return 'return';
+  return '';
 }
 
 function hasApprovalActions(stage) {

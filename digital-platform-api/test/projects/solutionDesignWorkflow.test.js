@@ -6422,6 +6422,7 @@ test('technical owner can upload, submit and get approval for RD cost estimation
     {
       projectId: 100,
       nodeKey: SOLUTION_DESIGN_NODE_KEY.RD_COST,
+      payload: { comment: '研发成本评估合理，同意进入制造估算。' },
       user: rdManager
     },
     db
@@ -6438,6 +6439,23 @@ test('technical owner can upload, submit and get approval for RD cost estimation
       OPERATION_ACTION_TYPE.SOLUTION_DESIGN_RD_COST_SUBMITTED,
       OPERATION_ACTION_TYPE.SOLUTION_DESIGN_RD_COST_APPROVED
     ]
+  );
+  const approvalLog = db.connection.operationLogs.at(-1);
+  assert.equal(
+    JSON.parse(approvalLog.details_json).approvalComment,
+    '研发成本评估合理，同意进入制造估算。'
+  );
+});
+
+test('solution design approval comments reject values longer than 1000 characters', async () => {
+  await assert.rejects(
+    () => approveSolutionDesignWorkflowNode({
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.RD_COST,
+      payload: { comment: 'x'.repeat(1001) },
+      user: { id: 1 }
+    }),
+    (error) => error.code === SOLUTION_DESIGN_ERROR.INVALID_APPROVAL_COMMENT
   );
 });
 

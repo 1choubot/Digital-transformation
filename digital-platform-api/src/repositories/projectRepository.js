@@ -30,6 +30,7 @@ export { advanceProjectStage } from './projects/stageAdvanceRepository.js';
 export {
   assignSolutionDesignRoles,
   approveSolutionDesignWorkflowNode,
+  canViewFinanceCostApprovalComment,
   getSolutionDesignAnalysisGeneratedFileDownload,
   getSolutionDesignAnalysisForm,
   getSolutionDesignQuotationForm,

@@ -170,7 +170,17 @@ function mapActor(row) {
   };
 }
 
-function mapOperationLog(row) {
+export function sanitizeOperationLogDetails(details, { includeFinanceApprovalComments = true } = {}) {
+  if (!details || typeof details !== 'object' || includeFinanceApprovalComments) return details;
+  if (details.nodeKey !== 'finance_cost_estimation' || !Object.hasOwn(details, 'approvalComment')) return details;
+
+  const sanitized = { ...details };
+  delete sanitized.approvalComment;
+  return sanitized;
+}
+
+function mapOperationLog(row, options = {}) {
+  const details = parseJsonValue(row.details_json);
   return {
     id: row.id,
     projectId: row.project_id,
@@ -180,7 +190,7 @@ function mapOperationLog(row) {
     targetType: row.target_type,
     targetId: row.target_id,
     summary: row.summary,
-    detailsJson: parseJsonValue(row.details_json),
+    detailsJson: sanitizeOperationLogDetails(details, options),
     createdAt: row.created_at
   };
 }
@@ -229,7 +239,7 @@ export async function insertOperationLog(
   );
 }
 
-export async function listProjectOperationLogs(projectId, limit = DEFAULT_OPERATION_LOG_LIMIT) {
+export async function listProjectOperationLogs(projectId, limit = DEFAULT_OPERATION_LOG_LIMIT, options = {}) {
   const safeLimit = normalizeOperationLogLimit(limit);
   const [rows] = await pool.execute(
     `SELECT
@@ -250,5 +260,5 @@ export async function listProjectOperationLogs(projectId, limit = DEFAULT_OPERAT
     [projectId]
   );
 
-  return rows.map(mapOperationLog);
+  return rows.map((row) => mapOperationLog(row, options));
 }

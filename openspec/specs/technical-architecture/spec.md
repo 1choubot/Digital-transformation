@@ -1916,6 +1916,19 @@ TBD - created by archiving change define-technical-architecture. Update Purpose 
 - **AND** 每项 MUST 使用 `需求1：内容` 等标签加中文冒号格式，并以 Excel 单元格换行分隔
 - **AND** 前端 MUST NOT 维护 Excel 单元格映射
 
+### Requirement: 统一审批卡片接口兼容架构
+技术架构 MUST 通过共享前端控件和向后兼容的审批 payload 扩展实现统一审批处理卡片。
+
+#### Scenario: 阶段和方案设计审批意见 payload
+- **WHEN** 前端提交阶段关口审批通过
+- **THEN** 请求 MAY 携带 `comment`
+- **AND** 非空意见 MUST 写入现有阶段审批历史和操作日志
+- **WHEN** 前端提交方案设计节点审批通过
+- **THEN** 请求 MAY 携带 `comment`
+- **AND** 财务总经理审批 payload MUST 同时支持 `branchType` 和可选 `comment`
+- **AND** 方案设计审批意见 MUST 写入现有操作日志 details
+- **AND** 实现 MUST NOT 新增数据库 migration
+
 ### Requirement: 报价结果按钮 payload 架构
 技术架构 MUST 将报价结果三个按钮映射到现有报价结果 API payload，避免引入新的报价结果状态机。
 

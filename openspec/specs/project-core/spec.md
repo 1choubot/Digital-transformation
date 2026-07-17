@@ -3182,6 +3182,20 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **AND** 每项 MUST 使用 Excel 单元格换行分隔
 - **AND** C15 和 C16 MUST 使用各自当前 revision 的结构化计划，不得串用数据
 
+### Requirement: 审批通过意见持久化
+系统 MUST 保存立项审批、方案设计节点审批、阶段关口审批和周报审批中用户提交的非空审批通过意见。
+
+#### Scenario: 可选审批意见兼容
+- **WHEN** 普通审批通过请求未提供意见
+- **THEN** 系统 MUST 保持旧请求兼容并完成审批
+- **WHEN** 请求提供非空意见
+- **THEN** 系统 MUST 将意见写入对应审批记录或业务操作日志
+- **AND** 阶段关口和方案设计审批意见 MUST 不超过 1000 字
+
+#### Scenario: 立项中心负责人评价必填
+- **WHEN** 营销或研发中心负责人处理立项审批表评价
+- **THEN** 无论审批通过或退回整改，评价或原因 MUST 非空
+
 ### Requirement: 报价结果处理三动作口径
 项目核心能力 MUST 将报价结果处理表达为客户接受报价、结束项目、审批不通过三个业务动作，并 MUST 复用现有报价结果状态机。
 

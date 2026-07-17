@@ -73,10 +73,10 @@
       v-if="currentNode"
       :node="currentNode"
       :is-pending="isPending"
-      :return-reason="returnReasons[nodeKey] || ''"
-      @update:return-reason="returnReasons[nodeKey] = $event"
+      :comment="returnReasons[nodeKey] || ''"
+      @update:comment="returnReasons[nodeKey] = $event"
       @submit="submitNode(nodeKey)"
-      @approve="approveNode(nodeKey)"
+      @approve="approveNode(nodeKey, { comment: $event })"
       @return="returnNode(nodeKey)"
     />
   </SolutionDesignNodeLayout>

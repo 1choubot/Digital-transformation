@@ -218,69 +218,22 @@
       </section>
 
       <!-- 审批 -->
-      <section class="panel weekly-approval-panel approval-review-card">
-        <div class="panel-toolbar approval-review-card__heading">
-          <div class="toolbar-info">
-            <strong class="toolbar-title">审批</strong>
-            <el-tag :type="canReviewApproval ? 'warning' : 'info'">
-              {{ canReviewApproval ? '待审批' : '只读' }}
-            </el-tag>
-          </div>
-        </div>
-        <div v-if="canReviewApproval" class="panel-body approval-review-card__body">
-          <div class="approval-review-card__decision">
-            <div class="approval-review-card__field-label">
-              <strong>审批决定</strong><span>*</span>
-            </div>
-            <el-radio-group v-model="approvalDecision" class="approval-review-card__options"
-              :disabled="savingApproval">
-              <el-radio class="approval-review-card__option approval-review-card__option--approve"
-                value="approve" border>通过审批</el-radio>
-              <el-radio class="approval-review-card__option approval-review-card__option--return"
-                value="return" border>打回修改</el-radio>
-            </el-radio-group>
-          </div>
-
-          <div v-if="approvalDecision" class="weekly-final-review-form approval-review-card__form">
-            <p v-if="approvalDecision === 'return'" class="approval-review-card__notice">
-              打回后提交人需要修改周报并重新提交审批。
-            </p>
-            <div class="form-field form-field--full">
-              <span class="field-label approval-review-card__field-label">
-                {{ approvalDecision === 'return' ? '打回原因' : '审批意见' }}
-                <span v-if="approvalDecision === 'return'">*</span>
-                <small v-else>选填</small>
-              </span>
-              <el-input
-                v-model="approvalForm.comment"
-                type="textarea"
-                :rows="3"
-                :disabled="savingApproval"
-                :placeholder="approvalDecision === 'return' ? '请明确填写打回原因和修改要求' : '可填写审批意见或后续工作要求'"
-              />
-            </div>
-            <div class="form-actions approval-review-card__footer">
-              <el-button
-                :type="approvalDecision === 'return' ? 'warning' : 'primary'"
-                :plain="approvalDecision === 'return'"
-                :loading="savingApproval"
-                :disabled="savingApproval || (approvalDecision === 'return' && !approvalForm.comment.trim())"
-                @click="submitApproval(approvalDecision)"
-              >
-                {{ approvalDecision === 'return' ? '确认打回修改' : '确认通过审批' }}
-              </el-button>
-            </div>
-          </div>
-        </div>
-        <div v-else class="panel-body approval-review-card__body">
-          <el-alert
-            title="当前审批已锁定或当前账号无审批权限，仅可查看。"
-            type="info"
-            show-icon
-            :closable="false"
-          />
-        </div>
-      </section>
+      <ApprovalActionCard
+        class="panel weekly-approval-panel"
+        title="审批处理"
+        description="周报审批 · 审批通过意见选填，退回整改原因必填。"
+        :status-text="canReviewApproval ? '待审批' : '只读'"
+        :status-type="canReviewApproval ? 'warning' : 'info'"
+        :comment="approvalForm.comment"
+        :comment-max-length="5000"
+        :can-approve="canReviewApproval"
+        :can-return="canReviewApproval"
+        :busy="savingApproval"
+        :pending-action="approvalPendingAction"
+        @update:comment="approvalForm.comment = $event"
+        @approve="submitApproval('approve')"
+        @return="submitApproval('return')"
+      />
 
       <!-- 评分 -->
       <section class="panel weekly-final-review-panel">
@@ -344,6 +297,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import ApprovalActionCard from '../components/approval/ApprovalActionCard.vue';
 import { OrganizationRole, ReportStatus, WeeklyApprovalStatus } from '../constants/reports.js';
 import {
   exportWeeklyReport,
@@ -400,11 +354,7 @@ const finalReviewForm = reactive({
 const approvalForm = reactive({
   comment: ''
 });
-const approvalDecision = ref('');
-
-watch(approvalDecision, (nextDecision, previousDecision) => {
-  if (previousDecision && nextDecision !== previousDecision) approvalForm.comment = '';
-});
+const approvalPendingAction = ref('');
 const finalGradeOptions = ['A', 'B', 'C', 'D', 'E'];
 
 const targetUserName = computed(() => targetUser.value?.displayName || targetUser.value?.account || '-');
@@ -587,7 +537,7 @@ function saveBlob(download, fallbackName) {
 }
 
 async function loadReport() {
-  approvalDecision.value = '';
+  approvalForm.comment = '';
   loading.value = true;
   errorMessage.value = '';
 
@@ -645,6 +595,7 @@ async function submitApproval(action) {
   }
 
   savingApproval.value = true;
+  approvalPendingAction.value = action;
   try {
     const result = await reviewWeeklyReportApproval(
       props.reportId,
@@ -655,12 +606,13 @@ async function submitApproval(action) {
       props.authToken
     );
     report.value = result.report;
-    approvalDecision.value = '';
+    approvalForm.comment = '';
     ElMessage.success(action === 'approve' ? '审批已通过。' : '周报已打回。');
   } catch (error) {
     ElMessage.error(toReadableApiError(error));
   } finally {
     savingApproval.value = false;
+    approvalPendingAction.value = '';
   }
 }
 

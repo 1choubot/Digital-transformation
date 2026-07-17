@@ -29,8 +29,9 @@
       </div>
     </section>
     <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending" hide-submit hide-when-empty
-      :return-reason="returnReasons[nodeKey] || ''" @update:return-reason="returnReasons[nodeKey] = $event"
-      @submit="submitNode(nodeKey)" @approve="approveNode(nodeKey)" @return="returnNode(nodeKey)" />
+      :comment="returnReasons[nodeKey] || ''" @update:comment="returnReasons[nodeKey] = $event"
+      @submit="submitNode(nodeKey)" @approve="approveNode(nodeKey, { comment: $event })"
+      @return="returnNode(nodeKey)" />
   </SolutionDesignNodeLayout>
 </template>
 

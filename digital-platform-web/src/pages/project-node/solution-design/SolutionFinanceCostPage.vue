@@ -6,11 +6,11 @@
       @cancel-exemption="cancelUploadExemption" />
 
     <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending"
-      :approve-requires-confirmation="requiresBranchSelection"
-      :approve-disabled="requiresBranchSelection && !branchType"
-      :return-reason="returnReasons[nodeKey] || ''" @update:return-reason="returnReasons[nodeKey] = $event"
+      :selection-required="requiresBranchSelection"
+      :selection-complete="!requiresBranchSelection || Boolean(branchType)"
+      :comment="returnReasons[nodeKey] || ''" @update:comment="returnReasons[nodeKey] = $event"
       @submit="submitNode(nodeKey)" @approve="approveFinanceNode" @return="returnNode(nodeKey)">
-      <template #approve-form="{ busy }">
+      <template #selection="{ disabled }">
         <div class="finance-approval-flow">
           <label class="finance-approval-flow__label" id="finance-approval-flow-title">
             <strong>后续流程</strong>
@@ -18,7 +18,7 @@
             <small>审批通过前必须选择</small>
           </label>
           <el-radio-group v-model="branchType" class="finance-approval-flow__options"
-            aria-labelledby="finance-approval-flow-title" aria-required="true" :disabled="busy">
+            aria-labelledby="finance-approval-flow-title" aria-required="true" :disabled="disabled">
             <el-radio value="quotation" border>报价流程</el-radio>
             <el-radio value="tender" border>投标流程</el-radio>
           </el-radio-group>
@@ -49,8 +49,10 @@ const requiresBranchSelection = computed(() => (
   currentNode.value?.permissions?.canApprove === true
 ));
 
-async function approveFinanceNode() {
-  const payload = requiresBranchSelection.value ? { branchType: branchType.value } : {};
+async function approveFinanceNode(comment) {
+  const payload = requiresBranchSelection.value
+    ? { branchType: branchType.value, comment }
+    : { comment };
   if (requiresBranchSelection.value && !payload.branchType) return;
   await approveNode(nodeKey.value, payload);
 }

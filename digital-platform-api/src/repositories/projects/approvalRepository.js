@@ -8,7 +8,8 @@ import {
   canUserHandleStageApproval,
   canUserSubmitStageApproval,
   getStageApprovalRule,
-  isValidCloseoutApprovalCenter
+  isValidCloseoutApprovalCenter,
+  normalizeOptionalApprovalComment
 } from '../../domain/projectApproval.js';
 import { PROJECT_STATUS } from '../../domain/projects.js';
 import { pool } from '../../db/pool.js';
@@ -217,7 +218,7 @@ function assertPendingApprovalStatus(stage) {
   }
 }
 
-function buildApprovalActionContext({ action, user, project, stage, rule, returnComment }) {
+function buildApprovalActionContext({ action, user, project, stage, rule, approvalComment, returnComment }) {
   if (project.status === PROJECT_STATUS.ENDED) {
     throw new ProjectApprovalError(
       'PROJECT_ALREADY_ENDED',
@@ -257,7 +258,7 @@ function buildApprovalActionContext({ action, user, project, stage, rule, return
         nextStatus: rule.requiresGeneralManagerApproval
           ? PROJECT_APPROVAL_STATUS.PENDING_GENERAL_MANAGER
           : PROJECT_APPROVAL_STATUS.APPROVED,
-        comment: null,
+        comment: approvalComment,
         summary: `中心负责人关口审批通过：${stage.stage_name}`
       };
     }
@@ -301,7 +302,7 @@ function buildApprovalActionContext({ action, user, project, stage, rule, return
         approvalRole: 'general_manager',
         approvalNode: rule.generalApprovalNode,
         nextStatus: PROJECT_APPROVAL_STATUS.APPROVED,
-        comment: null,
+        comment: approvalComment,
         summary: `总经理关口审批通过：${stage.stage_name}`
       };
     }
@@ -495,8 +496,9 @@ async function submitOrResubmitStageApproval({
   }
 }
 
-export async function approveStageApproval({ projectId, stageId, user }) {
-  return approveOrReturnStageApproval({ projectId, stageId, user, action: 'approve' });
+export async function approveStageApproval({ projectId, stageId, user, comment = '' }) {
+  const approvalComment = normalizeOptionalApprovalComment(comment, ProjectApprovalError);
+  return approveOrReturnStageApproval({ projectId, stageId, user, action: 'approve', approvalComment });
 }
 
 export async function returnStageApproval({ projectId, stageId, user, comment }) {
@@ -504,13 +506,28 @@ export async function returnStageApproval({ projectId, stageId, user, comment })
   return approveOrReturnStageApproval({ projectId, stageId, user, action: 'return', returnComment });
 }
 
-async function approveOrReturnStageApproval({ projectId, stageId, user, action, returnComment = null }) {
+async function approveOrReturnStageApproval({
+  projectId,
+  stageId,
+  user,
+  action,
+  approvalComment = null,
+  returnComment = null
+}) {
   const connection = await pool.getConnection();
 
   try {
     await connection.beginTransaction();
     const { project, stage, rule } = await loadApprovalTarget(connection, { projectId, stageId, lock: true });
-    const actionContext = buildApprovalActionContext({ action, user, project, stage, rule, returnComment });
+    const actionContext = buildApprovalActionContext({
+      action,
+      user,
+      project,
+      stage,
+      rule,
+      approvalComment,
+      returnComment
+    });
 
     if (action === 'approve') {
       const gateSummary = await buildStageGateSummaryForUpdate(connection, projectId, stage.stage_order);

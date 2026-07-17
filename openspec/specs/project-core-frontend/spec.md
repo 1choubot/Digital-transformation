@@ -2868,6 +2868,26 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **THEN** 前端 MUST 展示新上传文件为该产出的 current file
 - **AND** 前端 MUST 不再展示该产出仍处于无需上传豁免状态
 
+### Requirement: 审批页面统一处理卡片
+项目核心前端 MUST 使用同一个共享 Vue 控件展示立项审批、方案设计节点审批、阶段关口审批和周报审批处理卡片。
+
+#### Scenario: 统一审批卡片布局与动作
+- **WHEN** 当前用户可以处理审批
+- **THEN** 卡片 MUST 按标题、可选流程选择、评价或退回原因输入、操作按钮的顺序展示
+- **AND** 卡片 MUST 直接展示蓝色审批通过、黄色退回整改按钮
+- **AND** 仅在业务支持结束项目时展示红色结束项目按钮
+- **AND** 前端 MUST NOT 再要求用户先通过审批决定单选框选择动作
+
+#### Scenario: 审批输入和流程门禁
+- **WHEN** 审批通过
+- **THEN** 普通审批意见 MAY 为空
+- **AND** 立项审批表营销和研发中心负责人评价 MUST 非空
+- **WHEN** 退回整改或结束项目
+- **THEN** 原因 MUST 非空
+- **WHEN** 总经理审批要求先选择项目开展模式或报价投标流程
+- **AND** 尚未完成选择
+- **THEN** 意见输入框和全部审批动作按钮 MUST 禁用
+
 ### Requirement: 方案设计营销成本估算前端节点
 项目核心前端 MUST 在方案设计 workflow 中展示营销成本估算节点和营销中心成本估算表上传/审批交互。
 

@@ -643,6 +643,19 @@ TBD - created by archiving change add-business-operation-log. Update Purpose aft
 - **THEN** 系统 SHALL 写入项目完成日志
 - **AND** 日志 SHALL 标明该完成由自动阶段推进触发
 
+### Requirement: 审批通过意见日志与财务脱敏
+系统 MUST 在现有审批历史或业务日志中记录非空审批通过意见，并继续遵守财务成本信息可见性规则。
+
+#### Scenario: 方案设计审批意见日志
+- **WHEN** 方案设计节点审批通过请求包含非空意见
+- **THEN** 对应成功日志 details MUST 记录 `approvalComment`
+- **AND** 空意见 MUST 归一化为 null 或不展示
+
+#### Scenario: 财务成本审批意见脱敏
+- **WHEN** 无权查看财务成本详情的用户读取项目业务日志
+- **THEN** 财务成本估算审批日志 MUST NOT 返回 `approvalComment`
+- **AND** 有权查看财务成本详情的财务会计、财务负责人和总经理 MAY 查看该意见
+
 ### Requirement: 立项项目开展模式业务日志
 系统 MUST 记录总经理在 `1.2 项目立项审批表` 最终审批通过时选择项目开展模式的业务日志。
 

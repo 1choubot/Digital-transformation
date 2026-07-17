@@ -1,17 +1,18 @@
 <template>
-  <div class="review-generated-files">
-
-    <GeneratedFormFileCard :generated-file="activeDto?.form?.generatedFile"
-      :pending="isPending(`review:${nodeKey}:download`)" :button-text="activeDownloadButtonText"
-      @download="downloadReviewGeneratedFile(nodeKey)" />
-
-    <GeneratedFormFileCard v-if="isCustomerReview" :generated-file="internalReviewGeneratedFile"
-      :pending="isPending('review:internal_solution_review:download')" button-text="查看内部方案审评表"
-      @download="downloadReviewGeneratedFile('internal_solution_review')" />
-
-  </div>
   <SolutionDesignNodeLayout :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
     :error-message="context.solutionDesignErrorMessage">
+    <template #title-after>
+      <div class="review-generated-files">
+        <GeneratedFormFileCard :generated-file="activeDto?.form?.generatedFile"
+          :pending="isPending(`review:${nodeKey}:download`)" :button-text="activeDownloadButtonText"
+          @download="downloadReviewGeneratedFile(nodeKey)" />
+
+        <GeneratedFormFileCard v-if="isCustomerReview" :generated-file="internalReviewGeneratedFile"
+          :pending="isPending('review:internal_solution_review:download')" button-text="查看内部方案审评表"
+          @download="downloadReviewGeneratedFile('internal_solution_review')" />
+      </div>
+    </template>
+
     <section v-if="canViewFormContent" ref="reviewFormRoot" class="review-section">
 
       <SolutionReviewFormTable :model="reviewFormData" :repeatable-field-configs="tableRepeatableFieldConfigs"
@@ -58,10 +59,10 @@ const fields = [
   { key: 'recorder', label: '记录人', type: 'readonly' }
 ];
 const repeatableFieldConfigs = [
-  { key: 'customerRequirements', title: '项目需求分析', addLabel: '添加需求' },
-  { key: 'projectTargetDescription', title: '项目目标描述', addLabel: '添加目标' },
-  { key: 'technicalRisks', title: '项目风险评估', addLabel: '添加风险' },
-  { key: 'solutionSuggestions', title: '项目方案建议', addLabel: '添加建议' }
+  { key: 'customerRequirements', sourceType: 'requirement', title: '项目需求分析', addLabel: '添加需求' },
+  { key: 'projectTargetDescription', sourceType: 'target', title: '项目目标描述', addLabel: '添加目标' },
+  { key: 'technicalRisks', sourceType: 'risk', title: '项目风险评估', addLabel: '添加风险' },
+  { key: 'solutionSuggestions', sourceType: 'suggestion', title: '项目方案建议', addLabel: '添加建议' }
 ];
 
 const emit = defineEmits(['business-state-changed']);

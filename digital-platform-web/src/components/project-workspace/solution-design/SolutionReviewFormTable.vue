@@ -73,76 +73,88 @@
           </td>
         </tr>
 
-        <template v-for="source in repeatableFieldConfigs" :key="source.key">
-          <tr class="review-form-table__section-heading">
-            <th colspan="4" scope="rowgroup">
-              <div class="review-form-table__section-heading-content">
-                <span>{{ source.title }}</span>
-                <el-button class="review-form-table__row-action" size="small" type="primary" plain :disabled="disabled" @click="$emit('add-repeatable', source.key)">
-                  新增一行
-                </el-button>
-              </div>
-            </th>
-          </tr>
-          <tr
-            v-for="(item, index) in source.items"
-            :key="`${source.key}:${index}`"
-            :data-field-key="source.key"
-            :class="fieldClass(source.key)"
-          >
-            <td colspan="4">
-              <div class="review-form-table__repeatable-row">
-                <span class="review-form-table__index">{{ index + 1 }}</span>
-                <el-input
-                  :model-value="item"
-                  type="textarea"
-                  :rows="1"
-                  :disabled="disabled"
-                  :aria-label="`${source.title}${index + 1}`"
-                  @update:model-value="value => $emit('update-repeatable', { key: source.key, index, value })"
-                />
-                <el-button
-                  class="review-form-table__row-action"
-                  type="danger"
-                  plain
-                  size="small"
-                  :disabled="disabled || source.items.length <= 1"
-                  :aria-label="`删除${source.title}${index + 1}`"
-                  @click="$emit('remove-repeatable', { key: source.key, index })"
-                >
-                  删除
-                </el-button>
-              </div>
-            </td>
-          </tr>
-        </template>
-
-        <tr class="review-form-table__section-heading">
-          <th colspan="4" scope="rowgroup">项目实施计划</th>
-        </tr>
-        <tr v-if="implementationPlanItems.length === 0">
-          <td colspan="4" class="review-form-table__empty">填写需求、目标、风险或建议后生成实施计划项</td>
-        </tr>
-        <tr
-          v-for="item in implementationPlanItems"
-          v-else
-          :key="`${item.sourceType}:${item.sourceIndex}`"
-          :data-plan-key="`${item.sourceType}:${item.sourceIndex}`"
-          :class="{ 'review-form-table__cell--invalid': isPlanInvalid(item) }"
-        >
-          <th scope="row">{{ item.sourceLabel }}{{ item.sourceIndex }}</th>
-          <td class="review-form-table__source-text">{{ item.sourceText }}</td>
-          <td colspan="2">
-            <el-input
-              :model-value="item.planText"
-              type="textarea"
-              :rows="1"
-              :disabled="disabled"
-              :aria-label="`${item.sourceLabel}${item.sourceIndex}实施计划`"
-              placeholder="填写对应实施计划"
-              @update:model-value="planText => $emit('update-plan', { sourceType: item.sourceType, sourceIndex: item.sourceIndex, planText })"
-            />
-            <small v-if="isPlanInvalid(item)" class="form-field-error">请填写实施计划内容</small>
+        <tr>
+          <td colspan="4" class="review-form-table__matrix-cell">
+            <table class="review-plan-matrix">
+              <colgroup>
+                <col class="review-plan-matrix__category" />
+                <col class="review-plan-matrix__sequence" />
+                <col class="review-plan-matrix__content" />
+                <col class="review-plan-matrix__plan" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col" aria-label="分类"></th>
+                  <th scope="col">序号</th>
+                  <th scope="col">具体内容</th>
+                  <th scope="col">项目实施计划</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template v-for="source in repeatableFieldConfigs" :key="source.key">
+                  <tr v-for="(item, index) in source.items" :key="`${source.key}:${index}`">
+                    <th v-if="index === 0" :rowspan="source.items.length" scope="rowgroup" class="review-plan-matrix__category-cell">
+                      <div class="review-plan-matrix__category-content">
+                        <span>{{ source.title }}</span>
+                        <el-button
+                          class="review-form-table__row-action"
+                          size="small"
+                          type="primary"
+                          plain
+                          :disabled="disabled"
+                          :aria-label="`新增${source.title}`"
+                          @click="$emit('add-repeatable', source.key)"
+                        >
+                          新增一行
+                        </el-button>
+                      </div>
+                    </th>
+                    <td class="review-plan-matrix__sequence-cell">{{ index + 1 }}</td>
+                    <td :data-field-key="source.key" :class="fieldClass(source.key)">
+                      <div class="review-form-table__repeatable-row">
+                        <el-input
+                          :model-value="item"
+                          type="textarea"
+                          :rows="1"
+                          :disabled="disabled"
+                          :aria-label="`${source.title}${index + 1}`"
+                          @update:model-value="value => $emit('update-repeatable', { key: source.key, index, value })"
+                        />
+                        <el-button
+                          class="review-form-table__row-action"
+                          type="danger"
+                          plain
+                          size="small"
+                          :disabled="disabled || source.items.length <= 1"
+                          :aria-label="`删除${source.title}${index + 1}`"
+                          @click="$emit('remove-repeatable', { key: source.key, index })"
+                        >
+                          删除
+                        </el-button>
+                      </div>
+                    </td>
+                    <td
+                      :data-plan-key="`${source.sourceType}:${index + 1}`"
+                      :class="{ 'review-form-table__cell--invalid': isPlanInvalidKey(source.sourceType, index + 1) }"
+                    >
+                      <template v-if="planItemFor(source.sourceType, index + 1)">
+                        <el-input
+                          :model-value="planItemFor(source.sourceType, index + 1).planText"
+                          type="textarea"
+                          :rows="1"
+                          :disabled="disabled"
+                          :aria-label="`${planItemFor(source.sourceType, index + 1).sourceLabel}${index + 1}实施计划`"
+                          placeholder="填写对应实施计划"
+                          @update:model-value="planText => $emit('update-plan', { sourceType: source.sourceType, sourceIndex: index + 1, planText })"
+                        />
+                        <small v-if="isPlanInvalidKey(source.sourceType, index + 1)" class="form-field-error">请填写实施计划内容</small>
+                      </template>
+                      <span v-else class="review-plan-matrix__empty-plan">填写具体内容后生成计划项</span>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
           </td>
         </tr>
 
@@ -194,8 +206,14 @@ function fieldClass(key) {
   return { 'review-form-table__cell--invalid': props.invalidFieldKeys.includes(key) };
 }
 
-function isPlanInvalid(item) {
-  return props.invalidPlanKeys.includes(`${item.sourceType}:${item.sourceIndex}`);
+function planItemFor(sourceType, sourceIndex) {
+  return props.implementationPlanItems.find(
+    (item) => item.sourceType === sourceType && item.sourceIndex === sourceIndex
+  );
+}
+
+function isPlanInvalidKey(sourceType, sourceIndex) {
+  return props.invalidPlanKeys.includes(`${sourceType}:${sourceIndex}`);
 }
 </script>
 
@@ -245,17 +263,8 @@ function isPlanInvalid(item) {
   background: var(--el-fill-color-light);
 }
 
-.review-form-table__section-heading th {
-  padding: 9px 12px;
-  text-align: left;
-  background: var(--el-fill-color);
-}
-
-.review-form-table__section-heading-content {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+.review-form-table td.review-form-table__matrix-cell {
+  padding: 0;
 }
 
 .review-form-table__repeatable-row {
@@ -265,30 +274,55 @@ function isPlanInvalid(item) {
   width: 100%;
 }
 
-.review-form-table__index {
-  flex: 0 0 32px;
-  color: var(--el-text-color-secondary);
-  text-align: center;
-}
-
 .review-form-table__repeatable-row .el-textarea {
   flex: 1 1 auto;
   min-width: 0;
 }
 
 .review-form-table__row-action {
-  flex: 0 0 88px;
+  flex: 0 0 auto;
   width: 88px;
+  height: 24px;
   margin-left: auto;
 }
 
-.review-form-table__source-text {
-  white-space: pre-wrap;
-  word-break: break-word;
+.review-plan-matrix {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
 }
 
-.review-form-table__empty {
-  padding: 20px;
+.review-plan-matrix__category {
+  width: 150px;
+}
+
+.review-plan-matrix__sequence {
+  width: 56px;
+}
+
+.review-plan-matrix__content,
+.review-plan-matrix__plan {
+  width: calc((100% - 206px) / 2);
+}
+
+.review-plan-matrix__category-cell {
+  vertical-align: middle;
+}
+
+.review-plan-matrix__category-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.review-plan-matrix__sequence-cell {
+  color: var(--el-text-color-secondary);
+  text-align: center;
+}
+
+.review-plan-matrix__empty-plan {
+  display: block;
   color: var(--el-text-color-secondary);
   text-align: center;
 }

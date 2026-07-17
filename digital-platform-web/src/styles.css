@@ -4439,12 +4439,14 @@ p {
         display: flex;
         justify-content: center;
         gap: var(--space-4, 16px);
+        width: 100%;
+        min-width: 0;
+        height: 96px;
         padding: var(--space-3, 12px);
         border: 1px solid #a8ccf5;
         border-radius: var(--radius-md, 8px);
         background: #f2f8ff;
         align-items: center;
-        min-height: 96px;
         box-sizing: border-box;
     }
 

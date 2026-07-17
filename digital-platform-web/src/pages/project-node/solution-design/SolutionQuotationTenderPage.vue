@@ -2,7 +2,8 @@
   <SolutionDesignNodeLayout :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
     :error-message="context.solutionDesignErrorMessage">
     <template #title-after>
-      <SolutionGeneratedFile v-if="flow?.branchType === 'quotation' && quotation.dto.value?.form?.generatedFile"
+      <GeneratedFormFileCard v-if="flow?.branchType === 'quotation' && quotation.dto.value?.form?.generatedFile"
+        button-text="查看报价单"
         :generated-file="quotation.dto.value.form.generatedFile"
         :pending="quotation.pendingAction.value === 'download'" @download="quotation.download" />
     </template>
@@ -57,7 +58,7 @@ import SolutionDesignNodeLayout from '../../../components/project-workspace/solu
 import SolutionUploadSlots from '../../../components/project-workspace/solution-design/SolutionUploadSlots.vue';
 import SolutionNodeActions from '../../../components/project-workspace/solution-design/SolutionNodeActions.vue';
 import SolutionQuotationForm from '../../../components/project-workspace/solution-design/SolutionQuotationForm.vue';
-import SolutionGeneratedFile from '../../../components/project-workspace/solution-design/SolutionGeneratedFile.vue';
+import GeneratedFormFileCard from '../../../components/GeneratedFormFileCard.vue';
 import { solutionDesignNodePageProps, useSolutionDesignNodePage } from '../../../composables/project-stage/solution-design/useSolutionDesignNodePage.js';
 import { useSolutionQuotationForm } from '../../../composables/project-stage/solution-design/useSolutionQuotationForm.js';
 

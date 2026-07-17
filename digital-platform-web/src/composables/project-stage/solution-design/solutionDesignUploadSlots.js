@@ -5,13 +5,10 @@ const costSlotKeysByNode = Object.freeze({
     'manufacturing_cost_estimation_file'
   ],
   marketing_cost_estimation: [
-    'rd_cost_estimation_file',
     'manufacturing_cost_estimation_file',
     'marketing_cost_estimation_file'
   ],
   finance_cost_estimation: [
-    'rd_cost_estimation_file',
-    'manufacturing_cost_estimation_file',
     'marketing_cost_estimation_file',
     'finance_cost_estimation_file'
   ]

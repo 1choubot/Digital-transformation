@@ -6,10 +6,6 @@
         <GeneratedFormFileCard :generated-file="activeDto?.form?.generatedFile"
           :pending="isPending(`review:${nodeKey}:download`)" :button-text="activeDownloadButtonText"
           @download="downloadReviewGeneratedFile(nodeKey)" />
-
-        <GeneratedFormFileCard v-if="isCustomerReview" :generated-file="internalReviewGeneratedFile"
-          :pending="isPending('review:internal_solution_review:download')" button-text="查看内部方案审评表"
-          @download="downloadReviewGeneratedFile('internal_solution_review')" />
       </div>
     </template>
 

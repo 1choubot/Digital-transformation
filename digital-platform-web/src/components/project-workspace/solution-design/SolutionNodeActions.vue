@@ -1,45 +1,37 @@
 <template>
   <section v-if="showModule" class="solution-actions">
-    <article v-if="hasApprovalAction" class="solution-action-card">
-      <header class="solution-action-card__heading">
+    <article v-if="hasApprovalAction" class="solution-action-card approval-review-card">
+      <header class="solution-action-card__heading approval-review-card__heading">
         <div>
-          <strong>审批处理</strong>
-          <small>审批通过将直接执行；退回修改需要填写原因。</small>
+          <strong>{{ node.nodeName || '审批处理' }}</strong>
+          <small>请选择处理决定，再确认提交审批结果。</small>
         </div>
         <el-tag :type="resultTagType">{{ resultStatusText }}</el-tag>
       </header>
 
-      <div class="solution-approval-decision">
-        <div class="solution-approval-field-label">
+      <div class="solution-approval-decision approval-review-card__decision">
+        <div class="solution-approval-field-label approval-review-card__field-label">
           <strong>审批决定</strong><span>*</span>
         </div>
-        <el-radio-group v-if="approveRequiresConfirmation" v-model="decision"
-          class="solution-approval-decision__choices" :disabled="busy">
-          <el-radio v-if="node.permissions?.canApprove" class="solution-approval-decision__choice--approve"
+        <el-radio-group v-model="decision" class="approval-review-card__options" :disabled="busy"
+          @change="handleDecisionChange">
+          <el-radio v-if="node.permissions?.canApprove"
+            class="approval-review-card__option approval-review-card__option--approve"
             value="approve" border>
             审批通过
           </el-radio>
-          <el-radio v-if="node.permissions?.canReturn" class="solution-approval-decision__choice--return"
+          <el-radio v-if="node.permissions?.canReturn"
+            class="approval-review-card__option approval-review-card__option--return"
             value="return" border>
             退回修改
           </el-radio>
         </el-radio-group>
-        <div v-else class="solution-approval-decision__options">
-          <el-button v-if="node.permissions?.canApprove" type="primary"
-            :loading="isPending(`approve:${node.nodeKey}`)" :disabled="busy || approveDisabled"
-            @click="approveDirectly">
-            审批通过
-          </el-button>
-          <el-button v-if="node.permissions?.canReturn" type="warning" plain
-            :disabled="busy" @click="decision = 'return'">
-            退回修改
-          </el-button>
-        </div>
       </div>
 
-      <div v-if="approveRequiresConfirmation && decision === 'approve'" class="solution-approval-form">
+      <div v-if="approveRequiresConfirmation && decision === 'approve'"
+        class="solution-approval-form approval-review-card__form">
         <slot name="approve-form" :busy="busy" />
-        <div class="solution-action-card__footer">
+        <div class="solution-action-card__footer approval-review-card__footer">
           <el-button type="primary" :loading="isPending(`approve:${node.nodeKey}`)"
             :disabled="busy || approveDisabled" @click="confirmApprove">
             确认审批通过
@@ -47,15 +39,15 @@
         </div>
       </div>
 
-      <div v-if="decision === 'return'" class="solution-approval-form">
-        <p class="solution-approval-form__notice">退回后当前节点资料需要按原因修改并重新提交审批。</p>
-        <label class="solution-approval-field-label">
+      <div v-if="decision === 'return'" class="solution-approval-form approval-review-card__form">
+        <p class="solution-approval-form__notice approval-review-card__notice">退回后当前节点资料需要按原因修改并重新提交审批。</p>
+        <label class="solution-approval-field-label approval-review-card__field-label">
           <strong>退回原因</strong><span>*</span>
         </label>
         <el-input :model-value="returnReason" type="textarea" :rows="3"
           placeholder="请明确填写退回原因和修改要求" :disabled="busy"
           @update:model-value="$emit('update:returnReason', $event)" />
-        <div class="solution-action-card__footer">
+        <div class="solution-action-card__footer approval-review-card__footer">
           <el-button type="warning" plain :loading="isPending(`return:${node.nodeKey}`)"
             :disabled="busy || !normalizedReturnReason" @click="confirmReturn">
             确认退回修改
@@ -115,15 +107,19 @@ watch(
   }
 );
 
-function approveDirectly() {
+function confirmApprove() {
   if (props.approveDisabled || busy.value) return;
-  // 审批通过无需展开表单或二次确认；收起可能已打开的退回表单后直接请求。
-  decision.value = '';
   emit('approve');
 }
 
-function confirmApprove() {
-  if (props.approveDisabled || busy.value) return;
+function handleDecisionChange(nextDecision) {
+  if (nextDecision !== 'approve' || props.approveRequiresConfirmation) return;
+  if (props.approveDisabled || busy.value) {
+    decision.value = '';
+    return;
+  }
+  // 普通审批选择“通过”后立即提交；只有需要补充业务选择的节点才展开确认表单。
+  decision.value = '';
   emit('approve');
 }
 
@@ -151,16 +147,6 @@ async function confirmReturn() {
 
 .solution-action-card {
   padding: 14px;
-  border: 1px solid #e3ebf3;
-  border-radius: 8px;
-  background: #fff;
-}
-
-.solution-action-card__heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
 }
 
 .solution-action-card__heading > div,
@@ -186,99 +172,4 @@ async function confirmReturn() {
   color: var(--el-color-danger);
 }
 
-.solution-approval-decision__options {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  width: 100%;
-}
-
-.solution-approval-decision__choices {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
-}
-
-.solution-approval-decision__choices .el-radio.is-bordered {
-  width: 100%;
-  height: auto;
-  min-height: 40px;
-  margin: 0;
-  padding: 8px 12px;
-}
-
-.solution-approval-decision__choices :deep(.el-radio__label) {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
-.solution-approval-decision__choice--return:not(.is-disabled) {
-  --el-color-primary: var(--el-color-warning);
-}
-
-.solution-approval-decision__choice--approve:hover:not(.is-disabled),
-.solution-approval-decision__choice--approve.is-checked:not(.is-disabled) {
-  border-color: var(--el-color-primary);
-  color: var(--el-color-primary);
-}
-
-.solution-approval-decision__choice--approve.is-checked:not(.is-disabled) {
-  background: var(--el-color-primary-light-9);
-}
-
-.solution-approval-decision__choice--return:hover:not(.is-disabled),
-.solution-approval-decision__choice--return.is-checked:not(.is-disabled) {
-  border-color: var(--el-color-warning);
-  color: var(--el-color-warning);
-}
-
-.solution-approval-decision__choice--return.is-checked:not(.is-disabled) {
-  background: var(--el-color-warning-light-9);
-}
-
-.solution-approval-decision__options .el-button {
-  width: 100%;
-  height: auto;
-  min-height: 40px;
-  margin: 0;
-}
-
-.solution-approval-form {
-  padding: 12px;
-  border: 1px solid #e3ebf3;
-  border-radius: 8px;
-  background: #fbfcfe;
-}
-
-.solution-approval-form__notice {
-  margin: 0;
-  color: #526579;
-}
-
-.solution-action-card__footer {
-  display: flex;
-  justify-content: flex-end;
-}
-
-@media (max-width: 640px) {
-  .solution-action-card__heading,
-  .solution-action-card__footer {
-    display: grid;
-  }
-
-  .solution-approval-decision__options {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .solution-approval-decision__choices {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .solution-action-card__footer .el-button {
-    width: 100%;
-  }
-}
 </style>

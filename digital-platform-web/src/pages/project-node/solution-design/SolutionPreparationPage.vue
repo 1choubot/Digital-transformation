@@ -130,5 +130,7 @@ function roleCandidates(role) {
 
 .role-save-button {
   margin-top: 16px;
+  display: block;
+  margin-left: auto;
 }
 </style>

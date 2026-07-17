@@ -2,7 +2,7 @@
   <section v-if="slots.length" class="solution-section">
     <div class="solution-upload-list" role="table" aria-label="方案设计上传列表">
       <div class="solution-upload-list__head" role="row">
-        <span role="columnheader">标题</span>
+        <span role="columnheader">上传内容</span>
         <span role="columnheader">文件名</span>
         <span role="columnheader">操作</span>
       </div>

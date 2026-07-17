@@ -81,28 +81,48 @@
             {{ isPending(stage, 'resubmit') ? '提交中...' : '重新提交阶段关口审批' }}
           </el-button>
 
-          <template v-if="canApproveStageApproval(stage)">
-            <el-button type="primary"
-              :disabled="isPending(stage, 'approve')"
-              @click="$emit('approve', stage)"
-            >
-              {{ isPending(stage, 'approve') ? '处理中...' : '阶段关口审批通过' }}
-            </el-button>
-            <label class="approval-return">
-              <span>阶段关口审批退回原因</span>
-              <el-input
-                v-model="returnComments[stage.id]"
-                maxlength="1000"
-                placeholder="填写阶段关口审批退回原因"
-              />
-            </label>
-            <el-button type="warning" plain
-              :disabled="isPending(stage, 'return')"
-              @click="$emit('return', stage)"
-            >
-              {{ isPending(stage, 'return') ? '退回中...' : '退回阶段关口审批' }}
-            </el-button>
-          </template>
+          <section v-if="canApproveStageApproval(stage)" class="stage-approval-review approval-review-card">
+            <header class="approval-review-card__heading">
+              <div>
+                <strong>阶段关口审批</strong>
+                <small>请选择处理决定，再确认提交审批结果。</small>
+              </div>
+              <el-tag type="warning">待审批</el-tag>
+            </header>
+
+            <div class="approval-review-card__decision">
+              <div class="approval-review-card__field-label">
+                <strong>审批决定</strong><span>*</span>
+              </div>
+              <el-radio-group v-model="stageDecisions[stage.id]" class="approval-review-card__options"
+                :disabled="isStageReviewBusy(stage)">
+                <el-radio class="approval-review-card__option approval-review-card__option--approve"
+                  value="approve" border>审批通过</el-radio>
+                <el-radio class="approval-review-card__option approval-review-card__option--return"
+                  value="return" border>退回修改</el-radio>
+              </el-radio-group>
+            </div>
+
+            <div v-if="stageDecisions[stage.id]" class="approval-review-card__form">
+              <template v-if="stageDecisions[stage.id] === 'return'">
+                <p class="approval-review-card__notice">退回后项目经理需要按要求整改并重新提交阶段审批。</p>
+                <label class="approval-review-card__field-label">
+                  <strong>退回原因</strong><span>*</span>
+                </label>
+                <el-input v-model="returnComments[stage.id]" type="textarea" :rows="3" maxlength="1000"
+                  placeholder="请明确填写退回原因和整改要求" :disabled="isStageReviewBusy(stage)" />
+              </template>
+              <div class="approval-review-card__footer">
+                <el-button :type="stageDecisions[stage.id] === 'return' ? 'warning' : 'primary'"
+                  :plain="stageDecisions[stage.id] === 'return'"
+                  :loading="isPending(stage, stageDecisions[stage.id])"
+                  :disabled="isStageReviewBusy(stage) || (stageDecisions[stage.id] === 'return' && !normalizedReturnComment(stage))"
+                  @click="$emit(stageDecisions[stage.id], stage)">
+                  {{ stageDecisions[stage.id] === 'return' ? '确认退回修改' : '确认审批通过' }}
+                </el-button>
+              </div>
+            </div>
+          </section>
         </div>
 
         <details v-if="showApprovalHistory" class="approval-history">
@@ -137,6 +157,7 @@
 </template>
 
 <script setup>
+import { reactive, watch } from 'vue';
 import StatusBadge from '../StatusBadge.vue';
 import {
   formatApprovalAction,
@@ -207,6 +228,18 @@ const props = defineProps({
 });
 
 defineEmits(['submit', 'resubmit', 'approve', 'return']);
+
+const stageDecisions = reactive({});
+
+watch(
+  () => props.stages.map(stage => `${stage.id || stage.stageKey}:${stage.approvalStatus || ''}`).join('|'),
+  () => {
+    Object.keys(stageDecisions).forEach((stageId) => {
+      const stage = props.stages.find(item => String(item.id) === String(stageId));
+      if (!stage || !props.canApproveStageApproval(stage)) delete stageDecisions[stageId];
+    });
+  }
+);
 
 const staticApprovalCenters = {
   initiation: 'marketing_center',
@@ -285,6 +318,14 @@ function buildApprovalNodes(stage) {
 
 function isPending(stage, action) {
   return props.pendingAction === `${stage.id}:${action}`;
+}
+
+function isStageReviewBusy(stage) {
+  return isPending(stage, 'approve') || isPending(stage, 'return');
+}
+
+function normalizedReturnComment(stage) {
+  return String(props.returnComments[stage.id] || '').trim();
 }
 
 function hasApprovalActions(stage) {

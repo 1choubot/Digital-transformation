@@ -1,6 +1,5 @@
 <template>
-  <section class="solution-section" v-loading="loading">
-    <h4 v-if="showFormContent">报价单在线表单</h4>
+  <section class="solution-section solution-quotation-form" v-loading="loading">
     <el-alert v-if="errorMessage" :title="errorMessage" type="error" show-icon :closable="false" />
     <el-form v-if="showFormContent" label-position="top" :disabled="!canEdit">
       <div class="quotation-meta-grid">
@@ -41,7 +40,7 @@
     <div v-if="showFormContent" class="action-row node-online-form-actions">
       <el-button v-if="canEdit" size="large" :loading="pendingAction === 'save'" @click="$emit('save')">保存草稿</el-button>
       <el-button v-if="canSubmit" size="large" type="primary" :loading="pendingAction === 'submit'"
-        @click="$emit('submit')">提交并生成 Word</el-button>
+        @click="$emit('submit')">提交表单</el-button>
     </div>
   </section>
 </template>

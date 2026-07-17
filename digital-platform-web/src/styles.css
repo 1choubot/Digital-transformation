@@ -6312,18 +6312,22 @@ p {
   margin: 16px 0;
 }
 
-.solution-node-page .quotation-page-bottom-actions {
+.solution-node-page .action-row.quotation-page-bottom-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   flex-wrap: wrap;
   gap: 12px;
   width: 100%;
   min-width: 0;
 }
 
-.solution-node-page .quotation-page-bottom-actions .el-button + .el-button {
+.solution-node-page .action-row.quotation-page-bottom-actions .el-button + .el-button {
   margin-left: 0;
+}
+
+.solution-node-page .action-row.quotation-page-bottom-actions > .el-button {
+  width: 200px;
 }
 
 @media (max-width: 760px) {
@@ -6376,6 +6380,30 @@ p {
 
 /* Migrated from digital-platform-web/src/pages/project-node/solution-design/SolutionQuotationTenderPage.vue */
 .solution-node-page .quotation-section{display:grid;gap:var(--space-4,16px)}.solution-node-page .action-row{display:flex;flex-wrap:wrap;gap:var(--space-2,8px)}
+
+/*
+ * Keep the quotation action bar at the card bottom when the form is shorter
+ * than the workspace. Long forms still use the shared sticky action behavior.
+ */
+.solution-quotation-node-page,
+.solution-quotation-node-page .solution-node-card {
+  min-height: 100%;
+}
+
+.solution-quotation-node-page .solution-node-card,
+.solution-quotation-node-page .solution-quotation-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.solution-quotation-node-page .solution-quotation-form {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.solution-quotation-node-page .solution-quotation-form > .node-online-form-actions {
+  margin-top: auto;
+}
 
 /* ==========================================================================
    Element Plus integration

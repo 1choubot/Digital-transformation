@@ -1,5 +1,5 @@
 <template>
-  <SolutionDesignNodeLayout :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
+  <SolutionDesignNodeLayout class="solution-quotation-node-page" :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
     :error-message="context.solutionDesignErrorMessage">
     <template #title-after>
       <GeneratedFormFileCard v-if="flow?.branchType === 'quotation' && quotation.dto.value?.form?.generatedFile"

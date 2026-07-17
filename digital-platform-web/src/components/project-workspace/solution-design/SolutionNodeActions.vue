@@ -43,16 +43,6 @@
       </div>
     </article>
 
-    <article v-else-if="showReadOnlyResult" class="solution-action-card solution-approval-result"
-      aria-label="方案设计审批结果">
-      <header class="solution-action-card__heading">
-        <div><strong>审批结果</strong><small>当前审批状态（只读）</small></div>
-        <el-tag :type="resultTagType">{{ resultStatusText }}</el-tag>
-      </header>
-      <p v-if="node.returnReason">退回原因：{{ node.returnReason }}</p>
-      <small v-if="resultTime">处理时间：{{ formatDateTime(resultTime) }}</small>
-    </article>
-
     <div v-if="canShowSubmit" class="solution-node-submit-action">
       <el-button type="primary" size="large" :loading="isPending(`submit:${node.nodeKey}`)"
         :disabled="busy || submitDisabled" @click="$emit('submit')">
@@ -79,12 +69,8 @@ const emit = defineEmits(['submit', 'approve', 'return', 'update:returnReason'])
 const decision = ref('');
 const hasApprovalAction = computed(() => props.node.permissions?.canApprove === true
   || props.node.permissions?.canReturn === true);
-const approvalResultStatuses = new Set([
-  'pending_review', 'pending_general_review', 'approved', 'returned', 'ended', 'skipped'
-]);
-const showReadOnlyResult = computed(() => approvalResultStatuses.has(props.node.status));
 const canShowSubmit = computed(() => props.node.permissions?.canSubmit === true && !props.hideSubmit);
-const hasVisibleContent = computed(() => canShowSubmit.value || hasApprovalAction.value || showReadOnlyResult.value);
+const hasVisibleContent = computed(() => canShowSubmit.value || hasApprovalAction.value);
 const showModule = computed(() => hasVisibleContent.value || !props.hideWhenEmpty);
 const busy = computed(() => props.isPending(`submit:${props.node.nodeKey}`)
   || props.isPending(`approve:${props.node.nodeKey}`)
@@ -98,7 +84,6 @@ const resultTagType = computed(() => ({
   approved: 'success', returned: 'danger', ended: 'info', skipped: 'info',
   pending_review: 'warning', pending_general_review: 'warning'
 }[props.node.status] || 'info'));
-const resultTime = computed(() => props.node.approvedAt || props.node.returnedAt || props.node.submittedAt || null);
 
 watch(
   () => [props.node.nodeKey, props.node.currentRevision, props.node.status],
@@ -107,12 +92,6 @@ watch(
     if (previousValue) emit('update:returnReason', '');
   }
 );
-
-function formatDateTime(value) {
-  if (!value) return '-';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('zh-CN', { hour12: false });
-}
 
 function approveDirectly() {
   if (props.approveDisabled || busy.value) return;
@@ -167,8 +146,7 @@ async function confirmReturn() {
   flex-direction: column;
 }
 
-.solution-action-card__heading small,
-.solution-approval-result > small {
+.solution-action-card__heading small {
   color: #667789;
 }
 
@@ -202,8 +180,7 @@ async function confirmReturn() {
   background: #fbfcfe;
 }
 
-.solution-approval-form__notice,
-.solution-approval-result p {
+.solution-approval-form__notice {
   margin: 0;
   color: #526579;
 }

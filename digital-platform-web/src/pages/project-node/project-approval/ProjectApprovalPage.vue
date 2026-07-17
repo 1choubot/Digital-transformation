@@ -245,34 +245,7 @@
       </div>
     </section>
 
-    <section
-      v-if="completedReviewNodesForCurrentUser.length"
-      class="initiation-review-action-panel"
-      aria-label="已完成的项目立项审批结果"
-    >
-      <div class="initiation-review-nodes">
-        <article
-          v-for="reviewNode in completedReviewNodesForCurrentUser"
-          :key="`completed-${reviewNode.nodeKey}`"
-          class="initiation-review-node"
-        >
-          <div class="initiation-review-node__main">
-            <div class="initiation-review-node__heading">
-              <strong>{{ reviewNode.nodeName || formatReviewNodeName(reviewNode.nodeKey) }}</strong>
-              <small>审批结果（只读）</small>
-            </div>
-            <el-tag :type="reviewNodeTagType(reviewNode.nodeStatus)">
-              {{ formatReviewNodeStatus(reviewNode.nodeStatus) }}
-            </el-tag>
-          </div>
-          <p v-if="reviewNode.comment">审批意见：{{ reviewNode.comment }}</p>
-          <p v-if="reviewNode.returnReason">退回原因：{{ reviewNode.returnReason }}</p>
-          <small v-if="reviewNode.reviewedAt">处理时间：{{ formatReviewDateTime(reviewNode.reviewedAt) }}</small>
-        </article>
-      </div>
-    </section>
-
-    <el-empty v-else-if="!approvalReview" description="审批记录尚未生成。" />
+    <el-empty v-if="!approvalReview" description="审批记录尚未生成。" />
   </section>
 </template>
 
@@ -379,9 +352,6 @@ const marketResearchDownloadPending = computed(() => Boolean(
 const approvalReview = computed(() => approvalDocument.value?.initiationReview || null);
 const approvalReviewNodes = computed(() => approvalReview.value?.nodes || []);
 const actionableReviewNodes = computed(() => approvalReviewNodes.value.filter((reviewNode) => reviewNode.canAct));
-const completedReviewNodesForCurrentUser = computed(() => approvalReviewNodes.value.filter((reviewNode) => {
-  return reviewNode.canAct !== true && isInitiationReviewNodeReviewer(reviewNode, props.currentUser);
-}));
 const isApprovalViewer = computed(() => approvalReviewNodes.value.some(
   (reviewNode) => isInitiationReviewNodeReviewer(reviewNode, props.currentUser)
 ));
@@ -458,12 +428,6 @@ function reviewNodeTagType(status) {
 
 function isEvaluationNode(reviewNode) {
   return ['business_review', 'technical_review'].includes(reviewNode?.nodeKey);
-}
-
-function formatReviewDateTime(value) {
-  if (!value) return '-';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('zh-CN', { hour12: false });
 }
 
 function reviewNodeDescription(reviewNode) {

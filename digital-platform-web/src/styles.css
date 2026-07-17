@@ -3795,7 +3795,7 @@ p {
   height: 100%;
   min-width: 0;
   min-height: 0;
-  padding: 12px 20px 20px;
+  padding: 12px 20px 0;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;

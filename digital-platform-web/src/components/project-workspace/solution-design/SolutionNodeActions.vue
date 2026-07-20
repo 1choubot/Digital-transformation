@@ -17,7 +17,7 @@
       :approve-disabled="approveDisabled"
       @update:comment="$emit('update:comment', $event)"
       @approve="$emit('approve', $event)"
-      @return="confirmReturn"
+      @return="$emit('return', $event)"
     >
       <template v-if="selectionRequired" #selection="{ disabled }">
         <slot name="selection" :disabled="disabled" />
@@ -27,7 +27,7 @@
     <div v-if="canShowSubmit" class="solution-node-submit-action">
       <el-button type="primary" size="large" :loading="isPending(`submit:${node.nodeKey}`)"
         :disabled="busy || submitDisabled" @click="$emit('submit')">
-        确认提交
+        完成
       </el-button>
     </div>
   </section>
@@ -35,7 +35,6 @@
 
 <script setup>
 import { computed, watch } from 'vue';
-import { ElMessageBox } from 'element-plus';
 import ApprovalActionCard from '../../approval/ApprovalActionCard.vue';
 
 const props = defineProps({
@@ -79,17 +78,6 @@ watch(
   }
 );
 
-async function confirmReturn(comment) {
-  if (!comment || busy.value) return;
-  try {
-    await ElMessageBox.confirm(`确认退回“${props.node.nodeName || '当前节点'}”并要求修改吗？`, '退回修改', {
-      type: 'warning', confirmButtonText: '确认退回', cancelButtonText: '取消'
-    });
-    emit('return', comment);
-  } catch {
-    // 用户取消时不请求、不刷新。
-  }
-}
 </script>
 
 <style scoped>

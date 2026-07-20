@@ -189,7 +189,7 @@
                     下载
                   </el-button>
                   <el-button v-if="image.permissions?.canDelete ?? analysisFormDto?.permissions?.canEditForm"
-                    type="danger" link @click="confirmDelete(image)">
+                    type="danger" link @click="deleteAnalysisImage({ image })">
                     删除
                   </el-button>
                 </div>
@@ -368,20 +368,4 @@ async function handleSubmitAnalysisForm() {
   firstField?.querySelector('input, textarea, [tabindex]')?.focus?.();
 }
 
-async function confirmDelete(image) {
-  try {
-    await ElMessageBox.confirm(
-      `确认删除“${image.originalFileName || '该图片'}”吗？`,
-      '删除确认',
-      {
-        type: 'warning',
-        confirmButtonText: '确认删除',
-        cancelButtonText: '取消'
-      }
-    );
-    await deleteAnalysisImage({ image });
-  } catch {
-    // 用户取消时不请求、不刷新。
-  }
-}
 </script>

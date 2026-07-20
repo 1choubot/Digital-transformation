@@ -10,10 +10,10 @@
           <el-input v-model="formData.recipientName" />
           <small v-if="isInvalid('recipientName')" class="form-field-error">请填写收件人</small>
         </el-form-item>
-        <el-form-item data-field-key="contactName" label="公司联系人 *"
+        <el-form-item data-field-key="contactName" label="本公司联系人 *"
           :class="{ 'online-form-field--invalid': isInvalid('contactName') }">
           <el-input v-model="formData.contactName" />
-          <small v-if="isInvalid('contactName')" class="form-field-error">请填写公司联系人</small>
+          <small v-if="isInvalid('contactName')" class="form-field-error">请填写本公司联系人</small>
         </el-form-item>
         <el-form-item data-field-key="contactPhone" label="联系电话 *"
           :class="{ 'online-form-field--invalid': isInvalid('contactPhone') }">
@@ -71,7 +71,7 @@
 
 <script setup>
 import { computed, nextTick, ref } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { isFormValueEmpty } from '../../../utils/formValidation.js';
 import {
   calculateLineAmount,
@@ -120,7 +120,20 @@ function isInvalid(key) {
 async function handleSubmit() {
   validationAttempted.value = true;
   if (missingFields.value.length === 0) {
-    emit('submit');
+    try {
+      await ElMessageBox.confirm(
+        '提交后将生成报价表并进入后续流程，确认提交？',
+        '提交确认',
+        {
+          type: 'warning',
+          confirmButtonText: '确认提交',
+          cancelButtonText: '取消'
+        }
+      );
+      emit('submit');
+    } catch {
+      // 用户取消时不提交表单。
+    }
     return;
   }
   ElMessage.warning(`请补充以下必填内容：${missingFields.value.map((field) => field.label).join('、')}`);

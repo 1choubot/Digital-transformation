@@ -39,22 +39,24 @@
       @submit="submitNode(nodeKey)" @approve="approveNode(nodeKey, { comment: $event })"
       @return="returnNode(nodeKey)" />
 
-    <div v-if="flow && (flow.permissions?.canAcceptQuotation
-      || flow.permissions?.canRejectQuotationAndEndProject
-      || flow.permissions?.canRejectQuotationToRdCost)" class="action-row quotation-page-bottom-actions">
-      <el-button v-if="flow.permissions?.canAcceptQuotation" size="large" type="success"
-        :loading="isPending('quotation:accept')" @click="acceptQuotation">客户接受报价</el-button>
-      <el-button v-if="flow.permissions?.canRejectQuotationAndEndProject" size="large" type="danger" plain
-        :loading="isPending('quotation:reject:end_project')" @click="rejectQuotation('end_project')">结束项目</el-button>
-      <el-button v-if="flow.permissions?.canRejectQuotationToRdCost" size="large" type="warning" plain
-        :loading="isPending('quotation:reject:return_to_rd_cost')"
-        @click="rejectQuotation('return_to_rd_cost')">审批不通过</el-button>
-    </div>
+    <ApprovalActionCard v-if="showQuotationResultActions" title="报价结果处理"
+      description="记录客户对当前报价的处理结果。退回研发成本或结束项目时必须填写原因。"
+      status-text="等待客户确认" status-type="warning" :comment="quotationResultComment"
+      comment-label="处理意见/退回或结束原因" comment-placeholder="客户接受报价时选填；退回研发成本或结束项目时请填写原因"
+      :can-approve="flow.permissions?.canAcceptQuotation === true"
+      :can-return="flow.permissions?.canRejectQuotationToRdCost === true"
+      :can-end="flow.permissions?.canRejectQuotationAndEndProject === true"
+      :busy="quotationResultBusy" :pending-action="quotationResultPendingAction"
+      approve-text="客户接受报价" return-text="退回研发成本" end-text="结束项目"
+      @update:comment="quotationResultComment = $event" @approve="processQuotationAcceptance"
+      @return="processQuotationRejection('return_to_rd_cost', $event)"
+      @end="processQuotationRejection('end_project', $event)" />
   </SolutionDesignNodeLayout>
 </template>
 
 <script setup>
-import { computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
+import ApprovalActionCard from '../../../components/approval/ApprovalActionCard.vue';
 import SolutionDesignNodeLayout from '../../../components/project-workspace/solution-design/SolutionDesignNodeLayout.vue';
 import SolutionUploadSlots from '../../../components/project-workspace/solution-design/SolutionUploadSlots.vue';
 import SolutionNodeActions from '../../../components/project-workspace/solution-design/SolutionNodeActions.vue';
@@ -72,6 +74,19 @@ const {
   returnNode, selectBranch, submitQuotation, acceptQuotation, rejectQuotation
 } = page;
 const flow = computed(() => workflow.value?.quotationTender || null);
+const quotationResultComment = ref('');
+const showQuotationResultActions = computed(() => Boolean(flow.value && (
+  flow.value.permissions?.canAcceptQuotation
+  || flow.value.permissions?.canRejectQuotationAndEndProject
+  || flow.value.permissions?.canRejectQuotationToRdCost
+)));
+const quotationResultPendingAction = computed(() => {
+  if (isPending('quotation:accept')) return 'approve';
+  if (isPending('quotation:reject:return_to_rd_cost')) return 'return';
+  if (isPending('quotation:reject:end_project')) return 'end';
+  return '';
+});
+const quotationResultBusy = computed(() => Boolean(quotationResultPendingAction.value));
 const tenderSlotKeys = new Set(['tender_business_file', 'tender_technical_file']);
 const tenderSlots = computed(() => slots.value.filter((slot) => tenderSlotKeys.has(slot.slotKey)));
 const canViewFormContent = computed(() => quotation.dto.value?.permissions?.canEdit === true);
@@ -84,4 +99,14 @@ const quotation = useSolutionQuotationForm({
 watch(() => flow.value?.branchType, (branchType) => {
   if (branchType === 'quotation') quotation.load();
 }, { immediate: true });
+
+async function processQuotationAcceptance() {
+  const result = await acceptQuotation();
+  if (result) quotationResultComment.value = '';
+}
+
+async function processQuotationRejection(action, reason) {
+  const result = await rejectQuotation(action, reason);
+  if (result) quotationResultComment.value = '';
+}
 </script>

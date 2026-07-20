@@ -62,7 +62,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   approveInitiationReviewNode,
   confirmStageDocument,
@@ -1956,6 +1956,21 @@ async function saveOnlineForm(options = {}) {
 
 async function submitOnlineForm(options = {}) {
   if (!activeOnlineForm.value) {
+    return false;
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      '提交后在线表单将进入后续流程，确认提交？',
+      '提交确认',
+      {
+        type: 'warning',
+        confirmButtonText: '确认提交',
+        cancelButtonText: '取消'
+      }
+    );
+  } catch {
+    // 用户取消时不请求、不刷新，也不显示错误。
     return false;
   }
 

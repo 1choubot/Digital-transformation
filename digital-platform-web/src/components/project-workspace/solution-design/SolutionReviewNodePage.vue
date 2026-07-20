@@ -134,7 +134,7 @@ async function handleSubmitReviewForm() {
       );
       await submitReviewForm(nodeKey.value);
     } catch {
-      // 用户取消时不请求后端。
+      // 用户取消时不请求、不刷新，也不显示错误。
     }
     return;
   }

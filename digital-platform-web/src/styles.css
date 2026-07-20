@@ -6267,24 +6267,6 @@ p {
   margin: 16px 0;
 }
 
-.solution-node-page .action-row.quotation-page-bottom-actions {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  width: 100%;
-  min-width: 0;
-}
-
-.solution-node-page .action-row.quotation-page-bottom-actions .el-button + .el-button {
-  margin-left: 0;
-}
-
-.solution-node-page .action-row.quotation-page-bottom-actions > .el-button {
-  width: 200px;
-}
-
 @media (max-width: 760px) {
   .solution-node-page .quotation-meta-grid {
     grid-template-columns: 1fr;

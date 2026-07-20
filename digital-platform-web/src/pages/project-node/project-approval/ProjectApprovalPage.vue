@@ -94,7 +94,6 @@
 
 <script setup>
 import { computed, reactive } from 'vue';
-import { ElMessageBox } from 'element-plus';
 import ApprovalActionCard from '../../../components/approval/ApprovalActionCard.vue';
 import GeneratedFormFileCard from '../../../components/GeneratedFormFileCard.vue';
 import NodeOnlineFormEditor from '../../../components/node/NodeOnlineFormEditor.vue';
@@ -250,15 +249,6 @@ function endReviewNode(reviewNode, comment) {
 }
 
 async function returnNode(payload, pendingKind = 'return') {
-  try {
-    await ElMessageBox.confirm(
-      payload?.returnAction === 'project_end' ? '结束项目后将阻止后续阶段推进，确认继续吗？' : '确认退回项目市场调研并进入整改吗？',
-      payload?.returnAction === 'project_end' ? '结束项目' : '退回整改',
-      { type: 'warning', confirmButtonText: '确认', cancelButtonText: '取消' }
-    );
-  } catch (error) {
-    return;
-  }
   pendingReturnKinds[payload.node.nodeKey] = pendingKind;
   try {
     await runBusinessStateChangeAction(

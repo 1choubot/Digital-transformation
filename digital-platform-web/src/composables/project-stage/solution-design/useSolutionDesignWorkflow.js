@@ -1,5 +1,5 @@
 import { reactive, ref, toValue, watch } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import {
   approveSolutionDesignWorkflowNode,
   assignSolutionDesignRoles,
@@ -194,31 +194,17 @@ export function useSolutionDesignWorkflow({
   }
 
   async function acceptQuotation() {
-    await runAction('quotation:accept', () => processSolutionDesignQuotationResult(id(), { result: 'accepted' }, token()), '已记录客户接受报价。');
+    return runAction('quotation:accept', () => processSolutionDesignQuotationResult(id(), { result: 'accepted' }, token()), '已记录客户接受报价。');
   }
 
-  async function rejectQuotation(action) {
+  async function rejectQuotation(action, returnReason) {
     const normalizedAction = action === 'end_project' ? 'end_project' : 'return_to_rd_cost';
-    let reason = '';
-    try {
-      const result = await ElMessageBox.prompt(
-        normalizedAction === 'end_project'
-          ? '请填写结束项目原因。'
-          : '请填写审批不通过原因。',
-        normalizedAction === 'end_project' ? '结束项目确认' : '审批不通过确认',
-        {
-          type: 'warning',
-          inputType: 'textarea',
-          confirmButtonText: '确认提交',
-          cancelButtonText: '取消',
-          inputValidator: (value) => Boolean(String(value || '').trim()) || '请填写原因'
-        }
-      );
-      reason = String(result.value || '').trim();
-    } catch {
-      return;
+    const reason = String(returnReason || '').trim();
+    if (!reason) {
+      ElMessage.error(normalizedAction === 'end_project' ? '请填写结束项目原因。' : '请填写退回研发成本原因。');
+      return null;
     }
-    await runAction(
+    return runAction(
       `quotation:reject:${normalizedAction}`,
       () => processSolutionDesignQuotationResult(
         id(),

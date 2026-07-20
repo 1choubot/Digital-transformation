@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
 import test from 'node:test';
 import { buildApprovalActionState } from '../src/components/approval/approvalActionRules.js';
+
+function collectNodeActionSources(directoryUrl) {
+  return readdirSync(directoryUrl, { withFileTypes: true }).flatMap((entry) => {
+    const entryUrl = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, directoryUrl);
+    if (entry.isDirectory()) return collectNodeActionSources(entryUrl);
+    return /\.(?:js|vue)$/.test(entry.name)
+      ? [{ path: entryUrl.pathname, source: readFileSync(entryUrl, 'utf8') }]
+      : [];
+  });
+}
 
 test('ordinary approval allows an empty approve comment but requires return and end reasons', () => {
   const state = buildApprovalActionState({ comment: '' });
@@ -24,4 +35,44 @@ test('an incomplete required selection locks the input and every action', () => 
   assert.equal(state.approveDisabled, true);
   assert.equal(state.returnDisabled, true);
   assert.equal(state.endDisabled, true);
+});
+
+test('only online form submission keeps a secondary confirmation dialog', () => {
+  const roots = [
+    new URL('../src/pages/project-node/', import.meta.url),
+    new URL('../src/components/project-workspace/', import.meta.url),
+    new URL('../src/composables/project-stage/', import.meta.url)
+  ];
+  const files = roots.flatMap(collectNodeActionSources);
+  const projectDetailLayout = {
+    path: '/src/pages/project-detail/ProjectDetailLayout.vue',
+    source: readFileSync(new URL('../src/pages/project-detail/ProjectDetailLayout.vue', import.meta.url), 'utf8')
+  };
+  const onlineFormConfirmationFiles = [
+    projectDetailLayout,
+    ...files.filter(({ path }) => [
+      '/SolutionAnalysisPage.vue',
+      '/SolutionReviewNodePage.vue',
+      '/SolutionQuotationForm.vue'
+    ].some((suffix) => path.endsWith(suffix)))
+  ];
+  const allSources = [...files, projectDetailLayout].map(({ source }) => source).join('\n');
+
+  assert.doesNotMatch(allSources, /ElMessageBox\.prompt\s*\(/);
+  for (const { source } of onlineFormConfirmationFiles) {
+    assert.equal(source.match(/ElMessageBox\.confirm\s*\(/g)?.length, 1);
+    assert.match(source, /confirmButtonText:\s*'确认提交'/);
+  }
+  for (const { path, source } of [...files, projectDetailLayout]) {
+    if (onlineFormConfirmationFiles.some((item) => item.path === path)) continue;
+    assert.doesNotMatch(source, /ElMessageBox\.confirm\s*\(/);
+  }
+
+  const quotationPage = readFileSync(
+    new URL('../src/pages/project-node/solution-design/SolutionQuotationTenderPage.vue', import.meta.url),
+    'utf8'
+  );
+  assert.match(quotationPage, /<ApprovalActionCard/);
+  assert.match(quotationPage, /return-text="退回研发成本"/);
+  assert.doesNotMatch(quotationPage, /quotation-page-bottom-actions/);
 });

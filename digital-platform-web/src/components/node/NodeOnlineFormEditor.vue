@@ -373,7 +373,7 @@
         </el-button>
         <el-button size="large" type="primary" native-type="submit" :loading="submitting"
           :disabled="!form.permissions?.canSubmit">
-          {{ getOnlineFormSubmitLabel() }}
+          提交表单
         </el-button>
       </div>
     </el-form>
@@ -682,19 +682,6 @@ function formatEditablePart(part) {
   }[part] || '仅查看';
 }
 
-function getOnlineFormSubmitLabel() {
-  const part = props.form?.permissions?.editablePart;
-  if (props.form?.documentCode === '1.2') {
-    if (part === 'business') {
-      return '提交商务部分';
-    }
-    if (part === 'technical') {
-      return '提交技术部分';
-    }
-  }
-
-  return '提交表单';
-}
 
 function statusTagType(status) {
   if (['completed', 'confirmed', 'approved'].includes(status)) return 'success';

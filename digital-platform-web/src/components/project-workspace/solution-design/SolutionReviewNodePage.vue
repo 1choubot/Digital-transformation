@@ -1,62 +1,37 @@
 <template>
-  <GeneratedFormFileCard :generated-file="activeDto?.form?.generatedFile"
-    :pending="isPending(`review:${nodeKey}:download`)" @download="downloadReviewGeneratedFile(nodeKey)" />
   <SolutionDesignNodeLayout :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
     :error-message="context.solutionDesignErrorMessage">
-    <section ref="reviewFormRoot" class="review-section">
-
-      <SolutionFormFields :fields="fields" :model="reviewFormData" :invalid-field-keys="invalidFieldKeys"
-        :disabled="!activeDto?.permissions?.canEditReviewForm" @update="updateReviewFormField" />
-      <div class="review-repeatable-grid">
-        <SolutionRepeatableItems
-          v-for="source in repeatableFieldConfigs"
-          :key="source.key"
-          :field-key="source.key"
-          :title="source.title"
-          :add-label="source.addLabel"
-          :items="repeatableItemsFor(source.key)"
-          :disabled="!activeDto?.permissions?.canEditReviewForm"
-          @update="payload => updateRepeatableItem({ key: source.key, ...payload })"
-          @add="addRepeatableItem(source.key)"
-          @remove="payload => removeRepeatableItem({ key: source.key, ...payload })"
-        />
+    <template #title-after>
+      <div class="review-generated-files">
+        <GeneratedFormFileCard :generated-file="activeDto?.form?.generatedFile"
+          :pending="isPending(`review:${nodeKey}:download`)" :button-text="activeDownloadButtonText"
+          @download="downloadReviewGeneratedFile(nodeKey)" />
       </div>
-      <section class="implementation-plan-section">
-        <div class="implementation-plan-section__heading">
-          <h4>项目实施计划</h4>
-        </div>
-        <el-empty v-if="implementationPlanItems.length === 0" description="填写需求、目标、风险或建议后生成实施计划项" :image-size="44" />
-        <div v-else class="implementation-plan-list">
-          <article v-for="item in implementationPlanItems" :key="`${item.sourceType}:${item.sourceIndex}`"
-            class="implementation-plan-item"
-            :data-plan-key="`${item.sourceType}:${item.sourceIndex}`"
-            :class="{ 'implementation-plan-item--invalid': isPlanItemInvalid(item) }">
-            <div class="implementation-plan-item__source">
-              <strong>{{ item.sourceLabel }}{{ item.sourceIndex }}</strong>
-              <span>{{ item.sourceText }}</span>
-            </div>
-            <el-input :model-value="item.planText" type="textarea" :rows="2"
-              :disabled="!activeDto?.permissions?.canEditReviewForm"
-              placeholder="填写对应实施计划"
-              @update:model-value="value => updateImplementationPlanItem({ sourceType: item.sourceType, sourceIndex: item.sourceIndex, planText: value })" />
-            <small v-if="isPlanItemInvalid(item)" class="form-field-error">请填写实施计划内容</small>
-          </article>
-        </div>
-      </section>
-      <div class="action-row">
-        <el-button :disabled="!activeDto?.permissions?.canEditReviewForm" :loading="isPending(`review:${nodeKey}:save`)"
-          @click="saveReviewForm(nodeKey)">
+    </template>
+
+    <section v-if="canViewFormContent" ref="reviewFormRoot" class="review-section">
+
+      <SolutionReviewFormTable :model="reviewFormData" :repeatable-field-configs="tableRepeatableFieldConfigs"
+        :implementation-plan-items="implementationPlanItems" :invalid-field-keys="invalidFieldKeys"
+        :invalid-plan-keys="invalidPlanKeys" :disabled="!activeDto?.permissions?.canEditReviewForm"
+        @update-field="updateReviewFormField" @update-repeatable="updateRepeatableItem"
+        @add-repeatable="addRepeatableItem" @remove-repeatable="removeRepeatableItem"
+        @update-plan="updateImplementationPlanItem" />
+      <div class="action-row node-online-form-actions">
+        <el-button size="large" :disabled="!activeDto?.permissions?.canEditReviewForm"
+          :loading="isPending(`review:${nodeKey}:save`)" @click="saveReviewForm(nodeKey)">
           保存草稿
         </el-button>
-        <el-button type="primary" :disabled="!activeDto?.permissions?.canSubmitReviewForm"
+        <el-button size="large" type="primary" :disabled="!activeDto?.permissions?.canSubmitReviewForm"
           :loading="isPending(`review:${nodeKey}:submit`)" @click="handleSubmitReviewForm">
           提交表单
         </el-button>
       </div>
     </section>
     <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending" hide-submit hide-when-empty
-      :return-reason="returnReasons[nodeKey] || ''" @update:return-reason="returnReasons[nodeKey] = $event"
-      @submit="submitNode(nodeKey)" @approve="approveNode(nodeKey)" @return="returnNode(nodeKey)" />
+      :comment="returnReasons[nodeKey] || ''" @update:comment="returnReasons[nodeKey] = $event"
+      @submit="submitNode(nodeKey)" @approve="approveNode(nodeKey, { comment: $event })"
+      @return="returnNode(nodeKey)" />
   </SolutionDesignNodeLayout>
 </template>
 
@@ -65,8 +40,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import SolutionDesignNodeLayout from './SolutionDesignNodeLayout.vue';
 import SolutionNodeActions from './SolutionNodeActions.vue';
-import SolutionFormFields from './SolutionFormFields.vue';
-import SolutionRepeatableItems from './SolutionRepeatableItems.vue';
+import SolutionReviewFormTable from './SolutionReviewFormTable.vue';
 import GeneratedFormFileCard from '../../GeneratedFormFileCard.vue';
 import { solutionDesignNodePageProps, useSolutionDesignNodePage } from '../../../composables/project-stage/solution-design/useSolutionDesignNodePage.js';
 import { useSolutionReviewForm } from '../../../composables/project-stage/solution-design/useSolutionReviewForm.js';
@@ -82,10 +56,10 @@ const fields = [
   { key: 'recorder', label: '记录人', type: 'readonly' }
 ];
 const repeatableFieldConfigs = [
-  { key: 'customerRequirements', title: '项目需求分析', addLabel: '添加需求' },
-  { key: 'projectTargetDescription', title: '项目目标描述', addLabel: '添加目标' },
-  { key: 'technicalRisks', title: '项目风险评估', addLabel: '添加风险' },
-  { key: 'solutionSuggestions', title: '项目方案建议', addLabel: '添加建议' }
+  { key: 'customerRequirements', sourceType: 'requirement', title: '项目需求分析', addLabel: '添加需求' },
+  { key: 'projectTargetDescription', sourceType: 'target', title: '项目目标描述', addLabel: '添加目标' },
+  { key: 'technicalRisks', sourceType: 'risk', title: '项目风险评估', addLabel: '添加风险' },
+  { key: 'solutionSuggestions', sourceType: 'suggestion', title: '项目方案建议', addLabel: '添加建议' }
 ];
 
 const emit = defineEmits(['business-state-changed']);
@@ -110,6 +84,15 @@ const {
   saveReviewForm, submitReviewForm, downloadReviewGeneratedFile
 } = review;
 const activeDto = computed(() => review.activeReviewFormDto(workflow.value, currentNode.value));
+const isCustomerReview = computed(() => nodeKey.value === 'customer_solution_review');
+const internalReviewGeneratedFile = computed(() =>
+  workflow.value?.reviewForms?.internal_solution_review?.generatedFile || null
+);
+const activeDownloadButtonText = computed(() => isCustomerReview.value
+  ? '查看客户方案审评表'
+  : '查看内部方案审评表'
+);
+const canViewFormContent = computed(() => activeDto.value?.permissions?.canEdit === true);
 const reviewFormRoot = ref(null);
 const validationAttempted = ref(false);
 const missingRequiredFields = computed(() => getMissingRequiredFields(fields, reviewFormData));
@@ -120,6 +103,10 @@ const invalidFieldKeys = computed(() => validationAttempted.value
 const invalidPlanKeys = computed(() => validationAttempted.value
   ? missingPlanItems.value.map((item) => `${item.sourceType}:${item.sourceIndex}`)
   : []);
+const tableRepeatableFieldConfigs = computed(() => repeatableFieldConfigs.map((source) => ({
+  ...source,
+  items: repeatableItemsFor(source.key)
+})));
 
 watch(workflow, (value) => {
   syncFromWorkflow(value, nodeKey.value);
@@ -169,58 +156,15 @@ async function handleSubmitReviewForm() {
   firstField?.querySelector('input, textarea, [tabindex]')?.focus?.();
 }
 
-function isPlanItemInvalid(item) {
-  return invalidPlanKeys.value.includes(`${item.sourceType}:${item.sourceIndex}`);
-}
 </script>
 
 <style scoped>
-.implementation-plan-section {
-  margin-top: 16px;
+.review-section {
+  min-width: 0;
 }
 
-.review-repeatable-grid {
-  display: grid;
-  gap: 16px;
-}
-
-.implementation-plan-section__heading {
-  margin-bottom: 12px;
-}
-
-.implementation-plan-section__heading h4 {
-  margin: 0;
-}
-
-.implementation-plan-list {
+.review-generated-files {
   display: grid;
   gap: 12px;
-}
-
-.implementation-plan-item {
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 6px;
-  background: var(--el-fill-color-blank);
-}
-
-.implementation-plan-item--invalid {
-  border-color: var(--el-color-danger);
-}
-
-.implementation-plan-item__source {
-  display: grid;
-  gap: 4px;
-}
-
-.implementation-plan-item__source span {
-  white-space: pre-wrap;
-  color: var(--el-text-color-regular);
-}
-
-.form-field-error {
-  color: var(--el-color-danger);
 }
 </style>

@@ -1,20 +1,5 @@
 <template>
   <section class="page-stack">
-    <div class="page-title-row">
-      <div>
-        <span class="section-eyebrow">项目台账</span>
-        <h2>项目列表</h2>
-        <span class="page-user">当前用户：{{ formatUser(currentUser) }}</span>
-      </div>
-      <el-button
-        v-if="canCreateProject"
-        type="primary"
-        @click="navigate('/projects/new')"
-      >
-        新建项目
-      </el-button>
-    </div>
-
     <section class="panel">
       <div class="panel-toolbar">
         <div>

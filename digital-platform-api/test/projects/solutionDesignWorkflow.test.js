@@ -3456,6 +3456,11 @@ test('role assignment validates enabled users and business department users', as
       name: 'technical owner outside RD center',
       payload: rolePayload({ technicalOwnerUserId: 21 }),
       code: SOLUTION_DESIGN_ERROR.INVALID_ROLE_USER
+    },
+    {
+      name: 'procurement owner outside manufacturing center',
+      payload: rolePayload({ procurementOwnerUserId: 13 }),
+      code: SOLUTION_DESIGN_ERROR.INVALID_ROLE_USER
     }
   ];
 
@@ -3472,20 +3477,46 @@ test('role assignment validates enabled users and business department users', as
   }
 });
 
-test('procurement owner accepts enabled business department users in the first slice', async () => {
+test('procurement owner accepts manufacturing center users', async () => {
   const db = fakeDb();
   const actor = authUser(db.connection.users.get(1));
 
   const workflow = await assignSolutionDesignRoles(
     {
       projectId: 100,
-      payload: rolePayload({ procurementOwnerUserId: 13 }),
+      payload: rolePayload({ procurementOwnerUserId: 14 }),
       user: actor
     },
     db
   );
 
-  assert.equal(workflow.roles.procurement_owner.userId, 13);
+  assert.equal(workflow.roles.procurement_owner.userId, 14);
+});
+
+test('project manager accepts enabled global users except system administrators', async () => {
+  for (const projectManagerUserId of [3, 18, 30]) {
+    const db = fakeDb();
+    const actor = authUser(db.connection.users.get(1));
+    const workflow = await assignSolutionDesignRoles(
+      { projectId: 100, payload: rolePayload({ projectManagerUserId }), user: actor },
+      db
+    );
+
+    assert.equal(workflow.roles.project_manager.userId, projectManagerUserId);
+  }
+
+  for (const projectManagerUserId of [4, 17]) {
+    const db = fakeDb();
+    const actor = authUser(db.connection.users.get(1));
+
+    await assert.rejects(
+      () => assignSolutionDesignRoles(
+        { projectId: 100, payload: rolePayload({ projectManagerUserId }), user: actor },
+        db
+      ),
+      (error) => error.code === SOLUTION_DESIGN_ERROR.PROJECT_MANAGER_INVALID
+    );
+  }
 });
 
 test('successful role assignment writes role history and operation log with project manager from/to', async () => {
@@ -3883,6 +3914,7 @@ test('technical owner can save and submit solution analysis form', async () => {
   });
   const initial = await getSolutionDesignAnalysisForm({ projectId: 100, user: technicalOwner }, db);
   assert.equal(initial.nodeStatus, SOLUTION_DESIGN_NODE_STATUS.PENDING);
+  assert.equal(initial.permissions.canEdit, true);
   assert.equal(initial.permissions.canEditForm, true);
   assert.equal(initial.permissions.canSubmitForm, true);
   assert.equal(initial.permissions.canSubmitNode, false);
@@ -4987,6 +5019,7 @@ test('technical owner can save and submit internal review form', async () => {
   assert.equal(initial.reviewType, 'internal');
   assert.equal(initial.documentCode, 'C15');
   assert.equal(initial.templateName, '方案评审记录表-模板.xlsx');
+  assert.equal(initial.permissions.canEdit, true);
   assert.equal(initial.permissions.canEditReviewForm, true);
   assert.equal(initial.permissions.canSubmitReviewForm, true);
   assert.equal(initial.permissions.canSubmitNode, false);
@@ -6492,6 +6525,7 @@ test('technical owner can upload, submit and get approval for RD cost estimation
     {
       projectId: 100,
       nodeKey: SOLUTION_DESIGN_NODE_KEY.RD_COST,
+      payload: { comment: '研发成本评估合理，同意进入制造估算。' },
       user: rdManager
     },
     db
@@ -6508,6 +6542,23 @@ test('technical owner can upload, submit and get approval for RD cost estimation
       OPERATION_ACTION_TYPE.SOLUTION_DESIGN_RD_COST_SUBMITTED,
       OPERATION_ACTION_TYPE.SOLUTION_DESIGN_RD_COST_APPROVED
     ]
+  );
+  const approvalLog = db.connection.operationLogs.at(-1);
+  assert.equal(
+    JSON.parse(approvalLog.details_json).approvalComment,
+    '研发成本评估合理，同意进入制造估算。'
+  );
+});
+
+test('solution design approval comments reject values longer than 1000 characters', async () => {
+  await assert.rejects(
+    () => approveSolutionDesignWorkflowNode({
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.RD_COST,
+      payload: { comment: 'x'.repeat(1001) },
+      user: { id: 1 }
+    }),
+    (error) => error.code === SOLUTION_DESIGN_ERROR.INVALID_APPROVAL_COMMENT
   );
 });
 
@@ -7029,11 +7080,11 @@ test('general manager return sends cost workflow back to RD and current cost fil
   );
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.RD_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.RD_COST).currentRevision, 2);
-  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).currentRevision, 2);
-  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).currentRevision, 2);
-  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).currentRevision, 2);
   const returnedForTechnicalOwner = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
   assert.equal(
@@ -7421,9 +7472,11 @@ test('business owner saves and submits quotation form, accepted quotation approv
   );
 
   const initialForm = await getSolutionDesignQuotationForm({ projectId: 100, user: businessOwner }, db);
+  assert.equal(initialForm.permissions.canEdit, true);
   assert.equal(initialForm.permissions.canEditQuotationForm, true);
   assert.equal(initialForm.permissions.canSubmitQuotationForm, true);
-  assert.equal(initialForm.form, null);
+  assert.equal(initialForm.form.status, SOLUTION_DESIGN_QUOTATION_FORM_STATUS.DRAFT);
+  assert.equal(initialForm.form.revision, initialForm.nodeRevision);
 
   const saved = await saveSolutionDesignQuotationForm(
     {
@@ -7871,9 +7924,9 @@ test('rejected quotation can return to RD cost and current cost files can be reu
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER).currentRevision, 2);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.RD_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
   assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.RD_COST).currentRevision, 2);
-  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
-  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
-  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MANUFACTURING_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.MARKETING_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
+  assert.equal(findWorkflowNode(returned, SOLUTION_DESIGN_NODE_KEY.FINANCE_COST).status, SOLUTION_DESIGN_NODE_STATUS.RETURNED);
   assert.equal(db.connection.quotationTenderFlow.quotation_rejected_action, SOLUTION_DESIGN_QUOTATION_REJECTED_ACTION.RETURN_TO_RD_COST);
   const returnedForTechnicalOwner = await getSolutionDesignWorkflow({ projectId: 100, user: technicalOwner }, db);
   assert.equal(
@@ -7965,6 +8018,11 @@ test('rejected quotation can return to RD cost and current cost files can be reu
     },
     db
   );
+  const reopenedQuotation = await getSolutionDesignQuotationForm({ projectId: 100, user: businessOwner }, db);
+  assert.equal(reopenedQuotation.permissions.canEdit, true);
+  assert.equal(reopenedQuotation.form.status, SOLUTION_DESIGN_QUOTATION_FORM_STATUS.DRAFT);
+  assert.equal(reopenedQuotation.form.revision, reopenedQuotation.nodeRevision);
+  assert.equal(reopenedQuotation.form.formData.recipientName, '王客户');
   const reselectedUploads = await listSolutionDesignUploads({ projectId: 100, user: businessOwner }, db);
   assert.equal(
     reselectedUploads.slots.some((slot) => slot.slotKey === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.QUOTATION_FILE),
@@ -7990,6 +8048,7 @@ test('rejected quotation can return to RD cost and current cost files can be reu
     db
   );
   assert.equal(resubmittedQuotation.form.revision, 2);
+  assert.equal(resubmittedQuotation.permissions.canEdit, false);
   assert.equal(resubmittedQuotation.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED);
 });
 

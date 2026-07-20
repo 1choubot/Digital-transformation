@@ -119,6 +119,20 @@ export function normalizeApprovalComment(value) {
   return value === undefined || value === null ? '' : String(value).trim();
 }
 
+export function normalizeOptionalApprovalComment(value, ErrorClass) {
+  const comment = normalizeApprovalComment(value);
+  if (comment.length > 1000) {
+    throw new ErrorClass(
+      PROJECT_APPROVAL_ERROR.INVALID_APPROVAL_COMMENT,
+      'Approval comment is too long',
+      400,
+      ['comment']
+    );
+  }
+
+  return comment || null;
+}
+
 export function assertApprovalReturnComment(value, ErrorClass) {
   const comment = normalizeApprovalComment(value);
   if (!comment || comment.length > 1000) {

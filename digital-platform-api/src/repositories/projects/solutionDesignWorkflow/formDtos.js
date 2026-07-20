@@ -203,7 +203,8 @@ export function buildAnalysisFormPermissions({ projectRow, analysisNode, roleSta
     inSolutionStage,
     roleState,
     user,
-    analysisNode
+    analysisNode,
+    formRow: analysisFormRow
   });
   const canSubmitNode =
     canEditForm &&
@@ -219,6 +220,7 @@ export function buildAnalysisFormPermissions({ projectRow, analysisNode, roleSta
 
   return {
     canViewForm: true,
+    canEdit: canEditForm,
     canEditForm,
     canSubmitForm: canEditForm,
     canSubmitNode,
@@ -279,7 +281,8 @@ export function buildReviewFormPermissions({ projectRow, reviewNode, roleState, 
     inSolutionStage,
     roleState,
     user,
-    reviewNode
+    reviewNode,
+    formRow: reviewFormRow
   });
   const canReview = canReviewSolutionDesignNode({
     nodeRow: reviewNode || {},
@@ -291,6 +294,7 @@ export function buildReviewFormPermissions({ projectRow, reviewNode, roleState, 
 
   return {
     canViewReviewForm: true,
+    canEdit: canEditReviewForm,
     canEditReviewForm,
     canSubmitReviewForm: canEditReviewForm,
     canSubmitNode:

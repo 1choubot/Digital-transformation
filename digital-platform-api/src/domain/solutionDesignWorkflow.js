@@ -1,10 +1,10 @@
 import {
   BUSINESS_DEPARTMENT,
   ORGANIZATION_ROLE,
-  canBeProjectManagerUser,
   canBeResponsibleUser,
   isCenterManagerUser,
   isGeneralManagerUser,
+  isSystemAdminUser,
   isValidBusinessDepartment
 } from './organization.js';
 
@@ -84,7 +84,8 @@ export const SOLUTION_DESIGN_ROLE_DEFINITIONS = [
     roleKey: SOLUTION_DESIGN_ROLE_KEY.PROCUREMENT_OWNER,
     label: '采购负责人',
     requestField: 'procurementOwnerUserId',
-    columnName: 'procurement_owner_user_id'
+    columnName: 'procurement_owner_user_id',
+    requiredDepartment: BUSINESS_DEPARTMENT.MANUFACTURING_CENTER
   },
   {
     roleKey: SOLUTION_DESIGN_ROLE_KEY.FINANCE_ACCOUNTANT,
@@ -643,6 +644,7 @@ export const SOLUTION_DESIGN_ERROR = {
   GENERATED_FILE_GENERATION_FAILED: 'SOLUTION_DESIGN_GENERATED_FILE_GENERATION_FAILED',
   INVALID_QUOTATION_TENDER_BRANCH: 'SOLUTION_DESIGN_INVALID_QUOTATION_TENDER_BRANCH',
   INVALID_QUOTATION_RESULT: 'SOLUTION_DESIGN_INVALID_QUOTATION_RESULT',
+  INVALID_APPROVAL_COMMENT: 'SOLUTION_DESIGN_INVALID_APPROVAL_COMMENT',
   RETURN_REASON_REQUIRED: 'SOLUTION_DESIGN_RETURN_REASON_REQUIRED',
   NODE_NOT_SUBMITTABLE: 'SOLUTION_DESIGN_NODE_NOT_SUBMITTABLE',
   NODE_NOT_PROCESSABLE: 'SOLUTION_DESIGN_NODE_NOT_PROCESSABLE',
@@ -734,17 +736,8 @@ export function isProjectInSolutionDesignStage(project) {
 }
 
 export function assertAssignableRoleUser(definition, user) {
-  if (!user?.isEnabled || !canBeResponsibleUser(user)) {
-    throw new SolutionDesignWorkflowError(
-      SOLUTION_DESIGN_ERROR.INVALID_ROLE_USER,
-      `${definition.label} user is not an enabled business department user`,
-      409,
-      [definition.requestField]
-    );
-  }
-
   if (definition.roleKey === SOLUTION_DESIGN_ROLE_KEY.PROJECT_MANAGER) {
-    if (!canBeProjectManagerUser(user)) {
+    if (!user?.isEnabled || isSystemAdminUser(user)) {
       throw new SolutionDesignWorkflowError(
         SOLUTION_DESIGN_ERROR.PROJECT_MANAGER_INVALID,
         'Project manager user is not allowed',
@@ -753,6 +746,15 @@ export function assertAssignableRoleUser(definition, user) {
       );
     }
     return;
+  }
+
+  if (!user?.isEnabled || !canBeResponsibleUser(user)) {
+    throw new SolutionDesignWorkflowError(
+      SOLUTION_DESIGN_ERROR.INVALID_ROLE_USER,
+      `${definition.label} user is not an enabled business department user`,
+      409,
+      [definition.requestField]
+    );
   }
 
   if (definition.requiredDepartment && user.department !== definition.requiredDepartment) {

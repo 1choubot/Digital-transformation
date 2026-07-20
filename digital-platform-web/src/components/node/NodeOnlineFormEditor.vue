@@ -1,22 +1,189 @@
 <template>
   <section v-if="form" ref="editorRoot" class="online-form-editor" aria-label="在线表单动作区">
-    <div class="project-workspace__detail-heading">
-        <h3>{{ form.documentName }}</h3>
-    </div>
-
     <GeneratedFormFileCard
       :generated-file="generatedFile"
       :pending="downloadPending"
+      :button-text="downloadButtonText"
       @download="$emit('download-form')"
     />
     <slot name="generated-files" />
 
+    <template v-if="showFormContent">
     <el-alert v-if="blockingReasons.length" :title="`阻塞原因：${blockingReasons.join('；')}`" type="warning" show-icon
       :closable="false" />
 
     <el-alert v-if="errorMessage" :description="errorMessage" type="error" show-icon :closable="false" />
     <el-form class="online-form-editor__form" :model="formData" @submit.prevent="handleSubmit">
-      <section v-for="section in getSchemaSections(form)" :key="section.key" class="online-form-section">
+      <section v-if="isInitiationNotice" class="online-form-section initiation-notice-section">
+        <div class="initiation-notice-table-wrap">
+          <table class="initiation-notice-table">
+            <colgroup>
+              <col class="initiation-notice-table__code" />
+              <col class="initiation-notice-table__name" />
+              <col class="initiation-notice-table__customer" />
+              <col class="initiation-notice-table__mode" />
+              <col class="initiation-notice-table__date" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th scope="col">项目编号</th>
+                <th scope="col">项目名称</th>
+                <th scope="col">客户单位</th>
+                <th scope="col">开展模式</th>
+                <th scope="col">立项日期</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td
+                  data-field-key="projectCode"
+                  :class="{ 'online-form-field--invalid': isFieldInvalid('projectCode') }"
+                >
+                  <el-input
+                    :model-value="formData.projectCode"
+                    :readonly="projectCodeField.readOnly"
+                    :disabled="isOnlineFormFieldDisabled(projectCodeField)"
+                    aria-label="项目编号"
+                    @update:model-value="$emit('update-field', { key: 'projectCode', value: $event })"
+                  />
+                  <small v-if="isFieldInvalid('projectCode')" class="form-field-error">
+                    {{ getFieldValidationMessage('projectCode') }}
+                  </small>
+                </td>
+                <td>{{ formatInitiationNoticeValue(formData.projectName) }}</td>
+                <td>{{ formatInitiationNoticeValue(formData.customerUnit) }}</td>
+                <td>{{ formatInitiationNoticeValue(formData.projectExecutionMode) }}</td>
+                <td>{{ formatInitiationNoticeValue(formData.initiationDate) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <template v-else>
+      <section v-if="isInitiationRequirement" class="online-form-section requirement-template-section">
+        <div class="requirement-template-table-wrap">
+          <table class="requirement-template-table">
+            <colgroup>
+              <col class="requirement-template-table__label" />
+              <col class="requirement-template-table__value-part" />
+              <col class="requirement-template-table__value-part" />
+              <col class="requirement-template-table__label" />
+              <col class="requirement-template-table__value" />
+            </colgroup>
+            <tbody>
+              <tr>
+                <th scope="row">项目名称</th>
+                <td colspan="2" data-field-key="projectName" :class="getFieldClass(getFormField('projectName'))">
+                  <el-input :model-value="formData.projectName" :readonly="getFormField('projectName').readOnly"
+                    :disabled="isOnlineFormFieldDisabled(getFormField('projectName'))"
+                    @update:model-value="$emit('update-field', { key: 'projectName', value: $event })" />
+                </td>
+                <th scope="row">客户名称</th>
+                <td data-field-key="customerName" :class="getFieldClass(getFormField('customerName'))">
+                  <el-input :model-value="formData.customerName" :readonly="getFormField('customerName').readOnly"
+                    :disabled="isOnlineFormFieldDisabled(getFormField('customerName'))"
+                    @update:model-value="$emit('update-field', { key: 'customerName', value: $event })" />
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">交流时间</th>
+                <td colspan="2" data-field-key="communicationDate" :class="getFieldClass(getFormField('communicationDate'))">
+                  <el-date-picker :model-value="formData.communicationDate" type="date" value-format="YYYY-MM-DD"
+                    placeholder="选择日期" :disabled="isOnlineFormFieldDisabled(getFormField('communicationDate'))"
+                    @update:model-value="$emit('update-field', { key: 'communicationDate', value: $event || '' })" />
+                </td>
+                <th scope="row">交流次数</th>
+                <td data-field-key="communicationCount" :class="getFieldClass(getFormField('communicationCount'))">
+                  <el-input :model-value="formData.communicationCount"
+                    :disabled="isOnlineFormFieldDisabled(getFormField('communicationCount'))"
+                    @update:model-value="$emit('update-field', { key: 'communicationCount', value: $event })" />
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">交流地点</th>
+                <td colspan="2" data-field-key="communicationLocation" :class="getFieldClass(getFormField('communicationLocation'))">
+                  <el-input :model-value="formData.communicationLocation"
+                    :disabled="isOnlineFormFieldDisabled(getFormField('communicationLocation'))"
+                    @update:model-value="$emit('update-field', { key: 'communicationLocation', value: $event })" />
+                </td>
+                <th scope="row">交流方式</th>
+                <td data-field-key="communicationMethod" :class="getFieldClass(getFormField('communicationMethod'))">
+                  <el-input :model-value="formData.communicationMethod"
+                    :disabled="isOnlineFormFieldDisabled(getFormField('communicationMethod'))"
+                    @update:model-value="$emit('update-field', { key: 'communicationMethod', value: $event })" />
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">我方人员 <span class="requirement-template-table__required">*</span></th>
+                <td colspan="4" data-field-key="internalParticipants" :class="getFieldClass(getFormField('internalParticipants'))">
+                  <el-input type="textarea" :rows="2" :model-value="formData.internalParticipants"
+                    :disabled="isOnlineFormFieldDisabled(getFormField('internalParticipants'))"
+                    @update:model-value="$emit('update-field', { key: 'internalParticipants', value: $event })" />
+                  <small v-if="isFieldInvalid('internalParticipants')" class="form-field-error">
+                    {{ getFieldValidationMessage('internalParticipants') }}
+                  </small>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">甲方人员 <span class="requirement-template-table__required">*</span></th>
+                <td colspan="4" data-field-key="customerParticipants" :class="getFieldClass(getFormField('customerParticipants'))">
+                  <el-input type="textarea" :rows="2" :model-value="formData.customerParticipants"
+                    :disabled="isOnlineFormFieldDisabled(getFormField('customerParticipants'))"
+                    @update:model-value="$emit('update-field', { key: 'customerParticipants', value: $event })" />
+                  <small v-if="isFieldInvalid('customerParticipants')" class="form-field-error">
+                    {{ getFieldValidationMessage('customerParticipants') }}
+                  </small>
+                </td>
+              </tr>
+              <tr>
+                <th rowspan="5" scope="rowgroup">环境要求</th>
+                <td colspan="2">
+                  <div class="requirement-template-metric">
+                    <span>工作温度：（</span>
+                    <span data-field-key="workingTemperatureMin" :class="getFieldClass(getFormField('workingTemperatureMin'))"><el-input :model-value="formData.workingTemperatureMin" :disabled="isOnlineFormFieldDisabled(getFormField('workingTemperatureMin'))" aria-label="工作温度最小值" @update:model-value="$emit('update-field', { key: 'workingTemperatureMin', value: $event })" /></span>
+                    <span>）℃～（</span>
+                    <span data-field-key="workingTemperatureMax" :class="getFieldClass(getFormField('workingTemperatureMax'))"><el-input :model-value="formData.workingTemperatureMax" :disabled="isOnlineFormFieldDisabled(getFormField('workingTemperatureMax'))" aria-label="工作温度最大值" @update:model-value="$emit('update-field', { key: 'workingTemperatureMax', value: $event })" /></span>
+                    <span>）℃</span>
+                  </div>
+                </td>
+                <td colspan="2">
+                  <div class="requirement-template-metric">
+                    <span>储存温度：（</span>
+                    <span data-field-key="storageTemperatureMin" :class="getFieldClass(getFormField('storageTemperatureMin'))"><el-input :model-value="formData.storageTemperatureMin" :disabled="isOnlineFormFieldDisabled(getFormField('storageTemperatureMin'))" aria-label="储存温度最小值" @update:model-value="$emit('update-field', { key: 'storageTemperatureMin', value: $event })" /></span>
+                    <span>）℃～（</span>
+                    <span data-field-key="storageTemperatureMax" :class="getFieldClass(getFormField('storageTemperatureMax'))"><el-input :model-value="formData.storageTemperatureMax" :disabled="isOnlineFormFieldDisabled(getFormField('storageTemperatureMax'))" aria-label="储存温度最大值" @update:model-value="$emit('update-field', { key: 'storageTemperatureMax', value: $event })" /></span>
+                    <span>）℃</span>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td colspan="2"><div class="requirement-template-metric"><span>工作湿度：（</span><span data-field-key="workingHumidityMin" :class="getFieldClass(getFormField('workingHumidityMin'))"><el-input :model-value="formData.workingHumidityMin" :disabled="isOnlineFormFieldDisabled(getFormField('workingHumidityMin'))" aria-label="工作湿度最小值" @update:model-value="$emit('update-field', { key: 'workingHumidityMin', value: $event })" /></span><span>）%～（</span><span data-field-key="workingHumidityMax" :class="getFieldClass(getFormField('workingHumidityMax'))"><el-input :model-value="formData.workingHumidityMax" :disabled="isOnlineFormFieldDisabled(getFormField('workingHumidityMax'))" aria-label="工作湿度最大值" @update:model-value="$emit('update-field', { key: 'workingHumidityMax', value: $event })" /></span><span>）%</span></div></td>
+                <td colspan="2"><div class="requirement-template-metric"><span>储存湿度：（</span><span data-field-key="storageHumidityMin" :class="getFieldClass(getFormField('storageHumidityMin'))"><el-input :model-value="formData.storageHumidityMin" :disabled="isOnlineFormFieldDisabled(getFormField('storageHumidityMin'))" aria-label="储存湿度最小值" @update:model-value="$emit('update-field', { key: 'storageHumidityMin', value: $event })" /></span><span>）%～（</span><span data-field-key="storageHumidityMax" :class="getFieldClass(getFormField('storageHumidityMax'))"><el-input :model-value="formData.storageHumidityMax" :disabled="isOnlineFormFieldDisabled(getFormField('storageHumidityMax'))" aria-label="储存湿度最大值" @update:model-value="$emit('update-field', { key: 'storageHumidityMax', value: $event })" /></span><span>）%</span></div></td>
+              </tr>
+              <tr>
+                <td colspan="2"><div class="requirement-template-metric"><span>噪音：≤（</span><span data-field-key="noiseLimitValue" :class="getFieldClass(getFormField('noiseLimitValue'))"><el-input :model-value="formData.noiseLimitValue" :disabled="isOnlineFormFieldDisabled(getFormField('noiseLimitValue'))" aria-label="噪音上限值" @update:model-value="$emit('update-field', { key: 'noiseLimitValue', value: $event })" /></span><span>）dB</span></div></td>
+                <td colspan="2"><div class="requirement-template-metric"><span>IP 防护等级：IP（</span><span data-field-key="ipProtectionLevel" :class="getFieldClass(getFormField('ipProtectionLevel'))"><el-input :model-value="formData.ipProtectionLevel" :disabled="isOnlineFormFieldDisabled(getFormField('ipProtectionLevel'))" aria-label="IP 防护等级" @update:model-value="$emit('update-field', { key: 'ipProtectionLevel', value: $event })" /></span><span>）</span></div></td>
+              </tr>
+              <tr>
+                <td colspan="2"><div class="requirement-template-metric"><span>防腐等级：（</span><span data-field-key="antiCorrosionGrade" :class="getFieldClass(getFormField('antiCorrosionGrade'))"><el-input :model-value="formData.antiCorrosionGrade" :disabled="isOnlineFormFieldDisabled(getFormField('antiCorrosionGrade'))" aria-label="防腐等级" @update:model-value="$emit('update-field', { key: 'antiCorrosionGrade', value: $event })" /></span><span>）</span></div></td>
+                <td colspan="2"><div class="requirement-template-metric"><span>海拔高度：≤（</span><span data-field-key="altitudeLimitValue" :class="getFieldClass(getFormField('altitudeLimitValue'))"><el-input :model-value="formData.altitudeLimitValue" :disabled="isOnlineFormFieldDisabled(getFormField('altitudeLimitValue'))" aria-label="海拔高度上限值" @update:model-value="$emit('update-field', { key: 'altitudeLimitValue', value: $event })" /></span><span>）m</span></div></td>
+              </tr>
+              <tr>
+                <td colspan="4" data-field-key="explosionProofRequirement" :class="getFieldClass(getFormField('explosionProofRequirement'))">
+                  <div class="requirement-template-metric requirement-template-metric--wide">
+                    <span>防爆要求：（</span>
+                    <el-input :model-value="formData.explosionProofRequirement" :disabled="isOnlineFormFieldDisabled(getFormField('explosionProofRequirement'))" aria-label="防爆要求" @update:model-value="$emit('update-field', { key: 'explosionProofRequirement', value: $event })" />
+                    <span>）</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section v-for="section in getStandardSchemaSections(form)" :key="section.key" class="online-form-section">
         <h4 v-if="section.title">{{ section.title }}</h4>
         <div class="form-grid">
           <template v-for="item in getDisplayItems(section.fields)" :key="item.key">
@@ -104,25 +271,55 @@
           </template>
         </div>
       </section>
+      </template>
 
-      <section v-for="section in form.schema?.scoringSections || []" :key="section.key" class="online-form-section">
-        <h4>{{ section.title }}</h4>
-        <div class="online-form-score-list">
+      <section
+        v-for="section in form.schema?.scoringSections || []"
+        :key="section.key"
+        class="online-form-section online-form-score-section"
+        :data-score-section-key="section.key"
+      >
+        <button
+          class="online-form-score-section__toggle"
+          type="button"
+          :aria-expanded="isScoringSectionExpanded(section)"
+          :aria-controls="`score-section-${section.key}`"
+          @click="toggleScoringSection(section)"
+        >
+          <span>{{ formatScoringSectionTitle(section) }}</span>
+          <span class="online-form-score-section__toggle-icon" aria-hidden="true">
+            {{ isScoringSectionExpanded(section) ? '⌃' : '⌄' }}
+          </span>
+        </button>
+        <div
+          v-show="isScoringSectionExpanded(section)"
+          :id="`score-section-${section.key}`"
+          class="online-form-score-table-wrap"
+        >
+          <div class="online-form-score-table">
+            <div class="online-form-score-table__header" aria-hidden="true">
+              <span>评价项</span><span>评价标准</span><span>分值（0-5）</span><span>信息收集说明</span><span>责任人</span>
+            </div>
+            <div class="online-form-score-list">
           <article v-for="item in section.items || []" :key="item.key" :data-field-key="`${item.key}Score`"
             class="online-form-score-card"
             :class="{ 'online-form-field--invalid': isFieldInvalid(`${item.key}Score`) }">
-            <header>
+            <header class="online-form-score-card__item">
               <strong>{{ item.itemName }}</strong>
             </header>
             <dl class="online-form-score-card__template">
               <div>
                 <dt>评价标准</dt>
-                <dd>{{ item.evaluationStandard || '-' }}</dd>
+                <dd>
+                  <span v-for="(line, lineIndex) in formatEvaluationStandardLines(item.evaluationStandard)" :key="lineIndex">
+                    {{ line }}
+                  </span>
+                </dd>
               </div>
             </dl>
             <div class="online-form-score-card__inputs">
               <label>
-                <span>分值 0-5 *</span>
+                <span class="online-form-score-card__mobile-label">分值（0-5）*</span>
                 <el-select :model-value="formData[`${item.key}Score`]"
                   :disabled="isOnlineFormPartDisabled(section.editablePart)" placeholder="请选择分值"
                   @change="$emit('update-field', { key: `${item.key}Score`, value: $event })">
@@ -133,25 +330,30 @@
                 </small>
               </label>
               <label>
-                <span>信息收集说明（选填）</span>
-                <el-input type="textarea" :rows="2" :model-value="formData[`${item.key}InformationNotes`]"
+                <span class="online-form-score-card__mobile-label">信息收集说明（选填）</span>
+                <el-input type="textarea" :rows="4" :model-value="formData[`${item.key}InformationNotes`]"
                   :disabled="isOnlineFormPartDisabled(section.editablePart)"
                   @update:model-value="$emit('update-field', { key: `${item.key}InformationNotes`, value: $event })" />
               </label>
               <label>
-                <span>责任人（选填）</span>
+                <span class="online-form-score-card__mobile-label">责任人（选填）</span>
                 <el-input :model-value="formData[`${item.key}ResponsiblePerson`]"
                   :disabled="isOnlineFormPartDisabled(section.editablePart)"
                   @update:model-value="$emit('update-field', { key: `${item.key}ResponsiblePerson`, value: $event })" />
               </label>
             </div>
           </article>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section v-if="form.reviewOpinions?.length" class="online-form-section">
-        <div class="online-form-review-opinions">
-          <article v-for="opinion in form.reviewOpinions" :key="opinion.nodeKey" class="online-form-review-opinion">
+      <section v-if="showReviewOpinions && displayedReviewOpinions.length" class="online-form-section">
+        <div
+          class="online-form-review-opinions"
+          :class="{ 'online-form-review-opinions--two-column': displayedReviewOpinions.length === 2 }"
+        >
+          <article v-for="opinion in displayedReviewOpinions" :key="opinion.nodeKey" class="online-form-review-opinion">
             <strong>{{ opinion.nodeName }}</strong>
             <el-tag :type="statusTagType(opinion.nodeStatus)">
               {{ formatReviewOpinionStatus(opinion.nodeStatus) }}
@@ -165,15 +367,17 @@
         </div>
       </section>
 
-      <div class="form-actions online-form-editor__actions">
-        <el-button :loading="saving" :disabled="!form.permissions?.canEdit" @click="$emit('save')">
+      <div class="form-actions online-form-editor__actions node-online-form-actions">
+        <el-button size="large" :loading="saving" :disabled="!form.permissions?.canEdit" @click="$emit('save')">
           保存草稿
         </el-button>
-        <el-button type="primary" native-type="submit" :loading="submitting" :disabled="!form.permissions?.canSubmit">
-          {{ getOnlineFormSubmitLabel() }}
+        <el-button size="large" type="primary" native-type="submit" :loading="submitting"
+          :disabled="!form.permissions?.canSubmit">
+          提交表单
         </el-button>
       </div>
     </el-form>
+    </template>
   </section>
 </template>
 
@@ -231,16 +435,40 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  downloadButtonText: {
+    type: String,
+    default: '查看表单'
+  },
+  showFormContent: {
+    type: Boolean,
+    default: true
+  },
   imageState: {
     type: Object,
     default: () => ({})
+  },
+  showReviewOpinions: {
+    type: Boolean,
+    default: true
   }
 });
 
 const scoreOptions = [0, 1, 2, 3, 4, 5];
 const editorRoot = ref(null);
 const validationAttempted = ref(false);
+const expandedScoringSections = ref({});
 const schemaFields = computed(() => props.form?.schema?.fields || []);
+const sectionFields = computed(() => (props.form?.schema?.sections || []).flatMap((section) => section.fields || []));
+const isInitiationNotice = computed(() => props.form?.documentCode === '1.3');
+const isInitiationRequirement = computed(() => props.form?.documentCode === '1.1');
+const projectCodeField = computed(() => schemaFields.value.find((field) => field.key === 'projectCode') || ({
+  key: 'projectCode',
+  label: '项目编号',
+  required: true
+}));
+const displayedReviewOpinions = computed(() =>
+  (props.form?.reviewOpinions || []).filter((opinion) => opinion.nodeKey !== 'general_review')
+);
 const missingRequiredFields = computed(() => getMissingRequiredFields(
   schemaFields.value,
   props.formData,
@@ -254,11 +482,49 @@ const invalidFieldKeys = computed(() => validationAttempted.value
   : []);
 
 watch(
-  () => props.form?.stageDocumentId || props.form?.documentCode || null,
+  () => [
+    props.form?.id || props.form?.stageDocumentId || props.form?.documentCode || null,
+    props.form?.permissions?.canEdit === true,
+    props.form?.permissions?.editablePart || '',
+    (props.form?.schema?.scoringSections || []).map((section) => `${section.key}:${section.editablePart || ''}`).join('|')
+  ],
   () => {
     validationAttempted.value = false;
-  }
+    initializeScoringSectionExpansion();
+  },
+  { immediate: true }
 );
+
+function initializeScoringSectionExpansion() {
+  const editablePart = props.form?.permissions?.editablePart;
+  const canEdit = props.form?.permissions?.canEdit === true;
+  expandedScoringSections.value = Object.fromEntries(
+    (props.form?.schema?.scoringSections || []).map((section) => [
+      section.key,
+      canEdit && ['business', 'technical'].includes(editablePart) && section.editablePart === editablePart
+    ])
+  );
+}
+
+function isScoringSectionExpanded(section) {
+  return expandedScoringSections.value[section.key] !== false;
+}
+
+function toggleScoringSection(section) {
+  expandedScoringSections.value = { ...expandedScoringSections.value, [section.key]: !isScoringSectionExpanded(section) };
+}
+
+function formatScoringSectionTitle(section) {
+  if (section.editablePart === 'business') return '商务板块';
+  if (section.editablePart === 'technical') return '技术板块';
+  return String(section.title || '').replace('模块', '板块');
+}
+
+function formatEvaluationStandardLines(value) {
+  const text = String(value || '').trim();
+  if (!text) return ['-'];
+  return text.split('；').map((line) => line.trim()).filter(Boolean);
+}
 
 function getSchemaSections(form) {
   if (Array.isArray(form?.schema?.sections) && form.schema.sections.length > 0) {
@@ -274,8 +540,25 @@ function getSchemaSections(form) {
   ];
 }
 
+function getStandardSchemaSections(form) {
+  const sections = getSchemaSections(form);
+  if (!isInitiationRequirement.value) return sections;
+  return sections.filter((section) => !['basicInfo', 'environmentRequirements'].includes(section.key));
+}
+
+function getFormField(fieldKey) {
+  return schemaFields.value.find((field) => field.key === fieldKey)
+    || sectionFields.value.find((field) => field.key === fieldKey)
+    || { key: fieldKey, label: fieldKey, type: 'text', required: false };
+}
+
 function getDisplayItems(fields) {
   return groupThresholdFields(fields || []);
+}
+
+function formatInitiationNoticeValue(value) {
+  const text = String(value ?? '').trim();
+  return text || '-';
 }
 
 function getFieldClass(field) {
@@ -307,8 +590,12 @@ async function handleSubmit() {
   }
 
   ElMessage.warning(`请补充以下必填内容：${missingRequiredFields.value.map((field) => field.label).join('、')}`);
+  const firstMissingField = missingRequiredFields.value[0];
+  if (firstMissingField?.sectionKey) {
+    expandedScoringSections.value = { ...expandedScoringSections.value, [firstMissingField.sectionKey]: true };
+  }
   await nextTick();
-  const firstFieldKey = missingRequiredFields.value[0]?.key;
+  const firstFieldKey = firstMissingField?.key;
   const firstField = firstFieldKey
     ? editorRoot.value?.querySelector(`[data-field-key="${firstFieldKey}"]`)
     : null;
@@ -390,24 +677,11 @@ function formatCollaborationPartStatus(value) {
 
 function formatEditablePart(part) {
   return {
-    business: '基础模块和商务模块',
-    technical: '技术模块'
+    business: '基础信息和商务板块',
+    technical: '技术板块'
   }[part] || '仅查看';
 }
 
-function getOnlineFormSubmitLabel() {
-  const part = props.form?.permissions?.editablePart;
-  if (props.form?.documentCode === '1.2') {
-    if (part === 'business') {
-      return '提交商务部分';
-    }
-    if (part === 'technical') {
-      return '提交技术部分';
-    }
-  }
-
-  return '提交表单';
-}
 
 function statusTagType(status) {
   if (['completed', 'confirmed', 'approved'].includes(status)) return 'success';

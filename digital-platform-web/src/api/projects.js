@@ -396,11 +396,11 @@ export async function submitStageApproval(projectId, stageId, authToken) {
   });
 }
 
-export async function approveStageApproval(projectId, stageId, authToken) {
+export async function approveStageApproval(projectId, stageId, authToken, comment = '') {
   return request(`/api/projects/${projectId}/stages/${stageId}/approval/approve`, {
     method: 'POST',
     authToken,
-    body: JSON.stringify({})
+    body: JSON.stringify({ comment })
   });
 }
 

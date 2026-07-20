@@ -8,6 +8,10 @@ export async function listResponsibilityCandidates(authToken) {
   return request('/api/users/responsibility-candidates', { authToken });
 }
 
+export async function listSolutionDesignRoleCandidates(authToken) {
+  return request('/api/users/solution-design-role-candidates', { authToken });
+}
+
 export async function createUser(payload, authToken) {
   return request('/api/users', {
     method: 'POST',

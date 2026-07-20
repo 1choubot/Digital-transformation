@@ -1,82 +1,110 @@
 <template>
-  <section v-if="hasVisibleActions || !hideWhenEmpty" class="solution-actions">
-    <header>
-      <span class="section-eyebrow">节点动作</span>
-      <strong>提交、审批和退回</strong>
-    </header>
-    <div class="action-row">
-      <el-button
-        v-if="canShowSubmit"
-        type="primary"
-        :loading="isPending(`submit:${node.nodeKey}`)"
-        :disabled="submitDisabled"
-        @click="$emit('submit')"
-      >
+  <section v-if="showModule" class="solution-actions">
+    <ApprovalActionCard
+      v-if="hasApprovalAction"
+      title="审批处理"
+      :description="`${node.nodeName || '当前节点'} · 请填写意见后选择审批操作。`"
+      :status-text="resultStatusText"
+      :status-type="resultTagType"
+      :comment="comment"
+      :comment-max-length="1000"
+      :selection-required="selectionRequired"
+      :selection-complete="selectionComplete"
+      :can-approve="node.permissions?.canApprove === true"
+      :can-return="node.permissions?.canReturn === true"
+      :busy="busy"
+      :pending-action="pendingAction"
+      :approve-disabled="approveDisabled"
+      @update:comment="$emit('update:comment', $event)"
+      @approve="$emit('approve', $event)"
+      @return="confirmReturn"
+    >
+      <template v-if="selectionRequired" #selection="{ disabled }">
+        <slot name="selection" :disabled="disabled" />
+      </template>
+    </ApprovalActionCard>
+
+    <div v-if="canShowSubmit" class="solution-node-submit-action">
+      <el-button type="primary" size="large" :loading="isPending(`submit:${node.nodeKey}`)"
+        :disabled="busy || submitDisabled" @click="$emit('submit')">
         提交节点
       </el-button>
-      <el-button
-        v-if="node.permissions?.canApprove"
-        type="primary"
-        :loading="isPending(`approve:${node.nodeKey}`)"
-        @click="$emit('approve')"
-      >
-        审批通过
-      </el-button>
     </div>
-    <div v-if="node.permissions?.canReturn" class="return-box">
-      <el-input
-        :model-value="returnReason"
-        type="textarea"
-        :rows="3"
-        placeholder="退回原因 *"
-        @update:model-value="$emit('update:returnReason', $event)"
-      />
-      <el-button
-        type="danger"
-        plain
-        :loading="isPending(`return:${node.nodeKey}`)"
-        @click="confirmReturn"
-      >
-        审批退回
-      </el-button>
-    </div>
-    <el-empty
-      v-if="!hasVisibleActions && !hideWhenEmpty"
-      description="当前账号在该节点没有可执行动作"
-      :image-size="48"
-    />
   </section>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 import { ElMessageBox } from 'element-plus';
+import ApprovalActionCard from '../../approval/ApprovalActionCard.vue';
 
 const props = defineProps({
   node: { type: Object, required: true },
   isPending: { type: Function, required: true },
-  returnReason: { type: String, default: '' },
+  comment: { type: String, default: '' },
   submitDisabled: Boolean,
+  approveDisabled: Boolean,
+  selectionRequired: Boolean,
+  selectionComplete: { type: Boolean, default: true },
   hideSubmit: Boolean,
   hideWhenEmpty: Boolean
 });
-const emit = defineEmits(['submit', 'approve', 'return', 'update:returnReason']);
+const emit = defineEmits(['submit', 'approve', 'return', 'update:comment']);
+const hasApprovalAction = computed(() => props.node.permissions?.canApprove === true
+  || props.node.permissions?.canReturn === true);
+const canShowSubmit = computed(() => props.node.permissions?.canSubmit === true && !props.hideSubmit);
+const hasVisibleContent = computed(() => canShowSubmit.value || hasApprovalAction.value);
+const showModule = computed(() => hasVisibleContent.value || !props.hideWhenEmpty);
+const busy = computed(() => props.isPending(`submit:${props.node.nodeKey}`)
+  || props.isPending(`approve:${props.node.nodeKey}`)
+  || props.isPending(`return:${props.node.nodeKey}`));
+const pendingAction = computed(() => {
+  if (props.isPending(`approve:${props.node.nodeKey}`)) return 'approve';
+  if (props.isPending(`return:${props.node.nodeKey}`)) return 'return';
+  return '';
+});
+const resultStatusText = computed(() => ({
+  approved: '审批已通过', returned: '审批已退回', ended: '项目已结束', skipped: '节点已跳过',
+  pending_review: '待审批', pending_general_review: '待总经理审批'
+}[props.node.status] || props.node.status || '审批结果'));
+const resultTagType = computed(() => ({
+  approved: 'success', returned: 'danger', ended: 'info', skipped: 'info',
+  pending_review: 'warning', pending_general_review: 'warning'
+}[props.node.status] || 'info'));
 
-const canShowSubmit = computed(() => props.node.permissions?.canSubmit && !props.hideSubmit);
-const hasVisibleActions = computed(() =>
-  canShowSubmit.value || props.node.permissions?.canApprove || props.node.permissions?.canReturn
+watch(
+  () => [props.node.nodeKey, props.node.currentRevision, props.node.status],
+  (nextValue, previousValue) => {
+    if (previousValue) emit('update:comment', '');
+  }
 );
 
-async function confirmReturn() {
+async function confirmReturn(comment) {
+  if (!comment || busy.value) return;
   try {
-    await ElMessageBox.confirm(`确认退回“${props.node.nodeName || '当前节点'}”吗？`, '退回确认', {
-      type: 'warning',
-      confirmButtonText: '确认退回',
-      cancelButtonText: '取消'
+    await ElMessageBox.confirm(`确认退回“${props.node.nodeName || '当前节点'}”并要求修改吗？`, '退回修改', {
+      type: 'warning', confirmButtonText: '确认退回', cancelButtonText: '取消'
     });
-    emit('return');
+    emit('return', comment);
   } catch {
-    // 用户取消时不请求、不刷新
+    // 用户取消时不请求、不刷新。
   }
 }
 </script>
+
+<style scoped>
+.solution-actions {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.solution-node-submit-action {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  min-width: 0;
+}
+
+</style>

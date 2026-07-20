@@ -1,9 +1,5 @@
 <template>
   <section class="page-stack project-create-page">
-    <PageHeader
-      title="新建项目">
-    </PageHeader>
-
     <el-alert v-if="!canCreateProject" title="无权创建项目" description="当前账号无权创建项目。项目创建仅开放给总经理和中心负责人。" type="error" show-icon :closable="false">
       <!-- <template #default><el-button type="primary" size="small" @click="navigate('/projects')">返回项目总览</el-button></template> -->
     </el-alert>
@@ -53,7 +49,6 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { createProject, toReadableApiError } from '../api/projects.js';
 import { listResponsibilityCandidates } from '../api/users.js';
-import PageHeader from '../components/PageHeader.vue';
 import { formatBusinessDepartment } from '../utils/format.js';
 
 const props = defineProps({

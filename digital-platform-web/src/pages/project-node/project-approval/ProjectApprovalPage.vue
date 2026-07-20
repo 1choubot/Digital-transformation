@@ -11,7 +11,10 @@
       :submitting="context.onlineFormSubmitting === true"
       :generated-file="generatedFile"
       :download-pending="generatedFileDownloadPending"
+      download-button-text="查看项目立项审批表"
+      :show-form-content="canViewFormContent || isApprovalViewer"
       :image-state="context.onlineFormImageState || emptyObject"
+      :show-review-opinions="!hasActionableEvaluationNode"
       @save="saveOnlineForm"
       @submit="submitOnlineForm"
       @download-form="downloadOnlineFormFile"
@@ -23,7 +26,7 @@
       <template #generated-files>
         <GeneratedFormFileCard
           v-if="marketResearchCompleted"
-          heading="项目需求表"
+          button-text="查看项目需求表"
           :generated-file="marketResearchGeneratedFile"
           :pending="marketResearchDownloadPending"
           @download="downloadMarketResearchFile"
@@ -33,166 +36,66 @@
 
     <el-alert v-else-if="context.onlineFormErrorMessage" :description="context.onlineFormErrorMessage" type="error" show-icon :closable="false" />
 
-    <el-skeleton v-else-if="output?.formAvailable" :rows="4" animated />
+    <el-skeleton v-else-if="output?.formAvailable && context.onlineFormLoading" :rows="4" animated />
 
     <el-empty v-else :description="unavailableMessage" />
 
-    <section v-if="approvalReview" class="initiation-review-panel" aria-label="1.2 项目立项评价与最终审批记录">
-      <div class="initiation-review-panel__heading">
-        <div>
-          <h4>审批记录展示</h4>
-          <p>{{ approvalOverallText }}</p>
-        </div>
-        <el-tag :type="approvalReview.isComplete ? 'success' : 'warning'">{{ approvalReview.isComplete ? '最终通过' : '未最终通过' }}</el-tag>
-      </div>
-
-      <div class="initiation-review-nodes">
-        <article v-for="reviewNode in approvalReviewNodes" :key="reviewNode.nodeKey" class="initiation-review-node">
-          <div class="initiation-review-node__main">
-            <strong>{{ reviewNode.nodeName || formatReviewNodeName(reviewNode.nodeKey) }}</strong>
-            <el-tag :type="reviewNodeTagType(reviewNode.nodeStatus)">{{ formatReviewNodeStatus(reviewNode.nodeStatus) }}</el-tag>
-          </div>
-          <dl class="initiation-review-node__meta">
-            <div>
-              <dt>{{ isEvaluationNode(reviewNode) ? '评价角色' : '审批角色' }}</dt>
-              <dd>{{ formatReviewNodeReviewer(reviewNode) }}</dd>
-            </div>
-            <div>
-              <dt>{{ isEvaluationNode(reviewNode) ? '评价文本' : '审批意见' }}</dt>
-              <dd>{{ reviewNode.comment || reviewNode.returnReason || '-' }}</dd>
-            </div>
-            <div>
-              <dt>操作时间</dt>
-              <dd>{{ formatDateTime(reviewNode.reviewedAt || reviewNode.submittedAt || reviewNode.invalidatedAt) }}</dd>
-            </div>
-          </dl>
-        </article>
-      </div>
-    </section>
-
     <section v-if="actionableReviewNodes.length" class="initiation-review-action-panel" aria-label="1.2 项目立项评价与最终审批操作">
       <div class="initiation-review-nodes">
-        <article v-for="reviewNode in actionableReviewNodes" :key="reviewNode.nodeKey" class="initiation-review-node">
-          <div class="initiation-review-node__main">
-            <strong>{{ reviewNode.nodeName || formatReviewNodeName(reviewNode.nodeKey) }}</strong>
-            <el-tag :type="reviewNodeTagType(reviewNode.nodeStatus)">{{ formatReviewNodeStatus(reviewNode.nodeStatus) }}</el-tag>
-          </div>
-
-          <div class="initiation-review-actions">
-            <template v-if="isEvaluationNode(reviewNode)">
-              <el-input
-                v-model.trim="nodeComments[reviewNode.nodeKey]"
-                placeholder="评价文本"
-                :disabled="isReviewNodePending(reviewNode, 'approve')"
-              />
-              <el-button
-                type="primary"
-                :loading="isReviewNodePending(reviewNode, 'approve')"
-                :disabled="isReviewNodePending(reviewNode, 'approve') || !nodeComments[reviewNode.nodeKey]"
-                @click="approveNode({ document: approvalDocument, node: reviewNode, comment: nodeComments[reviewNode.nodeKey] || '' })"
-              >
-                提交评价
-              </el-button>
-              <el-input
-                v-model.trim="nodeReturnReasons[reviewNode.nodeKey]"
-                type="textarea"
-                placeholder="拒绝原因，退回项目市场调研"
-                :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
-              />
-              <el-button
-                type="danger"
-                plain
-                :loading="isReviewNodePending(reviewNode, 'return')"
-                :disabled="isReviewNodePending(reviewNode, 'return') || !nodeReturnReasons[reviewNode.nodeKey]"
-                @click="returnNode({
-                  document: approvalDocument,
-                  node: reviewNode,
-                  returnReason: nodeReturnReasons[reviewNode.nodeKey],
-                  returnAction: 'return_to_market_research'
-                })"
-              >
-                拒绝并退回市场调研
-              </el-button>
-            </template>
-            <template v-else>
-              <el-input
-                v-model.trim="nodeComments[reviewNode.nodeKey]"
-                type="textarea"
-                placeholder="审批意见"
-                :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
-              />
+        <ApprovalActionCard
+          v-for="reviewNode in actionableReviewNodes"
+          :key="reviewNode.nodeKey"
+          title="审批处理"
+          :description="`${reviewNode.nodeName || formatReviewNodeName(reviewNode.nodeKey)} · ${reviewNodeDescription(reviewNode)}`"
+          :status-text="formatReviewNodeStatus(reviewNode.nodeStatus)"
+          :status-type="reviewNodeTagType(reviewNode.nodeStatus)"
+          :comment="nodeComments[reviewNode.nodeKey] || ''"
+          :comment-label="isEvaluationNode(reviewNode) ? '评价/退回原因' : '审批意见/退回原因'"
+          :comment-placeholder="isEvaluationNode(reviewNode)
+            ? '请填写评价结论；退回时请明确说明需要补充或修正的内容'
+            : '可填写审批意见；退回整改或结束项目时请明确填写原因'"
+          :approve-comment-required="isEvaluationNode(reviewNode)"
+          :selection-required="!isEvaluationNode(reviewNode)"
+          :selection-complete="isEvaluationNode(reviewNode) || Boolean(nodeProjectExecutionModes[reviewNode.nodeKey])"
+          :can-approve="true"
+          :can-return="true"
+          :can-end="!isEvaluationNode(reviewNode)"
+          :busy="isReviewNodeBusy(reviewNode)"
+          :pending-action="pendingReviewAction(reviewNode)"
+          approve-text="审批通过"
+          @update:comment="nodeComments[reviewNode.nodeKey] = $event"
+          @approve="approveReviewNode(reviewNode, $event)"
+          @return="returnReviewNode(reviewNode, $event)"
+          @end="endReviewNode(reviewNode, $event)"
+        >
+          <template v-if="!isEvaluationNode(reviewNode)" #selection="{ disabled }">
+            <div class="initiation-review-general-mode">
+              <label class="initiation-review-field-label">
+                <strong>项目开展模式</strong>
+                <span class="required-mark">*</span>
+                <small>选择后才能处理审批</small>
+              </label>
               <el-select
                 v-model="nodeProjectExecutionModes[reviewNode.nodeKey]"
                 placeholder="请选择项目开展模式"
-                :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
+                :disabled="disabled"
               >
-                <el-option
-                  v-for="option in projectExecutionModeOptions"
-                  :key="option"
-                  :label="option"
-                  :value="option"
-                />
+                <el-option v-for="option in projectExecutionModeOptions" :key="option" :label="option" :value="option" />
               </el-select>
-              <el-button
-                type="primary"
-                :loading="isReviewNodePending(reviewNode, 'approve')"
-                :disabled="isReviewNodePending(reviewNode, 'approve') || !nodeProjectExecutionModes[reviewNode.nodeKey]"
-                @click="approveNode({
-                  document: approvalDocument,
-                  node: reviewNode,
-                  comment: nodeComments[reviewNode.nodeKey] || '',
-                  projectExecutionMode: nodeProjectExecutionModes[reviewNode.nodeKey]
-                })"
-              >
-                审批通过
-              </el-button>
-              <el-radio-group
-                :model-value="getGeneralReturnAction(reviewNode)"
-                :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
-                @change="setGeneralReturnAction(reviewNode, $event)"
-              >
-                <el-radio-button value="return_to_market_research">退回项目市场调研</el-radio-button>
-                <el-radio-button value="project_end">结束项目</el-radio-button>
-              </el-radio-group>
-              <el-input
-                v-if="isProjectEndReturn(reviewNode)"
-                v-model.trim="nodeEndReasons[reviewNode.nodeKey]"
-                type="textarea"
-                placeholder="项目结束原因（必填）"
-                :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
-              />
-              <el-input
-                v-else
-                v-model.trim="nodeReturnReasons[reviewNode.nodeKey]"
-                type="textarea"
-                placeholder="审批不通过原因，退回项目市场调研"
-                :disabled="isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return')"
-              />
-              <small v-if="isProjectEndReturn(reviewNode)" class="inline-muted">
-                项目结束后将阻止立项通知、方案设计和后续资料推进。
-              </small>
-              <el-button
-                type="danger"
-                plain
-                :loading="isReviewNodePending(reviewNode, 'return')"
-                :disabled="isReviewNodePending(reviewNode, 'return') || !canSubmitGeneralReturn(reviewNode)"
-                @click="returnNode(buildGeneralReturnPayload(reviewNode))"
-              >
-                {{ formatGeneralReturnButton(reviewNode) }}
-              </el-button>
-            </template>
-          </div>
-        </article>
+            </div>
+          </template>
+        </ApprovalActionCard>
       </div>
     </section>
 
-    <el-empty v-else-if="!approvalReview" description="审批记录尚未生成。" />
+    <el-empty v-if="!approvalReview" description="审批记录尚未生成。" />
   </section>
 </template>
 
 <script setup>
 import { computed, reactive } from 'vue';
 import { ElMessageBox } from 'element-plus';
+import ApprovalActionCard from '../../../components/approval/ApprovalActionCard.vue';
 import GeneratedFormFileCard from '../../../components/GeneratedFormFileCard.vue';
 import NodeOnlineFormEditor from '../../../components/node/NodeOnlineFormEditor.vue';
 import {
@@ -200,11 +103,9 @@ import {
   useNodeOnlineForm
 } from '../../../composables/node/useNodeOnlineForm.js';
 import {
-  formatBusinessDepartment,
-  formatDateTime,
-  formatOrganizationRole,
-  formatUser
-} from '../../../utils/format.js';
+  isInitiationApprovalFormFiller,
+  isInitiationReviewNodeReviewer
+} from '../../../utils/onlineFormVisibility.js';
 
 const emit = defineEmits(['business-state-changed']);
 
@@ -295,23 +196,14 @@ const marketResearchDownloadPending = computed(() => Boolean(
 const approvalReview = computed(() => approvalDocument.value?.initiationReview || null);
 const approvalReviewNodes = computed(() => approvalReview.value?.nodes || []);
 const actionableReviewNodes = computed(() => approvalReviewNodes.value.filter((reviewNode) => reviewNode.canAct));
-const approvalOverallText = computed(() => {
-  if (approvalReview.value?.isComplete) {
-    return '营销评价、研发评价均已完成，总经理已审批通过。';
-  }
-
-  if (approvalReview.value?.blockedByRework) {
-    return '1.1 返工未清除，1.2 暂不能最终完成。';
-  }
-
-  return '等待营销评价、研发评价和总经理最终审批完成。';
-});
-
+const isApprovalViewer = computed(() => approvalReviewNodes.value.some(
+  (reviewNode) => isInitiationReviewNodeReviewer(reviewNode, props.currentUser)
+));
+const canViewFormContent = computed(() => isInitiationApprovalFormFiller(activeForm.value));
+const hasActionableEvaluationNode = computed(() => actionableReviewNodes.value.some(isEvaluationNode));
 const nodeComments = reactive({});
-const nodeReturnReasons = reactive({});
-const nodeReturnActions = reactive({});
-const nodeEndReasons = reactive({});
 const nodeProjectExecutionModes = reactive({});
+const pendingReturnKinds = reactive({});
 const projectExecutionModeOptions = ['自研模式', '供应链模式'];
 
 function downloadMarketResearchFile() {
@@ -324,7 +216,37 @@ function approveNode(payload) {
   notifyFormChanged(payload?.document?.id ? [payload.document.id] : []);
 }
 
-async function returnNode(payload) {
+function approveReviewNode(reviewNode, comment) {
+  approveNode({
+    document: approvalDocument.value,
+    node: reviewNode,
+    comment,
+    projectExecutionMode: isEvaluationNode(reviewNode)
+      ? undefined
+      : nodeProjectExecutionModes[reviewNode.nodeKey]
+  });
+}
+
+function returnReviewNode(reviewNode, comment) {
+  return returnNode({
+    document: approvalDocument.value,
+    node: reviewNode,
+    returnReason: comment,
+    returnAction: 'return_to_market_research'
+  }, 'return');
+}
+
+function endReviewNode(reviewNode, comment) {
+  return returnNode({
+    document: approvalDocument.value,
+    node: reviewNode,
+    returnReason: '',
+    returnAction: 'project_end',
+    endReason: comment
+  }, 'end');
+}
+
+async function returnNode(payload, pendingKind = 'return') {
   try {
     await ElMessageBox.confirm(
       payload?.returnAction === 'project_end' ? '结束项目后将阻止后续阶段推进，确认继续吗？' : '确认退回项目市场调研并进入整改吗？',
@@ -334,12 +256,17 @@ async function returnNode(payload) {
   } catch (error) {
     return;
   }
-  invoke('returnInitiationNode', payload);
-  emit('business-state-changed', {
-    changedDocumentIds: payload?.document?.id ? [payload.document.id] : [],
-    affectedNodeCodes: ['market_research', 'initiation_approval'],
-    refreshCurrentDetail: true
-  });
+  pendingReturnKinds[payload.node.nodeKey] = pendingKind;
+  try {
+    await invoke('returnInitiationNode', payload);
+    emit('business-state-changed', {
+      changedDocumentIds: payload?.document?.id ? [payload.document.id] : [],
+      affectedNodeCodes: ['market_research', 'initiation_approval'],
+      refreshCurrentDetail: true
+    });
+  } finally {
+    delete pendingReturnKinds[payload.node.nodeKey];
+  }
 }
 
 function formatReviewNodeName(nodeKey) {
@@ -376,61 +303,35 @@ function reviewNodeTagType(status) {
   return 'info';
 }
 
-function formatReviewNodeReviewer(reviewNode) {
-  if (reviewNode.reviewerUser) {
-    return formatUser(reviewNode.reviewerUser);
-  }
-
-  const role = formatOrganizationRole(reviewNode.reviewerRole);
-  const department = reviewNode.reviewerDepartment ? formatBusinessDepartment(reviewNode.reviewerDepartment) : '';
-  return [department, role].filter(Boolean).join(' / ') || '-';
-}
-
 function isEvaluationNode(reviewNode) {
   return ['business_review', 'technical_review'].includes(reviewNode?.nodeKey);
+}
+
+function reviewNodeDescription(reviewNode) {
+  if (reviewNode?.nodeKey === 'business_review') {
+    return '从市场价值、客户需求和商业可行性角度给出评价。';
+  }
+  if (reviewNode?.nodeKey === 'technical_review') {
+    return '从技术路线、研发资源和交付风险角度给出评价。';
+  }
+  return '审核营销与研发评价结论，并作出最终审批决定。';
 }
 
 function isReviewNodePending(reviewNode, action) {
   return isActionPending(approvalDocument.value?.id, `initiation-${reviewNode.nodeKey}-${action}`);
 }
 
-function getGeneralReturnAction(reviewNode) {
-  return nodeReturnActions[reviewNode.nodeKey] || 'return_to_market_research';
-}
-
-function setGeneralReturnAction(reviewNode, action) {
-  nodeReturnActions[reviewNode.nodeKey] = action;
-}
-
-function isProjectEndReturn(reviewNode) {
-  return getGeneralReturnAction(reviewNode) === 'project_end';
-}
-
-function getGeneralReturnReason(reviewNode) {
-  return isProjectEndReturn(reviewNode) ? nodeEndReasons[reviewNode.nodeKey] : nodeReturnReasons[reviewNode.nodeKey];
-}
-
-function canSubmitGeneralReturn(reviewNode) {
-  return String(getGeneralReturnReason(reviewNode) || '').trim() !== '';
-}
-
-function buildGeneralReturnPayload(reviewNode) {
-  const action = getGeneralReturnAction(reviewNode);
-  const reason = String(getGeneralReturnReason(reviewNode) || '').trim();
-  return {
-    document: approvalDocument.value,
-    node: reviewNode,
-    returnAction: action,
-    returnReason: action === 'project_end' ? '' : reason,
-    endReason: action === 'project_end' ? reason : ''
-  };
-}
-
-function formatGeneralReturnButton(reviewNode) {
-  return isProjectEndReturn(reviewNode) ? '拒绝并结束项目' : '审批不通过并退回市场调研';
+function isReviewNodeBusy(reviewNode) {
+  return isReviewNodePending(reviewNode, 'approve') || isReviewNodePending(reviewNode, 'return');
 }
 
 function isActionPending(documentId, action) {
   return context.value.isActionPending?.(documentId, action) || false;
+}
+
+function pendingReviewAction(reviewNode) {
+  if (isReviewNodePending(reviewNode, 'approve')) return 'approve';
+  if (isReviewNodePending(reviewNode, 'return')) return pendingReturnKinds[reviewNode.nodeKey] || 'return';
+  return '';
 }
 </script>

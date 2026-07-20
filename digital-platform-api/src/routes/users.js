@@ -14,6 +14,7 @@ import {
   setManagedUserEnabled,
   updateManagedUser,
   listResponsibilityCandidateUsers,
+  listSolutionDesignRoleCandidateUsers,
   UserManagementError,
   USER_MANAGEMENT_ERROR
 } from '../repositories/userRepository.js';
@@ -181,6 +182,18 @@ usersRouter.get(
   requireAuth,
   asyncHandler(async (req, res) => {
     const users = await listResponsibilityCandidateUsers();
+
+    res.json({
+      data: users
+    });
+  })
+);
+
+usersRouter.get(
+  '/solution-design-role-candidates',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const users = await listSolutionDesignRoleCandidateUsers();
 
     res.json({
       data: users

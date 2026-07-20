@@ -1,13 +1,14 @@
 import { computed, onBeforeUnmount, watch } from 'vue';
 import { useSolutionDesignWorkflow } from './useSolutionDesignWorkflow.js';
+import { buildNodeUploadSlots } from './solutionDesignUploadSlots.js';
 
 export const solutionDesignRoleDefinitions = Object.freeze([
   { roleKey: 'project_manager', label: '项目经理', payloadKey: 'projectManagerUserId' },
-  { roleKey: 'technical_owner', label: '技术负责人', payloadKey: 'technicalOwnerUserId' },
-  { roleKey: 'business_owner', label: '商务负责人', payloadKey: 'businessOwnerUserId' },
-  { roleKey: 'procurement_owner', label: '采购负责人', payloadKey: 'procurementOwnerUserId' },
-  { roleKey: 'finance_accountant', label: '财务会计', payloadKey: 'financeAccountantUserId' },
-  { roleKey: 'finance_owner', label: '财务负责人', payloadKey: 'financeOwnerUserId' }
+  { roleKey: 'technical_owner', label: '技术负责人', payloadKey: 'technicalOwnerUserId', requiredDepartment: 'rd_center' },
+  { roleKey: 'business_owner', label: '商务负责人', payloadKey: 'businessOwnerUserId', requiredDepartment: 'marketing_center' },
+  { roleKey: 'procurement_owner', label: '采购负责人', payloadKey: 'procurementOwnerUserId', requiredDepartment: 'manufacturing_center' },
+  { roleKey: 'finance_accountant', label: '财务会计', payloadKey: 'financeAccountantUserId', requiredDepartment: 'operations_center' },
+  { roleKey: 'finance_owner', label: '财务负责人', payloadKey: 'financeOwnerUserId', requiredDepartment: 'operations_center' }
 ]);
 
 export function useSolutionDesignNodePage(props, emit) {
@@ -16,15 +17,17 @@ export function useSolutionDesignNodePage(props, emit) {
   const uploads = computed(() => context.value.solutionDesignUploads || null);
   const nodeKey = computed(() => props.nodeCode || props.node?.nodeKey || '');
   const currentNode = computed(() => workflow.value?.nodes?.find((item) => item.nodeKey === nodeKey.value) || null);
-  const slots = computed(() => (uploads.value?.slots || [])
-    .filter((item) => item.nodeKey === nodeKey.value)
-    .filter((item) => !(
-      nodeKey.value === 'quotation_or_tender' &&
-      item.slotKey === 'quotation_file' &&
-      workflow.value?.quotationTender?.branchType === 'quotation'
-    ))
-    .sort((a, b) => Number(a.slotOrder || 0) - Number(b.slotOrder || 0)));
-  const notifyChanged = () => emit('business-state-changed', { source: 'solution-design', nodeKey: nodeKey.value, changedDocumentIds: [] });
+  const slots = computed(() => buildNodeUploadSlots(
+    uploads.value?.slots,
+    nodeKey.value,
+    workflow.value
+  ));
+  const notifyChanged = (payload = {}) => emit('business-state-changed', {
+    source: 'solution-design',
+    nodeKey: nodeKey.value,
+    changedDocumentIds: [],
+    ...payload
+  });
   const actions = useSolutionDesignWorkflow({
     projectId: computed(() => props.projectId),
     authToken: computed(() => props.authToken),

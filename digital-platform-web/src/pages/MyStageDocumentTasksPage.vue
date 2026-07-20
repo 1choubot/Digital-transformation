@@ -1,12 +1,5 @@
 <template>
   <section class="page-stack stage-document-tasks-page">
-    <PageHeader
-      title="我的工作台">
-      <template #actions>
-        <!-- <el-button :loading="loading" @click="loadWorkbench">重新加载</el-button> -->
-      </template>
-    </PageHeader>
-
     <section class="panel task-filter-panel">
       <div class="stage-advance-summary">
         <div>
@@ -121,7 +114,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { getMyWorkbench } from '../api/me.js';
 import { toReadableApiError } from '../api/http.js';
-import PageHeader from '../components/PageHeader.vue';
+import { getProjectNavigation } from '../api/navigation.js';
 import {
   formatCompletionMode,
   formatCompletionStatus,
@@ -129,6 +122,7 @@ import {
   formatProjectCode,
   formatStatus
 } from '../utils/format.js';
+import { findProjectNavigationTarget } from '../utils/projectNavigation.js';
 
 const props = defineProps({
   authToken: {
@@ -316,11 +310,29 @@ function isInteractiveElement(element, cardElement) {
   return interactiveChild && interactiveChild !== cardElement;
 }
 
-function handleCardClick(event, item) {
+async function handleCardClick(event, item) {
   if (isInteractiveElement(event.target, event.currentTarget)) {
     return;
   }
-  props.navigate(item.targetRoute || `/projects/${item.projectId}`);
+
+  const targetRoute = String(item.targetRoute || '').trim();
+  if (targetRoute) {
+    props.navigate(targetRoute);
+    return;
+  }
+
+  const fallbackRoute = `/projects/${item.projectId}`;
+  try {
+    const navigation = await getProjectNavigation(item.projectId, props.authToken);
+    const target = findProjectNavigationTarget(navigation, {
+      stageKey: item.stageKey,
+      stageId: item.stageId,
+      stageOrder: item.stageOrder
+    });
+    props.navigate(target?.route || fallbackRoute);
+  } catch {
+    props.navigate(fallbackRoute);
+  }
 }
 
 async function loadWorkbench() {

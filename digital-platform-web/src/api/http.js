@@ -187,7 +187,11 @@ export function toReadableApiError(error) {
   }
 
   if (error.code === 'INVALID_APPROVAL_COMMENT') {
-    return '审批意见或退回原因不能为空。';
+    return '审批意见或退回原因无效；退回时必须填写，并请控制在 1000 字以内。';
+  }
+
+  if (error.code === 'SOLUTION_DESIGN_INVALID_APPROVAL_COMMENT') {
+    return '审批意见过长，请控制在 1000 字以内。';
   }
 
   if (error.code === 'PROJECT_APPROVAL_NOT_SUBMITTABLE') {

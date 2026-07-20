@@ -81,28 +81,23 @@
             {{ isPending(stage, 'resubmit') ? '提交中...' : '重新提交阶段关口审批' }}
           </el-button>
 
-          <template v-if="canApproveStageApproval(stage)">
-            <el-button type="primary"
-              :disabled="isPending(stage, 'approve')"
-              @click="$emit('approve', stage)"
-            >
-              {{ isPending(stage, 'approve') ? '处理中...' : '阶段关口审批通过' }}
-            </el-button>
-            <label class="approval-return">
-              <span>阶段关口审批退回原因</span>
-              <el-input
-                v-model="returnComments[stage.id]"
-                maxlength="1000"
-                placeholder="填写阶段关口审批退回原因"
-              />
-            </label>
-            <el-button plain
-              :disabled="isPending(stage, 'return')"
-              @click="$emit('return', stage)"
-            >
-              {{ isPending(stage, 'return') ? '退回中...' : '退回阶段关口审批' }}
-            </el-button>
-          </template>
+          <ApprovalActionCard
+            v-if="canApproveStageApproval(stage)"
+            class="stage-approval-review"
+            title="审批处理"
+            :description="`${stage.stageName} · 阶段关口审批`"
+            status-text="待审批"
+            status-type="warning"
+            :comment="returnComments[stage.id] || ''"
+            :comment-max-length="1000"
+            :can-approve="true"
+            :can-return="true"
+            :busy="isStageReviewBusy(stage)"
+            :pending-action="pendingReviewAction(stage)"
+            @update:comment="returnComments[stage.id] = $event"
+            @approve="$emit('approve', stage, $event)"
+            @return="$emit('return', stage, $event)"
+          />
         </div>
 
         <details v-if="showApprovalHistory" class="approval-history">
@@ -137,6 +132,7 @@
 </template>
 
 <script setup>
+import ApprovalActionCard from '../approval/ApprovalActionCard.vue';
 import StatusBadge from '../StatusBadge.vue';
 import {
   formatApprovalAction,
@@ -285,6 +281,16 @@ function buildApprovalNodes(stage) {
 
 function isPending(stage, action) {
   return props.pendingAction === `${stage.id}:${action}`;
+}
+
+function isStageReviewBusy(stage) {
+  return isPending(stage, 'approve') || isPending(stage, 'return');
+}
+
+function pendingReviewAction(stage) {
+  if (isPending(stage, 'approve')) return 'approve';
+  if (isPending(stage, 'return')) return 'return';
+  return '';
 }
 
 function hasApprovalActions(stage) {

@@ -21,6 +21,7 @@
     :auth-token="authToken"
     :current-user="currentUser"
     :route="route"
+    :breadcrumb-items="breadcrumbItems"
     :logging-out="loggingOut"
     @navigate="navigate"
     @logout="handleLogout"
@@ -31,6 +32,7 @@
         :is="Component"
         v-bind="pageProps(matchedRoute)"
         @auth-expired="handleAuthExpired"
+        @breadcrumb-change="handleBreadcrumbChange"
       />
     </RouterView>
   </MainLayout>
@@ -38,7 +40,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { RouterView, useRoute, useRouter } from 'vue-router';
 import { getCurrentUser, logout as logoutRequest } from './api/auth.js';
@@ -60,6 +62,11 @@ const loggingOut = ref(false);
 const authToken = ref('');
 const currentUser = ref(null);
 const authMessage = ref('');
+const breadcrumbItems = ref([]);
+
+function handleBreadcrumbChange(items) {
+  breadcrumbItems.value = Array.isArray(items) ? items.filter(Boolean) : [];
+}
 
 function navigate(path) {
   router.push(path);
@@ -72,6 +79,15 @@ function routeParam(value) {
 function routeQuery(value) {
   return Array.isArray(value) ? value[0] || '' : value || '';
 }
+
+watch(
+  () => route.fullPath,
+  () => {
+    if (route.name !== 'project-detail') {
+      breadcrumbItems.value = [];
+    }
+  }
+);
 
 function pageProps(targetRoute) {
   const commonProps = {

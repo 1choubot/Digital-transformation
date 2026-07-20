@@ -11,6 +11,8 @@
       :submitting="context.onlineFormSubmitting === true"
       :generated-file="generatedFile"
       :download-pending="generatedFileDownloadPending"
+      download-button-text="查看项目立项通知"
+      :show-form-content="canViewFormContent"
       :image-state="context.onlineFormImageState || emptyObject"
       @save="saveOnlineForm"
       @submit="submitOnlineForm"
@@ -29,13 +31,14 @@
       :closable="false"
     />
 
-    <el-skeleton v-else-if="output?.formAvailable" :rows="6" animated />
+    <el-skeleton v-else-if="output?.formAvailable && context.onlineFormLoading" :rows="6" animated />
 
     <el-empty v-else :description="unavailableMessage" />
   </section>
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import NodeOnlineFormEditor from '../../../components/node/NodeOnlineFormEditor.vue';
 import { useNodeOnlineForm } from '../../../composables/node/useNodeOnlineForm.js';
 
@@ -97,4 +100,6 @@ const {
   emit,
   documentCode: '1.3'
 });
+
+const canViewFormContent = computed(() => activeForm.value?.permissions?.canEdit === true);
 </script>

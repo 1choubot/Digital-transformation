@@ -4253,6 +4253,7 @@ p {
 
     .solution-node-page .solution-node-card {
         display: grid;
+        align-content: start;
         gap: var(--space-4, 16px)
     }
 

@@ -1,5 +1,4 @@
 <template>
-  <h4>填写评审表</h4>
   <div class="review-form-table-wrap">
     <table class="review-form-table">
       <colgroup>

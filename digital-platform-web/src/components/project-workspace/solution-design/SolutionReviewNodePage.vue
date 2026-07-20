@@ -9,6 +9,7 @@
       </div>
     </template>
 
+    <h4 v-if="canViewFormContent">填写评审记录表</h4>
     <section v-if="canViewFormContent" ref="reviewFormRoot" class="review-section">
 
       <SolutionReviewFormTable :model="reviewFormData" :repeatable-field-configs="tableRepeatableFieldConfigs"

@@ -6,7 +6,7 @@
     :error-message="context.solutionDesignErrorMessage"
   >
     <section class="solution-section">
-      <h4>项目内角色</h4>
+      <h4>指定项目组成员</h4>
       <el-form v-if="workflow?.permissions?.canAssignRoles" @submit.prevent="assignRoles">
         <el-descriptions :column="2" border>
           <el-descriptions-item
@@ -46,7 +46,7 @@
           :loading="isPending('roles')"
           :disabled="context.solutionDesignRoleCandidatesLoading"
         >
-          保存角色分配
+          保存分配
         </el-button>
       </el-form>
 
@@ -61,6 +61,8 @@
       </el-descriptions>
     </section>
 
+
+    <h4>编写方案设计阶段工作计划</h4>
     <SolutionUploadSlots
       :slots="slots"
       :is-pending="isPending"

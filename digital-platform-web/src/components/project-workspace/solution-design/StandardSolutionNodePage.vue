@@ -1,6 +1,9 @@
 <template>
   <SolutionDesignNodeLayout :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
     :error-message="context.solutionDesignErrorMessage">
+    <template v-if="nodeKey === 'solution_design' && slots.length" #title-after>
+      <h4>上传产出文件</h4>
+    </template>
     <SolutionUploadSlots :slots="slots" :is-pending="isPending"
       @upload="handleUpload" @download="downloadUpload" @mark-exemption="markUploadExemption"
       @cancel-exemption="cancelUploadExemption" />

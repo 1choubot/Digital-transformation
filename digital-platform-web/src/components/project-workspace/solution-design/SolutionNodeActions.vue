@@ -27,7 +27,7 @@
     <div v-if="canShowSubmit" class="solution-node-submit-action">
       <el-button type="primary" size="large" :loading="isPending(`submit:${node.nodeKey}`)"
         :disabled="busy || submitDisabled" @click="$emit('submit')">
-        提交节点
+        确认提交
       </el-button>
     </div>
   </section>

@@ -1,26 +1,50 @@
 <template>
-  <section class="solution-section solution-quotation-form" v-loading="loading">
+  <section ref="formRoot" class="solution-section solution-quotation-form" v-loading="loading">
     <el-alert v-if="errorMessage" :title="errorMessage" type="error" show-icon :closable="false" />
     <el-form v-if="showFormContent" label-position="top" :disabled="!canEdit">
       <div class="quotation-meta-grid">
         <el-form-item label="报价日期"><el-date-picker v-model="formData.quotationDate" type="date"
             value-format="YYYY-MM-DD" /></el-form-item>
-        <el-form-item label="收件人"><el-input v-model="formData.recipientName" /></el-form-item>
-        <el-form-item label="公司联系人"><el-input v-model="formData.contactName" /></el-form-item>
-        <el-form-item label="联系电话"><el-input v-model="formData.contactPhone" /></el-form-item>
+        <el-form-item data-field-key="recipientName" label="收件人 *"
+          :class="{ 'online-form-field--invalid': isInvalid('recipientName') }">
+          <el-input v-model="formData.recipientName" />
+          <small v-if="isInvalid('recipientName')" class="form-field-error">请填写收件人</small>
+        </el-form-item>
+        <el-form-item data-field-key="contactName" label="公司联系人 *"
+          :class="{ 'online-form-field--invalid': isInvalid('contactName') }">
+          <el-input v-model="formData.contactName" />
+          <small v-if="isInvalid('contactName')" class="form-field-error">请填写公司联系人</small>
+        </el-form-item>
+        <el-form-item data-field-key="contactPhone" label="联系电话 *"
+          :class="{ 'online-form-field--invalid': isInvalid('contactPhone') }">
+          <el-input v-model="formData.contactPhone" />
+          <small v-if="isInvalid('contactPhone')" class="form-field-error">请填写联系电话</small>
+        </el-form-item>
 
       </div>
       <div class="quotation-table-wrap">
         <el-table :data="formData.items" border>
           <el-table-column type="index" label="序号" width="60" />
-          <el-table-column label="名称" min-width="160"><template #default="{ row }"><el-input
-                v-model="row.name" /></template></el-table-column>
+          <el-table-column label="名称 *" min-width="160"><template #default="{ row, $index }">
+              <div :data-field-key="`items.${$index}.name`" :class="{ 'online-form-field--invalid': isInvalid(`items.${$index}.name`) }">
+                <el-input v-model="row.name" />
+                <small v-if="isInvalid(`items.${$index}.name`)" class="form-field-error">请填写名称</small>
+              </div>
+            </template></el-table-column>
           <el-table-column label="单位" width="100"><template #default="{ row }"><el-input
                 v-model="row.unit" /></template></el-table-column>
-          <el-table-column label="数量" width="120"><template #default="{ row }"><el-input
-                v-model="row.quantity" /></template></el-table-column>
-          <el-table-column label="单价" width="130"><template #default="{ row }"><el-input
-                v-model="row.unitPrice" /></template></el-table-column>
+          <el-table-column label="数量 *" width="120"><template #default="{ row, $index }">
+              <div :data-field-key="`items.${$index}.quantity`" :class="{ 'online-form-field--invalid': isInvalid(`items.${$index}.quantity`) }">
+                <el-input v-model="row.quantity" />
+                <small v-if="isInvalid(`items.${$index}.quantity`)" class="form-field-error">请填写数量</small>
+              </div>
+            </template></el-table-column>
+          <el-table-column label="单价 *" width="130"><template #default="{ row, $index }">
+              <div :data-field-key="`items.${$index}.unitPrice`" :class="{ 'online-form-field--invalid': isInvalid(`items.${$index}.unitPrice`) }">
+                <el-input v-model="row.unitPrice" />
+                <small v-if="isInvalid(`items.${$index}.unitPrice`)" class="form-field-error">请填写单价</small>
+              </div>
+            </template></el-table-column>
           <el-table-column label="金额" width="130">
             <template #default="{ row }">{{ lineAmountText(row) }}</template>
           </el-table-column>
@@ -40,13 +64,15 @@
     <div v-if="showFormContent" class="action-row node-online-form-actions">
       <el-button v-if="canEdit" size="large" :loading="pendingAction === 'save'" @click="$emit('save')">保存草稿</el-button>
       <el-button v-if="canSubmit" size="large" type="primary" :loading="pendingAction === 'submit'"
-        @click="$emit('submit')">提交表单</el-button>
+        @click="handleSubmit">提交表单</el-button>
     </div>
   </section>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, nextTick, ref } from 'vue';
+import { ElMessage } from 'element-plus';
+import { isFormValueEmpty } from '../../../utils/formValidation.js';
 import {
   calculateLineAmount,
   calculateTotalAmount,
@@ -63,8 +89,44 @@ const canEdit = computed(() => props.dto?.permissions?.canEditQuotationForm === 
 const canSubmit = computed(() => props.dto?.permissions?.canSubmitQuotationForm === true);
 const totalAmountPreview = computed(() => calculateTotalAmount(props.formData.items));
 const totalAmountUppercasePreview = computed(() => formatRmbUppercaseFromAmount(totalAmountPreview.value));
+const formRoot = ref(null);
+const validationAttempted = ref(false);
+const missingFields = computed(() => {
+  const missing = [];
+  [
+    ['recipientName', '收件人'],
+    ['contactName', '公司联系人'],
+    ['contactPhone', '联系电话']
+  ].forEach(([key, label]) => {
+    if (isFormValueEmpty(props.formData[key])) missing.push({ key, label });
+  });
+  (props.formData.items || []).forEach((item, index) => {
+    [['name', '名称'], ['quantity', '数量'], ['unitPrice', '单价']].forEach(([key, label]) => {
+      if (isFormValueEmpty(item?.[key])) missing.push({ key: `items.${index}.${key}`, label: `第 ${index + 1} 行${label}` });
+    });
+  });
+  if ((props.formData.items || []).length === 0) missing.push({ key: 'items', label: '报价明细' });
+  return missing;
+});
 
 const addItem = () => emit('add-item');
 const removeItem = (index) => emit('remove-item', index);
 const lineAmountText = (row) => calculateLineAmount(row?.quantity, row?.unitPrice) || '';
+
+function isInvalid(key) {
+  return validationAttempted.value && missingFields.value.some((field) => field.key === key);
+}
+
+async function handleSubmit() {
+  validationAttempted.value = true;
+  if (missingFields.value.length === 0) {
+    emit('submit');
+    return;
+  }
+  ElMessage.warning(`请补充以下必填内容：${missingFields.value.map((field) => field.label).join('、')}`);
+  await nextTick();
+  const firstField = formRoot.value?.querySelector(`[data-field-key="${missingFields.value[0]?.key}"]`);
+  firstField?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  firstField?.querySelector('input, textarea, [tabindex]')?.focus?.();
+}
 </script>

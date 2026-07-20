@@ -13,6 +13,7 @@
             :key="field.key"
             :data-field-key="field.key"
             class="threshold-field-input"
+            :class="{ 'online-form-field--invalid': isFieldInvalid(field.key) }"
             :label="`${field.limitLabel}${field.required ? ' *' : ''}`"
           >
             <el-input
@@ -20,6 +21,9 @@
               :disabled="disabled || field.type === 'readonly'"
               @update:model-value="update(field, $event)"
             />
+            <small v-if="isFieldInvalid(field.key)" class="form-field-error">
+              {{ validationMessage(field) }}
+            </small>
           </el-form-item>
         </div>
       </section>
@@ -28,7 +32,10 @@
         v-else-if="item.field.type === 'repeatable'"
         :data-field-key="item.field.key"
         class="solution-form-grid__wide solution-repeatable-field"
-        :class="{ 'solution-form-field--emphasized': item.field.emphasized }"
+        :class="{
+          'solution-form-field--emphasized': item.field.emphasized,
+          'online-form-field--invalid': isFieldInvalid(item.field.key)
+        }"
       >
         <template #label>
           <div class="solution-repeatable-field__heading">
@@ -45,6 +52,9 @@
               @click="removeRow(item.field, index)">删除</el-button>
           </div>
         </div>
+        <small v-if="isFieldInvalid(item.field.key)" class="form-field-error">
+          {{ validationMessage(item.field) }}
+        </small>
       </el-form-item>
 
       <el-form-item
@@ -53,7 +63,8 @@
         :label="`${item.field.label}${item.field.required ? ' *' : ''}`"
         :class="{
           'solution-form-grid__wide': item.field.type === 'textarea',
-          'solution-form-field--emphasized': item.field.emphasized
+          'solution-form-field--emphasized': item.field.emphasized,
+          'online-form-field--invalid': isFieldInvalid(item.field.key)
         }"
       >
         <el-date-picker
@@ -72,6 +83,9 @@
           :disabled="disabled || item.field.type === 'readonly'"
           @update:model-value="update(item.field, $event)"
         />
+        <small v-if="isFieldInvalid(item.field.key)" class="form-field-error">
+          {{ validationMessage(item.field) }}
+        </small>
       </el-form-item>
       <slot
         v-if="item.type !== 'threshold-group'"
@@ -85,15 +99,25 @@
 <script setup>
 import { computed } from 'vue';
 import { groupThresholdFields } from '../../../utils/thresholdFieldGroups.js';
+import { getRequiredFieldErrorMessage } from '../../../utils/formValidation.js';
 
 const emit = defineEmits(['update']);
 const props = defineProps({
   fields: { type: Array, default: () => [] },
   model: { type: Object, required: true },
+  invalidFieldKeys: { type: Array, default: () => [] },
   disabled: Boolean
 });
 
 const displayItems = computed(() => groupThresholdFields(props.fields));
+
+function isFieldInvalid(fieldKey) {
+  return props.invalidFieldKeys.includes(fieldKey);
+}
+
+function validationMessage(field) {
+  return getRequiredFieldErrorMessage(field);
+}
 
 function displayValue(value) {
   return Array.isArray(value) ? value.join('\n') : value ?? '';

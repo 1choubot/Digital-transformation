@@ -153,6 +153,16 @@ function update(field, value) {
 </script>
 
 <style scoped>
+.solution-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--space-4, 16px);
+}
+
+.solution-form-grid__wide {
+  grid-column: 1 / -1;
+}
+
 .solution-repeatable-field__heading {
   display: flex;
   align-items: center;
@@ -182,6 +192,12 @@ function update(field, value) {
   .solution-repeatable-field__row {
     align-items: stretch;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 768px) {
+  .solution-form-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

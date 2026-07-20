@@ -1,386 +1,258 @@
 # Digital-transformation 项目阶段前端页面拆分与风格统一通用规则
 
-> 适用范围：后续所有采用“后端先交付阶段 API 与通用页面，前端再完成节点页面拆分和风格统一”的项目阶段。  
-> 适用工程：`digital-platform-web`。  
-> 配套规范：`Digital-transformation-前端统一样式规范与重构方案.md`、`Digital-transformation-前端统一样式分步骤实施计划.md`。  
-> 核心原则：先完成业务等价拆分，再进行视觉迁移；不得长期保留仅按 `nodeKey` 切换内容的伪拆分页面。
+> 适用工程：`digital-platform-web`。
+>
+> 适用范围：后续项目阶段节点页面新增、从通用阶段实现拆分节点页面，以及阶段页面体验统一。
+>
+> 样式治理依据：`docs/Vue样式集中治理记录_20260720.md`。
+>
+> 正式业务与架构契约：`openspec/specs/` 下 active specs；`openspec/changes/archive/` 仅用于追溯历史背景。
 
-## 1. 目标与最终形态
+## 1. 总体原则
 
-后端提供阶段 API、DTO、状态机和一版可运行的阶段通用页面，用于验证业务闭环。前端接手后，必须将通用页面拆成独立节点页面，并统一为项目既定视觉体系。
-
-最终结构应满足：
-
-```text
-阶段 API / DTO / 权限 / 状态机
-              ↓
-阶段级 composable 和 API adapter
-              ↓
-节点独立页面 + 少量业务共享组件
-              ↓
-NodePageRouter / nodePages.js 注册
-              ↓
-ProjectDetailLayout 统一刷新和导航
-```
-
-不接受以下结构作为最终交付：
+项目阶段前端应形成“项目工作区统一编排、节点页面拥有业务结构、阶段能力按稳定语义复用”的架构。页面拆分和视觉调整不得改变后端业务状态机、权限模型、API、DTO、数据库结构、节点推进结果或资料版本语义。
 
 ```text
-NodeA.vue ─┐
-NodeB.vue ─┼─> CommonStagePanel.vue 根据 nodeKey 显示所有节点
-NodeC.vue ─┘
+阶段 API / DTO / permissions / blockingReasons / status
+                         ↓
+阶段 composable 与 API adapter
+                         ↓
+具名节点页面 + 稳定业务共享组件
+                         ↓
+nodePages.js + NodePageRouter.vue
+                         ↓
+ProjectDetailLayout 统一项目上下文、刷新和节点定位
 ```
 
-这种结构只能作为短期迁移桥接。节点页面若仅传递 `nodeKey`，展示、API 调用和操作仍全部集中在总面板中，则不算完成页面拆分。
+前端不得根据角色名称、部门文案或本地状态重新推导权限或节点推进结果。现有字段不足时，应记录为独立 OpenSpec change，不得在页面中硬编码补齐。
 
-## 2. 后端通用页面的定位
+## 2. 当前架构基线
 
-后端交付的通用页面是业务参考实现，不是最终前端架构。其职责是证明：
+- `src/pages/project-detail/ProjectDetailPage.vue` 是项目详情薄入口；
+- `ProjectDetailLayout.vue` 负责项目、工作区、阶段、节点上下文及统一业务刷新；
+- `src/config/nodePages.js` 负责节点代码到页面组件的注册；
+- `src/pages/project-node/project-approval/NodePageRouter.vue` 负责向节点页面传递统一上下文；
+- 立项节点位于 `src/pages/project-node/project-approval/`；
+- 方案设计节点位于 `src/pages/project-node/solution-design/`；
+- 阶段共享请求和状态协调位于 `src/composables/project-stage/<stage-name>/`；
+- 未注册节点继续使用现有 fallback 页面，不另建第二套路由协议。
 
-- API 可完成保存、提交、审批、退回、上传、下载和自动推进；
-- DTO 已包含节点状态、权限、阻塞原因和当前 revision；
-- 不同角色能完成阶段业务闭环；
-- 错误码和生成文件状态可被前端正确消费。
+方案设计阶段的旧总面板和迁移壳已退出运行路径。分析、评审、成本和报价/投标节点均已通过当前节点页面体系注册。
 
-前端可以重组通用页面的组件结构和视觉表现，但不得自行改变：
+## 3. 页面拆分实施顺序
 
-- API 路径、请求方法和 payload 字段；
-- DTO 字段、枚举值和权限语义；
-- 节点顺序、状态机、revision 和阶段门禁；
-- 保存、提交、审批、退回和重新提交规则；
-- 自动推进触发条件和幂等行为；
-- 文件鉴权、大小限制、生成文件状态和下载协议。
+### 3.1 冻结业务基线
 
-若通用页面逻辑与 API 文档或 DTO 不一致，必须先确认后端契约，不能通过前端硬编码角色或状态绕过。
+拆分前必须记录：
 
-## 3. 强制实施顺序
+- 节点清单、顺序、角色和状态；
+- 每个节点的可见、可编辑、可提交、可审批和可退回条件；
+- API、payload、DTO、错误码、文件接口和 revision；
+- 前置条件、阻塞原因、自动推进和退回重提规则；
+- active OpenSpec 对该阶段的 MUST / MUST NOT 场景；
+- 后端专项测试或可执行人工回归清单。
 
-每个新项目阶段必须按以下顺序实施。
+归档 change 只能解释历史决策，不能覆盖 active specs 和当前 API 行为。
 
-### 步骤 1：冻结业务基线
+### 3.2 建立节点注册
 
-在拆分前记录：
-
-- 阶段节点清单、`nodeKey`、节点顺序和角色；
-- 每个节点可见、可编辑、可提交、可审批和可退回条件；
-- API、payload、DTO、错误码和文件接口；
-- 节点间前置条件、阻塞原因和自动推进规则；
-- 通用页面可运行的完整业务场景。
-
-必须先运行后端该阶段专项测试。没有专项测试时，至少建立人工回归清单，不能只以页面可打开作为基线。
-
-### 步骤 2：建立节点目录和路由注册
-
-阶段目录统一放置在：
+阶段节点页面统一放置在：
 
 ```text
-src/pages/project-node/<stage-name>/
+src/pages/project-node/<stage-name>/<NodeName>Page.vue
 ```
 
-每个业务节点对应一个具名页面：
+节点统一注册到 `src/config/nodePages.js`，并通过现有 `NodePageRouter.vue` 接收项目上下文。不得在阶段内部新增平行路由、复制项目详情加载或自行刷新浏览器。
 
-```text
-<NodeName>Page.vue
-```
+### 3.3 抽取阶段共享能力
 
-节点注册统一维护在：
+阶段 composable 可以负责：
 
-- `src/config/nodePages.js`
-- `src/pages/project-node/project-approval/NodePageRouter.vue`
-
-项目详情布局继续由 `ProjectDetailLayout.vue` 负责，不在阶段页面中复制项目导航和刷新逻辑。
-
-### 步骤 3：先拆共享逻辑，再迁移节点 UI
-
-从阶段通用页面中优先抽取：
-
-```text
-src/composables/project-stage/<stage-name>/
-  use<StageName>Workflow.js
-  use<NodeName>Form.js          # 仅节点确有独立复杂状态时
-```
-
-composable 可以负责：
-
-- API 调用编排；
+- API 调用和 payload builder；
 - DTO 到页面状态的无损适配；
-- pending、错误和消息状态；
-- 文件上传、下载和生成文件处理；
-- 节点操作后的统一刷新通知；
-- 可复用且不改变业务语义的 payload builder。
+- pending、错误、消息和并发请求失效；
+- 上传、下载、生成文件和 Blob 保存；
+- 操作成功后的统一刷新通知。
 
-composable 不得负责：
+阶段 composable 不得负责 DOM、页面布局、本地权限推导、状态机改写或伪造乐观推进结果。
 
-- 页面 DOM 和布局；
-- 用前端角色名称重新推导后端权限；
-- 改写节点状态机；
-- 跨越现有 API 的乐观状态推进；
-- 吞掉业务错误并伪造成功状态。
+### 3.4 完成节点业务页面
 
-### 步骤 4：完成真正的独立节点页面
+节点页面负责：
 
-每个节点页面必须直接拥有本节点的：
+- 本节点页面结构和操作编排；
+- DTO 权限、阻塞原因和状态绑定；
+- loading、empty、error、readonly、disabled；
+- 调用阶段 composable；
+- 上抛 `business-state-changed`。
 
-- 展示结构；
-- 表单和操作入口；
-- 权限绑定；
-- loading、error、empty、readonly 状态；
-- 对 composable 或 API adapter 的调用；
-- `business-state-changed` 上抛。
+禁止把所有节点表单和操作重新集中到一个按 `nodeKey` 大量分支的阶段总面板。
 
-允许共享组件，但共享粒度应是稳定业务能力，例如：
+允许具名节点注册页复用稳定共享页面，但必须满足：
 
-- 生成文件状态卡；
-- 受控文件上传区；
-- 审批意见和审批记录；
-- 角色选择器；
-- 通用在线表单字段渲染器。
+- 节点业务结构、数据和事件语义确实一致；
+- 节点上下文仍能区分独立资料、revision、审批历史和生成文件；
+- 共享页面不包含整个阶段其他节点的条件分支。
 
-禁止重新创建一个包含整个阶段所有节点分支的大型共享面板。
+C15 内部评审和 C16 客户评审可以复用评审页面能力，但不得合并为一个资料项或不可区分的记录上下文。标准上传型节点可以复用上传页面，但各节点权限、上传槽和状态仍以后端 DTO 为准。
 
-### 步骤 5：验证业务等价
+## 4. 固定前端接口
 
-结构拆分完成后，先停止视觉改造并验证：
+节点页面继续接受路由约定的项目上下文 props，当前包括：
 
-- props、emits、API 和 payload 不变；
-- 权限按钮与拆分前一致；
-- 保存、提交、审批、退回和重新提交正常；
-- 文件上传、下载、删除和生成正常；
-- 节点操作后刷新项目详情、节点导航和当前节点；
-- 自动推进后定位新的当前阶段；
-- URL 刷新仍能打开正确节点页面。
+- `projectId`
+- `authToken`
+- `currentUser`
+- `project`
+- `workspace`
+- `stage`
+- `node`
+- `nodeCode`
+- `nodePageContext`
 
-业务等价验证通过后，才允许进入风格统一。
-
-### 步骤 6：在独立页面上统一风格
-
-标准业务控件统一使用 Element Plus：
-
-| 场景 | 组件 |
-|---|---|
-| 普通、主要、危险操作 | `el-button` |
-| 文本和多行文本 | `el-input` |
-| 数字 | `el-input-number` |
-| 选择、单选、复选 | `el-select`、`el-radio`、`el-checkbox` |
-| 日期 | `el-date-picker`，显式设置 `value-format` |
-| 表单与校验 | `el-form`、`el-form-item` |
-| 状态 | `el-tag` |
-| 错误和持续提示 | `el-alert` |
-| 加载和空状态 | `el-skeleton`、`v-loading`、`el-empty` |
-| 危险操作确认 | `ElMessageBox.confirm` |
-| 短反馈 | `ElMessage` |
-| 上传入口 | 受控 `el-upload` + `http-request` |
-
-流程树、节点专用图、复杂业务网格和图片预览布局可以保留原生结构，但其中的标准输入和操作控件仍应使用 Element Plus。
-
-### 步骤 7：删除迁移桥接和旧样式
-
-所有节点完成后必须：
-
-- 删除不再使用的阶段总面板；
-- 删除只传递 `nodeKey` 的空壳页面或共享壳；
-- 删除旧 `.primary-button`、`.ghost-button`、`.form-control` 等引用；
-- 删除重复 Toast、Spinner、Alert、Badge 和确认弹窗；
-- 删除失效局部 CSS；
-- 使用 `rg` 证明旧实现无引用后再删除文件。
-
-## 4. 页面、组件和 composable 的职责边界
-
-### 4.1 节点页面
-
-节点页面负责页面级编排，并且只关心一个业务节点。建议控制在可读范围内；模板或脚本持续膨胀时，应拆稳定业务组件，而不是重新合并成阶段总面板。
-
-### 4.2 阶段共享组件
-
-共享组件必须满足至少两个节点确实复用，并拥有一致的数据和事件语义。仅视觉相似但业务字段不同的表单不应过早抽象。
-
-共享组件通过明确 props/emits 通信，不直接读取路由、全局页面对象或兄弟节点状态。
-
-### 4.3 阶段 composable
-
-阶段 composable 负责跨节点可复用的请求和状态协调。页面卸载、节点切换和并发请求时必须避免旧请求结果覆盖新节点状态，必要时使用请求序号或取消机制。
-
-### 4.4 项目详情层
-
-项目详情层继续统一负责：
-
-- 当前项目、阶段和节点上下文；
-- 路由和节点页面选择；
-- `business-state-changed` 后重新加载；
-- 自动推进后的阶段和节点定位；
-- 项目级错误和认证失效。
-
-节点页面不得复制完整项目加载流程。
-
-## 5. 固定前端接口
-
-所有项目节点页面继续接受项目节点体系约定的上下文 props，具体字段以现有路由为准。新增阶段不得绕过 `NodePageRouter` 自建第二套路由协议。
-
-节点业务变化统一上抛：
+业务变化统一上抛：
 
 ```js
 emit('business-state-changed', {
   source: '<stage-name>',
-  nodeKey: props.nodeKey,
-  changedDocumentIds: [] // 有资料变化时填写
+  nodeKey: props.nodeCode,
+  changedDocumentIds: []
 });
 ```
 
 要求：
 
-- 保留调用方依赖的原 payload 字段；
-- 不在子页面直接刷新整个浏览器；
-- 不在多个层级重复触发相同刷新；
-- pending 结束前防止重复提交；
-- 操作失败时不得上抛成功刷新事件。
+- 保留调用方依赖的 payload 字段；
+- pending 结束前阻止重复操作；
+- 失败或用户取消时不得上抛成功刷新事件；
+- 不在多个层级重复刷新；
+- 自动推进后由项目详情层重新定位当前阶段和节点。
 
-## 6. 数据和交互兼容规则
+## 5. 权限、状态和错误边界
 
-### 6.1 表单数据
+- 按钮可见性和禁用状态以 DTO 的 `permissions`、在线表单权限、`blockingReasons` 和 `status` 为依据；
+- 前端隐藏按钮不能代替后端鉴权；
+- 前端不得用项目查看权限、部门、姓名或角色文案放宽操作权限；
+- 操作失败必须展示可读业务错误，不得伪造成功状态；
+- 生成文件失败不得展示节点已提交成功；
+- 后端未自动推进时展示后端返回的缺项和阻塞原因，不在前端复制门禁。
 
-- 日期必须保持后端要求的字符串格式；
-- 数字控件迁移后核对数字与字符串类型；
-- 动态数组必须使用稳定业务 key；
-- 新字段与 legacy 字段并存时，由 API adapter 明确兼容策略；
-- 不得在展示层静默丢弃后端仍要求的字段。
+## 6. 在线表单规则
 
-### 6.2 权限
+### 6.1 保存与提交
 
-- 按钮显示和禁用以 DTO permissions 为第一依据；
-- 不新增“某角色名称即可操作”的散落判断；
-- 只读用户仍应看到必要的状态、历史和文件；
-- 前端隐藏按钮不能代替后端鉴权。
+- 保存草稿不强制完成全部提交必填项；
+- 正式提交前校验当前用户负责范围内的必填字段；
+- 未填字段使用红色边框和字段级提示，并汇总提示、滚动及聚焦首个缺项；
+- 校验失败、接口失败或用户取消不得清空已填写数据；
+- 日期和数字类型必须保持后端协议，不得因控件替换改变 payload 类型；
+- 动态数组和结构化实施计划必须保留用户输入顺序和内容。
 
-### 6.3 文件
+### 6.2 提交确认与自动推进
 
-- `el-upload` 只负责选择文件和 UI；
-- 网络请求继续使用现有 API 客户端和 Bearer token；
-- 保留 MIME、大小、数量、revision 和只读限制；
-- 下载继续使用后端文件名和 Blob；
-- 上传或删除导致生成文件失效时，页面必须立即反映 DTO 定义的状态。
+C05、C15、C16 点击“提交表单”时必须确认；用户取消不得调用接口。这些在线表单页面以“提交表单”作为节点推进入口，不得同时展示手动“提交节点”。
 
-### 6.4 危险操作
+前端按后端结果分别展示：
 
-退回、删除、结束项目、废弃资料等操作使用 `ElMessageBox.confirm`。用户取消时不得发送请求，不得改变本地状态，也不得触发 `business-state-changed`。
+- 表单、生成文件和节点自动提交均成功；
+- 表单提交成功但仍有其他缺项；
+- 生成文件失败；
+- 节点门禁未满足。
 
-## 7. 样式归属规则
+前端不得维护 Excel 单元格、Word 表格或模板文本映射。
 
-全局设计变量、Element Plus 主题、页面布局原语和响应式断点放在 `src/styles.css`。
+## 7. 文件和危险操作
 
-节点页面局部 CSS 只允许描述：
+- `el-upload` 只负责选择文件和 UI，网络请求继续使用现有 API 客户端和 Bearer token；
+- 保留 MIME、大小、数量、revision、只读和后端下载文件名规则；
+- 无权用户不得看到已缓存的敏感文件名或附件明细；
+- 上传、删除或表单字段变化导致生成文件失效时，页面必须反映最新 DTO 状态；
+- 退回、删除、结束项目、废弃资料等危险操作使用 `ElMessageBox.confirm`；
+- 用户取消时不发送请求、不改变本地状态、不触发刷新事件。
 
-- 本节点独有业务布局；
-- 专用流程、时间轴或图形；
-- 复杂网格列定义；
-- 图片预览和定位；
-- 少量仅该组件使用的动画。
+## 8. Element Plus 和样式职责
 
-局部 CSS 禁止重新定义：
+普通业务控件统一使用 Element Plus：
 
-- 通用按钮、输入框和选择器皮肤；
-- Toast、Spinner、Alert、Badge；
-- 硬编码品牌色、状态色、圆角和阴影；
-- 大范围 `.el-button`、`.el-input` 内部覆盖；
-- 无说明的 `!important`。
+| 场景 | 组件 |
+|---|---|
+| 操作按钮 | `el-button` |
+| 文本、多行文本和数字 | `el-input`、`el-input-number` |
+| 选择、单选和复选 | `el-select`、`el-radio`、`el-checkbox` |
+| 日期 | `el-date-picker`，显式设置 `value-format` |
+| 表单 | `el-form`、`el-form-item` |
+| 表格和状态 | `el-table`、`el-tag` |
+| 错误、加载和空状态 | `el-alert`、`v-loading`、`el-empty` |
+| 确认和短反馈 | `ElMessageBox.confirm`、`ElMessage` |
+| 上传 | 受控 `el-upload` + `http-request` |
 
-页面布局优先复用已有变量和组合类。需要新增全局规则时，必须证明至少有多个页面使用，避免把单页补丁放进全局样式。
+流程树、节点导航、复杂业务表格和图片布局可保留原生结构，其中的标准输入和操作仍使用 Element Plus。
 
-## 8. 分批提交和回滚规则
+样式职责：
 
-每个阶段至少拆成以下提交：
+- `styles.css` 负责设计变量、主题、App shell、共享布局原语、项目工作区和响应式边界；
+- scoped 样式负责组件专属复杂业务结构；
+- 禁止同一职责同时存在于全局和局部样式；
+- `:deep()` 必须受组件根类约束，并仅在组件公开能力不足时使用；
+- Vue 局部样式禁止 `!important` 和硬编码品牌/状态色；
+- 不得为了追求 scoped 为零而把单组件规则堆入 `styles.css`。
 
-1. `refactor: split <stage> shared workflow state`
-2. `refactor: add dedicated <stage> node pages`
-3. `refactor: migrate <stage> controls to element plus`
-4. `refactor: remove legacy <stage> panel and styles`
+新增样式必须通过 `scripts/check-style-governance.mjs`。
 
-禁止把以下修改混入同一提交：
+## 9. 工作区宽度与滚动
 
-- 后端 API 或数据库迁移；
-- 节点状态机和权限规则调整；
-- 页面拆分和大规模视觉重写；
-- 自动推进逻辑和路由结构重写；
-- 与本阶段无关的全局 CSS 清理。
+根据 active OpenSpec：
 
-每个提交应可独立回滚，且回滚后不会留下半套节点注册或失效 import。
+- 桌面端 `.app-main` 不因节点内容新增页面级横向或纵向滚动；
+- 左侧流程树和右侧节点业务卡片分别承担纵向滚动；
+- 节点根元素和普通内容不得超过父业务卡片宽度；
+- 固定最小宽度表格必须在局部容器横向滚动；
+- 工作区容器不超过760px时，恢复 `.app-main` 页面级纵向滚动，节点卡片自然增高并使用 `overflow: visible`；
+- 宽表格在窄屏仍可保留局部横向滚动。
 
-## 9. 验证门禁
+## 10. 业务等价与清理
 
-### 9.1 自动检查
+页面拆分后、视觉迁移前先验证：
 
-每批必须执行：
+- props、emits、API、payload、权限和状态语义不变；
+- 保存、提交、审批、退回、重提和文件操作正常；
+- 自动推进、工作台待办和当前节点同步；
+- URL 刷新仍能打开正确节点；
+- API 失败、用户取消和重复点击状态可恢复。
+
+确认无引用后删除旧总面板、空壳迁移组件、失效 import 和重复 CSS。必须使用 `rg` 证明无引用，不得凭文件名直接删除兼容实现。
+
+## 11. 验证门禁
+
+前端每批必须执行：
 
 ```powershell
 cd digital-platform-web
-npm.cmd run build
 npm.cmd run check
+
+cd ..
+openspec validate --all --strict
 git diff --check
 ```
 
-同时使用 `rg` 检查：
+同时静态检查：
 
-- 阶段总面板是否仍被节点页面引用；
-- 是否残留原生业务按钮、输入框、选择器和 textarea；
-- 是否残留旧按钮、表单、Toast、Spinner 和 Alert 类；
-- 删除文件是否仍有 import 或路由注册。
+- 节点注册和 fallback 完整；
+- 旧总面板、旧控件类和失效 import 无残留；
+- 原生表单控件、scoped 样式、`:deep()` 和全局预算符合治理清单；
+- 删除文件未被路由、测试、README、docs 或 OpenSpec 引用。
 
-后端有阶段专项测试时必须同步执行，例如：
+人工视觉回归至少覆盖1280px、768px、375px，以及 loading、empty、error、readonly、disabled、长文本、大量数据、无数据、键盘操作和表格溢出。
 
-```powershell
-cd digital-platform-api
-npm.cmd run check
-npm.cmd run test:<stage-name>
-```
+## 12. 完成定义
 
-### 9.2 功能回归
+项目阶段前端交付同时满足以下条件才算完成：
 
-每个阶段至少覆盖：
-
-- 所有节点可打开并支持 URL 刷新；
-- 各角色的可见、可编辑和只读状态；
-- 保存、提交、审批、退回、重新提交；
-- 上传、下载、删除、生成文件；
-- API 失败后的状态恢复；
-- 重复点击和并发请求；
-- 节点状态、项目详情和工作台同步刷新；
-- 自动推进和退回整改后的当前节点定位。
-
-### 9.3 视觉回归
-
-至少验证：
-
-- 1280px 桌面；
-- 768px 平板；
-- 375px 手机；
-- loading、empty、error、readonly、disabled；
-- 长文本、大量数据和无数据；
-- 键盘 Tab、Enter、Space 基本操作。
-
-## 10. 完成定义
-
-一个项目阶段只有同时满足以下条件才算完成前端交付：
-
-1. 每个业务节点拥有独立页面，而不是只传递 `nodeKey` 的包装页。
-2. 阶段总面板已删除，或仅保留确有跨节点展示价值且不包含节点表单分支的组件。
-3. API、DTO、权限、状态机、刷新协议和自动推进保持不变。
-4. 标准业务控件已统一使用 Element Plus。
-5. 旧通用控件类和失效局部 CSS 已清理。
-6. 后端专项测试、前端构建和检查均通过。
-7. 所有角色和关键业务路径完成回归。
-8. 桌面、平板和手机视觉回归通过。
-
-## 11. 针对方案设计阶段的纠偏要求
-
-当前 `src/pages/project-node/solution-design/` 下的节点页面仍通过 `SolutionDesignNodePageShell.vue` 使用 `ProjectSolutionDesignWorkflowPanel.vue`。这属于迁移桥接状态，不是本规则定义的最终拆分。
-
-后续处理方案设计阶段时，应按以下顺序纠偏：
-
-1. 先抽取方案设计 API、pending、文件和刷新 composable；
-2. 优先迁移 C05 `SolutionAnalysisPage.vue`；
-3. 再迁移 C15/C16 内部评审和客户评审页面；
-4. 迁移准备、设计、成本估算和报价/投标页面；
-5. 每批完成业务等价验证后再做 Element Plus 迁移；
-6. 最终删除 `SolutionDesignNodePageShell.vue` 和总面板中的节点分支。
-
-后续项目阶段必须直接遵守本规则，避免再次形成“先创建空壳节点页、长期依赖阶段总面板、之后二次拆分”的重复成本。
-
+1. 节点通过统一注册体系进入项目工作区，不依赖包含全阶段分支的总面板。
+2. 共享页面只承载业务语义一致的稳定能力，独立资料和节点上下文未被合并。
+3. API、DTO、权限、状态机、revision、刷新协议和自动推进保持后端权威。
+4. 在线表单具备提交校验、错误提示、数据保留和生成状态反馈。
+5. 标准控件使用 Element Plus，样式职责符合自动治理门禁。
+6. 桌面、窄屏和宽表格滚动行为符合 active OpenSpec。
+7. 前端检查、OpenSpec strict validate、diff check 和关键业务回归通过。
+8. 未把未执行的人工视觉检查声明为通过。

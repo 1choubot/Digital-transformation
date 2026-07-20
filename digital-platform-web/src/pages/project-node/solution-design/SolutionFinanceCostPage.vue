@@ -69,7 +69,7 @@ async function approveFinanceNode(comment) {
   display: flex;
   align-items: baseline;
   gap: 5px;
-  color: #334252;
+  color: var(--el-text-color-primary);
   font-size: 13px;
 }
 
@@ -78,7 +78,7 @@ async function approveFinanceNode(comment) {
 }
 
 .finance-approval-flow__label small {
-  color: #7a8998;
+  color: var(--el-text-color-secondary);
   font-size: 12px;
   font-weight: 400;
 }

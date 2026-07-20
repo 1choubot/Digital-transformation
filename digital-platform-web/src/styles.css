@@ -1535,6 +1535,12 @@ p {
   grid-template-columns: minmax(0, 1fr);
 }
 
+@media (max-width: 768px) {
+  .threshold-field-group__inputs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .threshold-field-input {
   display: grid !important;
   grid-template-columns: max-content minmax(0, 1fr);
@@ -4250,27 +4256,6 @@ p {
         gap: var(--space-4, 16px)
     }
 
-/* Migrated from digital-platform-web/src/components/project-workspace/solution-design/SolutionFormFields.vue */
-.solution-form-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0 var(--space-4, 16px)
-    }
-
-    .solution-form-grid .solution-form-grid__wide {
-        grid-column: 1/-1
-    }
-
-    @media(max-width:768px) {
-        .solution-form-grid {
-            grid-template-columns: 1fr
-        }
-
-        .threshold-field-group__inputs {
-            grid-template-columns: 1fr
-        }
-    }
-
 /* Shared generated-file status card for initiation and solution-design forms. */
 .generated-file-card {
         display: flex;
@@ -4305,36 +4290,6 @@ p {
     @media(max-width:640px) {
         .generated-file-card {
             display: grid
-        }
-    }
-
-/* Migrated from digital-platform-web/src/components/project-workspace/solution-design/SolutionNodeActions.vue */
-.solution-actions,
-    .solution-actions .return-box {
-        display: grid;
-        gap: var(--space-3, 12px)
-    }
-
-    .solution-actions .solution-actions>header,
-    .solution-actions .action-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-3, 12px)
-    }
-
-    .solution-actions .action-row {
-        justify-content: flex-start;
-        flex-wrap: wrap
-    }
-
-    @media(max-width:640px) {
-        .solution-actions .solution-actions>header {
-            display: grid
-        }
-
-        .solution-actions .action-row>* {
-            width: 100%
         }
     }
 

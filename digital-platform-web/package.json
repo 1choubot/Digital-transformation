@@ -10,7 +10,9 @@
     "test:implementation-plan": "node --test test/implementationPlanItems.test.js",
     "test:quotation-amounts": "node --test test/quotationAmounts.test.js",
     "test:flow-navigation": "node --test test/flowNodeNavigation.test.js",
-    "check": "vite build && node --test test/approvalActionRules.test.js test/implementationPlanItems.test.js test/quotationAmounts.test.js test/flowNodeNavigation.test.js test/solutionDesignRoleCandidates.test.js test/solutionDesignUploadSlots.test.js"
+    "check:styles": "node scripts/check-style-governance.mjs",
+    "test:style-governance": "node --test test/styleGovernance.test.js",
+    "check": "node scripts/check-style-governance.mjs && vite build && node --test test/styleGovernance.test.js test/approvalActionRules.test.js test/implementationPlanItems.test.js test/quotationAmounts.test.js test/flowNodeNavigation.test.js test/solutionDesignRoleCandidates.test.js test/solutionDesignUploadSlots.test.js"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",

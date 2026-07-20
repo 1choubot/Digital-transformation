@@ -937,18 +937,9 @@ async function activateAnalysisNode(db, storage = fakeUploadStorage()) {
   return storage;
 }
 
-async function submitAnalysisNodeForReview(db, storage = fakeUploadStorage()) {
+async function uploadProductFunctionDiagram(db, storage = fakeUploadStorage()) {
   const technicalOwner = authUser(db.connection.users.get(12));
-  await activateAnalysisNode(db, storage);
-  await submitSolutionDesignAnalysisForm(
-    {
-      projectId: 100,
-      payload: analysisFormPayload(),
-      user: technicalOwner
-    },
-    db
-  );
-  await uploadSolutionDesignWorkflowFile(
+  return uploadSolutionDesignWorkflowFile(
     {
       projectId: 100,
       slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PRODUCT_FUNCTION_DIAGRAM,
@@ -958,10 +949,16 @@ async function submitAnalysisNodeForReview(db, storage = fakeUploadStorage()) {
     db,
     storage
   );
-  return submitSolutionDesignWorkflowNode(
+}
+
+async function submitAnalysisNodeForReview(db, storage = fakeUploadStorage()) {
+  const technicalOwner = authUser(db.connection.users.get(12));
+  await activateAnalysisNode(db, storage);
+  await uploadProductFunctionDiagram(db, storage);
+  return submitSolutionDesignAnalysisForm(
     {
       projectId: 100,
-      nodeKey: SOLUTION_DESIGN_NODE_KEY.ANALYSIS,
+      payload: analysisFormPayload(),
       user: technicalOwner
     },
     db
@@ -3602,6 +3599,46 @@ test('slot replacement increments revision and keeps only the latest file curren
   assert.equal(workPlanSlot.currentFile.originalFileName, '方案设计工作计划-v2.docx');
 });
 
+test('slot upload revision catches up to the current node revision before incrementing replacements', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const projectManager = authUser(db.connection.users.get(11));
+  await getSolutionDesignWorkflow({ projectId: 100, user: projectManager }, db);
+  const preparationNode = db.connection.nodes.find(
+    (node) => node.node_key === SOLUTION_DESIGN_NODE_KEY.PREPARATION
+  );
+  preparationNode.current_revision = 4;
+
+  const first = await uploadSolutionDesignWorkflowFile(
+    {
+      projectId: 100,
+      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.WORK_PLAN,
+      file: testUploadFile('方案设计工作计划-r4.docx'),
+      user: projectManager
+    },
+    db,
+    storage
+  );
+  const second = await uploadSolutionDesignWorkflowFile(
+    {
+      projectId: 100,
+      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.WORK_PLAN,
+      file: testUploadFile('方案设计工作计划-r4-v2.docx'),
+      user: projectManager
+    },
+    db,
+    storage
+  );
+
+  assert.equal(first.file.revision, 4);
+  assert.equal(second.file.revision, 5);
+  assert.equal(
+    db.connection.uploadSlots.find((slot) => slot.slot_key === SOLUTION_DESIGN_UPLOAD_SLOT_KEY.WORK_PLAN).revision,
+    5
+  );
+});
+
 test('approved preparation node rejects later work plan uploads without writing files or logs', async () => {
   const db = fakeDb();
   seedAssignedRoles(db.connection);
@@ -3842,6 +3879,8 @@ test('technical owner can save and submit solution analysis form', async () => {
   assert.equal(Object.hasOwn(saved.form.formData, 'technicalRisks'), false);
   assert.equal(Object.hasOwn(saved.form.formData, 'solutionScope'), false);
 
+  await uploadProductFunctionDiagram(db, storage);
+
   const submitted = await submitSolutionDesignAnalysisForm(
     {
       projectId: 100,
@@ -3888,13 +3927,10 @@ test('technical owner can save and submit solution analysis form', async () => {
   assert.equal(Object.hasOwn(submitted.form.formData, 'solutionScope'), false);
   assert.equal(submitted.images.length, 4);
   assert.equal(submitted.autoSubmit.attempted, true);
-  assert.equal(submitted.autoSubmit.submitted, false);
+  assert.equal(submitted.autoSubmit.submitted, true);
   assert.equal(submitted.autoSubmit.nodeKey, SOLUTION_DESIGN_NODE_KEY.ANALYSIS);
-  assert.equal(submitted.autoSubmit.nodeStatus, SOLUTION_DESIGN_NODE_STATUS.PENDING);
-  assert.equal(
-    submitted.autoSubmit.blockingReasons.includes(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PRODUCT_FUNCTION_DIAGRAM),
-    true
-  );
+  assert.equal(submitted.autoSubmit.nodeStatus, SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW);
+  assert.deepEqual(submitted.autoSubmit.blockingReasons, []);
   assert.equal(submitted.permissions.canSubmitNode, false);
   assert.equal(db.generatedFileStorage.written.length, 1);
   const analysisGeneratedKey = submitted.form.generatedFile.storageKey ?? db.generatedFileStorage.written[0].storageKey;
@@ -3993,7 +4029,42 @@ test('technical owner can save and submit solution analysis form', async () => {
   assert.equal(actionTypes.includes(OPERATION_ACTION_TYPE.SOLUTION_DESIGN_ANALYSIS_FORM_SUBMITTED), true);
   assert.equal(actionTypes.includes(OPERATION_ACTION_TYPE.SOLUTION_DESIGN_ANALYSIS_FORM_GENERATED), true);
   assert.equal(actionTypes.includes(OPERATION_ACTION_TYPE.SOLUTION_DESIGN_ANALYSIS_FORM_GENERATION_FAILED), false);
-  assert.equal(actionTypes.includes(OPERATION_ACTION_TYPE.SOLUTION_DESIGN_ANALYSIS_SUBMITTED), false);
+  assert.equal(actionTypes.includes(OPERATION_ACTION_TYPE.SOLUTION_DESIGN_ANALYSIS_SUBMITTED), true);
+});
+
+test('solution analysis form submission requires a current product function diagram without side effects', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const technicalOwner = authUser(db.connection.users.get(12));
+
+  await activateAnalysisNode(db, storage);
+  const saved = await saveSolutionDesignAnalysisForm(
+    { projectId: 100, payload: analysisFormPayload(), user: technicalOwner },
+    db
+  );
+  const logCountBeforeSubmit = db.connection.operationLogs.length;
+
+  await assert.rejects(
+    () => submitSolutionDesignAnalysisForm(
+      { projectId: 100, payload: analysisFormPayload(), user: technicalOwner },
+      db
+    ),
+    (error) => error.statusCode === 409 &&
+      error.code === SOLUTION_DESIGN_ERROR.NODE_BLOCKED &&
+      error.details.includes(SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PRODUCT_FUNCTION_DIAGRAM)
+  );
+
+  const currentForm = db.connection.currentAnalysisForm();
+  const analysisNode = db.connection.nodes.find(
+    (node) => node.node_key === SOLUTION_DESIGN_NODE_KEY.ANALYSIS
+  );
+  assert.equal(saved.form.status, SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.DRAFT);
+  assert.equal(currentForm.form_status, SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.DRAFT);
+  assert.equal(currentForm.generated_file_status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.NOT_STARTED);
+  assert.equal(analysisNode.status, SOLUTION_DESIGN_NODE_STATUS.PENDING);
+  assert.equal(db.generatedFileStorage.written.length, 0);
+  assert.equal(db.connection.operationLogs.length, logCountBeforeSubmit);
 });
 
 test('solution analysis images support legacy C05 anchors and invalidate generated files after changes', async () => {
@@ -4007,6 +4078,7 @@ test('solution analysis images support legacy C05 anchors and invalidate generat
   const technicalOwner = authUser(db.connection.users.get(12));
 
   await activateAnalysisNode(db, storage);
+  await uploadProductFunctionDiagram(db, storage);
   useLegacySolutionDesignStageDocumentCodes(db.connection);
   const legacyDocument = db.connection.stageDocuments.find((document) => document.document_code === '2.2');
   const seededImage = seedOnlineFormImage(db.connection, {
@@ -4038,6 +4110,16 @@ test('solution analysis images support legacy C05 anchors and invalidate generat
   assert.equal(submitted.form.generatedFile.status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.GENERATED);
   assert.ok(db.connection.currentAnalysisForm().generated_file_storage_key);
 
+  await returnSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.ANALYSIS,
+      payload: { returnReason: '验证旧版 C05 图片重新生成' },
+      user: authUser(db.connection.users.get(1))
+    },
+    db
+  );
+
   await withFakePoolConnection(db.connection, async () => {
     await deleteStageDocumentOnlineFormImage({
       projectId: 100,
@@ -4048,10 +4130,10 @@ test('solution analysis images support legacy C05 anchors and invalidate generat
   });
 
   let currentForm = db.connection.currentAnalysisForm();
-  assert.equal(currentForm.form_status, SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.SUBMITTED);
+  assert.equal(currentForm.form_status, SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.DRAFT);
   assert.equal(currentForm.generated_file_status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.NOT_STARTED);
   assert.equal(currentForm.generated_file_storage_key, null);
-  assert.equal(currentForm.generated_file_template_name, '项目方案分析表-模板.xlsx');
+  assert.equal(currentForm.generated_file_template_name, null);
 
   const regenerated = await submitSolutionDesignAnalysisForm(
     {
@@ -4070,13 +4152,23 @@ test('solution analysis images support legacy C05 anchors and invalidate generat
   assert.equal(currentForm.revision, 2);
   assert.equal(
     db.connection.nodes.find((node) => node.node_key === SOLUTION_DESIGN_NODE_KEY.ANALYSIS)?.current_revision,
-    1
+    2
   );
   const regeneratedDownload = await getSolutionDesignAnalysisGeneratedFileDownload(
     { projectId: 100, user: technicalOwner },
     db
   );
   assert.equal(regeneratedDownload.filePath, currentForm.generated_file_storage_key);
+
+  await returnSolutionDesignWorkflowNode(
+    {
+      projectId: 100,
+      nodeKey: SOLUTION_DESIGN_NODE_KEY.ANALYSIS,
+      payload: { returnReason: '继续验证旧版 C05 图片变更' },
+      user: authUser(db.connection.users.get(1))
+    },
+    db
+  );
 
   const uploaded = await withFakePoolConnection(db.connection, async () =>
     uploadStageDocumentOnlineFormImage({
@@ -4095,7 +4187,7 @@ test('solution analysis images support legacy C05 anchors and invalidate generat
   assert.equal(uploaded.fieldKey, 'projectTargetImages');
 
   currentForm = db.connection.currentAnalysisForm();
-  assert.equal(currentForm.form_status, SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.SUBMITTED);
+  assert.equal(currentForm.form_status, SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.DRAFT);
   assert.equal(currentForm.generated_file_status, SOLUTION_DESIGN_GENERATED_FILE_STATUS.NOT_STARTED);
   assert.equal(currentForm.generated_file_storage_key, null);
 
@@ -4117,6 +4209,7 @@ test('solution analysis generated file download enforces readiness without stric
   const technicalOwner = authUser(db.connection.users.get(12));
 
   await activateAnalysisNode(db, storage);
+  await uploadProductFunctionDiagram(db, storage);
   await submitSolutionDesignAnalysisForm(
     {
       projectId: 100,
@@ -4256,6 +4349,7 @@ test('solution analysis generated file failure blocks node submit and cleans par
   const technicalOwner = authUser(db.connection.users.get(12));
 
   await activateAnalysisNode(db, uploadStorage);
+  await uploadProductFunctionDiagram(db, uploadStorage);
   const submitted = await submitSolutionDesignAnalysisForm(
     {
       projectId: 100,
@@ -4429,14 +4523,6 @@ test('solution analysis node cannot be submitted before both required outputs ar
   const storageMissingDiagram = fakeUploadStorage();
   const technicalOwner = authUser(dbMissingDiagram.connection.users.get(12));
   await activateAnalysisNode(dbMissingDiagram, storageMissingDiagram);
-  await submitSolutionDesignAnalysisForm(
-    {
-      projectId: 100,
-      payload: analysisFormPayload(),
-      user: technicalOwner
-    },
-    dbMissingDiagram
-  );
   const logCountBeforeMissingDiagramSubmit = dbMissingDiagram.connection.operationLogs.length;
 
   await assert.rejects(
@@ -8077,6 +8163,49 @@ test('tender branch requires both business and technical files before submitting
       OPERATION_ACTION_TYPE.STAGE_ADVANCED
     ]
   );
+});
+
+test('tender uploads catch up when the node revision is ahead of slot upload history', async () => {
+  const db = fakeDb();
+  seedAssignedRoles(db.connection);
+  const storage = fakeUploadStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+  const technicalOwner = authUser(db.connection.users.get(12));
+
+  await activateQuotationOrTenderNode(db, storage, SOLUTION_DESIGN_QUOTATION_TENDER_BRANCH_TYPE.TENDER);
+  const tenderNode = db.connection.nodes.find(
+    (node) => node.node_key === SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER
+  );
+  tenderNode.current_revision = 4;
+  db.connection.quotationTenderFlow.revision = 4;
+
+  const businessFile = await uploadSolutionDesignWorkflowFile(
+    {
+      projectId: 100,
+      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.TENDER_BUSINESS_FILE,
+      file: testUploadFile('投标商务标-r4.docx'),
+      user: businessOwner
+    },
+    db,
+    storage
+  );
+  const technicalFile = await uploadSolutionDesignWorkflowFile(
+    {
+      projectId: 100,
+      slotKey: SOLUTION_DESIGN_UPLOAD_SLOT_KEY.TENDER_TECHNICAL_FILE,
+      file: testUploadFile('投标技术标-r4.docx'),
+      user: technicalOwner
+    },
+    db,
+    storage
+  );
+
+  assert.equal(businessFile.file.revision, 4);
+  assert.equal(technicalFile.file.revision, 4);
+  const readyWorkflow = await getSolutionDesignWorkflow({ projectId: 100, user: businessOwner }, db);
+  const readyTenderNode = findWorkflowNode(readyWorkflow, SOLUTION_DESIGN_NODE_KEY.QUOTATION_OR_TENDER);
+  assert.equal(readyTenderNode.permissions.canSubmit, true);
+  assert.equal(readyTenderNode.permissions.canSubmitTender, true);
 });
 
 test('solution design end-to-end smoke covers quotation and tender happy paths', async () => {

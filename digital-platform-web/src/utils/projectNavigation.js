@@ -44,6 +44,17 @@ export function shouldAutoSwitchAfterNodeRefresh(previousStatus, refreshedStatus
   return AUTO_SWITCH_TARGET_STATUSES.has(refreshed);
 }
 
+/** Emits a shared-state refresh only after the owning async action succeeds. */
+export async function runBusinessStateChangeAction(action, notifyChanged) {
+  const succeeded = await action();
+  if (succeeded !== true) {
+    return false;
+  }
+
+  notifyChanged();
+  return true;
+}
+
 /** Selects a routable node using only the backend navigation projection. */
 export function findNavigationStageTarget(stage) {
   const nodes = Array.isArray(stage?.children) ? stage.children : [];

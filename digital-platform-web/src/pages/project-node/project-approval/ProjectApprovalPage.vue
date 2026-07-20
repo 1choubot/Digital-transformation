@@ -106,6 +106,7 @@ import {
   isInitiationApprovalFormFiller,
   isInitiationReviewNodeReviewer
 } from '../../../utils/onlineFormVisibility.js';
+import { runBusinessStateChangeAction } from '../../../utils/projectNavigation.js';
 
 const emit = defineEmits(['business-state-changed']);
 
@@ -211,9 +212,11 @@ function downloadMarketResearchFile() {
   invoke('downloadGeneratedFile', marketResearchOutput.value);
 }
 
-function approveNode(payload) {
-  invoke('approveInitiationNode', payload);
-  notifyFormChanged(payload?.document?.id ? [payload.document.id] : []);
+async function approveNode(payload) {
+  await runBusinessStateChangeAction(
+    () => invoke('approveInitiationNode', payload),
+    () => notifyFormChanged(payload?.document?.id ? [payload.document.id] : [])
+  );
 }
 
 function approveReviewNode(reviewNode, comment) {
@@ -258,12 +261,14 @@ async function returnNode(payload, pendingKind = 'return') {
   }
   pendingReturnKinds[payload.node.nodeKey] = pendingKind;
   try {
-    await invoke('returnInitiationNode', payload);
-    emit('business-state-changed', {
-      changedDocumentIds: payload?.document?.id ? [payload.document.id] : [],
-      affectedNodeCodes: ['market_research', 'initiation_approval'],
-      refreshCurrentDetail: true
-    });
+    await runBusinessStateChangeAction(
+      () => invoke('returnInitiationNode', payload),
+      () => emit('business-state-changed', {
+        changedDocumentIds: payload?.document?.id ? [payload.document.id] : [],
+        affectedNodeCodes: ['market_research', 'initiation_approval'],
+        refreshCurrentDetail: true
+      })
+    );
   } finally {
     delete pendingReturnKinds[payload.node.nodeKey];
   }

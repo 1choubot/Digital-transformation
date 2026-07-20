@@ -2858,11 +2858,6 @@ p {
   width: 100%;
 }
 
-.requirement-template-table .el-input__wrapper,
-.requirement-template-table .el-textarea__inner {
-  box-shadow: 0 0 0 1px #d7e0e8 inset;
-}
-
 .requirement-template-table__required {
   color: var(--el-color-danger);
 }
@@ -2900,6 +2895,11 @@ p {
   background: #f4f7fa;
   color: #5d6c7a;
 }
+/* Shared control surface for project-node online forms. */
+:is(.online-form-editor, .analysis-section, .review-form-table, .solution-quotation-form) :is(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner) { border-radius: var(--el-border-radius-base); background: #ffffff; box-shadow: 0 0 0 1px #d7e0e8 inset; }
+:is(.online-form-editor, .analysis-section, .review-form-table, .solution-quotation-form) :is(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner):is(:hover, :focus, .is-focus, .is-focused) { box-shadow: 0 0 0 1px var(--el-color-primary) inset; }
+:is(.online-form-editor, .analysis-section, .review-form-table, .solution-quotation-form) :is(.el-input.is-disabled .el-input__wrapper, .el-textarea.is-disabled .el-textarea__inner, .el-select__wrapper.is-disabled, .el-date-editor.is-disabled) { color: var(--el-text-color-regular); background: var(--el-fill-color-lighter); }
+:is(.online-form-editor, .analysis-section, .review-form-table, .solution-quotation-form) .online-form-field--readonly :is(.el-input__wrapper, .el-select__wrapper, .el-textarea__inner) { color: var(--el-text-color-regular); background: var(--el-fill-color-lighter); }
 
 .form-field-error {
   color: #f56c6c;

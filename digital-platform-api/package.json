@@ -12,6 +12,7 @@
     "migrate-stage-document-precise-rework": "node scripts/migrate-stage-document-precise-rework.js",
     "migrate-project-initiation-review-nodes": "node scripts/migrate-project-initiation-review-nodes.js",
     "migrate-project-workspace-initiation-forms": "node scripts/migrate-project-workspace-initiation-forms.js",
+    "repair:tender-file-revisions": "node scripts/repair-tender-file-revisions.js",
     "reset-stage-documents-v20260624": "node scripts/reset-stage-documents-v20260624.js --confirm",
     "reset-stage-documents-v20260625": "node scripts/reset-stage-documents-v20260624.js --confirm",
     "cleanup-business-data": "node scripts/cleanup-business-data.js --confirm",

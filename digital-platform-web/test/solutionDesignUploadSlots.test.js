@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildNodeUploadSlots } from '../src/composables/project-stage/solution-design/solutionDesignUploadSlots.js';
+import {
+  buildNodeUploadSlots,
+  hasCurrentProductFunctionDiagram
+} from '../src/composables/project-stage/solution-design/solutionDesignUploadSlots.js';
 
 const costSlots = [
   buildSlot('rd_cost_estimation_file', 'rd_cost_estimation', 11),
@@ -56,4 +59,15 @@ test('the immediate predecessor is read-only while the current slot keeps its pe
     canCancelExemption: false
   });
   assert.deepEqual(currentSlot.permissions, costSlots[2].permissions);
+});
+
+test('product function diagram gate only accepts a slot with a current file', () => {
+  assert.equal(hasCurrentProductFunctionDiagram([]), false);
+  assert.equal(hasCurrentProductFunctionDiagram([
+    buildSlot('product_function_diagram', 'solution_analysis', 1)
+  ]), false);
+  assert.equal(hasCurrentProductFunctionDiagram([{
+    ...buildSlot('product_function_diagram', 'solution_analysis', 1),
+    currentFile: { id: 101, originalFileName: '产品功能框图.png' }
+  }]), true);
 });

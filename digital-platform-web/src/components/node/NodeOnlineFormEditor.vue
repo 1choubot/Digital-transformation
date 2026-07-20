@@ -14,6 +14,8 @@
 
     <el-alert v-if="errorMessage" :description="errorMessage" type="error" show-icon :closable="false" />
     <el-form class="online-form-editor__form" :model="formData" @submit.prevent="handleSubmit">
+
+      <h4 v-if="isInitiationNotice">编写立项通知</h4>
       <section v-if="isInitiationNotice" class="online-form-section initiation-notice-section">
         <div class="initiation-notice-table-wrap">
           <table class="initiation-notice-table">
@@ -61,6 +63,8 @@
       </section>
 
       <template v-else>
+      <h4 v-if="isInitiationApproval">填写立项审批表</h4>
+      <h4 v-if="isInitiationRequirement">填写项目需求表</h4>
       <section v-if="isInitiationRequirement" class="online-form-section requirement-template-section">
         <div class="requirement-template-table-wrap">
           <table class="requirement-template-table">
@@ -460,6 +464,7 @@ const expandedScoringSections = ref({});
 const schemaFields = computed(() => props.form?.schema?.fields || []);
 const sectionFields = computed(() => (props.form?.schema?.sections || []).flatMap((section) => section.fields || []));
 const isInitiationNotice = computed(() => props.form?.documentCode === '1.3');
+const isInitiationApproval = computed(() => props.form?.documentCode === '1.2');
 const isInitiationRequirement = computed(() => props.form?.documentCode === '1.1');
 const projectCodeField = computed(() => schemaFields.value.find((field) => field.key === 'projectCode') || ({
   key: 'projectCode',

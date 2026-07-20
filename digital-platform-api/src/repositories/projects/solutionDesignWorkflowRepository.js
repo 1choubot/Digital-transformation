@@ -531,6 +531,22 @@ async function selectCurrentUploadFiles(executor, projectId, slotKeys) {
   return rows;
 }
 
+async function assertProductFunctionDiagramUploaded(executor, projectId) {
+  const files = await selectCurrentUploadFiles(executor, projectId, [
+    SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PRODUCT_FUNCTION_DIAGRAM
+  ]);
+  if (files.length > 0) {
+    return;
+  }
+
+  throw new SolutionDesignWorkflowError(
+    SOLUTION_DESIGN_ERROR.NODE_BLOCKED,
+    'Product function diagram is required before submitting the solution analysis form',
+    409,
+    [SOLUTION_DESIGN_UPLOAD_SLOT_KEY.PRODUCT_FUNCTION_DIAGRAM]
+  );
+}
+
 async function selectCurrentUploadFileForDownload(executor, projectId, slotKey) {
   const [rows] = await executor.execute(
     `SELECT
@@ -3633,13 +3649,17 @@ async function generateAndPersistQuotationFormFile(executor, {
   return selectCurrentQuotationForm(executor, projectRow.id);
 }
 
-async function replaceCurrentSlotFile(executor, { projectId, slotRow, slot, uploadFile, storageKey, userId }) {
+async function replaceCurrentSlotFile(
+  executor,
+  { projectId, slotRow, slot, nodeRevision, uploadFile, storageKey, userId }
+) {
   const currentFiles = await selectCurrentUploadFiles(executor, projectId, [slot.slotKey]);
-  const currentRevision = Math.max(
+  const currentFileRevision = Math.max(0, ...currentFiles.map((file) => Number(file.revision ?? 0)));
+  const nextRevision = Math.max(
+    Number(nodeRevision ?? 1),
     Number(slotRow.revision ?? 0),
-    ...currentFiles.map((file) => Number(file.revision ?? 0))
+    currentFileRevision + 1
   );
-  const nextRevision = currentFiles.length > 0 ? currentRevision + 1 : 1;
 
   await executor.execute(
     `UPDATE project_solution_design_upload_files
@@ -5919,6 +5939,11 @@ async function saveOrSubmitSolutionDesignAnalysisForm(
       SOLUTION_DESIGN_ANALYSIS_FORM_DOCUMENT_CODES,
       { forUpdate: true }
     );
+    if (formStatus === SOLUTION_DESIGN_ANALYSIS_FORM_STATUS.SUBMITTED) {
+      // Validate the companion C06 output before persisting or generating C05 so a
+      // blocked submission cannot leave the form locked in a submitted state.
+      await assertProductFunctionDiagramUploaded(connection, projectId);
+    }
     let savedFormRow = await saveAnalysisFormVersion(connection, {
       projectId,
       nodeRevision: analysisNode.current_revision,
@@ -6387,6 +6412,7 @@ export async function uploadSolutionDesignWorkflowFile(
       projectId,
       slotRow,
       slot,
+      nodeRevision: nodeRow.current_revision,
       uploadFile,
       storageKey,
       userId: user.id

@@ -4,8 +4,15 @@ import {
   findBackendActiveNavigationTarget,
   findNavigationStageTarget,
   findProjectNavigationTarget,
+  runBusinessStateChangeAction,
   shouldAutoSwitchAfterNodeRefresh
 } from '../src/utils/projectNavigation.js';
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((resolvePromise) => { resolve = resolvePromise; });
+  return { promise, resolve };
+}
 
 test('switches only when the navigation status enters completed or returned', () => {
   assert.equal(shouldAutoSwitchAfterNodeRefresh('PROCESSING', 'COMPLETED'), true);
@@ -14,6 +21,75 @@ test('switches only when the navigation status enters completed or returned', ()
   assert.equal(shouldAutoSwitchAfterNodeRefresh('COMPLETED', 'COMPLETED'), false);
   assert.equal(shouldAutoSwitchAfterNodeRefresh('RETURNED', 'RETURNED'), false);
   assert.equal(shouldAutoSwitchAfterNodeRefresh('in_progress', 'completed'), false);
+});
+
+test('final initiation approval waits for success before navigating to initiation notice', async () => {
+  const action = deferred();
+  let target = null;
+  const transition = runBusinessStateChangeAction(
+    () => action.promise,
+    () => {
+      assert.equal(shouldAutoSwitchAfterNodeRefresh('PROCESSING', 'COMPLETED'), true);
+      target = findBackendActiveNavigationTarget({
+        currentStageKey: 'initiation',
+        children: [{
+          stageKey: 'initiation',
+          children: [
+            { nodeCode: 'initiation_approval', status: 'COMPLETED', route: '/approval' },
+            { nodeCode: 'initiation_notice', status: 'PROCESSING', route: '/notice' }
+          ]
+        }]
+      });
+    }
+  );
+
+  await Promise.resolve();
+  assert.equal(target, null);
+  action.resolve(true);
+  assert.equal(await transition, true);
+  assert.deepEqual(target, {
+    stageKey: 'initiation', nodeKey: 'initiation_notice', route: '/notice'
+  });
+});
+
+test('initiation return waits for success before navigating to market research', async () => {
+  const action = deferred();
+  let target = null;
+  const transition = runBusinessStateChangeAction(
+    () => action.promise,
+    () => {
+      assert.equal(shouldAutoSwitchAfterNodeRefresh('PROCESSING', 'RETURNED'), true);
+      target = findBackendActiveNavigationTarget({
+        currentStageKey: 'initiation',
+        children: [{
+          stageKey: 'initiation',
+          children: [
+            { nodeCode: 'market_research', status: 'RETURNED', route: '/market-research' },
+            { nodeCode: 'initiation_approval', status: 'RETURNED', route: '/approval' }
+          ]
+        }]
+      });
+    }
+  );
+
+  await Promise.resolve();
+  assert.equal(target, null);
+  action.resolve(true);
+  assert.equal(await transition, true);
+  assert.deepEqual(target, {
+    stageKey: 'initiation', nodeKey: 'market_research', route: '/market-research'
+  });
+});
+
+test('failed business state actions do not notify navigation refresh', async () => {
+  let notified = false;
+  const succeeded = await runBusinessStateChangeAction(
+    async () => false,
+    () => { notified = true; }
+  );
+
+  assert.equal(succeeded, false);
+  assert.equal(notified, false);
 });
 
 test('selects processing before approval and returned nodes', () => {

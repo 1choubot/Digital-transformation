@@ -1228,7 +1228,14 @@ function ensureSolutionDesignWorkspaceSelection(options = {}) {
   selectWorkspaceTargetFromRoute(options);
 }
 
-async function runDocumentAction(document, action, runner, successText, onSuccess = null) {
+async function runDocumentAction(
+  document,
+  action,
+  runner,
+  successText,
+  onSuccess = null,
+  { refreshWorkspace = true } = {}
+) {
   clearActionState();
   pendingAction.value = actionKey(document.id, action);
 
@@ -1238,9 +1245,13 @@ async function runDocumentAction(document, action, runner, successText, onSucces
       onSuccess();
     }
     actionMessage.value = successText;
-    await refreshProjectWorkspaceState();
+    if (refreshWorkspace) {
+      await refreshProjectWorkspaceState();
+    }
+    return true;
   } catch (error) {
     actionErrorMessage.value = toReadableApiError(error);
+    return false;
   } finally {
     pendingAction.value = '';
   }
@@ -1367,7 +1378,7 @@ async function approveInitiationNode({ document, node, comment, projectExecution
     node.nodeKey === 'general_review'
       ? '总经理审批已通过。'
       : `${node.nodeName || '评价'}已提交。`;
-  await runDocumentAction(
+  return runDocumentAction(
     document,
     `initiation-${node.nodeKey}-approve`,
     () =>
@@ -1379,7 +1390,9 @@ async function approveInitiationNode({ document, node, comment, projectExecution
         props.authToken,
         { projectExecutionMode }
       ),
-    successText
+    successText,
+    null,
+    { refreshWorkspace: false }
   );
 }
 
@@ -1399,7 +1412,7 @@ async function returnInitiationNode({ document, node, returnReason, returnAction
     return;
   }
 
-  await runDocumentAction(
+  return runDocumentAction(
     document,
     `initiation-${node.nodeKey}-return`,
     () =>
@@ -1416,7 +1429,9 @@ async function returnInitiationNode({ document, node, returnReason, returnAction
       ),
     isProjectEnd
       ? '项目已结束，后续立项通知、阶段推进和资料操作已停止。'
-      : `${node.nodeName || '审批'}已不通过，流程退回项目市场调研，1.1 项目需求表进入返工，1.2 需要重新填写。`
+      : `${node.nodeName || '审批'}已不通过，流程退回项目市场调研，1.1 项目需求表进入返工，1.2 需要重新填写。`,
+    null,
+    { refreshWorkspace: false }
   );
 }
 

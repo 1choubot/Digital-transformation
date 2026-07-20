@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { analyzeStyleGovernance } from '../scripts/check-style-governance.mjs';
 
 function policy(overrides = {}) {
@@ -63,4 +64,17 @@ test('enforces styles.css physical-line and important budgets', () => {
   const errors = analyze('<template><div /></template>', { maxStylesCssLines: 2, maxStylesCssImportant: 0 }, '.a {\n color: red !important;\n}');
   assert.ok(errors.some((error) => error.includes('物理行数')));
   assert.ok(errors.some((error) => error.includes('!important 数量')));
+});
+
+test('online forms keep the shared clear control surface without review-table overrides', () => {
+  const stylesCss = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  const reviewForm = readFileSync(
+    new URL('../src/components/project-workspace/solution-design/SolutionReviewFormTable.vue', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(stylesCss, /Shared control surface for project-node online forms/);
+  assert.match(stylesCss, /box-shadow: 0 0 0 1px #d7e0e8 inset/);
+  assert.doesNotMatch(reviewForm, /:deep\(\.el-input__wrapper\)[\s\S]*?background:\s*transparent/);
+  assert.doesNotMatch(reviewForm, /:deep\(\.el-input__wrapper\)[\s\S]*?border-radius:\s*0/);
 });

@@ -114,8 +114,6 @@
                       <div class="review-form-table__repeatable-row">
                         <el-input
                           :model-value="item"
-                          type="textarea"
-                          :rows="1"
                           :disabled="disabled"
                           :aria-label="`${source.title}${index + 1}`"
                           @update:model-value="value => $emit('update-repeatable', { key: source.key, index, value })"
@@ -140,8 +138,6 @@
                       <template v-if="planItemFor(source.sourceType, index + 1)">
                         <el-input
                           :model-value="planItemFor(source.sourceType, index + 1).planText"
-                          type="textarea"
-                          :rows="1"
                           :disabled="disabled"
                           :aria-label="`${planItemFor(source.sourceType, index + 1).sourceLabel}${index + 1}实施计划`"
                           placeholder="填写对应实施计划"
@@ -345,25 +341,5 @@ function isPlanInvalidKey(sourceType, sourceIndex) {
 .review-form-table :deep(.el-date-editor.el-input),
 .review-form-table :deep(.el-date-editor.el-input__wrapper) {
   width: 100%;
-}
-
-.review-form-table :deep(.el-input__wrapper),
-.review-form-table :deep(.el-textarea__inner) {
-  border-radius: 0;
-  box-shadow: none;
-  background: transparent;
-}
-
-.review-form-table :deep(.el-input__wrapper:hover),
-.review-form-table :deep(.el-input__wrapper.is-focus),
-.review-form-table :deep(.el-textarea__inner:hover),
-.review-form-table :deep(.el-textarea__inner:focus) {
-  box-shadow: inset 0 0 0 1px var(--el-color-primary);
-}
-
-.review-form-table :deep(.el-input.is-disabled .el-input__wrapper),
-.review-form-table :deep(.el-textarea.is-disabled .el-textarea__inner) {
-  color: var(--el-text-color-regular);
-  background: var(--el-fill-color-lighter);
 }
 </style>

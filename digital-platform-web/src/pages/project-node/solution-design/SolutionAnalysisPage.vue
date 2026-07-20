@@ -1,12 +1,17 @@
 <template>
   <SolutionDesignNodeLayout :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
     :error-message="context.solutionDesignErrorMessage" :message="localMessage" :local-error="localError">
+
     <GeneratedFormFileCard button-text="查看项目方案分析表" :generated-file="analysisFormDto?.form?.generatedFile"
       :pending="isPending('analysis:download')" @download="downloadAnalysisGeneratedFile" />
-    <SolutionUploadSlots :slots="slots" :is-pending="isPending"
-      @upload="handleUpload" @download="downloadUpload" @mark-exemption="markUploadExemption"
-      @cancel-exemption="cancelUploadExemption" />
 
+    <h4>编写产品功能框图</h4>
+    <div ref="uploadSlotsRoot">
+      <SolutionUploadSlots :slots="slots" :is-pending="isPending" @upload="handleUpload" @download="downloadUpload"
+        @mark-exemption="markUploadExemption" @cancel-exemption="cancelUploadExemption" />
+    </div>
+
+    <h4 v-if="canViewFormContent">项目方案分析表</h4>
     <section v-if="canViewFormContent" ref="analysisFormRoot" class="analysis-section">
 
       <el-descriptions :column="3" border>
@@ -37,39 +42,111 @@
                 <td colspan="2">
                   <div class="requirement-template-metric">
                     <span>工作温度：（</span>
-                    <span data-field-key="workingTemperatureMin" :class="{ 'online-form-field--invalid': isFieldInvalid('workingTemperatureMin') }"><el-input :model-value="analysisFormData.workingTemperatureMin" :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="工作温度最小值" @update:model-value="updateAnalysisEnvironmentField('workingTemperatureMin', $event)" /></span>
+                    <span data-field-key="workingTemperatureMin"
+                      :class="{ 'online-form-field--invalid': isFieldInvalid('workingTemperatureMin') }"><el-input
+                        :model-value="analysisFormData.workingTemperatureMin"
+                        :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="工作温度最小值"
+                        @update:model-value="updateAnalysisEnvironmentField('workingTemperatureMin', $event)" /></span>
                     <span>）℃～（</span>
-                    <span data-field-key="workingTemperatureMax" :class="{ 'online-form-field--invalid': isFieldInvalid('workingTemperatureMax') }"><el-input :model-value="analysisFormData.workingTemperatureMax" :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="工作温度最大值" @update:model-value="updateAnalysisEnvironmentField('workingTemperatureMax', $event)" /></span>
+                    <span data-field-key="workingTemperatureMax"
+                      :class="{ 'online-form-field--invalid': isFieldInvalid('workingTemperatureMax') }"><el-input
+                        :model-value="analysisFormData.workingTemperatureMax"
+                        :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="工作温度最大值"
+                        @update:model-value="updateAnalysisEnvironmentField('workingTemperatureMax', $event)" /></span>
                     <span>）℃</span>
                   </div>
                 </td>
                 <td colspan="2">
                   <div class="requirement-template-metric">
                     <span>储存温度：（</span>
-                    <span data-field-key="storageTemperatureMin" :class="{ 'online-form-field--invalid': isFieldInvalid('storageTemperatureMin') }"><el-input :model-value="analysisFormData.storageTemperatureMin" :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="储存温度最小值" @update:model-value="updateAnalysisEnvironmentField('storageTemperatureMin', $event)" /></span>
+                    <span data-field-key="storageTemperatureMin"
+                      :class="{ 'online-form-field--invalid': isFieldInvalid('storageTemperatureMin') }"><el-input
+                        :model-value="analysisFormData.storageTemperatureMin"
+                        :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="储存温度最小值"
+                        @update:model-value="updateAnalysisEnvironmentField('storageTemperatureMin', $event)" /></span>
                     <span>）℃～（</span>
-                    <span data-field-key="storageTemperatureMax" :class="{ 'online-form-field--invalid': isFieldInvalid('storageTemperatureMax') }"><el-input :model-value="analysisFormData.storageTemperatureMax" :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="储存温度最大值" @update:model-value="updateAnalysisEnvironmentField('storageTemperatureMax', $event)" /></span>
+                    <span data-field-key="storageTemperatureMax"
+                      :class="{ 'online-form-field--invalid': isFieldInvalid('storageTemperatureMax') }"><el-input
+                        :model-value="analysisFormData.storageTemperatureMax"
+                        :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="储存温度最大值"
+                        @update:model-value="updateAnalysisEnvironmentField('storageTemperatureMax', $event)" /></span>
                     <span>）℃</span>
                   </div>
                 </td>
               </tr>
               <tr>
-                <td colspan="2"><div class="requirement-template-metric"><span>工作湿度：（</span><span data-field-key="workingHumidityMin" :class="{ 'online-form-field--invalid': isFieldInvalid('workingHumidityMin') }"><el-input :model-value="analysisFormData.workingHumidityMin" :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="工作湿度最小值" @update:model-value="updateAnalysisEnvironmentField('workingHumidityMin', $event)" /></span><span>）%～（</span><span data-field-key="workingHumidityMax" :class="{ 'online-form-field--invalid': isFieldInvalid('workingHumidityMax') }"><el-input :model-value="analysisFormData.workingHumidityMax" :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="工作湿度最大值" @update:model-value="updateAnalysisEnvironmentField('workingHumidityMax', $event)" /></span><span>）%</span></div></td>
-                <td colspan="2"><div class="requirement-template-metric"><span>储存湿度：（</span><span data-field-key="storageHumidityMin" :class="{ 'online-form-field--invalid': isFieldInvalid('storageHumidityMin') }"><el-input :model-value="analysisFormData.storageHumidityMin" :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="储存湿度最小值" @update:model-value="updateAnalysisEnvironmentField('storageHumidityMin', $event)" /></span><span>）%～（</span><span data-field-key="storageHumidityMax" :class="{ 'online-form-field--invalid': isFieldInvalid('storageHumidityMax') }"><el-input :model-value="analysisFormData.storageHumidityMax" :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="储存湿度最大值" @update:model-value="updateAnalysisEnvironmentField('storageHumidityMax', $event)" /></span><span>）%</span></div></td>
+                <td colspan="2">
+                  <div class="requirement-template-metric"><span>工作湿度：（</span><span data-field-key="workingHumidityMin"
+                      :class="{ 'online-form-field--invalid': isFieldInvalid('workingHumidityMin') }"><el-input
+                        :model-value="analysisFormData.workingHumidityMin"
+                        :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="工作湿度最小值"
+                        @update:model-value="updateAnalysisEnvironmentField('workingHumidityMin', $event)" /></span><span>）%～（</span><span
+                      data-field-key="workingHumidityMax"
+                      :class="{ 'online-form-field--invalid': isFieldInvalid('workingHumidityMax') }"><el-input
+                        :model-value="analysisFormData.workingHumidityMax"
+                        :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="工作湿度最大值"
+                        @update:model-value="updateAnalysisEnvironmentField('workingHumidityMax', $event)" /></span><span>）%</span>
+                  </div>
+                </td>
+                <td colspan="2">
+                  <div class="requirement-template-metric"><span>储存湿度：（</span><span data-field-key="storageHumidityMin"
+                      :class="{ 'online-form-field--invalid': isFieldInvalid('storageHumidityMin') }"><el-input
+                        :model-value="analysisFormData.storageHumidityMin"
+                        :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="储存湿度最小值"
+                        @update:model-value="updateAnalysisEnvironmentField('storageHumidityMin', $event)" /></span><span>）%～（</span><span
+                      data-field-key="storageHumidityMax"
+                      :class="{ 'online-form-field--invalid': isFieldInvalid('storageHumidityMax') }"><el-input
+                        :model-value="analysisFormData.storageHumidityMax"
+                        :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="储存湿度最大值"
+                        @update:model-value="updateAnalysisEnvironmentField('storageHumidityMax', $event)" /></span><span>）%</span>
+                  </div>
+                </td>
               </tr>
               <tr>
-                <td colspan="2"><div class="requirement-template-metric"><span>噪音：≤（</span><span data-field-key="noiseLimitValue" :class="{ 'online-form-field--invalid': isFieldInvalid('noiseLimitValue') }"><el-input :model-value="analysisFormData.noiseLimitValue" :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="噪音上限" @update:model-value="updateAnalysisEnvironmentField('noiseLimitValue', $event)" /></span><span>）dB</span></div></td>
-                <td colspan="2"><div class="requirement-template-metric"><span>IP 防护等级：IP（</span><span data-field-key="ipProtectionLevel" :class="{ 'online-form-field--invalid': isFieldInvalid('ipProtectionLevel') }"><el-input :model-value="analysisFormData.ipProtectionLevel" :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="IP 防护等级" @update:model-value="updateAnalysisEnvironmentField('ipProtectionLevel', $event)" /></span><span>）</span></div></td>
+                <td colspan="2">
+                  <div class="requirement-template-metric"><span>噪音：≤（</span><span data-field-key="noiseLimitValue"
+                      :class="{ 'online-form-field--invalid': isFieldInvalid('noiseLimitValue') }"><el-input
+                        :model-value="analysisFormData.noiseLimitValue"
+                        :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="噪音上限"
+                        @update:model-value="updateAnalysisEnvironmentField('noiseLimitValue', $event)" /></span><span>）dB</span>
+                  </div>
+                </td>
+                <td colspan="2">
+                  <div class="requirement-template-metric"><span>IP 防护等级：IP（</span><span
+                      data-field-key="ipProtectionLevel"
+                      :class="{ 'online-form-field--invalid': isFieldInvalid('ipProtectionLevel') }"><el-input
+                        :model-value="analysisFormData.ipProtectionLevel"
+                        :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="IP 防护等级"
+                        @update:model-value="updateAnalysisEnvironmentField('ipProtectionLevel', $event)" /></span><span>）</span>
+                  </div>
+                </td>
               </tr>
               <tr>
-                <td colspan="2"><div class="requirement-template-metric"><span>防腐等级：（</span><span data-field-key="antiCorrosionGrade" :class="{ 'online-form-field--invalid': isFieldInvalid('antiCorrosionGrade') }"><el-input :model-value="analysisFormData.antiCorrosionGrade" :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="防腐等级" @update:model-value="updateAnalysisEnvironmentField('antiCorrosionGrade', $event)" /></span><span>）</span></div></td>
-                <td colspan="2"><div class="requirement-template-metric"><span>海拔高度：≤（</span><span data-field-key="altitudeLimitValue" :class="{ 'online-form-field--invalid': isFieldInvalid('altitudeLimitValue') }"><el-input :model-value="analysisFormData.altitudeLimitValue" :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="海拔高度上限" @update:model-value="updateAnalysisEnvironmentField('altitudeLimitValue', $event)" /></span><span>）m</span></div></td>
+                <td colspan="2">
+                  <div class="requirement-template-metric"><span>防腐等级：（</span><span data-field-key="antiCorrosionGrade"
+                      :class="{ 'online-form-field--invalid': isFieldInvalid('antiCorrosionGrade') }"><el-input
+                        :model-value="analysisFormData.antiCorrosionGrade"
+                        :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="防腐等级"
+                        @update:model-value="updateAnalysisEnvironmentField('antiCorrosionGrade', $event)" /></span><span>）</span>
+                  </div>
+                </td>
+                <td colspan="2">
+                  <div class="requirement-template-metric"><span>海拔高度：≤（</span><span data-field-key="altitudeLimitValue"
+                      :class="{ 'online-form-field--invalid': isFieldInvalid('altitudeLimitValue') }"><el-input
+                        :model-value="analysisFormData.altitudeLimitValue"
+                        :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="海拔高度上限"
+                        @update:model-value="updateAnalysisEnvironmentField('altitudeLimitValue', $event)" /></span><span>）m</span>
+                  </div>
+                </td>
               </tr>
               <tr>
-                <td colspan="4" data-field-key="explosionProofRequirement" :class="{ 'online-form-field--invalid': isFieldInvalid('explosionProofRequirement') }">
+                <td colspan="4" data-field-key="explosionProofRequirement"
+                  :class="{ 'online-form-field--invalid': isFieldInvalid('explosionProofRequirement') }">
                   <div class="requirement-template-metric requirement-template-metric--wide">
                     <span>防爆要求：（</span>
-                    <el-input :model-value="analysisFormData.explosionProofRequirement" :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="防爆要求" @update:model-value="updateAnalysisEnvironmentField('explosionProofRequirement', $event)" />
+                    <el-input :model-value="analysisFormData.explosionProofRequirement"
+                      :disabled="!analysisFormDto?.permissions?.canEditForm" aria-label="防爆要求"
+                      @update:model-value="updateAnalysisEnvironmentField('explosionProofRequirement', $event)" />
                     <span>）</span>
                   </div>
                 </td>
@@ -123,8 +200,8 @@
       </section>
 
       <div class="action-row node-online-form-actions">
-        <el-button size="large" :disabled="!analysisFormDto?.permissions?.canEditForm" :loading="isPending('analysis:save')"
-          @click="saveAnalysisForm">
+        <el-button size="large" :disabled="!analysisFormDto?.permissions?.canEditForm"
+          :loading="isPending('analysis:save')" @click="saveAnalysisForm">
           保存草稿
         </el-button>
         <el-button size="large" type="primary" :disabled="!analysisFormDto?.permissions?.canSubmitForm"
@@ -133,6 +210,8 @@
         </el-button>
       </div>
     </section>
+
+
 
     <SolutionNodeActions v-if="currentNode" :node="currentNode" :is-pending="isPending" hide-submit hide-when-empty
       :submit-disabled="generatedBlocksSubmit" :comment="returnReasons[nodeKey] || ''"
@@ -154,6 +233,7 @@ import {
   solutionDesignNodePageProps,
   useSolutionDesignNodePage
 } from '../../../composables/project-stage/solution-design/useSolutionDesignNodePage.js';
+import { hasCurrentProductFunctionDiagram } from '../../../composables/project-stage/solution-design/solutionDesignUploadSlots.js';
 import { useSolutionAnalysisForm } from '../../../composables/project-stage/solution-design/useSolutionAnalysisForm.js';
 import { getMissingRequiredFields } from '../../../utils/formValidation.js';
 
@@ -204,7 +284,9 @@ const {
 
 const images = computed(() => analysisFormDto.value?.images || analysisFormDto.value?.form?.images || []);
 const analysisFormRoot = ref(null);
+const uploadSlotsRoot = ref(null);
 const validationAttempted = ref(false);
+const hasProductFunctionDiagram = computed(() => hasCurrentProductFunctionDiagram(slots.value));
 const standardAnalysisSections = computed(() => analysisSections.filter(
   (section) => section.key !== 'environmentRequirements'
 ));
@@ -253,6 +335,12 @@ function updateAnalysisEnvironmentField(key, value) {
 async function handleSubmitAnalysisForm() {
   validationAttempted.value = true;
   if (missingRequiredFields.value.length === 0) {
+    if (!hasProductFunctionDiagram.value) {
+      ElMessage.warning('请先上传产品功能框图后再提交项目方案分析表。');
+      await nextTick();
+      uploadSlotsRoot.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
     try {
       await ElMessageBox.confirm(
         '提交后将生成项目方案分析表，并在资料齐套时自动提交当前节点。确认提交？',

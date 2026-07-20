@@ -26,6 +26,12 @@ function asReadOnlyDownloadSlot(slot) {
   };
 }
 
+export function hasCurrentProductFunctionDiagram(slots = []) {
+  return slots.some(
+    (slot) => slot.slotKey === 'product_function_diagram' && Boolean(slot.currentFile)
+  );
+}
+
 // Cost-estimation nodes can reference completed upstream files without being able to modify them.
 export function buildNodeUploadSlots(allSlots, nodeKey, workflow = null) {
   const slots = Array.isArray(allSlots) ? allSlots : [];

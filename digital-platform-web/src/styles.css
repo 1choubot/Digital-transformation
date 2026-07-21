@@ -164,9 +164,14 @@ p {
 .report-data-table .el-input__wrapper,
 .report-data-table .el-select__wrapper,
 .report-data-table .el-date-editor.el-input__wrapper { min-height: 40px; }
-.report-data-table .el-textarea__inner {
+.report-data-table:is(
+  .report-data-table--daily-items,
+  .report-data-table--daily-plans,
+  .report-data-table--weekly-summaries,
+  .report-data-table--weekly-plans
+) .el-textarea__inner {
   min-height: 72px !important;
-  resize: vertical;
+  resize: none;
 }
 .report-data-table .invalid .el-input__wrapper,
 .report-data-table .invalid .el-select__wrapper,
@@ -6441,6 +6446,13 @@ p {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+  gap: var(--app-space-1);
+}
+
+.weekly-report-page .task-field {
+  display: flex;
+  align-items: stretch;
+  flex-direction: column;
   gap: var(--app-space-1);
 }
 

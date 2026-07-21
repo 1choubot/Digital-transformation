@@ -69,14 +69,6 @@
                 <el-table-column label="项目名称" min-width="220"><template #default="{ row: summary, $index: index }">
                   <!-- 任务信息（含来源标签 + 项目选择） -->
                   <div class="form-field task-field">
-                    <div class="source-chip-row">
-                      <span class="source-chip" :class="sourceChipClass(summary)">
-                        {{ sourceTypeLabel(summary) }}
-                      </span>
-                      <span v-if="summary.missingDailyEvidence" class="source-chip source-chip--warning">
-                        未填日报
-                      </span>
-                    </div>
                     <el-select
                       v-model="summary.projectId"
                       :class="{ invalid: fieldErrors[`summaries.${index}.workTask`] }"
@@ -86,6 +78,14 @@
                     >
                       <el-option v-for="project in projectOptions" :key="project.id" :label="projectOptionLabel(project)" :value="project.id" />
                     </el-select>
+                    <div class="source-chip-row">
+                      <span class="source-chip" :class="sourceChipClass(summary)">
+                        {{ sourceTypeLabel(summary) }}
+                      </span>
+                      <span v-if="summary.missingDailyEvidence" class="source-chip source-chip--warning">
+                        未填日报
+                      </span>
+                    </div>
                     <small v-if="fieldErrors[`summaries.${index}.workTask`]" class="field-error">
                       {{ fieldErrors[`summaries.${index}.workTask`] }}
                     </small>
@@ -97,6 +97,7 @@
                     <el-input
                       v-model="summary.workTarget"
                       type="textarea"
+                      :autosize="{ minRows: 2, maxRows: 4 }"
                       :class="{ invalid: fieldErrors[`summaries.${index}.workTarget`] }"
                       placeholder="描述工作目标"
                     />
@@ -142,6 +143,7 @@
                     <el-input
                       v-model="summary.completionDescription"
                       type="textarea"
+                      :autosize="{ minRows: 2, maxRows: 4 }"
                       :class="{ invalid: fieldErrors[`summaries.${index}.completionDescription`] }"
                       placeholder="完成情况说明"
                     />
@@ -223,6 +225,7 @@
                     <el-input
                       v-model="plan.workTarget"
                       type="textarea"
+                      :autosize="{ minRows: 2, maxRows: 4 }"
                       :class="{ invalid: fieldErrors[`plans.${index}.workTarget`] }"
                       placeholder="描述工作目标"
                     />

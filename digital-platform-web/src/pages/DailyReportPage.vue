@@ -126,6 +126,7 @@
                 <el-input
                   v-model="item.workContent"
                   type="textarea"
+                  :autosize="{ minRows: 2, maxRows: 4 }"
                   :class="{ invalid: itemErrors[item.localId]?.workContent }"
                 />
               </template></el-table-column>
@@ -161,7 +162,11 @@
                 <el-input v-model="item.responsiblePerson" />
               </template></el-table-column>
               <el-table-column label="偏差与纠偏" min-width="180"><template #default="{ row: item }">
-                <el-input v-model="item.deviationAndCorrectiveAction" type="textarea" />
+                <el-input
+                  v-model="item.deviationAndCorrectiveAction"
+                  type="textarea"
+                  :autosize="{ minRows: 2, maxRows: 4 }"
+                />
               </template></el-table-column>
               <el-table-column label="操作" width="80" fixed="right" align="center"><template #default="{ $index: index }">
                 <el-button link type="danger" :disabled="form.items.length === 1" @click="removeItem(index)">删除</el-button>
@@ -220,7 +225,11 @@
           <div class="table-container report-table-scroll">
             <el-table :data="form.plans" row-key="localId" class="report-data-table report-data-table--daily-plans">
               <el-table-column label="计划内容" min-width="260"><template #default="{ row: plan }">
-                <el-input v-model="plan.plannedWorkContent" type="textarea" />
+                <el-input
+                  v-model="plan.plannedWorkContent"
+                  type="textarea"
+                  :autosize="{ minRows: 2, maxRows: 4 }"
+                />
               </template></el-table-column>
               <el-table-column label="负责人" min-width="150"><template #default="{ row: plan }">
                 <el-input v-model="plan.responsiblePerson" />
@@ -232,7 +241,11 @@
                 <el-input v-model="plan.collaboratingCenter" />
               </template></el-table-column>
               <el-table-column label="协同事项" min-width="230"><template #default="{ row: plan }">
-                <el-input v-model="plan.collaborationItem" type="textarea" />
+                <el-input
+                  v-model="plan.collaborationItem"
+                  type="textarea"
+                  :autosize="{ minRows: 2, maxRows: 4 }"
+                />
               </template></el-table-column>
               <el-table-column label="操作" width="80" fixed="right" align="center"><template #default="{ $index: index }">
                 <el-button link type="danger" :disabled="form.plans.length === 1" @click="removePlan(index)">删除</el-button>

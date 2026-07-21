@@ -4313,6 +4313,8 @@ p {
     }
 
     .solution-node-page .solution-upload-list {
+        width: 90%;
+        margin-inline: auto;
         overflow: hidden;
         border: 1px solid var(--color-border, #d8dde6);
         border-radius: var(--radius-md, 8px);
@@ -6256,7 +6258,7 @@ p {
 /* Keep the quotation table's intrinsic column width inside the node workspace. */
 .solution-node-page .quotation-section,
 .solution-node-page .solution-section,
-.solution-node-page .solution-section > *,
+.solution-node-page .solution-section > :not(.solution-upload-list),
 .solution-node-page .quotation-table-wrap {
   box-sizing: border-box;
   width: 100%;
@@ -6315,6 +6317,10 @@ p {
 
 /* Migrated from digital-platform-web/src/pages/project-node/solution-design/SolutionPreparationPage.vue */
 .solution-node-page .solution-section{display:grid;gap:var(--space-4,16px)}
+.solution-node-page .solution-section .solution-role-table {
+  width: 90%;
+  margin-inline: auto;
+}
 
 /* Migrated from digital-platform-web/src/pages/project-node/solution-design/SolutionQuotationTenderPage.vue */
 .solution-node-page .quotation-section{display:grid;gap:var(--space-4,16px)}.solution-node-page .action-row{display:flex;flex-wrap:wrap;gap:var(--space-2,8px)}

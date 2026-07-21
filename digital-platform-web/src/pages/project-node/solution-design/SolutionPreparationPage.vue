@@ -8,7 +8,7 @@
     <section class="solution-section">
       <h4>指定项目组成员</h4>
       <el-form v-if="workflow?.permissions?.canAssignRoles" @submit.prevent="assignRoles">
-        <el-descriptions :column="2" border>
+        <el-descriptions class="solution-role-table" :column="2" border>
           <el-descriptions-item
             v-for="role in solutionDesignRoleDefinitions"
             :key="role.roleKey"
@@ -50,7 +50,7 @@
         </el-button>
       </el-form>
 
-      <el-descriptions v-else :column="2" border>
+      <el-descriptions v-else class="solution-role-table" :column="2" border>
         <el-descriptions-item
           v-for="role in solutionDesignRoleDefinitions"
           :key="role.roleKey"

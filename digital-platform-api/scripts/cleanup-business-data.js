@@ -26,6 +26,7 @@ const DELETE_ORDER = [
   'project_solution_design_upload_slots',
   'project_solution_design_analysis_forms',
   'project_solution_design_review_forms',
+  'project_solution_design_quotation_forms',
   'project_solution_design_quotation_tender_flows',
   'project_solution_design_role_history',
   'project_solution_design_roles',
@@ -60,7 +61,8 @@ const FILE_SOURCES = [
   ['project_stage_document_generated_files', 'storage_key', getStageDocumentGeneratedFilePath],
   ['project_solution_design_upload_files', 'storage_key', getSolutionDesignUploadPath],
   ['project_solution_design_analysis_forms', 'generated_file_storage_key', getSolutionDesignUploadPath],
-  ['project_solution_design_review_forms', 'generated_file_storage_key', getSolutionDesignUploadPath]
+  ['project_solution_design_review_forms', 'generated_file_storage_key', getSolutionDesignUploadPath],
+  ['project_solution_design_quotation_forms', 'generated_file_storage_key', getSolutionDesignUploadPath]
 ];
 
 function requireConfirmFlag(argv) {

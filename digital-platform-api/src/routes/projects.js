@@ -5,12 +5,14 @@ import {
   advanceProjectStageHandler,
   assignSolutionDesignRolesHandler,
   approveContractSigningPreparationFileHandler,
-  approveContractSigningPaymentReleaseHandler,
+  approveContractSigningPaymentReleasePaidHandler,
+  approveContractSigningPaymentReleaseUnpaidHandler,
   approveInitiationReviewNodeHandler,
   approveSolutionDesignWorkflowNodeHandler,
   approveStageApprovalHandler,
   confirmContractSigningScanFileHandler,
   completeContractSigningAdvancePaymentHandler,
+  completeContractSigningNodeHandler,
   confirmStageDocumentHandler,
   completeStageDocumentRevisionHandler,
   createProjectHandler,
@@ -48,6 +50,9 @@ import {
   processSolutionDesignQuotationResultHandler,
   restoreStageDocumentApplicableHandler,
   returnContractSigningPreparationFileHandler,
+  returnContractSigningSalesContractForCustomerHandler,
+  returnContractSigningTechnicalAgreementForCustomerHandler,
+  rejectDeprecatedContractSigningPaymentReleaseHandler,
   requestContractSigningPaymentReleaseHandler,
   returnStageApprovalHandler,
   returnInitiationReviewNodeHandler,
@@ -167,6 +172,24 @@ projectsRouter.post(
 );
 
 projectsRouter.post(
+  '/:projectId/contract-signing-workflow/signing/return-technical-agreement',
+  requireAuth,
+  asyncHandler(returnContractSigningTechnicalAgreementForCustomerHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/signing/return-sales-contract',
+  requireAuth,
+  asyncHandler(returnContractSigningSalesContractForCustomerHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/signing/complete',
+  requireAuth,
+  asyncHandler(completeContractSigningNodeHandler)
+);
+
+projectsRouter.post(
   '/:projectId/contract-signing-workflow/payment/complete',
   requireAuth,
   asyncHandler(completeContractSigningAdvancePaymentHandler)
@@ -181,7 +204,19 @@ projectsRouter.post(
 projectsRouter.post(
   '/:projectId/contract-signing-workflow/payment/approve-release',
   requireAuth,
-  asyncHandler(approveContractSigningPaymentReleaseHandler)
+  asyncHandler(rejectDeprecatedContractSigningPaymentReleaseHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/payment/approve-release-unpaid',
+  requireAuth,
+  asyncHandler(approveContractSigningPaymentReleaseUnpaidHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/payment/approve-release-paid',
+  requireAuth,
+  asyncHandler(approveContractSigningPaymentReleasePaidHandler)
 );
 
 projectsRouter.put(

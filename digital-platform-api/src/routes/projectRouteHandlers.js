@@ -1,5 +1,9 @@
 import { normalizeCreateProjectInput, ValidationError } from '../domain/projects.js';
 import { canCreateProject } from '../domain/organization.js';
+import {
+  CONTRACT_SIGNING_ERROR,
+  ContractSigningWorkflowError
+} from '../domain/contractSigningWorkflow.js';
 import { DOCUMENT_APPLICABILITY_ACTION } from '../domain/stageDocumentApplicability.js';
 import { DOCUMENT_STATUS_ACTION } from '../domain/stageDocumentStatus.js';
 import {
@@ -8,8 +12,10 @@ import {
   advanceProjectStage,
   assignSolutionDesignRoles,
   approveContractSigningPreparationFile,
-  approveContractSigningPaymentRelease,
+  approveContractSigningPaymentReleasePaid,
+  approveContractSigningPaymentReleaseUnpaid,
   confirmContractSigningScanFile,
+  completeContractSigningNode,
   getContractSigningWorkflow,
   approveSolutionDesignWorkflowNode,
   approveStageApproval,
@@ -40,6 +46,8 @@ import {
   resubmitStageApproval,
   returnContractSigningPreparationFile,
   requestContractSigningPaymentRelease,
+  returnContractSigningSalesContractForCustomer,
+  returnContractSigningTechnicalAgreementForCustomer,
   returnSolutionDesignWorkflowNode,
   returnStageApproval,
   saveSolutionDesignAnalysisForm,
@@ -438,6 +446,44 @@ export async function confirmContractSigningScanFileHandler(req, res) {
   });
 }
 
+export async function returnContractSigningTechnicalAgreementForCustomerHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await returnContractSigningTechnicalAgreementForCustomer({
+    projectId,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function returnContractSigningSalesContractForCustomerHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await returnContractSigningSalesContractForCustomer({
+    projectId,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function completeContractSigningNodeHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await completeContractSigningNode({
+    projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
 export async function completeContractSigningAdvancePaymentHandler(req, res) {
   const projectId = parseProjectId(req.params.projectId);
   const workflow = await completeContractSigningAdvancePayment({
@@ -462,9 +508,37 @@ export async function requestContractSigningPaymentReleaseHandler(req, res) {
   });
 }
 
-export async function approveContractSigningPaymentReleaseHandler(req, res) {
+export async function rejectDeprecatedContractSigningPaymentReleaseHandler(req, res) {
+  parseProjectId(req.params.projectId);
+  throw new ContractSigningWorkflowError(
+    CONTRACT_SIGNING_ERROR.DEPRECATED_ACTION,
+    'Deprecated payment release endpoint. Use approve-release-unpaid or approve-release-paid.',
+    410,
+    {
+      deprecatedEndpoint: '/contract-signing-workflow/payment/approve-release',
+      replacementEndpoints: [
+        '/contract-signing-workflow/payment/approve-release-unpaid',
+        '/contract-signing-workflow/payment/approve-release-paid'
+      ]
+    }
+  );
+}
+
+export async function approveContractSigningPaymentReleaseUnpaidHandler(req, res) {
   const projectId = parseProjectId(req.params.projectId);
-  const workflow = await approveContractSigningPaymentRelease({
+  const workflow = await approveContractSigningPaymentReleaseUnpaid({
+    projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function approveContractSigningPaymentReleasePaidHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await approveContractSigningPaymentReleasePaid({
     projectId,
     user: req.auth.user
   });

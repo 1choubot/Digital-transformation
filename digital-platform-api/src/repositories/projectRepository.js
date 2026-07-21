@@ -58,13 +58,17 @@ export {
 } from './projects/solutionDesignWorkflowRepository.js';
 export {
   approveContractSigningPreparationFile,
-  approveContractSigningPaymentRelease,
+  approveContractSigningPaymentReleasePaid,
+  approveContractSigningPaymentReleaseUnpaid,
   assertContractSigningWriteAllowed,
+  completeContractSigningNode,
   completeContractSigningAdvancePayment,
   confirmContractSigningScanFile,
   getContractSigningUploadDownload,
   getContractSigningWorkflow,
   requestContractSigningPaymentRelease,
+  returnContractSigningSalesContractForCustomer,
+  returnContractSigningTechnicalAgreementForCustomer,
   returnContractSigningPreparationFile,
   uploadContractSigningWorkflowFile
 } from './projects/contractSigningWorkflowRepository.js';

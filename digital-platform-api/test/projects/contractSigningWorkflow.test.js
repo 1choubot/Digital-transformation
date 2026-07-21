@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   BUSINESS_DEPARTMENT,
+  CONTRACT_SIGNING_ERROR,
   CONTRACT_SIGNING_NODE_KEY,
   CONTRACT_SIGNING_NODE_STATUS,
   CONTRACT_SIGNING_PAYMENT_STATUS,
@@ -24,13 +25,17 @@ import {
 } from '../../src/repositories/stageDocuments/shared.js';
 import {
   assertContractSigningWriteAllowed,
-  approveContractSigningPreparationFile,
   approveContractSigningPaymentRelease,
+  approveContractSigningPreparationFile,
+  approveContractSigningPaymentReleasePaid,
+  approveContractSigningPaymentReleaseUnpaid,
+  completeContractSigningNode,
   completeContractSigningAdvancePayment,
-  confirmContractSigningScanFile,
   getContractSigningUploadDownload,
   getContractSigningWorkflow,
   requestContractSigningPaymentRelease,
+  returnContractSigningSalesContractForCustomer,
+  returnContractSigningTechnicalAgreementForCustomer,
   returnContractSigningPreparationFile,
   selectContractSigningWorkbenchTodos,
   uploadContractSigningWorkflowFile
@@ -38,6 +43,7 @@ import {
 import { advanceProjectStage } from '../../src/repositories/projects/stageAdvanceRepository.js';
 import { OPERATION_ACTION_TYPE } from '../../src/repositories/operationLogRepository.js';
 import { buildContractSigningSupplementalDocuments } from '../../src/repositories/projects/workspaceRepository.js';
+import { rejectDeprecatedContractSigningPaymentReleaseHandler } from '../../src/routes/projectRouteHandlers.js';
 import { pool } from '../../src/db/pool.js';
 import {
   buildWorkbenchSummary,
@@ -693,6 +699,30 @@ class ContractSigningWorkflowFakeConnection {
 
     if (
       text.startsWith('UPDATE project_contract_signing_upload_slots SET status = ?') &&
+      text.includes('review_status = NULL') &&
+      text.includes('confirmation_status = NULL') &&
+      text.includes('submitted_by_user_id = ?') &&
+      text.includes('WHERE id = ?') &&
+      !text.includes('AND status = ?')
+    ) {
+      const [status, submittedByUserId, revision, slotId] = params;
+      const slot = this.contractUploadSlots.find((candidate) => Number(candidate.id) === Number(slotId));
+      if (slot) {
+        slot.status = status;
+        slot.review_status = null;
+        slot.confirmation_status = null;
+        slot.return_reason = null;
+        slot.submitted_by_user_id = submittedByUserId;
+        slot.submitted_at = '2026-07-16 11:05:00';
+        slot.confirmed_by_user_id = null;
+        slot.confirmed_at = null;
+        slot.revision = revision;
+      }
+      return [{ affectedRows: slot ? 1 : 0 }];
+    }
+
+    if (
+      text.startsWith('UPDATE project_contract_signing_upload_slots SET status = ?') &&
       text.includes('review_status = ?') &&
       text.includes('submitted_by_user_id = ?')
     ) {
@@ -791,6 +821,56 @@ class ContractSigningWorkflowFakeConnection {
       slot.confirmed_by_user_id = actorUserId;
       slot.confirmed_at = '2026-07-16 11:40:00';
       return [{ affectedRows: 1 }];
+    }
+
+    if (
+      text.startsWith('UPDATE project_contract_signing_upload_slots SET status = ?') &&
+      text.includes('slot_key IN (?, ?)') &&
+      text.includes('AND status = ?')
+    ) {
+      const [status, projectId, firstSlotKey, secondSlotKey, expectedStatus] = params;
+      const slotKeys = new Set([firstSlotKey, secondSlotKey]);
+      let affectedRows = 0;
+      for (const slot of this.contractUploadSlots) {
+        if (
+          Number(slot.project_id) === Number(projectId) &&
+          slotKeys.has(slot.slot_key) &&
+          slot.status === expectedStatus
+        ) {
+          slot.status = status;
+          slot.confirmation_status = null;
+          slot.return_reason = null;
+          slot.confirmed_by_user_id = null;
+          slot.confirmed_at = null;
+          affectedRows += 1;
+        }
+      }
+      return [{ affectedRows }];
+    }
+
+    if (
+      text.startsWith('UPDATE project_contract_signing_upload_slots SET status = ?') &&
+      text.includes('submitted_by_user_id = NULL') &&
+      text.includes('revision = revision + 1') &&
+      text.includes('AND slot_key = ?')
+    ) {
+      const [status, projectId, slotKey] = params;
+      const slot = this.contractUploadSlots.find(
+        (candidate) =>
+          Number(candidate.project_id) === Number(projectId) &&
+          candidate.slot_key === slotKey
+      );
+      if (slot) {
+        slot.status = status;
+        slot.confirmation_status = null;
+        slot.return_reason = null;
+        slot.submitted_by_user_id = null;
+        slot.submitted_at = null;
+        slot.confirmed_by_user_id = null;
+        slot.confirmed_at = null;
+        slot.revision = Number(slot.revision || 0) + 1;
+      }
+      return [{ affectedRows: slot ? 1 : 0 }];
     }
 
     if (
@@ -1091,16 +1171,8 @@ async function activateAdvancePaymentNode({ db, storage }) {
 
   await activateContractSigningNode({ db, storage });
   await uploadSigningScans({ db, storage });
-  await confirmContractSigningScanFile({
+  return completeContractSigningNode({
     projectId: 200,
-    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN,
-    payload: { result: 'approved' },
-    user: businessOwner
-  }, db);
-  return confirmContractSigningScanFile({
-    projectId: 200,
-    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN,
-    payload: { result: 'approved' },
     user: businessOwner
   }, db);
 }
@@ -1283,19 +1355,11 @@ test('contract workbench todos cover business owner signing, payment, and kickof
   businessTodos = await selectContractSigningWorkbenchTodos(businessOwner, db);
   assert.deepEqual(
     todoActionTexts(businessTodos),
-    ['确认技术协议扫描件线下签署结果', '确认销售合同扫描件线下签署结果']
+    ['完成签订协议和合同']
   );
 
-  await confirmContractSigningScanFile({
+  await completeContractSigningNode({
     projectId: 200,
-    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN,
-    payload: { result: 'approved' },
-    user: businessOwner
-  }, db);
-  await confirmContractSigningScanFile({
-    projectId: 200,
-    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN,
-    payload: { result: 'approved' },
     user: businessOwner
   }, db);
 
@@ -1332,7 +1396,7 @@ test('contract workbench todos cover general manager release only while waiting'
   assert.equal(managerTodos[0].status, CONTRACT_SIGNING_NODE_STATUS.WAITING_GENERAL_MANAGER);
   assert.deepEqual(managerTodos[0].blockingReasons, ['等待总经理审批预付款放行']);
 
-  await approveContractSigningPaymentRelease({
+  await approveContractSigningPaymentReleaseUnpaid({
     projectId: 200,
     user: generalManager
   }, db);
@@ -1676,59 +1740,62 @@ test('contract workflow resolves center manager and general manager permissions 
 
   assert.equal(pendingGeneralManagerWorkflow.permissions.isGeneralManager, true);
   assert.equal(
-    findNode(pendingGeneralManagerWorkflow, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT).permissions.canApprovePaymentRelease,
+    findNode(pendingGeneralManagerWorkflow, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT)
+      .permissions.canApprovePaymentReleaseUnpaid,
+    false
+  );
+  assert.equal(
+    findNode(pendingGeneralManagerWorkflow, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT)
+      .permissions.canApprovePaymentReleasePaid,
     false
   );
 
   advancePaymentNode.status = CONTRACT_SIGNING_NODE_STATUS.WAITING_GENERAL_MANAGER;
   const waitingGeneralManagerWorkflow = await getContractSigningWorkflow({ projectId: 200, user: generalManager }, db);
   assert.equal(
-    findNode(waitingGeneralManagerWorkflow, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT).permissions.canApprovePaymentRelease,
+    findNode(waitingGeneralManagerWorkflow, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT)
+      .permissions.canApprovePaymentReleaseUnpaid,
+    true
+  );
+  assert.equal(
+    findNode(waitingGeneralManagerWorkflow, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT)
+      .permissions.canApprovePaymentReleasePaid,
     true
   );
 });
 
-test('contract signing confirmation permissions require uploaded scan files', async () => {
+test('contract signing DTO exposes customer return and complete permissions instead of scan confirmation permissions', async () => {
   const db = fakeDb();
+  const storage = fakeStorage();
   const businessOwner = authUser(db.connection.users.get(13));
 
-  await getContractSigningWorkflow({ projectId: 200, user: businessOwner }, db);
-  const signingNode = db.connection.contractNodes.find(
-    (node) => node.node_key === CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING
-  );
-  signingNode.status = CONTRACT_SIGNING_NODE_STATUS.PENDING;
+  await activateContractSigningNode({ db, storage });
 
   const beforeUploadWorkflow = await getContractSigningWorkflow({ projectId: 200, user: businessOwner }, db);
-  assert.equal(
-    findNode(beforeUploadWorkflow, CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING)
-      .permissions.canConfirmTechnicalAgreementSigning,
-    false
-  );
-  assert.equal(
-    findNode(beforeUploadWorkflow, CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING)
-      .permissions.canConfirmSalesContractSigning,
-    false
-  );
+  const beforeUploadNode = findNode(beforeUploadWorkflow, CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING);
+  assert.equal(Object.hasOwn(beforeUploadNode.permissions, 'canConfirmTechnicalAgreementSigning'), false);
+  assert.equal(Object.hasOwn(beforeUploadNode.permissions, 'canConfirmSalesContractSigning'), false);
+  assert.equal(beforeUploadNode.permissions.canReturnTechnicalAgreementForCustomer, true);
+  assert.equal(beforeUploadNode.permissions.canReturnSalesContractForCustomer, true);
+  assert.equal(beforeUploadNode.permissions.canCompleteSigning, false);
 
-  addCurrentContractFile(db.connection, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN).status =
-    CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.UPLOADED;
-  addCurrentContractFile(db.connection, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN).status =
-    CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.UPLOADED;
+  await uploadSigningScans({ db, storage });
   const afterUploadWorkflow = await getContractSigningWorkflow({ projectId: 200, user: businessOwner }, db);
+  const afterUploadNode = findNode(afterUploadWorkflow, CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING);
 
+  assert.equal(Object.hasOwn(afterUploadNode.permissions, 'canConfirmTechnicalAgreementSigning'), false);
+  assert.equal(Object.hasOwn(afterUploadNode.permissions, 'canConfirmSalesContractSigning'), false);
   assert.equal(
-    findNode(afterUploadWorkflow, CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING)
-      .permissions.canConfirmTechnicalAgreementSigning,
-    true
+    Object.hasOwn(
+      findSlot(afterUploadWorkflow, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN).permissions,
+      'canConfirmSigningResult'
+    ),
+    false
   );
-  assert.equal(
-    findNode(afterUploadWorkflow, CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING)
-      .permissions.canConfirmSalesContractSigning,
-    true
-  );
+  assert.equal(afterUploadNode.permissions.canCompleteSigning, true);
 });
 
-test('business owner uploads signed scan files and can download them before confirmation', async () => {
+test('business owner uploads signed scan files and can download them before completion', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
   const businessOwner = authUser(db.connection.users.get(13));
@@ -1753,13 +1820,15 @@ test('business owner uploads signed scan files and can download them before conf
   );
   assert.equal(
     findNode(salesScanUpload.workflow, CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING)
-      .permissions.canConfirmTechnicalAgreementSigning,
+      .permissions.canCompleteSigning,
     true
   );
   assert.equal(
-    findNode(salesScanUpload.workflow, CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING)
-      .permissions.canConfirmSalesContractSigning,
-    true
+    Object.hasOwn(
+      findSlot(salesScanUpload.workflow, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN).permissions,
+      'canConfirmSigningResult'
+    ),
+    false
   );
 
   const download = await getContractSigningUploadDownload({
@@ -1777,7 +1846,7 @@ test('business owner uploads signed scan files and can download them before conf
   assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_SALES_CONTRACT_SCAN_UPLOADED));
 });
 
-test('technical agreement scan rejection only returns technical preparation line and can resume after reapproval', async () => {
+test('technical agreement customer return only reworks technical preparation line and invalidates technical scan', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
   const technicalOwner = authUser(db.connection.users.get(12));
@@ -1786,16 +1855,9 @@ test('technical agreement scan rejection only returns technical preparation line
 
   await activateContractSigningNode({ db, storage });
   await uploadSigningScans({ db, storage });
-  await confirmContractSigningScanFile({
+  const returned = await returnContractSigningTechnicalAgreementForCustomer({
     projectId: 200,
-    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN,
-    payload: { result: 'approved' },
-    user: businessOwner
-  }, db);
-  const returned = await confirmContractSigningScanFile({
-    projectId: 200,
-    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN,
-    payload: { result: 'returned', returnReason: '客户未签署技术协议' },
+    payload: { returnReason: '客户要求调整技术协议' },
     user: businessOwner
   }, db);
 
@@ -1809,19 +1871,28 @@ test('technical agreement scan rejection only returns technical preparation line
   );
   assert.equal(
     findSlot(returned, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN).status,
-    CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.RETURNED
+    CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.PENDING
+  );
+  assert.equal(
+    findSlot(returned, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN).currentFile,
+    null
   );
   assert.equal(
     findSlot(returned, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN).status,
-    CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.APPROVED
+    CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.UPLOADED
   );
-  assert.equal(
-    findNode(returned, CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING).status,
-    CONTRACT_SIGNING_NODE_STATUS.RETURNED
-  );
+  assert.equal(findNode(returned, CONTRACT_SIGNING_NODE_KEY.CONTRACT_PREPARATION).status, CONTRACT_SIGNING_NODE_STATUS.RETURNED);
+  assert.equal(findNode(returned, CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING).status, CONTRACT_SIGNING_NODE_STATUS.RETURNED);
   assert.deepEqual(
     findNode(returned, CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING).blockingReasons,
-    ['等待技术协议准备线整改重提']
+    ['等待技术协议准备线整改重提', '等待商务负责人上传技术协议扫描件']
+  );
+  await assert.rejects(
+    () => completeContractSigningNode({
+      projectId: 200,
+      user: businessOwner
+    }, db),
+    (error) => error.code === 'CONTRACT_SIGNING_NODE_NOT_PROCESSABLE' && error.statusCode === 409
   );
 
   await uploadContractSigningWorkflowFile({
@@ -1849,26 +1920,23 @@ test('technical agreement scan rejection only returns technical preparation line
     findSlot(businessWorkflow, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN).permissions.canUpload,
     true
   );
-  assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_TECHNICAL_AGREEMENT_SCAN_RETURNED));
+  assert.equal(
+    findSlot(businessWorkflow, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN).status,
+    CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.UPLOADED
+  );
+  assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_TECHNICAL_AGREEMENT_CUSTOMER_RETURNED));
 });
 
-test('sales contract scan rejection only returns sales preparation line', async () => {
+test('sales contract customer return only reworks sales preparation line and invalidates sales scan', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
   const businessOwner = authUser(db.connection.users.get(13));
 
   await activateContractSigningNode({ db, storage });
   await uploadSigningScans({ db, storage });
-  await confirmContractSigningScanFile({
+  const returned = await returnContractSigningSalesContractForCustomer({
     projectId: 200,
-    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN,
-    payload: { result: 'approved' },
-    user: businessOwner
-  }, db);
-  const returned = await confirmContractSigningScanFile({
-    projectId: 200,
-    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN,
-    payload: { result: 'returned', returnReason: '客户未签署销售合同' },
+    payload: { returnReason: '客户要求调整销售合同' },
     user: businessOwner
   }, db);
 
@@ -1882,36 +1950,38 @@ test('sales contract scan rejection only returns sales preparation line', async 
   );
   assert.equal(
     findSlot(returned, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN).status,
-    CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.APPROVED
+    CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.UPLOADED
   );
   assert.equal(
     findSlot(returned, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN).status,
-    CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.RETURNED
+    CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.PENDING
+  );
+  assert.equal(
+    findSlot(returned, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN).currentFile,
+    null
   );
   assert.deepEqual(
     findNode(returned, CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING).blockingReasons,
-    ['等待销售合同准备线整改重提']
+    ['等待销售合同准备线整改重提', '等待商务负责人上传销售合同扫描件']
   );
-  assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_SALES_CONTRACT_SCAN_RETURNED));
+  assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_SALES_CONTRACT_CUSTOMER_RETURNED));
 });
 
-test('both scan rejections return both preparation lines', async () => {
+test('customer returns both source lines when both return actions are used', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
   const businessOwner = authUser(db.connection.users.get(13));
 
   await activateContractSigningNode({ db, storage });
   await uploadSigningScans({ db, storage });
-  await confirmContractSigningScanFile({
+  await returnContractSigningTechnicalAgreementForCustomer({
     projectId: 200,
-    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN,
-    payload: { result: 'returned', returnReason: '技术协议需重新签署' },
+    payload: { returnReason: '技术协议需重签' },
     user: businessOwner
   }, db);
-  const returned = await confirmContractSigningScanFile({
+  const returned = await returnContractSigningSalesContractForCustomer({
     projectId: 200,
-    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN,
-    payload: { result: 'returned', returnReason: '销售合同需重新签署' },
+    payload: { returnReason: '销售合同需重签' },
     user: businessOwner
   }, db);
 
@@ -1925,37 +1995,48 @@ test('both scan rejections return both preparation lines', async () => {
   );
   assert.deepEqual(
     findNode(returned, CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING).blockingReasons,
-    ['等待技术协议准备线整改重提', '等待销售合同准备线整改重提']
+    [
+      '等待技术协议准备线整改重提',
+      '等待销售合同准备线整改重提',
+      '等待商务负责人上传技术协议扫描件',
+      '等待商务负责人上传销售合同扫描件'
+    ]
   );
 });
 
-test('both scan confirmations approved complete signing and activate advance payment', async () => {
+test('complete signing requires both scans and activates advance payment', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
   const businessOwner = authUser(db.connection.users.get(13));
 
   await activateContractSigningNode({ db, storage });
-  await uploadSigningScans({ db, storage });
-  const firstApproved = await confirmContractSigningScanFile({
+  await uploadContractSigningWorkflowFile({
     projectId: 200,
     slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN,
-    payload: { result: 'approved' },
+    file: buildPdfFile('技术协议扫描件.pdf'),
     user: businessOwner
-  }, db);
+  }, db, storage);
 
-  assert.equal(
-    findNode(firstApproved, CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING).status,
-    CONTRACT_SIGNING_NODE_STATUS.PENDING_REVIEW
+  await assert.rejects(
+    () => completeContractSigningNode({
+      projectId: 200,
+      user: businessOwner
+    }, db),
+    (error) => error.code === 'CONTRACT_SIGNING_NODE_NOT_PROCESSABLE' && error.statusCode === 409
   );
   assert.equal(
-    findNode(firstApproved, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT).status,
+    db.connection.contractNodes.find((node) => node.node_key === CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT).status,
     CONTRACT_SIGNING_NODE_STATUS.NOT_STARTED
   );
 
-  const workflow = await confirmContractSigningScanFile({
+  await uploadContractSigningWorkflowFile({
     projectId: 200,
     slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN,
-    payload: { result: 'approved' },
+    file: buildPdfFile('销售合同扫描件.pdf'),
+    user: businessOwner
+  }, db, storage);
+  const workflow = await completeContractSigningNode({
+    projectId: 200,
     user: businessOwner
   }, db);
 
@@ -1973,11 +2054,18 @@ test('both scan confirmations approved complete signing and activate advance pay
     false
   );
   assert.equal(
-    findSlot(workflow, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN).permissions.canConfirmSigningResult,
+    findSlot(workflow, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN).status,
+    CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.APPROVED
+  );
+  assert.equal(
+    findSlot(workflow, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN).status,
+    CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.APPROVED
+  );
+  assert.equal(
+    Object.hasOwn(findSlot(workflow, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN).permissions, 'canConfirmSigningResult'),
     false
   );
-  assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_TECHNICAL_AGREEMENT_SCAN_CONFIRMED));
-  assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_SALES_CONTRACT_SCAN_CONFIRMED));
+  assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_COMPLETED));
 });
 
 test('business owner completes advance payment and activates kickoff notice', async () => {
@@ -2057,12 +2145,23 @@ test('business owner can request general manager release and workflow waits for 
     user: generalManager
   }, db);
   assert.equal(
-    findNode(managerWorkflow, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT).permissions.canApprovePaymentRelease,
+    findNode(managerWorkflow, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT).permissions.canApprovePaymentReleaseUnpaid,
+    true
+  );
+  assert.equal(
+    findNode(managerWorkflow, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT).permissions.canApprovePaymentReleasePaid,
     true
   );
 
   await assert.rejects(
-    () => approveContractSigningPaymentRelease({
+    () => approveContractSigningPaymentReleaseUnpaid({
+      projectId: 200,
+      user: technicalOwner
+    }, db),
+    (error) => error.code === 'CONTRACT_SIGNING_FORBIDDEN' && error.statusCode === 403
+  );
+  await assert.rejects(
+    () => approveContractSigningPaymentReleasePaid({
       projectId: 200,
       user: technicalOwner
     }, db),
@@ -2075,7 +2174,7 @@ test('business owner can request general manager release and workflow waits for 
   assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_REQUESTED));
 });
 
-test('general manager approves payment release and activates kickoff notice', async () => {
+test('deprecated generic payment release action is rejected without changing workflow state', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
   const businessOwner = authUser(db.connection.users.get(13));
@@ -2086,7 +2185,58 @@ test('general manager approves payment release and activates kickoff notice', as
     projectId: 200,
     user: businessOwner
   }, db);
-  const workflow = await approveContractSigningPaymentRelease({
+
+  await assert.rejects(
+    async () => approveContractSigningPaymentRelease({
+      projectId: 200,
+      user: generalManager
+    }, db),
+    (error) =>
+      error.code === CONTRACT_SIGNING_ERROR.DEPRECATED_ACTION &&
+      error.statusCode === 410 &&
+      error.details?.replacementEndpoints?.includes('/contract-signing-workflow/payment/approve-release-unpaid') &&
+      error.details?.replacementEndpoints?.includes('/contract-signing-workflow/payment/approve-release-paid')
+  );
+
+  assert.equal(
+    db.connection.contractNodes.find((node) => node.node_key === CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT).status,
+    CONTRACT_SIGNING_NODE_STATUS.WAITING_GENERAL_MANAGER
+  );
+  assert.equal(db.connection.paymentFlowRow().status, CONTRACT_SIGNING_PAYMENT_STATUS.WAITING_GENERAL_MANAGER);
+  assert.equal(
+    db.connection.contractNodes.find((node) => node.node_key === CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE).status,
+    CONTRACT_SIGNING_NODE_STATUS.NOT_STARTED
+  );
+  assert.equal(
+    latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED_UNPAID),
+    null
+  );
+
+  await assert.rejects(
+    async () => rejectDeprecatedContractSigningPaymentReleaseHandler({
+      params: { projectId: '200' },
+      auth: { user: generalManager }
+    }, {}),
+    (error) =>
+      error.code === CONTRACT_SIGNING_ERROR.DEPRECATED_ACTION &&
+      error.statusCode === 410 &&
+      error.details?.replacementEndpoints?.includes('/contract-signing-workflow/payment/approve-release-unpaid') &&
+      error.details?.replacementEndpoints?.includes('/contract-signing-workflow/payment/approve-release-paid')
+  );
+});
+
+test('general manager approves unpaid payment release and activates kickoff notice', async () => {
+  const db = fakeDb();
+  const storage = fakeStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+  const generalManager = authUser(db.connection.users.get(30));
+
+  await activateAdvancePaymentNode({ db, storage });
+  await requestContractSigningPaymentRelease({
+    projectId: 200,
+    user: businessOwner
+  }, db);
+  const workflow = await approveContractSigningPaymentReleaseUnpaid({
     projectId: 200,
     user: generalManager
   }, db);
@@ -2102,10 +2252,43 @@ test('general manager approves payment release and activates kickoff notice', as
     CONTRACT_SIGNING_NODE_STATUS.PENDING
   );
   assert.equal(
-    findNode(workflow, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT).permissions.canApprovePaymentRelease,
+    findNode(workflow, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT).permissions.canApprovePaymentReleaseUnpaid,
     false
   );
-  assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED));
+  assert.equal(
+    findNode(workflow, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT).permissions.canApprovePaymentReleasePaid,
+    false
+  );
+  assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED_UNPAID));
+});
+
+test('general manager approves paid payment release and records completed payment status', async () => {
+  const db = fakeDb();
+  const storage = fakeStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+  const generalManager = authUser(db.connection.users.get(30));
+
+  await activateAdvancePaymentNode({ db, storage });
+  await requestContractSigningPaymentRelease({
+    projectId: 200,
+    user: businessOwner
+  }, db);
+  const workflow = await approveContractSigningPaymentReleasePaid({
+    projectId: 200,
+    user: generalManager
+  }, db);
+
+  assert.equal(
+    findNode(workflow, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT).status,
+    CONTRACT_SIGNING_NODE_STATUS.APPROVED
+  );
+  assert.equal(workflow.paymentFlow.status, CONTRACT_SIGNING_PAYMENT_STATUS.COMPLETED);
+  assert.equal(workflow.paymentFlow.approvedBy.id, 30);
+  assert.equal(
+    findNode(workflow, CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE).status,
+    CONTRACT_SIGNING_NODE_STATUS.PENDING
+  );
+  assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED_PAID));
 });
 
 test('manual contract advance is blocked after general manager release until kickoff notice is uploaded', async () => {
@@ -2120,7 +2303,7 @@ test('manual contract advance is blocked after general manager release until kic
     projectId: 200,
     user: businessOwner
   }, db);
-  await approveContractSigningPaymentRelease({
+  await approveContractSigningPaymentReleaseUnpaid({
     projectId: 200,
     user: generalManager
   }, db);
@@ -2149,7 +2332,14 @@ test('advance payment actions reject wrong actors, inactive nodes, ended project
     (error) => error.code === 'CONTRACT_SIGNING_NODE_NOT_PROCESSABLE' && error.statusCode === 409
   );
   await assert.rejects(
-    () => approveContractSigningPaymentRelease({
+    () => approveContractSigningPaymentReleaseUnpaid({
+      projectId: 200,
+      user: generalManager
+    }, inactiveDb),
+    (error) => error.code === 'CONTRACT_SIGNING_NODE_NOT_PROCESSABLE' && error.statusCode === 409
+  );
+  await assert.rejects(
+    () => approveContractSigningPaymentReleasePaid({
       projectId: 200,
       user: generalManager
     }, inactiveDb),
@@ -2195,7 +2385,14 @@ test('advance payment actions reject wrong actors, inactive nodes, ended project
     (error) => error.code === 'CONTRACT_SIGNING_NODE_NOT_PROCESSABLE' && error.statusCode === 409
   );
   await assert.rejects(
-    () => approveContractSigningPaymentRelease({
+    () => approveContractSigningPaymentReleaseUnpaid({
+      projectId: 200,
+      user: generalManager
+    }, db),
+    (error) => error.code === 'CONTRACT_SIGNING_NODE_NOT_PROCESSABLE' && error.statusCode === 409
+  );
+  await assert.rejects(
+    () => approveContractSigningPaymentReleasePaid({
       projectId: 200,
       user: generalManager
     }, db),
@@ -2223,7 +2420,14 @@ test('advance payment actions reject wrong actors, inactive nodes, ended project
     (error) => error.code === 'CONTRACT_SIGNING_PROJECT_ENDED'
   );
   await assert.rejects(
-    () => approveContractSigningPaymentRelease({
+    () => approveContractSigningPaymentReleaseUnpaid({
+      projectId: 200,
+      user: generalManager
+    }, endedDb),
+    (error) => error.code === 'CONTRACT_SIGNING_PROJECT_ENDED'
+  );
+  await assert.rejects(
+    () => approveContractSigningPaymentReleasePaid({
       projectId: 200,
       user: generalManager
     }, endedDb),
@@ -2394,7 +2598,7 @@ test('contract derived completion feeds stage gate for workflow-owned documents'
   );
 });
 
-test('non-business users and ended projects cannot upload or confirm scan files', async () => {
+test('non-business users and ended projects cannot perform signing node write actions', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
   const technicalOwner = authUser(db.connection.users.get(12));
@@ -2411,17 +2615,30 @@ test('non-business users and ended projects cannot upload or confirm scan files'
     (error) => error.code === 'CONTRACT_SIGNING_FORBIDDEN' && error.statusCode === 403
   );
 
+  await assert.rejects(
+    () => returnContractSigningTechnicalAgreementForCustomer({
+      projectId: 200,
+      payload: { returnReason: '客户退回' },
+      user: technicalOwner
+    }, db),
+    (error) => error.code === 'CONTRACT_SIGNING_FORBIDDEN' && error.statusCode === 403
+  );
+
   await uploadContractSigningWorkflowFile({
     projectId: 200,
     slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN,
     file: buildPdfFile('技术协议扫描件.pdf'),
     user: businessOwner
   }, db, storage);
+  await uploadContractSigningWorkflowFile({
+    projectId: 200,
+    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN,
+    file: buildPdfFile('销售合同扫描件.pdf'),
+    user: businessOwner
+  }, db, storage);
   await assert.rejects(
-    () => confirmContractSigningScanFile({
+    () => completeContractSigningNode({
       projectId: 200,
-      slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN,
-      payload: { result: 'approved' },
       user: technicalOwner
     }, db),
     (error) => error.code === 'CONTRACT_SIGNING_FORBIDDEN' && error.statusCode === 403
@@ -2438,10 +2655,16 @@ test('non-business users and ended projects cannot upload or confirm scan files'
     (error) => error.code === 'CONTRACT_SIGNING_PROJECT_ENDED'
   );
   await assert.rejects(
-    () => confirmContractSigningScanFile({
+    () => returnContractSigningTechnicalAgreementForCustomer({
       projectId: 200,
-      slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN,
-      payload: { result: 'approved' },
+      payload: { returnReason: '客户退回' },
+      user: businessOwner
+    }, endedDb),
+    (error) => error.code === 'CONTRACT_SIGNING_PROJECT_ENDED'
+  );
+  await assert.rejects(
+    () => completeContractSigningNode({
+      projectId: 200,
       user: businessOwner
     }, endedDb),
     (error) => error.code === 'CONTRACT_SIGNING_PROJECT_ENDED'

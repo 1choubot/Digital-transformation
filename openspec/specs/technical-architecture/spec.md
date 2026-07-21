@@ -1932,27 +1932,34 @@ TBD - created by archiving change define-technical-architecture. Update Purpose 
 - **AND** 后端 MUST NOT 新增第三套报价审批状态
 
 ### Requirement: 合同签订 workflow 架构
-技术架构 MUST 新增数字化平台内的合同签订 workflow 后端模块，并 MUST 通过正式 migration、仓储、DTO、API、导航、工作台待办和 operation log 集成实现。
+技术架构 MUST 由数字化平台内的合同签订 workflow 后端模块承载合同签订业务，并 MUST 通过仓储、DTO、API、导航、工作台待办和 operation log 集成实现；本 change 仅调整既有合同 workflow 内部状态机，不新增第二套流程或资料项。
 
 #### Scenario: 专用模块和 API
 - **WHEN** 实现合同签订阶段业务
-- **THEN** 后端 MUST 新增或等价实现 `contractSigningWorkflow` 专用模块
+- **THEN** 后端 MUST 使用 `contractSigningWorkflow` 专用模块
 - **AND** API MUST 返回合同节点、上传槽、current file、revision、审批状态、退回原因、阻塞原因和权限
 - **AND** API MUST 提供按 slot 下载 current file 的只读接口，并按合同 workflow 权限校验下载人
-- **AND** API MUST 为签订协议和合同节点提供扫描件线下签署结果确认动作，且该动作 MUST 使用确认语义，不得复用审批自己上传文件的表述
-- **AND** API MUST 为项目预付款支付节点提供合同 workflow 命名空间内的完成支付、申请总经理放行和总经理放行通过动作
+- **AND** API MUST 为签订协议和合同节点提供客户退回技术协议、客户退回销售合同和签订完成动作
+- **AND** API MUST NOT 为前端继续提供扫描件确认通过/确认不通过权限作为签订节点主动作
+- **AND** API MUST 为项目预付款支付节点提供合同 workflow 命名空间内的完成支付、申请总经理放行、总经理未付款并通过、总经理已付款通过动作
 - **AND** API MUST 在 DTO 中返回 `paymentFlow.status`、申请人、申请时间、放行人、放行时间、预付款权限和阻塞原因
 - **AND** 前端 MUST 以该 DTO 作为合同阶段节点导航和节点页面唯一来源
 
+#### Scenario: 旧总经理笼统放行接口不改变 workflow
+- **WHEN** 旧 `POST /api/projects/:projectId/contract-signing-workflow/payment/approve-release` 被调用
+- **THEN** 后端 MUST 返回明确的弃用错误，状态码 SHOULD 为 410
+- **AND** 错误详情 MUST 提供 `/payment/approve-release-unpaid` 和 `/payment/approve-release-paid` 两个替代接口
+- **AND** 旧接口 MUST NOT 默认调用未付款并通过动作
+- **AND** 旧接口 MUST NOT 修改合同 workflow 节点、`paymentFlow` 或 operation log
+
 #### Scenario: 正式 migration
-- **WHEN** 实现合同 workflow 持久化
-- **THEN** 实现 MUST 新增正式 migration
-- **AND** migration MUST 覆盖 `project_contract_signing_nodes`、`project_contract_signing_upload_slots`、`project_contract_signing_upload_files`
-- **AND** 如支付放行独立建模，migration MUST 覆盖 `project_contract_signing_payment_flows`
-- **AND** schema ensure MUST 与正式 migration 保持一致，不得只改 ensure schema
+- **WHEN** 调整合同 workflow 状态机
+- **THEN** 实现 MUST 复用现有 `project_contract_signing_nodes`、`project_contract_signing_upload_slots`、`project_contract_signing_upload_files` 和 `project_contract_signing_payment_flows`
+- **AND** 实现 MUST NOT 因本 change 新增资料项、阶段或第二套流程表
+- **AND** schema ensure MUST 与正式 migration 保持一致
 
 #### Scenario: workflow 状态和资料完成分开建模
-- **WHEN** 合同 workflow 上传、审批、退回、签署确认、预付款放行或项目启动通知上传成功
+- **WHEN** 合同 workflow 上传、审批、客户退回、签订完成、预付款放行或项目启动通知上传成功
 - **THEN** 后端 MUST 在合同 workflow 表中保存业务状态
 - **AND** 后端 MUST 从 workflow 状态派生或同步既有 71 项资料完成结果
 - **AND** 后端 MUST NOT 以普通资料卡片状态替代合同 workflow 状态

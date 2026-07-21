@@ -68,12 +68,20 @@
             未完成支付，待总经理审批
           </el-button>
           <el-button
-            v-if="currentNode?.permissions?.canApprovePaymentRelease"
+            v-if="currentNode?.permissions?.canApprovePaymentReleaseUnpaid"
             type="primary"
-            :loading="isPending('payment:approve-release')"
-            @click="approvePaymentRelease"
+            :loading="isPending('payment:approve-release-unpaid')"
+            @click="approvePaymentReleaseUnpaid"
           >
-            通过
+            未付款并通过
+          </el-button>
+          <el-button
+            v-if="currentNode?.permissions?.canApprovePaymentReleasePaid"
+            type="success"
+            :loading="isPending('payment:approve-release-paid')"
+            @click="approvePaymentReleasePaid"
+          >
+            已付款通过
           </el-button>
         </div>
       </div>
@@ -105,14 +113,16 @@ const {
   isPending,
   completePayment,
   requestGeneralManagerRelease,
-  approvePaymentRelease
+  approvePaymentReleaseUnpaid,
+  approvePaymentReleasePaid
 } = useContractSigningNodePage(props, emit);
 
 const hasPaymentActions = computed(() =>
   Boolean(
     currentNode.value?.permissions?.canCompletePayment ||
     currentNode.value?.permissions?.canRequestGeneralManagerRelease ||
-    currentNode.value?.permissions?.canApprovePaymentRelease
+    currentNode.value?.permissions?.canApprovePaymentReleaseUnpaid ||
+    currentNode.value?.permissions?.canApprovePaymentReleasePaid
   )
 );
 

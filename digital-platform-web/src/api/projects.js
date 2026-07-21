@@ -101,11 +101,27 @@ export async function returnContractSigningPreparationFile(projectId, slotKey, r
   });
 }
 
-export async function confirmContractSigningScanFile(projectId, slotKey, payload, authToken = '') {
-  return request(`/api/projects/${projectId}/contract-signing-workflow/uploads/${slotKey}/signing-result`, {
+export async function returnContractSigningTechnicalAgreementForCustomer(projectId, returnReason, authToken = '') {
+  return request(`/api/projects/${projectId}/contract-signing-workflow/signing/return-technical-agreement`, {
     method: 'POST',
     authToken,
-    body: JSON.stringify(payload)
+    body: JSON.stringify({ returnReason })
+  });
+}
+
+export async function returnContractSigningSalesContractForCustomer(projectId, returnReason, authToken = '') {
+  return request(`/api/projects/${projectId}/contract-signing-workflow/signing/return-sales-contract`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ returnReason })
+  });
+}
+
+export async function completeContractSigningNode(projectId, authToken = '') {
+  return request(`/api/projects/${projectId}/contract-signing-workflow/signing/complete`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({})
   });
 }
 
@@ -125,8 +141,16 @@ export async function requestContractSigningPaymentRelease(projectId, authToken 
   });
 }
 
-export async function approveContractSigningPaymentRelease(projectId, authToken = '') {
-  return request(`/api/projects/${projectId}/contract-signing-workflow/payment/approve-release`, {
+export async function approveContractSigningPaymentReleaseUnpaid(projectId, authToken = '') {
+  return request(`/api/projects/${projectId}/contract-signing-workflow/payment/approve-release-unpaid`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({})
+  });
+}
+
+export async function approveContractSigningPaymentReleasePaid(projectId, authToken = '') {
+  return request(`/api/projects/${projectId}/contract-signing-workflow/payment/approve-release-paid`, {
     method: 'POST',
     authToken,
     body: JSON.stringify({})

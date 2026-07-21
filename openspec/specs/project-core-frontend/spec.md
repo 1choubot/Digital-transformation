@@ -2912,20 +2912,21 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 
 #### Scenario: 签订协议和合同页面
 - **WHEN** 用户打开签订协议和合同节点
-- **THEN** 前端 MUST 展示技术协议扫描件和销售合同扫描件上传槽
-- **AND** 前端 MUST 为商务负责人展示分别确认线下签署结果通过或不通过的动作
-- **AND** 前端 MUST 只在后端返回扫描件可确认权限时展示确认线下签署结果动作
-- **AND** 已确认通过的扫描件 MUST 不再展示重复上传或重复确认入口
-- **AND** 操作日志展示 MUST 将扫描件上传和线下签署确认 action type 映射为中文文案
+- **THEN** 前端 MUST 在页面顶部按后端权限展示退回技术协议和退回销售合同动作
+- **AND** 前端 MUST 在中间展示技术协议扫描件和销售合同扫描件上传槽
+- **AND** 前端 MUST 在页面底部按后端权限展示签订完成动作
+- **AND** 前端 MUST 只在后端返回 `canCompleteSigning` 时展示完成按钮
+- **AND** 前端 MUST NOT 展示扫描件确认通过或确认不通过按钮
+- **AND** 操作日志展示 MUST 将扫描件上传、客户退回和签订完成 action type 映射为中文文案
 
 #### Scenario: 预付款支付页面
 - **WHEN** 用户打开项目预付款支付节点
 - **THEN** 前端 MUST 为商务负责人展示完成支付和未完成支付待总经理审批动作
 - **AND** 前端 MUST 在总经理放行等待状态展示等待提示
-- **AND** 前端 MUST 只在后端权限允许时向总经理展示放行通过动作
-- **AND** 前端 MUST 以 DTO 的 `canCompletePayment`、`canRequestGeneralManagerRelease` 和 `canApprovePaymentRelease` 控制按钮
+- **AND** 前端 MUST 只在后端权限允许时向总经理展示未付款并通过和已付款通过两个动作
+- **AND** 前端 MUST 以 DTO 的 `canCompletePayment`、`canRequestGeneralManagerRelease`、`canApprovePaymentReleaseUnpaid` 和 `canApprovePaymentReleasePaid` 控制按钮
 - **AND** 前端 MUST 展示后端返回的 `等待总经理审批预付款放行` 阻塞原因
-- **AND** 完成支付或总经理放行后，前端 MUST 不再展示重复预付款处理按钮
+- **AND** 完成支付、未付款放行或已付款通过后，前端 MUST 不再展示重复预付款处理按钮
 
 #### Scenario: 项目启动通知页面
 - **WHEN** 用户打开项目启动通知节点

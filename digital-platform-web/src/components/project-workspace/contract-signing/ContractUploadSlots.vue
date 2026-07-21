@@ -90,39 +90,6 @@
             </el-button>
           </div>
         </div>
-
-        <div v-if="mode === 'signing' && slot.permissions?.canConfirmSigningResult" class="solution-actions">
-          <header>
-            <span class="section-eyebrow">签署确认</span>
-            <strong>确认线下签署结果</strong>
-          </header>
-          <div class="action-row">
-            <el-button
-              type="primary"
-              :loading="isPending(`signing:${slot.slotKey}:approved`)"
-              @click="$emit('confirm-signing', slot, 'approved')"
-            >
-              确认通过
-            </el-button>
-          </div>
-          <div class="return-box">
-            <el-input
-              :model-value="returnReasons[slot.slotKey] || ''"
-              type="textarea"
-              :rows="3"
-              placeholder="不通过原因 *"
-              @update:model-value="$emit('update-return-reason', slot.slotKey, $event)"
-            />
-            <el-button
-              type="danger"
-              plain
-              :loading="isPending(`signing:${slot.slotKey}:returned`)"
-              @click="$emit('confirm-signing', slot, 'returned')"
-            >
-              确认不通过
-            </el-button>
-          </div>
-        </div>
       </article>
     </div>
   </section>
@@ -142,7 +109,6 @@ const emit = defineEmits([
   'download',
   'approve',
   'return',
-  'confirm-signing',
   'update-return-reason'
 ]);
 

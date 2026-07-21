@@ -677,6 +677,18 @@ function getPreparationSlotKeyForSigningScan(slotKey) {
   return null;
 }
 
+function getSigningScanSlotKeyForPreparationSlot(slotKey) {
+  if (slotKey === CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT) {
+    return CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN;
+  }
+
+  if (slotKey === CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT) {
+    return CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN;
+  }
+
+  return null;
+}
+
 function isSigningScanPreparationLineApproved({ slot, slots }) {
   const preparationSlotKey = getPreparationSlotKeyForSigningScan(slot?.slotKey);
   if (!preparationSlotKey) {
@@ -685,6 +697,27 @@ function isSigningScanPreparationLineApproved({ slot, slots }) {
 
   const preparationSlot = getSlotByKey(slots, preparationSlotKey);
   return preparationSlot?.status === CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.APPROVED;
+}
+
+function areSigningPreparationLinesApproved(slots) {
+  return [
+    CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT,
+    CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT
+  ].every((slotKey) => getSlotByKey(slots, slotKey)?.status === CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.APPROVED);
+}
+
+function areSigningScansUploaded(slots) {
+  return [
+    CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN,
+    CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN
+  ].every((slotKey) => {
+    const slot = getSlotByKey(slots, slotKey);
+    return hasCurrentFile(slot) && slot?.status === CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.UPLOADED;
+  });
+}
+
+function isSigningReadyForCompletion(slots) {
+  return areSigningPreparationLinesApproved(slots) && areSigningScansUploaded(slots);
 }
 
 function isUploadSlotCurrentlyUploadable({ slot, slotRow, slots = [] }) {
@@ -807,6 +840,36 @@ function assertAdvancePaymentReadyForGeneralManagerRelease(nodeRow, paymentFlow)
         nodeKey: CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT,
         nodeStatus: nodeRow?.status ?? null,
         paymentStatus: paymentFlow?.status ?? null
+      }
+    );
+  }
+}
+
+function assertPreparationLineApprovedForCustomerReturn(slotRow, slot) {
+  if (slotRow?.status !== CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.APPROVED) {
+    throw new ContractSigningWorkflowError(
+      CONTRACT_SIGNING_ERROR.UPLOAD_SLOT_NOT_PROCESSABLE,
+      'Contract signing preparation line is not approved for customer return',
+      409,
+      {
+        slotKey: slot.slotKey,
+        slotStatus: slotRow?.status ?? null
+      }
+    );
+  }
+}
+
+function assertSigningReadyForCompletion({ nodeRow, slots }) {
+  assertNodeProcessable(nodeRow, CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING, 'completed');
+
+  if (!isSigningReadyForCompletion(slots)) {
+    throw new ContractSigningWorkflowError(
+      CONTRACT_SIGNING_ERROR.NODE_NOT_PROCESSABLE,
+      'Contract signing node is not ready to complete',
+      409,
+      {
+        nodeKey: CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING,
+        missingRequirements: buildSigningCompletionBlockingReasons(slots)
       }
     );
   }
@@ -978,22 +1041,12 @@ function buildUploadSlotPermissions({
     isSlotReadyForReview(slotRow) &&
     slot.slotKey === CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT &&
     isContractSigningMarketingCenterManager(user);
-  const canConfirmSigning =
-    canWrite &&
-    isSlotReadyForSigningConfirmation(slotRow) &&
-    [
-      CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN,
-      CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN
-    ].includes(slot.slotKey) &&
-    isBusinessOwner(roleState, user);
-
   return {
     canUpload: canUploadSlot,
     canDownload: hasCurrentFile(slotRow) && canDownloadContractSigningUploadFile({ slot, roleState, user }),
     canSubmit: canUploadSlot,
     canApprove: canReview || canReviewSales,
-    canReturn: canReview || canReviewSales,
-    canConfirmSigningResult: canConfirmSigning
+    canReturn: canReview || canReviewSales
   };
 }
 
@@ -1051,11 +1104,14 @@ function buildNodePermissions({
   }
 
   if (nodeRow.node_key === CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING) {
+    const technicalAgreementSlot = getSlotByKey(slots, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT);
+    const salesContractSlot = getSlotByKey(slots, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT);
     const technicalAgreementScanSlot = getSlotByKey(
       slots,
       CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN
     );
     const salesContractScanSlot = getSlotByKey(slots, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN);
+    const canCompleteSigning = canWrite && businessOwner && isSigningReadyForCompletion(slots);
     return {
       canUploadTechnicalAgreementScan:
         canWrite &&
@@ -1073,14 +1129,15 @@ function buildNodePermissions({
           slotRow: salesContractScanSlot,
           slots
         }),
-      canConfirmTechnicalAgreementSigning:
+      canReturnTechnicalAgreementForCustomer:
         canWrite &&
         businessOwner &&
-        isSlotReadyForSigningConfirmation(technicalAgreementScanSlot),
-      canConfirmSalesContractSigning:
+        technicalAgreementSlot?.status === CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.APPROVED,
+      canReturnSalesContractForCustomer:
         canWrite &&
         businessOwner &&
-        isSlotReadyForSigningConfirmation(salesContractScanSlot)
+        salesContractSlot?.status === CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.APPROVED,
+      canCompleteSigning
     };
   }
 
@@ -1090,7 +1147,13 @@ function buildNodePermissions({
     return {
       canCompletePayment: canWrite && businessOwner && paymentPending,
       canRequestGeneralManagerRelease: canWrite && businessOwner && paymentPending,
-      canApprovePaymentRelease:
+      canApprovePaymentReleaseUnpaid:
+        !projectEnded &&
+        inContractStage &&
+        hasAssignedRoles &&
+        isContractSigningGeneralManager(user) &&
+        waitingGeneralManager,
+      canApprovePaymentReleasePaid:
         !projectEnded &&
         inContractStage &&
         hasAssignedRoles &&
@@ -1136,22 +1199,41 @@ function buildPreparationSlotBlockingReason({ slotRow, pendingText, submittedTex
   return null;
 }
 
-function buildSigningScanBlockingReason({ slotRow, preparationSlot, pendingText, uploadedText, returnedText, reuploadText }) {
+function buildSigningScanBlockingReason({ slotRow, preparationSlot, pendingText, uploadedText, returnedText }) {
+  if (preparationSlot?.status !== CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.APPROVED) {
+    return returnedText;
+  }
+
   if (!slotRow || slotRow.status === CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.PENDING) {
     return pendingText;
   }
 
-  if (CONFIRMABLE_UPLOAD_SLOT_STATUSES.has(slotRow.status)) {
+  if (slotRow.status === CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.UPLOADED) {
     return uploadedText;
   }
 
-  if (slotRow.status === CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.RETURNED) {
-    return preparationSlot?.status === CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.APPROVED
-      ? reuploadText
-      : returnedText;
-  }
-
   return null;
+}
+
+function buildSigningCompletionBlockingReasons(slots) {
+  const technicalAgreement = getSlotByKey(slots, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT);
+  const salesContract = getSlotByKey(slots, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT);
+  const technicalScan = getSlotByKey(slots, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN);
+  const salesScan = getSlotByKey(slots, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN);
+  return [
+    technicalAgreement?.status === CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.APPROVED
+      ? null
+      : '等待技术协议准备线整改重提',
+    salesContract?.status === CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.APPROVED
+      ? null
+      : '等待销售合同准备线整改重提',
+    hasCurrentFile(technicalScan) && technicalScan?.status === CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.UPLOADED
+      ? null
+      : '等待商务负责人上传技术协议扫描件',
+    hasCurrentFile(salesScan) && salesScan?.status === CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.UPLOADED
+      ? null
+      : '等待商务负责人上传销售合同扫描件'
+  ].filter(Boolean);
 }
 
 function buildNodeBlockingReasons({ nodeRow, roleState, slots, paymentFlow }) {
@@ -1187,28 +1269,7 @@ function buildNodeBlockingReasons({ nodeRow, roleState, slots, paymentFlow }) {
   }
 
   if (nodeRow.node_key === CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING) {
-    const technicalScan = getSlotByKey(slots, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN);
-    const salesScan = getSlotByKey(slots, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN);
-    const technicalAgreement = getSlotByKey(slots, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT);
-    const salesContract = getSlotByKey(slots, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT);
-    return [
-      buildSigningScanBlockingReason({
-        slotRow: technicalScan,
-        preparationSlot: technicalAgreement,
-        pendingText: '等待商务负责人上传技术协议扫描件',
-        uploadedText: '等待商务负责人确认技术协议扫描件线下签署结果',
-        returnedText: '等待技术协议准备线整改重提',
-        reuploadText: '等待商务负责人重新上传技术协议扫描件'
-      }),
-      buildSigningScanBlockingReason({
-        slotRow: salesScan,
-        preparationSlot: salesContract,
-        pendingText: '等待商务负责人上传销售合同扫描件',
-        uploadedText: '等待商务负责人确认销售合同扫描件线下签署结果',
-        returnedText: '等待销售合同准备线整改重提',
-        reuploadText: '等待商务负责人重新上传销售合同扫描件'
-      })
-    ].filter(Boolean);
+    return buildSigningCompletionBlockingReasons(slots);
   }
 
   if (nodeRow.node_key === CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT) {
@@ -1462,7 +1523,7 @@ async function replaceCurrentSigningScanSlotFile(executor, { projectId, slotRow,
     `UPDATE project_contract_signing_upload_slots
     SET status = ?,
       review_status = NULL,
-      confirmation_status = ?,
+      confirmation_status = NULL,
       return_reason = NULL,
       submitted_by_user_id = ?,
       submitted_at = CURRENT_TIMESTAMP,
@@ -1473,7 +1534,6 @@ async function replaceCurrentSigningScanSlotFile(executor, { projectId, slotRow,
     WHERE id = ?`,
     [
       CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.UPLOADED,
-      'pending',
       userId,
       nextRevision,
       slotRow.id
@@ -1846,6 +1906,92 @@ async function returnPreparationLineFromSigningScan(executor, { projectId, slot,
   );
 }
 
+async function returnPreparationLineForCustomer(executor, { projectId, slot, returnReason }) {
+  const [updateResult] = await executor.execute(
+    `UPDATE project_contract_signing_upload_slots
+    SET status = ?,
+      review_status = ?,
+      return_reason = ?,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE project_id = ?
+      AND slot_key = ?
+      AND status = ?`,
+    [
+      CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.RETURNED,
+      'returned',
+      returnReason,
+      projectId,
+      slot.slotKey,
+      CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.APPROVED
+    ]
+  );
+
+  if (Number(updateResult?.affectedRows ?? 0) !== 1) {
+    throw new ContractSigningWorkflowError(
+      CONTRACT_SIGNING_ERROR.UPLOAD_SLOT_NOT_PROCESSABLE,
+      'Contract signing preparation line status changed before customer return',
+      409,
+      [slot.slotKey]
+    );
+  }
+
+  await executor.execute(
+    `UPDATE project_contract_signing_nodes
+    SET status = ?,
+      return_reason = ?,
+      returned_at = CURRENT_TIMESTAMP,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE project_id = ?
+      AND node_key = ?
+      AND status IN (?, ?)`,
+    [
+      CONTRACT_SIGNING_NODE_STATUS.RETURNED,
+      returnReason,
+      projectId,
+      CONTRACT_SIGNING_NODE_KEY.CONTRACT_PREPARATION,
+      CONTRACT_SIGNING_NODE_STATUS.APPROVED,
+      CONTRACT_SIGNING_NODE_STATUS.RETURNED
+    ]
+  );
+}
+
+async function invalidateSigningScanForPreparationLine(executor, { projectId, preparationSlotKey }) {
+  const scanSlotKey = getSigningScanSlotKeyForPreparationSlot(preparationSlotKey);
+  if (!scanSlotKey) {
+    return;
+  }
+
+  await executor.execute(
+    `UPDATE project_contract_signing_upload_files
+    SET is_current = 0,
+      replaced_at = CURRENT_TIMESTAMP
+    WHERE project_id = ?
+      AND slot_key = ?
+      AND is_current = 1`,
+    [projectId, scanSlotKey]
+  );
+
+  await executor.execute(
+    `UPDATE project_contract_signing_upload_slots
+    SET status = ?,
+      confirmation_status = NULL,
+      return_reason = NULL,
+      submitted_by_user_id = NULL,
+      submitted_at = NULL,
+      confirmed_by_user_id = NULL,
+      confirmed_at = NULL,
+      revision = revision + 1,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE project_id = ?
+      AND slot_key = ?`,
+    [
+      CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.PENDING,
+      projectId,
+      scanSlotKey
+    ]
+  );
+}
+
 async function markSigningNodeReturned(executor, { projectId, returnReason }) {
   await executor.execute(
     `UPDATE project_contract_signing_nodes
@@ -1866,6 +2012,40 @@ async function markSigningNodeReturned(executor, { projectId, returnReason }) {
       CONTRACT_SIGNING_NODE_STATUS.RETURNED
     ]
   );
+}
+
+async function markSigningScansApprovedForCompletion(executor, { projectId }) {
+  const [updateResult] = await executor.execute(
+    `UPDATE project_contract_signing_upload_slots
+    SET status = ?,
+      confirmation_status = NULL,
+      return_reason = NULL,
+      confirmed_by_user_id = NULL,
+      confirmed_at = NULL,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE project_id = ?
+      AND slot_key IN (?, ?)
+      AND status = ?`,
+    [
+      CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.APPROVED,
+      projectId,
+      CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN,
+      CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN,
+      CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.UPLOADED
+    ]
+  );
+
+  if (Number(updateResult?.affectedRows ?? 0) !== 2) {
+    throw new ContractSigningWorkflowError(
+      CONTRACT_SIGNING_ERROR.UPLOAD_SLOT_NOT_PROCESSABLE,
+      'Contract signing scan files changed before completion',
+      409,
+      [
+        CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN,
+        CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN
+      ]
+    );
+  }
 }
 
 async function refreshSigningNodeAfterConfirmation(executor, { projectId }) {
@@ -2110,6 +2290,33 @@ async function markAdvancePaymentReleased(executor, { projectId, actorUserId }) 
   }
 }
 
+async function markAdvancePaymentPaidByGeneralManager(executor, { projectId, actorUserId }) {
+  const [updateResult] = await executor.execute(
+    `UPDATE project_contract_signing_payment_flows
+    SET status = ?,
+      approved_by_user_id = ?,
+      approved_at = CURRENT_TIMESTAMP,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE project_id = ?
+      AND status = ?`,
+    [
+      CONTRACT_SIGNING_PAYMENT_STATUS.COMPLETED,
+      actorUserId,
+      projectId,
+      CONTRACT_SIGNING_PAYMENT_STATUS.WAITING_GENERAL_MANAGER
+    ]
+  );
+
+  if (Number(updateResult?.affectedRows ?? 0) !== 1) {
+    throw new ContractSigningWorkflowError(
+      CONTRACT_SIGNING_ERROR.NODE_NOT_PROCESSABLE,
+      'Advance payment flow status changed before general manager paid approval',
+      409,
+      [CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT]
+    );
+  }
+}
+
 function getPreparationUploadActionType(slotKey) {
   return slotKey === CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT
     ? OPERATION_ACTION_TYPE.CONTRACT_SIGNING_TECHNICAL_AGREEMENT_UPLOADED
@@ -2154,6 +2361,12 @@ function getSigningScanReturnActionType(slotKey) {
   return slotKey === CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN
     ? OPERATION_ACTION_TYPE.CONTRACT_SIGNING_TECHNICAL_AGREEMENT_SCAN_RETURNED
     : OPERATION_ACTION_TYPE.CONTRACT_SIGNING_SALES_CONTRACT_SCAN_RETURNED;
+}
+
+function getCustomerReturnActionType(slotKey) {
+  return slotKey === CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT
+    ? OPERATION_ACTION_TYPE.CONTRACT_SIGNING_TECHNICAL_AGREEMENT_CUSTOMER_RETURNED
+    : OPERATION_ACTION_TYPE.CONTRACT_SIGNING_SALES_CONTRACT_CUSTOMER_RETURNED;
 }
 
 async function insertContractSigningUploadLog(executor, { projectId, actorUserId, slot, fileRow }) {
@@ -2209,6 +2422,50 @@ async function insertContractSigningScanConfirmationLog(
       returnReason,
       returnToNodeKey: approved ? null : CONTRACT_SIGNING_NODE_KEY.CONTRACT_PREPARATION,
       returnToSlotKey,
+      actorUserId
+    }
+  });
+}
+
+async function insertContractSigningCustomerReturnLog(executor, { projectId, actorUserId, slot, returnReason }) {
+  const scanSlotKey = getSigningScanSlotKeyForPreparationSlot(slot.slotKey);
+  await insertOperationLog(executor, {
+    projectId,
+    actorUserId,
+    actionType: getCustomerReturnActionType(slot.slotKey),
+    targetType: OPERATION_TARGET_TYPE.CONTRACT_SIGNING_WORKFLOW,
+    targetId: projectId,
+    summary: `客户退回${slot.slotName}，返回准备线重提`,
+    details: {
+      projectId,
+      nodeKey: CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING,
+      returnToNodeKey: CONTRACT_SIGNING_NODE_KEY.CONTRACT_PREPARATION,
+      slotKey: slot.slotKey,
+      slotName: slot.slotName,
+      invalidatedScanSlotKey: scanSlotKey,
+      returnReason,
+      actorUserId
+    }
+  });
+}
+
+async function insertContractSigningCompleteLog(executor, { projectId, actorUserId }) {
+  await insertOperationLog(executor, {
+    projectId,
+    actorUserId,
+    actionType: OPERATION_ACTION_TYPE.CONTRACT_SIGNING_COMPLETED,
+    targetType: OPERATION_TARGET_TYPE.CONTRACT_SIGNING_WORKFLOW,
+    targetId: projectId,
+    summary: '签订协议和合同已完成，进入项目预付款支付',
+    details: {
+      projectId,
+      nodeKey: CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING,
+      completedSlotKeys: [
+        CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN,
+        CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN
+      ],
+      derivedDocumentCodes: ['C21', 'C23'],
+      nextNodeKey: CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT,
       actorUserId
     }
   });
@@ -2414,18 +2671,6 @@ function getContractSigningSlotReviewActionText(slot) {
   return `审批/退回${slot.slotName}`;
 }
 
-function getContractSigningSlotConfirmationActionText(slot) {
-  if (slot.slotKey === CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN) {
-    return '确认技术协议扫描件线下签署结果';
-  }
-
-  if (slot.slotKey === CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN) {
-    return '确认销售合同扫描件线下签署结果';
-  }
-
-  return `确认${slot.slotName}线下签署结果`;
-}
-
 export function buildContractSigningWorkbenchTodos({ projectRow = null, workflow }) {
   if (!workflow?.projectId || workflow.isProjectEnded) {
     return [];
@@ -2472,13 +2717,15 @@ export function buildContractSigningWorkbenchTodos({ projectRow = null, workflow
       });
     }
 
-    if (slot?.permissions?.canConfirmSigningResult === true) {
-      addTodo({
-        node,
-        actionText: getContractSigningSlotConfirmationActionText(slot),
-        actionKey: `confirm_signing:${slot.slotKey}`
-      });
-    }
+  }
+
+  const signingNode = getWorkflowNodeDto(workflow, CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING);
+  if (signingNode?.permissions?.canCompleteSigning === true) {
+    addTodo({
+      node: signingNode,
+      actionText: '完成签订协议和合同',
+      actionKey: 'complete_contract_signing'
+    });
   }
 
   const advancePaymentNode = getWorkflowNodeDto(workflow, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT);
@@ -2493,7 +2740,10 @@ export function buildContractSigningWorkbenchTodos({ projectRow = null, workflow
     });
   }
 
-  if (advancePaymentNode?.permissions?.canApprovePaymentRelease === true) {
+  if (
+    advancePaymentNode?.permissions?.canApprovePaymentReleaseUnpaid === true ||
+    advancePaymentNode?.permissions?.canApprovePaymentReleasePaid === true
+  ) {
     addTodo({
       node: advancePaymentNode,
       actionText: '审批预付款放行',
@@ -2783,7 +3033,18 @@ export async function uploadContractSigningWorkflowFile(
 export async function confirmContractSigningScanFile({ projectId, slotKey, payload = {}, user }, db = pool) {
   const slot = getContractSigningUploadSlotDefinition(slotKey);
   assertSigningScanSlot(slot);
-  const { approved, returnReason } = normalizeSigningConfirmationPayload(payload);
+  throw new ContractSigningWorkflowError(
+    CONTRACT_SIGNING_ERROR.NODE_NOT_PROCESSABLE,
+    'Contract signing scan confirmation has been replaced by customer return and complete signing actions',
+    409,
+    [slot.slotKey]
+  );
+}
+
+async function returnContractSigningAgreementForCustomer({ projectId, slotKey, payload = {}, user }, db = pool) {
+  const slot = getContractSigningUploadSlotDefinition(slotKey);
+  assertPreparationSlot(slot);
+  const returnReason = normalizeReturnReason(payload);
 
   return withConnection(db, async (connection) => {
     const projectRow = await selectProjectContext(connection, projectId, { forUpdate: true });
@@ -2794,36 +3055,78 @@ export async function confirmContractSigningScanFile({ projectId, slotKey, paylo
     const roleState = buildRoleStateWithoutUserDetails(rolesRow);
     assertRequiredRolesAssigned(roleState);
     assertContractRoleActor(roleState, CONTRACT_SIGNING_ROLE_KEY.BUSINESS_OWNER, user);
-    const nodeRow = await selectContractSigningNodeForUpdate(connection, projectId, slot.nodeKey);
-    assertNodeProcessable(nodeRow, slot.nodeKey, 'confirmed');
+    const nodeRow = await selectContractSigningNodeForUpdate(
+      connection,
+      projectId,
+      CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING
+    );
+    assertNodeProcessable(nodeRow, CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING, 'customer returned');
     const slotRow = await selectContractSigningUploadSlotForUpdate(connection, projectId, slot.slotKey);
-    assertSigningScanSlotReadyForConfirmation(slotRow, slot);
+    assertPreparationLineApprovedForCustomerReturn(slotRow, slot);
 
-    await markSigningScanSlotConfirmed(connection, {
-      slotRow,
+    await returnPreparationLineForCustomer(connection, {
+      projectId,
       slot,
-      actorUserId: user.id,
-      approved,
       returnReason
     });
-
-    if (approved) {
-      await refreshSigningNodeAfterConfirmation(connection, { projectId });
-    } else {
-      await returnPreparationLineFromSigningScan(connection, {
-        projectId,
-        slot,
-        returnReason
-      });
-      await markSigningNodeReturned(connection, { projectId, returnReason });
-    }
-
-    await insertContractSigningScanConfirmationLog(connection, {
+    await invalidateSigningScanForPreparationLine(connection, {
+      projectId,
+      preparationSlotKey: slot.slotKey
+    });
+    await markSigningNodeReturned(connection, { projectId, returnReason });
+    await insertContractSigningCustomerReturnLog(connection, {
       projectId,
       actorUserId: user.id,
       slot,
-      approved,
       returnReason
+    });
+
+    const refreshedProjectRow = await selectProjectContext(connection, projectId);
+    return buildWorkflowDtoForProject(connection, { projectRow: refreshedProjectRow, user });
+  });
+}
+
+export function returnContractSigningTechnicalAgreementForCustomer({ projectId, payload = {}, user }, db = pool) {
+  return returnContractSigningAgreementForCustomer({
+    projectId,
+    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT,
+    payload,
+    user
+  }, db);
+}
+
+export function returnContractSigningSalesContractForCustomer({ projectId, payload = {}, user }, db = pool) {
+  return returnContractSigningAgreementForCustomer({
+    projectId,
+    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT,
+    payload,
+    user
+  }, db);
+}
+
+export async function completeContractSigningNode({ projectId, user }, db = pool) {
+  return withConnection(db, async (connection) => {
+    const projectRow = await selectProjectContext(connection, projectId, { forUpdate: true });
+    assertContractSigningWriteAllowed(projectRow);
+    await ensureContractSigningWorkflowState(connection, projectRow);
+    const rolesRow = await selectSolutionDesignRoles(connection, projectId);
+    await assertWorkflowViewable(connection, projectId, user, { rolesRow });
+    const roleState = buildRoleStateWithoutUserDetails(rolesRow);
+    assertRequiredRolesAssigned(roleState);
+    assertContractRoleActor(roleState, CONTRACT_SIGNING_ROLE_KEY.BUSINESS_OWNER, user);
+    const nodeRow = await selectContractSigningNodeForUpdate(
+      connection,
+      projectId,
+      CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING
+    );
+    const slots = await selectContractSigningUploadSlots(connection, projectId);
+    assertSigningReadyForCompletion({ nodeRow, slots });
+
+    await markSigningScansApprovedForCompletion(connection, { projectId });
+    await refreshSigningNodeAfterConfirmation(connection, { projectId });
+    await insertContractSigningCompleteLog(connection, {
+      projectId,
+      actorUserId: user.id
     });
 
     const refreshedProjectRow = await selectProjectContext(connection, projectId);
@@ -2974,7 +3277,7 @@ export async function requestContractSigningPaymentRelease({ projectId, user }, 
   });
 }
 
-export async function approveContractSigningPaymentRelease({ projectId, user }, db = pool) {
+async function approveContractSigningPaymentReleaseWithResult({ projectId, user, paid }, db = pool) {
   return withConnection(db, async (connection) => {
     const projectRow = await selectProjectContext(connection, projectId, { forUpdate: true });
     assertContractSigningWriteAllowed(projectRow);
@@ -2993,22 +3296,58 @@ export async function approveContractSigningPaymentRelease({ projectId, user }, 
     assertAdvancePaymentReadyForGeneralManagerRelease(nodeRow, paymentFlow);
 
     await markAdvancePaymentNodeApproved(connection, { projectId });
-    await markAdvancePaymentReleased(connection, {
-      projectId,
-      actorUserId: user.id
-    });
+    if (paid) {
+      await markAdvancePaymentPaidByGeneralManager(connection, {
+        projectId,
+        actorUserId: user.id
+      });
+    } else {
+      await markAdvancePaymentReleased(connection, {
+        projectId,
+        actorUserId: user.id
+      });
+    }
     await activateProjectKickoffNoticeNode(connection, { projectId });
     await insertContractSigningPaymentLog(connection, {
       projectId,
       actorUserId: user.id,
-      actionType: OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED,
-      summary: '总经理预付款放行通过，进入项目启动通知',
-      paymentStatus: CONTRACT_SIGNING_PAYMENT_STATUS.RELEASED
+      actionType: paid
+        ? OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED_PAID
+        : OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED_UNPAID,
+      summary: paid
+        ? '总经理确认预付款已付款通过，进入项目启动通知'
+        : '总经理确认未付款并通过，进入项目启动通知',
+      paymentStatus: paid
+        ? CONTRACT_SIGNING_PAYMENT_STATUS.COMPLETED
+        : CONTRACT_SIGNING_PAYMENT_STATUS.RELEASED
     });
 
     const refreshedProjectRow = await selectProjectContext(connection, projectId);
     return buildWorkflowDtoForProject(connection, { projectRow: refreshedProjectRow, user });
   });
+}
+
+export function approveContractSigningPaymentReleaseUnpaid({ projectId, user }, db = pool) {
+  return approveContractSigningPaymentReleaseWithResult({ projectId, user, paid: false }, db);
+}
+
+export function approveContractSigningPaymentReleasePaid({ projectId, user }, db = pool) {
+  return approveContractSigningPaymentReleaseWithResult({ projectId, user, paid: true }, db);
+}
+
+export function approveContractSigningPaymentRelease({ projectId, user }, db = pool) {
+  throw new ContractSigningWorkflowError(
+    CONTRACT_SIGNING_ERROR.DEPRECATED_ACTION,
+    'Deprecated payment release action. Use approve-release-unpaid or approve-release-paid.',
+    410,
+    {
+      deprecatedEndpoint: '/contract-signing-workflow/payment/approve-release',
+      replacementEndpoints: [
+        '/contract-signing-workflow/payment/approve-release-unpaid',
+        '/contract-signing-workflow/payment/approve-release-paid'
+      ]
+    }
+  );
 }
 
 async function withConnection(db, callback) {

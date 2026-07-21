@@ -129,7 +129,7 @@ const CONTRACT_SIGNING_DOCUMENT_SLOT_MAP = Object.freeze({
   C21: {
     nodeKey: CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING,
     slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN,
-    blockingReason: '技术协议扫描件未确认线下签署结果通过，或 current 文件缺失'
+    blockingReason: '签订协议和合同节点未完成，或技术协议扫描件 current 文件缺失'
   },
   C22: {
     nodeKey: CONTRACT_SIGNING_NODE_KEY.CONTRACT_PREPARATION,
@@ -139,7 +139,7 @@ const CONTRACT_SIGNING_DOCUMENT_SLOT_MAP = Object.freeze({
   C23: {
     nodeKey: CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING,
     slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN,
-    blockingReason: '销售合同扫描件未确认线下签署结果通过，或 current 文件缺失'
+    blockingReason: '签订协议和合同节点未完成，或销售合同扫描件 current 文件缺失'
   },
   C25: {
     nodeKey: CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE,

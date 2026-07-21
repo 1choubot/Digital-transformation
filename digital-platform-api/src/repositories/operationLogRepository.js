@@ -121,12 +121,21 @@ export const OPERATION_ACTION_TYPE = {
   CONTRACT_SIGNING_TECHNICAL_AGREEMENT_SCAN_UPLOADED: 'contract_signing.technical_agreement_scan_uploaded',
   CONTRACT_SIGNING_TECHNICAL_AGREEMENT_SCAN_CONFIRMED: 'contract_signing.technical_agreement_scan_confirmed',
   CONTRACT_SIGNING_TECHNICAL_AGREEMENT_SCAN_RETURNED: 'contract_signing.technical_agreement_scan_returned',
+  CONTRACT_SIGNING_TECHNICAL_AGREEMENT_CUSTOMER_RETURNED:
+    'contract_signing.technical_agreement_customer_returned',
   CONTRACT_SIGNING_SALES_CONTRACT_SCAN_UPLOADED: 'contract_signing.sales_contract_scan_uploaded',
   CONTRACT_SIGNING_SALES_CONTRACT_SCAN_CONFIRMED: 'contract_signing.sales_contract_scan_confirmed',
   CONTRACT_SIGNING_SALES_CONTRACT_SCAN_RETURNED: 'contract_signing.sales_contract_scan_returned',
+  CONTRACT_SIGNING_SALES_CONTRACT_CUSTOMER_RETURNED:
+    'contract_signing.sales_contract_customer_returned',
+  CONTRACT_SIGNING_COMPLETED: 'contract_signing.completed',
   CONTRACT_SIGNING_ADVANCE_PAYMENT_COMPLETED: 'contract_signing.advance_payment_completed',
   CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_REQUESTED: 'contract_signing.advance_payment_release_requested',
   CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED: 'contract_signing.advance_payment_release_approved',
+  CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED_UNPAID:
+    'contract_signing.advance_payment_release_approved_unpaid',
+  CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED_PAID:
+    'contract_signing.advance_payment_release_approved_paid',
   CONTRACT_SIGNING_PROJECT_KICKOFF_NOTICE_UPLOADED: 'contract_signing.project_kickoff_notice_uploaded',
   STAGE_ADVANCED: 'stage.advanced',
   PROJECT_COMPLETED: 'project.completed'

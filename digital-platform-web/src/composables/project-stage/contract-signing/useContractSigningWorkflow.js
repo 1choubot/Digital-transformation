@@ -1,13 +1,16 @@
 import { computed, reactive, ref, toValue, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
-  approveContractSigningPaymentRelease,
+  approveContractSigningPaymentReleasePaid,
+  approveContractSigningPaymentReleaseUnpaid,
   approveContractSigningPreparationFile,
   completeContractSigningAdvancePayment,
-  confirmContractSigningScanFile,
+  completeContractSigningNode,
   downloadContractSigningWorkflowFile,
   getContractSigningWorkflow,
   requestContractSigningPaymentRelease,
+  returnContractSigningSalesContractForCustomer,
+  returnContractSigningTechnicalAgreementForCustomer,
   returnContractSigningPreparationFile,
   toReadableApiError,
   uploadContractSigningWorkflowFile
@@ -189,46 +192,76 @@ export function useContractSigningWorkflow({
     }
   }
 
-  async function confirmSigningResult(slot, result) {
-    const approved = result === 'approved';
-    const returnReason = String(returnReasons[slot.slotKey] || '').trim();
-    if (!approved && !returnReason) {
-      ElMessage.error('请填写不通过原因。');
+  async function returnTechnicalAgreementForCustomer() {
+    const returnReason = String(returnReasons.technical_agreement || '').trim();
+    if (!returnReason) {
+      ElMessage.error('请填写客户退回原因。');
       return;
     }
 
     try {
-      await ElMessageBox.confirm(
-        approved
-          ? `确认“${slot.slotName}”线下签署结果通过吗？`
-          : `确认“${slot.slotName}”线下签署结果不通过吗？`,
-        '确认线下签署结果',
-        {
-          type: approved ? 'warning' : 'error',
-          confirmButtonText: approved ? '确认通过' : '确认不通过',
-          cancelButtonText: '取消'
-        }
-      );
+      await ElMessageBox.confirm('确认客户退回技术协议，并返回准备线重提吗？', '客户退回确认', {
+        type: 'warning',
+        confirmButtonText: '退回技术协议',
+        cancelButtonText: '取消'
+      });
     } catch {
       return;
     }
 
     const response = await runAction(
-      `signing:${slot.slotKey}:${result}`,
-      () =>
-        confirmContractSigningScanFile(
-          id(),
-          slot.slotKey,
-          approved ? { result: 'approved' } : { result: 'returned', returnReason },
-          token()
-        ),
-      approved
-        ? `${slot.slotName}线下签署结果已确认通过。`
-        : `${slot.slotName}线下签署结果已确认不通过。`
+      'signing:return-technical-agreement',
+      () => returnContractSigningTechnicalAgreementForCustomer(id(), returnReason, token()),
+      '技术协议已按客户退回返回准备线。'
     );
-    if (response && !approved) {
-      delete returnReasons[slot.slotKey];
+    if (response) {
+      delete returnReasons.technical_agreement;
     }
+  }
+
+  async function returnSalesContractForCustomer() {
+    const returnReason = String(returnReasons.sales_contract || '').trim();
+    if (!returnReason) {
+      ElMessage.error('请填写客户退回原因。');
+      return;
+    }
+
+    try {
+      await ElMessageBox.confirm('确认客户退回销售合同，并返回准备线重提吗？', '客户退回确认', {
+        type: 'warning',
+        confirmButtonText: '退回销售合同',
+        cancelButtonText: '取消'
+      });
+    } catch {
+      return;
+    }
+
+    const response = await runAction(
+      'signing:return-sales-contract',
+      () => returnContractSigningSalesContractForCustomer(id(), returnReason, token()),
+      '销售合同已按客户退回返回准备线。'
+    );
+    if (response) {
+      delete returnReasons.sales_contract;
+    }
+  }
+
+  async function completeSigning() {
+    try {
+      await ElMessageBox.confirm('确认两份扫描件已齐备，并完成签订协议和合同节点吗？', '签订完成确认', {
+        type: 'warning',
+        confirmButtonText: '完成',
+        cancelButtonText: '取消'
+      });
+    } catch {
+      return;
+    }
+
+    await runAction(
+      'signing:complete',
+      () => completeContractSigningNode(id(), token()),
+      '签订协议和合同节点已完成。'
+    );
   }
 
   async function completePayment() {
@@ -267,11 +300,11 @@ export function useContractSigningWorkflow({
     );
   }
 
-  async function approvePaymentRelease() {
+  async function approvePaymentReleaseUnpaid() {
     try {
-      await ElMessageBox.confirm('确认通过预付款放行吗？', '总经理放行', {
+      await ElMessageBox.confirm('确认客户仍未付款，但允许项目继续吗？', '总经理放行', {
         type: 'warning',
-        confirmButtonText: '通过',
+        confirmButtonText: '未付款并通过',
         cancelButtonText: '取消'
       });
     } catch {
@@ -279,9 +312,27 @@ export function useContractSigningWorkflow({
     }
 
     await runAction(
-      'payment:approve-release',
-      () => approveContractSigningPaymentRelease(id(), token()),
-      '总经理预付款放行已通过。'
+      'payment:approve-release-unpaid',
+      () => approveContractSigningPaymentReleaseUnpaid(id(), token()),
+      '总经理已确认未付款并通过。'
+    );
+  }
+
+  async function approvePaymentReleasePaid() {
+    try {
+      await ElMessageBox.confirm('确认等待期间客户已付款，并允许项目继续吗？', '总经理放行', {
+        type: 'warning',
+        confirmButtonText: '已付款通过',
+        cancelButtonText: '取消'
+      });
+    } catch {
+      return;
+    }
+
+    await runAction(
+      'payment:approve-release-paid',
+      () => approveContractSigningPaymentReleasePaid(id(), token()),
+      '总经理已确认已付款通过。'
     );
   }
 
@@ -304,9 +355,12 @@ export function useContractSigningWorkflow({
     downloadUpload,
     approvePreparationSlot,
     returnPreparationSlot,
-    confirmSigningResult,
+    returnTechnicalAgreementForCustomer,
+    returnSalesContractForCustomer,
+    completeSigning,
     completePayment,
     requestGeneralManagerRelease,
-    approvePaymentRelease
+    approvePaymentReleaseUnpaid,
+    approvePaymentReleasePaid
   };
 }

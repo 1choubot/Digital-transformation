@@ -2858,7 +2858,7 @@ p {
   width: 100%;
 }
 
-.requirement-template-table__required {
+.online-form-required-mark {
   color: var(--el-color-danger);
 }
 

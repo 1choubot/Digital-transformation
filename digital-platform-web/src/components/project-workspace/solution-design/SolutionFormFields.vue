@@ -14,8 +14,10 @@
             :data-field-key="field.key"
             class="threshold-field-input"
             :class="{ 'online-form-field--invalid': isFieldInvalid(field.key) }"
-            :label="`${field.limitLabel}${field.required ? ' *' : ''}`"
           >
+            <template #label>
+              <span>{{ field.limitLabel }}<span v-if="field.required" class="online-form-required-mark"> *</span></span>
+            </template>
             <el-input
               :model-value="displayValue(model[field.key])"
               :disabled="disabled || field.type === 'readonly'"
@@ -39,7 +41,7 @@
       >
         <template #label>
           <div class="solution-repeatable-field__heading">
-            <span>{{ item.field.label }}{{ item.field.required ? ' *' : '' }}</span>
+            <span>{{ item.field.label }}<span v-if="item.field.required" class="online-form-required-mark"> *</span></span>
             <el-button size="small" :disabled="disabled" @click="addRow(item.field)">新增一行</el-button>
           </div>
         </template>
@@ -60,13 +62,15 @@
       <el-form-item
         v-else
         :data-field-key="item.field.key"
-        :label="`${item.field.label}${item.field.required ? ' *' : ''}`"
         :class="{
           'solution-form-grid__wide': item.field.type === 'textarea',
           'solution-form-field--emphasized': item.field.emphasized,
           'online-form-field--invalid': isFieldInvalid(item.field.key)
         }"
       >
+        <template #label>
+          <span>{{ item.field.label }}<span v-if="item.field.required" class="online-form-required-mark"> *</span></span>
+        </template>
         <el-date-picker
           v-if="item.field.type === 'date'"
           :model-value="displayValue(model[item.field.key])"

@@ -29,11 +29,11 @@
               </colgroup>
               <thead>
                 <tr>
-                  <th scope="col">项目编号</th>
-                  <th scope="col">项目名称</th>
-                  <th scope="col">客户单位</th>
-                  <th scope="col">开展模式</th>
-                  <th scope="col">立项日期</th>
+                  <th scope="col">项目编号 <span v-if="isFieldRequired('projectCode')" class="online-form-required-mark">*</span></th>
+                  <th scope="col">项目名称 <span v-if="isFieldRequired('projectName')" class="online-form-required-mark">*</span></th>
+                  <th scope="col">客户单位 <span v-if="isFieldRequired('customerUnit')" class="online-form-required-mark">*</span></th>
+                  <th scope="col">开展模式 <span v-if="isFieldRequired('projectExecutionMode')" class="online-form-required-mark">*</span></th>
+                  <th scope="col">立项日期 <span v-if="isFieldRequired('initiationDate')" class="online-form-required-mark">*</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -70,13 +70,13 @@
                 </colgroup>
                 <tbody>
                   <tr>
-                    <th scope="row">项目名称</th>
+                    <th scope="row">项目名称 <span v-if="isFieldRequired('projectName')" class="online-form-required-mark">*</span></th>
                     <td colspan="2" data-field-key="projectName" :class="getFieldClass(getFormField('projectName'))">
                       <el-input :model-value="formData.projectName" :readonly="getFormField('projectName').readOnly"
                         :disabled="isOnlineFormFieldDisabled(getFormField('projectName'))"
                         @update:model-value="$emit('update-field', { key: 'projectName', value: $event })" />
                     </td>
-                    <th scope="row">客户名称</th>
+                    <th scope="row">客户名称 <span v-if="isFieldRequired('customerName')" class="online-form-required-mark">*</span></th>
                     <td data-field-key="customerName" :class="getFieldClass(getFormField('customerName'))">
                       <el-input :model-value="formData.customerName" :readonly="getFormField('customerName').readOnly"
                         :disabled="isOnlineFormFieldDisabled(getFormField('customerName'))"
@@ -84,14 +84,14 @@
                     </td>
                   </tr>
                   <tr>
-                    <th scope="row">交流时间</th>
+                    <th scope="row">交流时间 <span v-if="isFieldRequired('communicationDate')" class="online-form-required-mark">*</span></th>
                     <td colspan="2" data-field-key="communicationDate"
                       :class="getFieldClass(getFormField('communicationDate'))">
                       <el-date-picker :model-value="formData.communicationDate" type="date" value-format="YYYY-MM-DD"
                         placeholder="选择日期" :disabled="isOnlineFormFieldDisabled(getFormField('communicationDate'))"
                         @update:model-value="$emit('update-field', { key: 'communicationDate', value: $event || '' })" />
                     </td>
-                    <th scope="row">交流次数</th>
+                    <th scope="row">交流次数 <span v-if="isFieldRequired('communicationCount')" class="online-form-required-mark">*</span></th>
                     <td data-field-key="communicationCount" :class="getFieldClass(getFormField('communicationCount'))">
                       <el-input :model-value="formData.communicationCount"
                         :disabled="isOnlineFormFieldDisabled(getFormField('communicationCount'))"
@@ -99,14 +99,14 @@
                     </td>
                   </tr>
                   <tr>
-                    <th scope="row">交流地点</th>
+                    <th scope="row">交流地点 <span v-if="isFieldRequired('communicationLocation')" class="online-form-required-mark">*</span></th>
                     <td colspan="2" data-field-key="communicationLocation"
                       :class="getFieldClass(getFormField('communicationLocation'))">
                       <el-input :model-value="formData.communicationLocation"
                         :disabled="isOnlineFormFieldDisabled(getFormField('communicationLocation'))"
                         @update:model-value="$emit('update-field', { key: 'communicationLocation', value: $event })" />
                     </td>
-                    <th scope="row">交流方式</th>
+                    <th scope="row">交流方式 <span v-if="isFieldRequired('communicationMethod')" class="online-form-required-mark">*</span></th>
                     <td data-field-key="communicationMethod"
                       :class="getFieldClass(getFormField('communicationMethod'))">
                       <el-input :model-value="formData.communicationMethod"
@@ -115,7 +115,7 @@
                     </td>
                   </tr>
                   <tr>
-                    <th scope="row">我方人员 <span class="requirement-template-table__required">*</span></th>
+                    <th scope="row">我方人员 <span v-if="isFieldRequired('internalParticipants')" class="online-form-required-mark">*</span></th>
                     <td colspan="4" data-field-key="internalParticipants"
                       :class="getFieldClass(getFormField('internalParticipants'))">
                       <el-input type="textarea" :rows="2" :model-value="formData.internalParticipants"
@@ -127,7 +127,7 @@
                     </td>
                   </tr>
                   <tr>
-                    <th scope="row">甲方人员 <span class="requirement-template-table__required">*</span></th>
+                    <th scope="row">甲方人员 <span v-if="isFieldRequired('customerParticipants')" class="online-form-required-mark">*</span></th>
                     <td colspan="4" data-field-key="customerParticipants"
                       :class="getFieldClass(getFormField('customerParticipants'))">
                       <el-input type="textarea" :rows="2" :model-value="formData.customerParticipants"
@@ -286,7 +286,7 @@
                     <label v-for="field in item.fields" :key="field.key" :data-field-key="field.key"
                       :class="[getFieldClass(field), 'threshold-field-input']">
                       <span class="form-field-label">
-                        <span>{{ field.limitLabel }}{{ field.required ? ' *' : '' }}</span>
+                        <span>{{ field.limitLabel }}<span v-if="field.required" class="online-form-required-mark"> *</span></span>
                       </span>
                       <el-input :model-value="formData[field.key]" :readonly="field.readOnly"
                         :disabled="isOnlineFormFieldDisabled(field)"
@@ -301,7 +301,7 @@
                 <template v-else v-for="field in [item.field]" :key="field.key">
                   <label :data-field-key="field.key" :class="getFieldClass(field)">
                     <span class="form-field-label">
-                      <span>{{ field.label }}{{ field.required ? ' *' : '' }}</span>
+                      <span>{{ field.label }}<span v-if="field.required" class="online-form-required-mark"> *</span></span>
                       <small v-if="field.description" class="form-field-description">{{ field.description }}</small>
                     </span>
                     <el-select v-if="field.type === 'select'" :model-value="formData[field.key]"
@@ -379,7 +379,7 @@
             class="online-form-score-table-wrap">
             <div class="online-form-score-table">
               <div class="online-form-score-table__header" aria-hidden="true">
-                <span>评价项</span><span>评价标准</span><span>分值（0-5）</span><span>信息收集说明</span><span>责任人</span>
+                <span>评价项</span><span>评价标准</span><span>分值（0-5）<span class="online-form-required-mark">*</span></span><span>信息收集说明</span><span>责任人</span>
               </div>
               <div class="online-form-score-list">
                 <article v-for="item in section.items || []" :key="item.key" :data-field-key="`${item.key}Score`"
@@ -401,7 +401,7 @@
                   </dl>
                   <div class="online-form-score-card__inputs">
                     <label>
-                      <span class="online-form-score-card__mobile-label">分值（0-5）*</span>
+                      <span class="online-form-score-card__mobile-label">分值（0-5）<span class="online-form-required-mark">*</span></span>
                       <el-select :model-value="formData[`${item.key}Score`]"
                         :disabled="isOnlineFormPartDisabled(section.editablePart)" placeholder="请选择分值"
                         @change="$emit('update-field', { key: `${item.key}Score`, value: $event })">
@@ -633,6 +633,10 @@ function getFormField(fieldKey) {
   return schemaFields.value.find((field) => field.key === fieldKey)
     || sectionFields.value.find((field) => field.key === fieldKey)
     || { key: fieldKey, label: fieldKey, type: 'text', required: false };
+}
+
+function isFieldRequired(fieldKey) {
+  return getFormField(fieldKey).required === true;
 }
 
 function getDisplayItems(fields) {

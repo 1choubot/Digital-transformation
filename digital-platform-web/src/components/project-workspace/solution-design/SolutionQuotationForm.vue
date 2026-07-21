@@ -6,18 +6,21 @@
       <div class="quotation-meta-grid">
         <el-form-item label="报价日期"><el-date-picker v-model="formData.quotationDate" type="date"
             value-format="YYYY-MM-DD" /></el-form-item>
-        <el-form-item data-field-key="recipientName" label="收件人 *"
+        <el-form-item data-field-key="recipientName"
           :class="{ 'online-form-field--invalid': isInvalid('recipientName') }">
+          <template #label>收件人 <span class="online-form-required-mark">*</span></template>
           <el-input v-model="formData.recipientName" />
           <small v-if="isInvalid('recipientName')" class="form-field-error">请填写收件人</small>
         </el-form-item>
-        <el-form-item data-field-key="contactName" label="本公司联系人 *"
+        <el-form-item data-field-key="contactName"
           :class="{ 'online-form-field--invalid': isInvalid('contactName') }">
+          <template #label>本公司联系人 <span class="online-form-required-mark">*</span></template>
           <el-input v-model="formData.contactName" />
           <small v-if="isInvalid('contactName')" class="form-field-error">请填写本公司联系人</small>
         </el-form-item>
-        <el-form-item data-field-key="contactPhone" label="联系电话 *"
+        <el-form-item data-field-key="contactPhone"
           :class="{ 'online-form-field--invalid': isInvalid('contactPhone') }">
+          <template #label>联系电话 <span class="online-form-required-mark">*</span></template>
           <el-input v-model="formData.contactPhone" />
           <small v-if="isInvalid('contactPhone')" class="form-field-error">请填写联系电话</small>
         </el-form-item>
@@ -26,26 +29,35 @@
       <div class="quotation-table-wrap">
         <el-table :data="formData.items" border>
           <el-table-column type="index" label="序号" width="60" />
-          <el-table-column label="名称 *" min-width="160"><template #default="{ row, $index }">
+          <el-table-column min-width="160">
+            <template #header>名称 <span class="online-form-required-mark">*</span></template>
+            <template #default="{ row, $index }">
               <div :data-field-key="`items.${$index}.name`" :class="{ 'online-form-field--invalid': isInvalid(`items.${$index}.name`) }">
                 <el-input v-model="row.name" />
                 <small v-if="isInvalid(`items.${$index}.name`)" class="form-field-error">请填写名称</small>
               </div>
-            </template></el-table-column>
+            </template>
+          </el-table-column>
           <el-table-column label="单位" width="100"><template #default="{ row }"><el-input
                 v-model="row.unit" /></template></el-table-column>
-          <el-table-column label="数量 *" width="120"><template #default="{ row, $index }">
+          <el-table-column width="120">
+            <template #header>数量 <span class="online-form-required-mark">*</span></template>
+            <template #default="{ row, $index }">
               <div :data-field-key="`items.${$index}.quantity`" :class="{ 'online-form-field--invalid': isInvalid(`items.${$index}.quantity`) }">
                 <el-input v-model="row.quantity" />
                 <small v-if="isInvalid(`items.${$index}.quantity`)" class="form-field-error">请填写数量</small>
               </div>
-            </template></el-table-column>
-          <el-table-column label="单价 *" width="130"><template #default="{ row, $index }">
+            </template>
+          </el-table-column>
+          <el-table-column width="130">
+            <template #header>单价 <span class="online-form-required-mark">*</span></template>
+            <template #default="{ row, $index }">
               <div :data-field-key="`items.${$index}.unitPrice`" :class="{ 'online-form-field--invalid': isInvalid(`items.${$index}.unitPrice`) }">
                 <el-input v-model="row.unitPrice" />
                 <small v-if="isInvalid(`items.${$index}.unitPrice`)" class="form-field-error">请填写单价</small>
               </div>
-            </template></el-table-column>
+            </template>
+          </el-table-column>
           <el-table-column label="金额" width="130">
             <template #default="{ row }">{{ lineAmountText(row) }}</template>
           </el-table-column>

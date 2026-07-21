@@ -9,7 +9,7 @@
       </colgroup>
       <tbody>
         <tr>
-          <th scope="row">评审时间 <span class="review-form-table__required">*</span></th>
+          <th scope="row">评审时间 <span class="online-form-required-mark">*</span></th>
           <td data-field-key="meetingDate" :class="fieldClass('meetingDate')">
             <el-date-picker
               :model-value="displayValue(model.meetingDate)"
@@ -155,7 +155,7 @@
         </tr>
 
         <tr>
-          <th scope="row">其他补充内容/评审结论 <span class="review-form-table__required">*</span></th>
+          <th scope="row">其他补充内容/评审结论 <span class="online-form-required-mark">*</span></th>
           <td colspan="3" data-field-key="reviewConclusion" :class="fieldClass('reviewConclusion')">
             <el-input
               :model-value="displayValue(model.reviewConclusion)"
@@ -323,7 +323,6 @@ function isPlanInvalidKey(sourceType, sourceIndex) {
   text-align: center;
 }
 
-.review-form-table__required,
 .form-field-error {
   color: var(--el-color-danger);
 }

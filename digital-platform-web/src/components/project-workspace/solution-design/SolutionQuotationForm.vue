@@ -1,6 +1,7 @@
 <template>
   <section ref="formRoot" class="solution-section solution-quotation-form" v-loading="loading">
     <el-alert v-if="errorMessage" :title="errorMessage" type="error" show-icon :closable="false" />
+    <h4 v-if="showFormContent">填写报价表</h4>
     <el-form v-if="showFormContent" label-position="top" :disabled="!canEdit">
       <div class="quotation-meta-grid">
         <el-form-item label="报价日期"><el-date-picker v-model="formData.quotationDate" type="date"

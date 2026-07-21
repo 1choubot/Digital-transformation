@@ -1,5 +1,5 @@
 <template>
-  <SolutionDesignNodeLayout :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
+  <SolutionDesignNodeLayout heading="估计管理费用及税费利润" :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
     :error-message="context.solutionDesignErrorMessage">
     <SolutionUploadSlots :slots="slots" :is-pending="isPending"
       @upload="handleUpload" @download="downloadUpload" @mark-exemption="markUploadExemption"

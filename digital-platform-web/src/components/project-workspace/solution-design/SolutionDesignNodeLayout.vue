@@ -8,11 +8,21 @@
                 <el-alert v-if="node.returnReason" :title="`退回原因：${node.returnReason}`" type="warning" show-icon
                     :closable="false" /><el-alert v-if="node.blockingReasons?.length"
                     :title="`阻塞原因：${node.blockingReasons.join('；')}`" type="warning" show-icon :closable="false" />
+                <h4 v-if="heading">{{ heading }}</h4>
                 <slot />
             </section>
         </template>
     </section>
 </template>
 <script setup>
-defineProps({ workflow: Object, node: Object, loading: Boolean, errorMessage: String });
+defineProps({
+    workflow: Object,
+    node: Object,
+    loading: Boolean,
+    errorMessage: String,
+    heading: {
+        type: String,
+        default: ''
+    }
+});
 </script>

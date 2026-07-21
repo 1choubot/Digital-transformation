@@ -1,6 +1,6 @@
 <template>
   <SolutionDesignNodeLayout class="solution-quotation-node-page" :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
-    :error-message="context.solutionDesignErrorMessage">
+    :error-message="context.solutionDesignErrorMessage" :heading="pageHeading">
     <template #title-after>
       <GeneratedFormFileCard v-if="flow?.branchType === 'quotation' && quotation.dto.value?.form?.generatedFile"
         button-text="查看报价单"
@@ -74,6 +74,11 @@ const {
   returnNode, selectBranch, submitQuotation, acceptQuotation, rejectQuotation
 } = page;
 const flow = computed(() => workflow.value?.quotationTender || null);
+const pageHeading = computed(() => {
+  if (flow.value?.branchType === 'quotation') return '填写报价单';
+  if (flow.value?.branchType === 'tender') return '编写标书';
+  return '';
+});
 const quotationResultComment = ref('');
 const showQuotationResultActions = computed(() => Boolean(flow.value && (
   flow.value.permissions?.canAcceptQuotation

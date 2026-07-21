@@ -1,9 +1,6 @@
 <template>
   <SolutionDesignNodeLayout :workflow="workflow" :node="currentNode" :loading="context.solutionDesignLoading"
-    :error-message="context.solutionDesignErrorMessage">
-    <template v-if="nodeKey === 'solution_design' && slots.length" #title-after>
-      <h4>上传产出文件</h4>
-    </template>
+    :error-message="context.solutionDesignErrorMessage" :heading="pageHeading">
     <SolutionUploadSlots :slots="slots" :is-pending="isPending"
       @upload="handleUpload" @download="downloadUpload" @mark-exemption="markUploadExemption"
       @cancel-exemption="cancelUploadExemption" />
@@ -15,6 +12,7 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import SolutionDesignNodeLayout from './SolutionDesignNodeLayout.vue';
 import SolutionUploadSlots from './SolutionUploadSlots.vue';
 import SolutionNodeActions from './SolutionNodeActions.vue';
@@ -30,4 +28,13 @@ const {
   isPending, handleUpload, downloadUpload, markUploadExemption,
   cancelUploadExemption, submitNode, approveNode, returnNode
 } = useSolutionDesignNodePage(props, emit);
+
+const headingsByNodeKey = Object.freeze({
+  solution_design: '上传产出文件',
+  rd_cost_estimation: '估算物料明细和研发费用',
+  manufacturing_cost_estimation: '估算物料价格和安装调试运输费用',
+  marketing_cost_estimation: '估算销售费用'
+});
+
+const pageHeading = computed(() => headingsByNodeKey[nodeKey.value] || '');
 </script>

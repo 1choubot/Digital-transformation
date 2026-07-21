@@ -10,9 +10,10 @@
         :closable="false" />
       <el-alert v-if="errorMessage" :description="errorMessage" type="error" show-icon :closable="false" />
 
+
       <h4 v-if="isInitiationApproval">填写立项审批表</h4>
-      <h4 v-if="isInitiationRequirement">填写项目需求表</h4>
-      <h4 v-if="isInitiationNotice">编写立项通知</h4>
+      <h4 v-if="isInitiationRequirement && form.permissions?.canEdit">填写项目需求表</h4>
+      <h4 v-if="isInitiationNotice && form.permissions?.canEdit">编写立项通知</h4>
 
 
       <el-form class="online-form-editor__form" :model="formData" @submit.prevent="handleSubmit">

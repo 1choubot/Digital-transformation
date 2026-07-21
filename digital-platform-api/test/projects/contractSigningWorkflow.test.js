@@ -209,6 +209,8 @@ function fakeGeneratedFileStorage({ failWrite = false } = {}) {
   };
 }
 
+const CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE = 'contract_kickoff_notice';
+
 function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -416,17 +418,11 @@ class ContractSigningWorkflowFakeConnection {
     };
   }
 
-  kickoffNoticeDocument() {
-    return this.projectStageDocuments.find((document) =>
-      document.document_code === 'C25' || document.document_code === '4.1'
-    ) || null;
-  }
-
   latestKickoffNoticeGeneratedFile({ downloadable = false } = {}) {
     const rows = this.generatedFiles
       .filter((file) =>
         Number(file.project_id) === Number(this.project.id) &&
-        ['C25', '4.1'].includes(file.document_code) &&
+        file.document_code === CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE &&
         (!downloadable || (file.status === 'generated' && Boolean(file.storage_key)))
       )
       .sort((left, right) => Number(right.version) - Number(left.version) || Number(right.id) - Number(left.id));
@@ -553,11 +549,11 @@ class ContractSigningWorkflowFakeConnection {
       text.startsWith('SELECT COALESCE(MAX(version), 0) + 1 AS nextVersion') &&
       text.includes('FROM project_stage_document_generated_files')
     ) {
-      const [projectId, documentId, templateKey] = params;
+      const [projectId, documentCode, templateKey] = params;
       const maxVersion = this.generatedFiles.reduce((max, file) => {
         if (
           Number(file.project_id) === Number(projectId) &&
-          Number(file.stage_document_id) === Number(documentId) &&
+          file.document_code === documentCode &&
           file.template_key === templateKey
         ) {
           return Math.max(max, Number(file.version || 0));
@@ -578,17 +574,17 @@ class ContractSigningWorkflowFakeConnection {
 
     if (
       text.startsWith('SELECT id FROM project_stage_document_generated_files') &&
-      text.includes('document_code IN (?, ?)') &&
+      text.includes('document_code = ?') &&
       text.includes('storage_key IS NOT NULL')
     ) {
-      const [projectId, firstCode, secondCode, status] = params;
-      const codes = new Set([firstCode, secondCode]);
+      const [projectId, documentCode, status, templateKey] = params;
       const file =
         this.generatedFiles
           .filter((candidate) =>
             Number(candidate.project_id) === Number(projectId) &&
-            codes.has(candidate.document_code) &&
+            candidate.document_code === documentCode &&
             candidate.status === status &&
+            candidate.template_key === templateKey &&
             Boolean(candidate.storage_key)
           )
           .sort((left, right) => Number(right.version) - Number(left.version) || Number(right.id) - Number(left.id))[0] ||
@@ -625,15 +621,15 @@ class ContractSigningWorkflowFakeConnection {
 
     if (
       text.startsWith('SELECT * FROM project_stage_document_generated_files') &&
-      text.includes('document_code IN (?, ?)')
+      text.includes('document_code = ?')
     ) {
-      const [projectId, firstCode, secondCode, status] = params;
-      const codes = new Set([firstCode, secondCode]);
+      const [projectId, documentCode, templateKey, status] = params;
       const downloadable = text.includes('storage_key IS NOT NULL');
       const rows = this.generatedFiles
         .filter((candidate) =>
           Number(candidate.project_id) === Number(projectId) &&
-          codes.has(candidate.document_code) &&
+          candidate.document_code === documentCode &&
+          candidate.template_key === templateKey &&
           (!downloadable || (candidate.status === status && Boolean(candidate.storage_key)))
         )
         .sort((left, right) => Number(right.version) - Number(left.version) || Number(right.id) - Number(left.id));
@@ -1302,12 +1298,12 @@ class ContractSigningWorkflowFakeConnection {
       text.startsWith('UPDATE project_stage_document_generated_files SET status = ?') &&
       text.includes('id <> ?')
     ) {
-      const [status, projectId, documentId, templateKey, expectedStatus, excludedId] = params;
+      const [status, projectId, documentCode, templateKey, expectedStatus, excludedId] = params;
       let affectedRows = 0;
       for (const file of this.generatedFiles) {
         if (
           Number(file.project_id) === Number(projectId) &&
-          Number(file.stage_document_id) === Number(documentId) &&
+          file.document_code === documentCode &&
           file.template_key === templateKey &&
           file.status === expectedStatus &&
           Number(file.id) !== Number(excludedId)
@@ -1505,7 +1501,9 @@ async function assertManualContractAdvanceBlockedByKickoffNotice(db, user) {
       assert.equal(error.code, 'PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE');
       assert.equal(error.message, '项目启动通知未生成完成');
       const documents = error.details?.incompleteRequiredDocuments || [];
-      const kickoffNoticeDocument = documents.find((document) => document.documentCode === 'C25');
+      const kickoffNoticeDocument = documents.find(
+        (document) => document.documentCode === CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE
+      );
       assert.ok(kickoffNoticeDocument);
       assert.equal(kickoffNoticeDocument.documentName, '项目启动通知');
       assert.deepEqual(kickoffNoticeDocument.derivedBlockingReasons, ['项目启动通知未生成完成']);
@@ -1531,18 +1529,21 @@ async function assertKickoffNoticeGeneratedAndDownloadable(db, user, {
 } = {}) {
   const generatedFile = db.connection.latestKickoffNoticeGeneratedFile({ downloadable: true });
   assert.ok(generatedFile);
-  assert.equal(generatedFile.document_code, 'C25');
+  assert.equal(generatedFile.document_code, CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE);
+  assert.equal(generatedFile.stage_document_id, null);
   assert.equal(generatedFile.status, 'generated');
   assert.equal(generatedFile.file_name.includes('项目启动通知'), true);
   assert.equal(Boolean(generatedFile.storage_key), true);
+  const sourceSnapshot = JSON.parse(generatedFile.source_snapshot_json);
+  assert.equal(sourceSnapshot.document.documentCode, CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE);
+  assert.equal(sourceSnapshot.document.documentName, '项目启动通知');
   if (expectedPaymentAction) {
-    assert.equal(JSON.parse(generatedFile.source_snapshot_json).paymentAction, expectedPaymentAction);
+    assert.equal(sourceSnapshot.paymentAction, expectedPaymentAction);
   }
   if (expectedPaymentStatus) {
-    assert.equal(JSON.parse(generatedFile.source_snapshot_json).contractSigningWorkflow.paymentFlow.status, expectedPaymentStatus);
+    assert.equal(sourceSnapshot.contractSigningWorkflow.paymentFlow.status, expectedPaymentStatus);
   }
   if (expectedProjectDisplayName) {
-    const sourceSnapshot = JSON.parse(generatedFile.source_snapshot_json);
     assert.equal(sourceSnapshot.project.projectDisplayName, expectedProjectDisplayName);
     assert.equal(sourceSnapshot.project.projectCode, db.connection.project.project_code);
     assert.equal(sourceSnapshot.project.customerName, db.connection.project.customer_name);
@@ -1560,7 +1561,8 @@ async function assertKickoffNoticeGeneratedAndDownloadable(db, user, {
     user
   }, db);
   assert.equal(download.fileName, generatedFile.file_name);
-  assert.equal(download.documentCode, 'C25');
+  assert.equal(download.documentCode, CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE);
+  assert.equal(download.documentName, '项目启动通知');
   assert.equal(download.version, Number(generatedFile.version));
 }
 
@@ -1748,7 +1750,10 @@ test('contract workbench todos cover business owner signing, payment, and kickof
 
   businessTodos = await selectContractSigningWorkbenchTodos(businessOwner, db);
   assert.deepEqual(todoActionTexts(businessTodos), []);
-  assert.equal(db.connection.latestKickoffNoticeGeneratedFile({ downloadable: true })?.document_code, 'C25');
+  assert.equal(
+    db.connection.latestKickoffNoticeGeneratedFile({ downloadable: true })?.document_code,
+    CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE
+  );
 });
 
 test('contract workbench todos cover general manager release only while waiting', async () => {
@@ -2442,7 +2447,7 @@ test('complete signing requires both scans and activates advance payment', async
   assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_COMPLETED));
 });
 
-test('business owner completes advance payment, generates C25, and auto advances to detailed design', async () => {
+test('business owner completes advance payment, generates contract kickoff notice, and auto advances', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
   const businessOwner = authUser(db.connection.users.get(13));
@@ -2476,7 +2481,7 @@ test('business owner completes advance payment, generates C25, and auto advances
   assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_COMPLETED));
 });
 
-test('manual contract advance is blocked before C25 generated file exists', async () => {
+test('manual contract advance is blocked before contract kickoff notice generated file exists', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
   const generalManager = authUser(db.connection.users.get(30));
@@ -2593,7 +2598,7 @@ test('deprecated generic payment release action is rejected without changing wor
   );
 });
 
-test('general manager approves unpaid payment release, generates C25, and auto advances', async () => {
+test('general manager approves unpaid payment release, generates contract kickoff notice, and auto advances', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
   const businessOwner = authUser(db.connection.users.get(13));
@@ -2632,7 +2637,7 @@ test('general manager approves unpaid payment release, generates C25, and auto a
   assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED_UNPAID));
 });
 
-test('general manager approves paid payment release, records completed status, generates C25, and auto advances', async () => {
+test('general manager approves paid payment release, records completed status, generates contract kickoff notice', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
   const businessOwner = authUser(db.connection.users.get(13));
@@ -2663,7 +2668,7 @@ test('general manager approves paid payment release, records completed status, g
   assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED_PAID));
 });
 
-test('manual contract advance is blocked while general manager release is waiting and C25 is not generated', async () => {
+test('manual contract advance is blocked while general manager release is waiting and kickoff notice is not generated', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
   const businessOwner = authUser(db.connection.users.get(13));
@@ -2800,7 +2805,7 @@ test('advance payment actions reject wrong actors, inactive nodes, ended project
   );
 });
 
-test('complete payment generated C25 completes contract stage and records kickoff generation context', async () => {
+test('complete payment generated contract kickoff notice completes contract stage and records context', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
   const businessOwner = authUser(db.connection.users.get(13));
@@ -2837,29 +2842,38 @@ test('complete payment generated C25 completes contract stage and records kickof
   });
 
   const c25 = db.connection.projectStageDocuments.find((document) => document.document_code === '4.1');
-  assert.equal(c25.document_name, '项目启动通知');
+  assert.equal(c25.document_name, '项目启动书');
   const [c25WithDerived] = await attachSolutionDesignDerivedCompletionToStageDocumentRows(db.connection, [c25]);
   const c25Completion = deriveStageDocumentCompletion(c25WithDerived);
-  assert.equal(c25Completion.isComplete, true);
-  assert.equal(c25Completion.completionStatus, 'completed');
-  assert.equal(c25WithDerived.contractSigningDerivedCompletion.source, 'contract_signing_workflow');
+  assert.equal(c25Completion.isComplete, false);
+  assert.equal(c25Completion.completionStatus, 'incomplete');
+  assert.equal(c25WithDerived.contractSigningDerivedCompletion, undefined);
 
   assert.equal(SELF_DEVELOPED_PROJECT_STAGES.length, 8);
   assert.equal(db.connection.projectStageDocuments.length, 71);
   assert.equal(
     db.connection.projectStageDocuments.filter((document) => document.document_name === '项目启动通知').length,
-    1
+    0
+  );
+  assert.equal(
+    V20260629_WORKSPACE_BLUE_MODULES
+      .filter((module) => module.stageOrder === 3)
+      .some((module) => module.outputCodes.includes('C25')),
+    false
   );
   assert.equal(
     V20260629_WORKSPACE_BLUE_MODULES
       .filter((module) => module.stageOrder === 4)
       .some((module) => module.outputCodes.includes('C25')),
-    false
+    true
   );
 
   const paymentLog = latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_COMPLETED);
   assert.ok(paymentLog);
-  assert.equal(JSON.parse(paymentLog.details_json).generatedKickoffNotice.documentCode, 'C25');
+  assert.equal(
+    JSON.parse(paymentLog.details_json).generatedKickoffNotice.generatedFileCode,
+    CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE
+  );
   const stageAdvanceLog = latestLog(db.connection, OPERATION_ACTION_TYPE.STAGE_ADVANCED);
   assert.ok(stageAdvanceLog);
   const stageAdvanceDetails = JSON.parse(stageAdvanceLog.details_json);
@@ -2868,11 +2882,11 @@ test('complete payment generated C25 completes contract stage and records kickof
     OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_GENERATED_KICKOFF_NOTICE
   );
   assert.equal(stageAdvanceDetails.nodeKey, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT);
-  assert.equal(stageAdvanceDetails.documentCode, 'C25');
+  assert.equal(stageAdvanceDetails.generatedFileCode, CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE);
   assert.equal(stageAdvanceDetails.toStageKey, 'detailedDesign');
 });
 
-test('C25 generation failure rolls back the advance payment final action', async () => {
+test('contract kickoff notice generation failure rolls back the advance payment final action', async () => {
   const generatedFileStorage = fakeGeneratedFileStorage({ failWrite: true });
   const db = fakeDb({ generatedFileStorage });
   const storage = fakeStorage();
@@ -2952,7 +2966,7 @@ test('contract derived completion feeds stage gate for workflow-owned documents'
       ['3.1', 'contract_signing_workflow', true],
       ['C22', 'contract_signing_workflow', true],
       ['3.2', 'contract_signing_workflow', true],
-      ['4.1', 'contract_signing_workflow', true]
+      ['4.1', null, false]
     ]
   );
 });
@@ -3119,7 +3133,7 @@ test('contract stage supplemental documents keep C24 outside workflow node navig
     { documentCode: 'C22', documentName: '销售合同' },
     { documentCode: 'C23', documentName: '销售合同（客户侧成品）' },
     { documentCode: 'C24', documentName: '发票（预付款）' },
-    { documentCode: 'C25', documentName: '项目启动通知' }
+    { documentCode: 'C25', documentName: '项目启动书' }
   ]);
 
   assert.deepEqual(
@@ -3133,7 +3147,7 @@ test('contract stage supplemental documents keep C24 outside workflow node navig
     { documentCode: 'C22', documentName: '销售合同' },
     { documentCode: '3.2', documentName: '销售合同（客户侧成品）' },
     { documentCode: '3.4', documentName: '发票（预付款）' },
-    { documentCode: '4.1', documentName: '项目启动通知' }
+    { documentCode: '4.1', documentName: '项目启动书' }
   ]);
 
   assert.deepEqual(
@@ -3154,7 +3168,9 @@ test('contract workflow metadata keeps eight stages and seventy-one target docum
   assert.equal(outputByCode.get('C23').documentName, '销售合同（客户侧成品）');
   assert.equal(outputByCode.get('C24').documentName, '发票（预付款）');
   assert.equal(outputByCode.get('C24').stageOrder, 3);
-  assert.equal(outputByCode.get('C25').documentName, '项目启动通知');
+  assert.equal(outputByCode.get('C25').documentName, '项目启动书');
+  assert.equal(outputByCode.get('C25').stageOrder, 4);
+  assert.equal(outputByCode.get('C25').nodeKey, 'project_kickoff_meeting');
   assert.equal(
     [outputByCode.get('C20'), outputByCode.get('C22')]
       .some((output) => output.documentName.includes('草稿')),

@@ -26,7 +26,6 @@ import {
   CONTRACT_SIGNING_UPLOAD_SLOT_KEY,
   CONTRACT_SIGNING_UPLOAD_SLOT_STATUS
 } from '../../domain/contractSigningWorkflow.js';
-import { GENERATED_FILE_STATUS } from '../../domain/initiationTemplateFileManifest.js';
 
 export class StageDocumentNotFoundError extends Error {
   constructor(projectId, documentId) {
@@ -107,8 +106,7 @@ const SOLUTION_DESIGN_DOCUMENT_CODES = new Set([
 ]);
 const CONTRACT_SIGNING_LEGACY_DOCUMENT_CODE_BY_TARGET_CODE = Object.freeze({
   C21: '3.1',
-  C23: '3.2',
-  C25: '4.1'
+  C23: '3.2'
 });
 const CONTRACT_SIGNING_TARGET_DOCUMENT_CODE_BY_LEGACY_CODE = new Map(
   Object.entries(CONTRACT_SIGNING_LEGACY_DOCUMENT_CODE_BY_TARGET_CODE).map(([targetCode, legacyCode]) => [
@@ -116,7 +114,7 @@ const CONTRACT_SIGNING_TARGET_DOCUMENT_CODE_BY_LEGACY_CODE = new Map(
     targetCode
   ])
 );
-const CONTRACT_SIGNING_DERIVED_DOCUMENT_CODES = Object.freeze(['C20', 'C21', 'C22', 'C23', 'C25']);
+const CONTRACT_SIGNING_DERIVED_DOCUMENT_CODES = Object.freeze(['C20', 'C21', 'C22', 'C23']);
 const CONTRACT_SIGNING_DOCUMENT_CODES = new Set([
   ...CONTRACT_SIGNING_DERIVED_DOCUMENT_CODES,
   ...Object.values(CONTRACT_SIGNING_LEGACY_DOCUMENT_CODE_BY_TARGET_CODE)
@@ -141,11 +139,6 @@ const CONTRACT_SIGNING_DOCUMENT_SLOT_MAP = Object.freeze({
     nodeKey: CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING,
     slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN,
     blockingReason: '签订协议和合同节点未完成，或销售合同扫描件 current 文件缺失'
-  },
-  C25: {
-    nodeKey: CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT,
-    slotKey: null,
-    blockingReason: '项目启动通知未生成完成'
   }
 });
 const SOLUTION_DESIGN_WORKFLOW_ANCHOR_DOCUMENT_CODES = new Set(
@@ -810,28 +803,6 @@ function mapQuotationTenderFlows(rows) {
   return mapped;
 }
 
-function mapContractSigningGeneratedFilesByProjectAndCode(rows) {
-  const mapped = new Map();
-  for (const row of rows) {
-    const projectId = Number(row.project_id ?? row.projectId);
-    const rawDocumentCode = getDocumentCode(row);
-    const documentCode = normalizeContractSigningDocumentCode(rawDocumentCode);
-    if (!Number.isSafeInteger(projectId) || documentCode !== 'C25') {
-      continue;
-    }
-
-    if (!mapped.has(projectId)) {
-      mapped.set(projectId, new Map());
-    }
-
-    const projectMap = mapped.get(projectId);
-    if (!projectMap.has(documentCode)) {
-      projectMap.set(documentCode, row);
-    }
-  }
-  return mapped;
-}
-
 function getContextNode(context, nodeKey) {
   return context.nodesByKey.get(nodeKey) || null;
 }
@@ -1171,10 +1142,6 @@ function getContractSigningSlot(context, slotKey) {
   return context.slotsByKey.get(slotKey) || null;
 }
 
-function getContractSigningGeneratedFile(context, documentCode) {
-  return context.generatedFilesByCode?.get(documentCode) || null;
-}
-
 function getContractSigningRevision({ node, slot }) {
   const revision = Math.max(
     Number(node?.current_revision ?? 0),
@@ -1189,38 +1156,10 @@ function isContractSigningSlotApprovedWithCurrentFile(slot) {
     slot?.status === CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.APPROVED;
 }
 
-function isContractKickoffNoticeGeneratedFileComplete(generatedFile) {
-  return Boolean(generatedFile?.storage_key) &&
-    generatedFile?.status === GENERATED_FILE_STATUS.GENERATED;
-}
-
-function deriveContractSigningKickoffNoticeCompletion(context, documentCode) {
-  const mapping = CONTRACT_SIGNING_DOCUMENT_SLOT_MAP.C25;
-  const node = getContractSigningNode(context, mapping.nodeKey);
-  const generatedFile = getContractSigningGeneratedFile(context, 'C25');
-  const complete =
-    node?.status === CONTRACT_SIGNING_NODE_STATUS.APPROVED &&
-    isContractKickoffNoticeGeneratedFileComplete(generatedFile);
-  const version = Number(generatedFile?.version ?? 1);
-
-  return buildDerivedCompletion({
-    documentCode,
-    nodeKey: mapping.nodeKey,
-    revision: Number.isSafeInteger(version) && version > 0 ? version : 1,
-    isComplete: complete,
-    blockingReasons: complete ? [] : [mapping.blockingReason],
-    source: CONTRACT_SIGNING_DERIVED_SOURCE
-  });
-}
-
 function deriveContractSigningDocumentCompletion(context, documentCode) {
   const mapping = CONTRACT_SIGNING_DOCUMENT_SLOT_MAP[documentCode];
   if (!mapping) {
     return null;
-  }
-
-  if (documentCode === 'C25') {
-    return deriveContractSigningKickoffNoticeCompletion(context, documentCode);
   }
 
   const node = getContractSigningNode(context, mapping.nodeKey);
@@ -1352,27 +1291,14 @@ async function selectContractSigningDerivedContexts(executor, projectIds) {
     ORDER BY s.project_id ASC, s.slot_order ASC`,
     projectIds
   );
-  const [generatedFileRows] = await executor.execute(
-    `SELECT *
-    FROM project_stage_document_generated_files
-    WHERE project_id IN (${placeholders})
-      AND document_code IN (?, ?)
-      AND status = ?
-      AND storage_key IS NOT NULL
-    ORDER BY project_id ASC, version DESC, id DESC`,
-    [...projectIds, 'C25', '4.1', GENERATED_FILE_STATUS.GENERATED]
-  );
-
   const nodesByProject = mapRowsByProjectAndKey(nodeRows, 'node_key');
   const slotsByProject = mapRowsByProjectAndKey(slotRows, 'slot_key');
-  const generatedFilesByProject = mapContractSigningGeneratedFilesByProjectAndCode(generatedFileRows);
 
   return new Map(projectIds.map((projectId) => [
     projectId,
     {
       nodesByKey: nodesByProject.get(projectId) || new Map(),
-      slotsByKey: slotsByProject.get(projectId) || new Map(),
-      generatedFilesByCode: generatedFilesByProject.get(projectId) || new Map()
+      slotsByKey: slotsByProject.get(projectId) || new Map()
     }
   ]));
 }

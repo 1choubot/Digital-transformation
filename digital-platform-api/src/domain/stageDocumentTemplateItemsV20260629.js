@@ -406,9 +406,9 @@ export const V20260629_TARGET_TEMPLATE_OUTPUTS = Object.freeze([
     targetOutputCode: 'C25',
     stageOrder: 4,
     nodeKey: 'project_kickoff_meeting',
-    documentName: '项目启动通知',
+    documentName: '项目启动书',
     legacyDocumentCode: '4.1',
-    sourceNode: '项目启动通知',
+    sourceNode: '项目启动会',
     responsibleRole: '制造中心',
     ownerDepartment: MANUFACTURING_CENTER,
     reviewDepartment: MANUFACTURING_CENTER,
@@ -1065,11 +1065,11 @@ export const V20260629_WORKSPACE_BLUE_MODULES = Object.freeze([
   }),
   blueModule({ stageOrder: 3, nodeKey: 'advance_payment_invoice', nodeName: '项目预付款交付', outputCodes: ['C24'] }),
   blueModule({
-    stageOrder: 3,
-    nodeKey: 'project_start_notice',
-    nodeName: '项目启动通知',
+    stageOrder: 4,
+    nodeKey: 'project_kickoff_meeting',
+    nodeName: '项目启动会',
     outputCodes: ['C25'],
-    notes: 'C25 由合同签订 workflow 的项目预付款支付最终动作生成，不作为独立合同主流程节点或详细设计第二入口。'
+    notes: 'C25/4.1 为详细设计阶段项目启动书；合同 workflow 生成的项目启动通知不占用 C25。'
   }),
   blueModule({ stageOrder: 4, nodeKey: 'detailed_design_preparation', nodeName: '详细设计准备', outputCodes: ['C26'] }),
   blueModule({ stageOrder: 4, nodeKey: 'detailed_design', nodeName: '详细设计', outputCodes: ['C27', 'C28', 'C29', 'C30', 'C31', 'C32', 'C33', 'C34', 'C35'] }),

@@ -22,7 +22,8 @@ import { getContractSigningWorkflow } from './contractSigningWorkflowRepository.
 
 const INITIATION_STAGE_KEY = 'initiation';
 const CURRENT_RUNTIME_TEMPLATE_VERSION = V20260629_TARGET_TEMPLATE_VERSION;
-const CONTRACT_SIGNING_WORKFLOW_DOCUMENT_CODES = new Set(['C20', 'C21', '3.1', 'C22', 'C23', '3.2', 'C25', '4.1']);
+const CONTRACT_SIGNING_WORKFLOW_DOCUMENT_CODES = new Set(['C20', 'C21', '3.1', 'C22', 'C23', '3.2']);
+const CONTRACT_SIGNING_EXCLUDED_SUPPLEMENTAL_DOCUMENT_CODES = new Set(['C25', '4.1']);
 
 function buildDocumentActionHints(document, outputConfig) {
   const permissions = document?.permissions || {};
@@ -304,7 +305,9 @@ function isCompatibilityOnlyModule(moduleConfig) {
 
 function isContractSigningSupplementalDocument(document) {
   const documentCode = String(document?.documentCode || '').trim();
-  return Boolean(documentCode) && !CONTRACT_SIGNING_WORKFLOW_DOCUMENT_CODES.has(documentCode);
+  return Boolean(documentCode) &&
+    !CONTRACT_SIGNING_WORKFLOW_DOCUMENT_CODES.has(documentCode) &&
+    !CONTRACT_SIGNING_EXCLUDED_SUPPLEMENTAL_DOCUMENT_CODES.has(documentCode);
 }
 
 export function buildContractSigningSupplementalDocuments(documents = []) {

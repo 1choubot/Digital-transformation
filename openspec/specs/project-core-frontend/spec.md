@@ -2932,19 +2932,19 @@ TBD - created by archiving change add-project-core-frontend. Update Purpose afte
 - **AND** 完成支付、未付款放行或已付款通过后，前端 MUST 不再展示重复预付款处理按钮
 
 #### Scenario: 预付款页面展示项目启动通知生成结果
-- **WHEN** 后端返回 C25 项目启动通知 generated file 状态
+- **WHEN** 后端返回合同 workflow `contract_kickoff_notice` 项目启动通知 generated file 状态
 - **THEN** 前端 MUST 在项目预付款支付页面展示生成状态、生成时间、生成失败原因和下载入口
 - **AND** 前端 MUST 在后端返回可下载时调用生成文件下载接口
 - **AND** 前端 MUST NOT 展示项目启动通知手工上传入口作为主路径
 - **AND** 前端 MUST NOT 跳转到独立项目启动通知节点页
 - **AND** 操作成功后前端 MUST 刷新项目阶段和合同 workflow 状态
-- **AND** 前端 MUST 使用 C25 修正后的展示名 `项目启动通知`
+- **AND** 前端 MUST NOT 将该生成结果展示为 C25 或详细设计 `项目启动书`
 
 #### Scenario: 项目启动通知不形成双入口
 - **WHEN** 用户查看合同签订阶段或详细设计阶段导航
-- **THEN** 前端 MUST 只在项目预付款支付节点上下文中展示 C25 项目启动通知生成结果
-- **AND** 前端 MUST NOT 同时展示合同阶段 `项目启动通知` 主入口和详细设计阶段旧名 `项目启动书` 主入口
-- **AND** C25 MUST NOT 作为另一套主流程节点出现
+- **THEN** 前端 MUST 只在项目预付款支付节点上下文中展示合同 workflow 项目启动通知生成结果
+- **AND** 前端 MUST NOT 同时展示合同阶段 `项目启动通知` 主入口
+- **AND** C25 / `4.1` MUST 保持详细设计阶段 `项目启动书`，且不得作为合同 workflow 的另一套入口出现
 
 #### Scenario: 已结束项目只读
 - **WHEN** 项目已结束

@@ -116,7 +116,7 @@ const {
 } = BUSINESS_DEPARTMENT;
 
 const LEGACY_CONTRACT_REVIEW_COMPATIBILITY_OUTPUT_CODES = new Set(['LC33', 'LC54']);
-const CONTRACT_SIGNING_WORKFLOW_DOCUMENT_CODES = new Set(['C20', 'C21', 'C22', 'C23', 'C25']);
+const CONTRACT_SIGNING_WORKFLOW_DOCUMENT_CODES = new Set(['C20', 'C21', 'C22', 'C23']);
 const CONTRACT_STAGE_NON_WORKFLOW_BLUEPRINT_OUTPUT_CODES = new Set(['C24']);
 const EXCLUDED_V20260629_PROJECT_DOCUMENT_CODES = new Set(['3.3', '5.4', 'LC33', 'LC54']);
 const V20260629_TARGET_ONLY_DOCUMENT_CODES = STAGE_DOCUMENT_TEMPLATE_ITEMS_V20260629
@@ -6000,7 +6000,7 @@ assert.deepEqual(
     reviewDepartment: byCode.get('4.1').reviewDepartment
   },
   {
-    documentName: '项目启动通知',
+    documentName: '项目启动书',
     ownerDepartment: MANUFACTURING_CENTER,
     reviewDepartment: MANUFACTURING_CENTER
   }

@@ -36,6 +36,7 @@ import {
 import { materializeContractSigningWorkflow } from './contractSigningWorkflowMaterialization.js';
 
 const CONTRACT_SIGNING_KICKOFF_NOTICE_BLOCKING_REASON = '项目启动通知未生成完成';
+const CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE = 'contract_kickoff_notice';
 const CONTRACT_SIGNING_ADVANCE_GATE_IGNORED_DOCUMENT_CODES = new Set(['C24', '3.4']);
 
 function assertCanAdvanceProject(projectRow) {
@@ -261,13 +262,14 @@ async function hasContractKickoffNoticeGeneratedFile(connection, projectId) {
     `SELECT id
     FROM project_stage_document_generated_files
     WHERE project_id = ?
-      AND document_code IN (?, ?)
+      AND document_code = ?
       AND status = ?
+      AND template_key = ?
       AND storage_key IS NOT NULL
     ORDER BY version DESC, id DESC
     LIMIT 1
     FOR UPDATE`,
-    [projectId, 'C25', '4.1', 'generated']
+    [projectId, CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE, 'generated', 'contract_kickoff_notice_docx']
   );
 
   return rows.length > 0;
@@ -276,7 +278,7 @@ async function hasContractKickoffNoticeGeneratedFile(connection, projectId) {
 function buildContractKickoffNoticeGateDocument() {
   return {
     id: null,
-    documentCode: 'C25',
+    documentCode: CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE,
     documentName: '项目启动通知',
     status: CONTRACT_SIGNING_NODE_STATUS.PENDING,
     completionMode: 'submit_only',
@@ -298,7 +300,7 @@ function buildContractKickoffNoticeGateDocument() {
 
 function appendIncompleteGateDocument(gateSummary, document) {
   const existingIndex = gateSummary.incompleteRequiredDocuments.findIndex((candidate) =>
-    candidate.documentCode === document.documentCode || candidate.documentCode === '4.1'
+    candidate.documentCode === document.documentCode
   );
   const incompleteRequiredDocuments = existingIndex >= 0
     ? gateSummary.incompleteRequiredDocuments.map((candidate, index) =>
@@ -353,7 +355,7 @@ async function applyContractSigningStageGate(connection, projectId, currentStage
 
 function getStageGateIncompleteMessage(gateSummary) {
   const kickoffNoticeDocument = gateSummary.incompleteRequiredDocuments.find((document) =>
-    document.documentCode === 'C25' &&
+    document.documentCode === CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE &&
     (document.derivedBlockingReasons || []).includes(CONTRACT_SIGNING_KICKOFF_NOTICE_BLOCKING_REASON)
   );
 

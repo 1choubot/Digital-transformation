@@ -86,7 +86,8 @@ const PREPARATION_UPLOAD_REPLACEABLE_STATUSES = new Set([
   CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.RETURNED
 ]);
 const DEFAULT_UPLOAD_MIME_TYPE = 'application/octet-stream';
-const CONTRACT_KICKOFF_NOTICE_DOCUMENT_CODES = Object.freeze(['C25', '4.1']);
+const CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE = 'contract_kickoff_notice';
+const CONTRACT_KICKOFF_NOTICE_DOCUMENT_NAME = '项目启动通知';
 const CONTRACT_KICKOFF_NOTICE_TEMPLATE = Object.freeze({
   templateKey: 'contract_kickoff_notice_docx',
   fileType: 'docx',
@@ -589,42 +590,16 @@ async function selectContractSigningPaymentFlowForUpdate(executor, projectId) {
   return rows[0] || null;
 }
 
-async function selectProjectKickoffNoticeStageDocumentForUpdate(executor, projectId) {
-  const [rows] = await executor.execute(
-    `SELECT *
-    FROM project_stage_documents
-    WHERE project_id = ?
-      AND document_code IN (?, ?)
-    ORDER BY CASE WHEN document_code = ? THEN 0 ELSE 1 END ASC, id ASC
-    LIMIT 1
-    FOR UPDATE`,
-    [projectId, ...CONTRACT_KICKOFF_NOTICE_DOCUMENT_CODES, CONTRACT_KICKOFF_NOTICE_DOCUMENT_CODES[0]]
-  );
-
-  const document = rows[0] || null;
-  if (!document) {
-    throw new ContractSigningWorkflowError(
-      CONTRACT_SIGNING_ERROR.NODE_NOT_PROCESSABLE,
-      'Project kickoff notice document is not initialized',
-      409,
-      {
-        documentCodes: CONTRACT_KICKOFF_NOTICE_DOCUMENT_CODES
-      }
-    );
-  }
-
-  return document;
-}
-
 async function selectLatestProjectKickoffNoticeGeneratedFile(executor, projectId) {
   const [rows] = await executor.execute(
     `SELECT *
     FROM project_stage_document_generated_files
     WHERE project_id = ?
-      AND document_code IN (?, ?)
+      AND document_code = ?
+      AND template_key = ?
     ORDER BY version DESC, id DESC
     LIMIT 1`,
-    [projectId, ...CONTRACT_KICKOFF_NOTICE_DOCUMENT_CODES]
+    [projectId, CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE, CONTRACT_KICKOFF_NOTICE_TEMPLATE.templateKey]
   );
 
   return rows[0] || null;
@@ -635,12 +610,18 @@ async function selectLatestDownloadableProjectKickoffNoticeGeneratedFile(executo
     `SELECT *
     FROM project_stage_document_generated_files
     WHERE project_id = ?
-      AND document_code IN (?, ?)
+      AND document_code = ?
+      AND template_key = ?
       AND status = ?
       AND storage_key IS NOT NULL
     ORDER BY version DESC, id DESC
     LIMIT 1`,
-    [projectId, ...CONTRACT_KICKOFF_NOTICE_DOCUMENT_CODES, GENERATED_FILE_STATUS.GENERATED]
+    [
+      projectId,
+      CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE,
+      CONTRACT_KICKOFF_NOTICE_TEMPLATE.templateKey,
+      GENERATED_FILE_STATUS.GENERATED
+    ]
   );
 
   return rows[0] || null;
@@ -655,8 +636,8 @@ async function selectProjectKickoffNoticeGeneratedFileDto(executor, projectId) {
   return latestRow
     ? {
         ...mapGeneratedFile(latestRow, { downloadableRow }),
-        documentCode: 'C25',
-        documentName: '项目启动通知',
+        documentCode: CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE,
+        documentName: CONTRACT_KICKOFF_NOTICE_DOCUMENT_NAME,
         downloadEndpoint: downloadableRow
           ? `/api/projects/${projectId}/contract-signing-workflow/kickoff-notice/generated-file/download`
           : null
@@ -665,8 +646,8 @@ async function selectProjectKickoffNoticeGeneratedFileDto(executor, projectId) {
         id: null,
         projectId,
         stageDocumentId: null,
-        documentCode: 'C25',
-        documentName: '项目启动通知',
+        documentCode: CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE,
+        documentName: CONTRACT_KICKOFF_NOTICE_DOCUMENT_NAME,
         templateKey: CONTRACT_KICKOFF_NOTICE_TEMPLATE.templateKey,
         fileType: CONTRACT_KICKOFF_NOTICE_TEMPLATE.fileType,
         version: null,
@@ -2347,14 +2328,14 @@ async function markAdvancePaymentPaidByGeneralManager(executor, { projectId, act
   }
 }
 
-async function selectNextProjectKickoffNoticeGeneratedVersion(executor, projectId, documentId) {
+async function selectNextProjectKickoffNoticeGeneratedVersion(executor, projectId) {
   const [rows] = await executor.execute(
     `SELECT COALESCE(MAX(version), 0) + 1 AS nextVersion
     FROM project_stage_document_generated_files
     WHERE project_id = ?
-      AND stage_document_id = ?
+      AND document_code = ?
       AND template_key = ?`,
-    [projectId, documentId, CONTRACT_KICKOFF_NOTICE_TEMPLATE.templateKey]
+    [projectId, CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE, CONTRACT_KICKOFF_NOTICE_TEMPLATE.templateKey]
   );
 
   return Number(rows[0]?.nextVersion || 1);
@@ -2380,7 +2361,6 @@ export function buildProjectKickoffNoticeDisplayName(projectRow) {
 
 function buildProjectKickoffNoticeSourceSnapshot({
   projectRow,
-  documentRow,
   roleState,
   nodes,
   slots,
@@ -2400,9 +2380,9 @@ function buildProjectKickoffNoticeSourceSnapshot({
       currentStageOrder: projectRow.current_stage_order ?? null
     },
     document: {
-      id: documentRow.id,
-      documentCode: documentRow.document_code,
-      documentName: '项目启动通知'
+      id: null,
+      documentCode: CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE,
+      documentName: CONTRACT_KICKOFF_NOTICE_DOCUMENT_NAME
     },
     contractSigningWorkflow: {
       nodes: nodes.map((node) => ({
@@ -2440,7 +2420,6 @@ function buildProjectKickoffNoticeSourceSnapshot({
 
 async function insertProjectKickoffNoticeGeneratingRecord(executor, {
   projectId,
-  documentRow,
   fileName,
   version,
   userId,
@@ -2469,9 +2448,9 @@ async function insertProjectKickoffNoticeGeneratingRecord(executor, {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       projectId,
-      documentRow.id,
       null,
-      'C25',
+      null,
+      CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE,
       CONTRACT_KICKOFF_NOTICE_TEMPLATE.templateKey,
       CONTRACT_KICKOFF_NOTICE_TEMPLATE.fileType,
       version,
@@ -2494,7 +2473,6 @@ async function insertProjectKickoffNoticeGeneratingRecord(executor, {
 async function markProjectKickoffNoticeGenerated(executor, {
   recordId,
   projectId,
-  documentId,
   storageKey,
   fileSize,
   templateHash
@@ -2503,14 +2481,14 @@ async function markProjectKickoffNoticeGenerated(executor, {
     `UPDATE project_stage_document_generated_files
     SET status = ?
     WHERE project_id = ?
-      AND stage_document_id = ?
+      AND document_code = ?
       AND template_key = ?
       AND status = ?
       AND id <> ?`,
     [
       GENERATED_FILE_STATUS.SUPERSEDED,
       projectId,
-      documentId,
+      CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE,
       CONTRACT_KICKOFF_NOTICE_TEMPLATE.templateKey,
       GENERATED_FILE_STATUS.GENERATED,
       recordId
@@ -2571,16 +2549,14 @@ async function generateProjectKickoffNoticeFile(executor, {
   const projectId = projectRow.id;
   let storageKey = null;
   try {
-    const [documentRow, nodes, slots] = await Promise.all([
-      selectProjectKickoffNoticeStageDocumentForUpdate(executor, projectId),
+    const [nodes, slots] = await Promise.all([
       selectContractSigningNodes(executor, projectId),
       selectContractSigningUploadSlots(executor, projectId)
     ]);
-    const version = await selectNextProjectKickoffNoticeGeneratedVersion(executor, projectId, documentRow.id);
+    const version = await selectNextProjectKickoffNoticeGeneratedVersion(executor, projectId);
     const fileName = buildProjectKickoffNoticeGeneratedFileName({ projectRow, version });
     const sourceSnapshot = buildProjectKickoffNoticeSourceSnapshot({
       projectRow,
-      documentRow,
       roleState,
       nodes,
       slots,
@@ -2598,7 +2574,6 @@ async function generateProjectKickoffNoticeFile(executor, {
     });
     const recordId = await insertProjectKickoffNoticeGeneratingRecord(executor, {
       projectId,
-      documentRow,
       fileName,
       version,
       userId: actorUserId,
@@ -2610,7 +2585,7 @@ async function generateProjectKickoffNoticeFile(executor, {
     const generatedBuffer = renderProjectKickoffNoticeTemplate(templateBuffer, sourceSnapshot);
     storageKey = generatedFileStorage.createStorageKey({
       projectId,
-      documentId: documentRow.id,
+      documentId: CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE,
       version,
       fileType: CONTRACT_KICKOFF_NOTICE_TEMPLATE.fileType
     });
@@ -2618,7 +2593,6 @@ async function generateProjectKickoffNoticeFile(executor, {
     await markProjectKickoffNoticeGenerated(executor, {
       recordId,
       projectId,
-      documentId: documentRow.id,
       storageKey,
       fileSize: stored.size,
       templateHash
@@ -2626,15 +2600,14 @@ async function generateProjectKickoffNoticeFile(executor, {
     const generatedFileRow = await selectProjectKickoffNoticeGeneratedFileById(executor, recordId);
     const generatedFile = {
       ...mapGeneratedFile(generatedFileRow, { includePrivate: true }),
-      documentCode: 'C25',
-      documentName: '项目启动通知',
+      documentCode: CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE,
+      documentName: CONTRACT_KICKOFF_NOTICE_DOCUMENT_NAME,
       downloadEndpoint: `/api/projects/${projectId}/contract-signing-workflow/kickoff-notice/generated-file/download`
     };
 
     return {
       generatedFile,
       storageKey,
-      documentRow,
       templateHash
     };
   } catch (error) {
@@ -2837,8 +2810,8 @@ async function insertContractSigningPaymentLog(
       paymentAction,
       generatedKickoffNotice: generatedFile
         ? {
-            documentCode: 'C25',
-            documentName: '项目启动通知',
+            generatedFileCode: CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE,
+            documentName: CONTRACT_KICKOFF_NOTICE_DOCUMENT_NAME,
             generatedFileId: generatedFile.id,
             version: generatedFile.version,
             fileName: generatedFile.fileName,
@@ -3272,7 +3245,7 @@ export async function getContractSigningKickoffNoticeGeneratedFileDownload(
         CONTRACT_SIGNING_ERROR.UPLOAD_FILE_NOT_FOUND,
         'Project kickoff notice generated file not found',
         404,
-        ['C25']
+        [CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE]
       );
     }
 
@@ -3284,7 +3257,7 @@ export async function getContractSigningKickoffNoticeGeneratedFileDownload(
         CONTRACT_SIGNING_ERROR.UPLOAD_FILE_NOT_FOUND,
         'Project kickoff notice generated file is missing from local storage',
         404,
-        ['C25']
+        [CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE]
       );
     }
 
@@ -3293,7 +3266,8 @@ export async function getContractSigningKickoffNoticeGeneratedFileDownload(
       fileName: fileRow.file_name,
       mimeType: fileRow.mime_type || CONTRACT_KICKOFF_NOTICE_TEMPLATE.mimeType,
       fileSize: Number(fileRow.file_size || 0),
-      documentCode: 'C25',
+      documentCode: CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE,
+      documentName: CONTRACT_KICKOFF_NOTICE_DOCUMENT_NAME,
       version: Number(fileRow.version || 1)
     };
   });
@@ -3651,8 +3625,8 @@ async function completeContractSigningPaymentFinalAction({
       triggerMetadata: {
         source: OPERATION_TARGET_TYPE.CONTRACT_SIGNING_WORKFLOW,
         nodeKey: CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT,
-        documentCode: 'C25',
-        documentName: '项目启动通知',
+        generatedFileCode: CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE,
+        documentName: CONTRACT_KICKOFF_NOTICE_DOCUMENT_NAME,
         paymentAction,
         paymentStatus,
         generatedFileId: generation.generatedFile.id,

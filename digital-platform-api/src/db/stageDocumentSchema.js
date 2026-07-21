@@ -142,7 +142,7 @@ async function ensureGeneratedFilesTable(executor) {
     `CREATE TABLE IF NOT EXISTS project_stage_document_generated_files (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
       project_id BIGINT UNSIGNED NOT NULL,
-      stage_document_id BIGINT UNSIGNED NOT NULL,
+      stage_document_id BIGINT UNSIGNED NULL,
       online_form_id BIGINT UNSIGNED NULL,
       document_code VARCHAR(32) NOT NULL,
       template_key VARCHAR(128) NOT NULL,

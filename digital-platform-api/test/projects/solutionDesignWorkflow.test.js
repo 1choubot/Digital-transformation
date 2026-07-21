@@ -1396,9 +1396,15 @@ function buildNavigationWorkspaceFromConnection(connection) {
               outputs: []
             },
             {
-              nodeKey: 'project_kickoff_notice',
-              nodeName: '项目启动通知',
-              nodeStatus: 'process_node',
+              nodeKey: 'contract_signing',
+              nodeName: '签订协议和合同',
+              nodeStatus: 'not_started',
+              outputs: []
+            },
+            {
+              nodeKey: 'advance_payment',
+              nodeName: '项目预付款支付',
+              nodeStatus: 'not_started',
               outputs: []
             }
           ]

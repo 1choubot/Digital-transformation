@@ -694,19 +694,21 @@ TBD - created by archiving change add-business-operation-log. Update Purpose aft
 #### Scenario: 预付款最终动作和项目启动通知生成日志
 - **WHEN** 商务负责人确认完成支付
 - **THEN** 系统 MUST 记录预付款完成并生成项目启动通知业务日志
-- **AND** 日志 MUST 包含 C25 generated file version、模板 key、模板版本或 hash、操作人和操作时间
+- **AND** 日志 MUST 包含 `generatedFileCode=contract_kickoff_notice`、`documentName=项目启动通知`、generated file version、模板 key、模板版本或 hash、操作人和操作时间
 - **WHEN** 总经理选择未付款并通过
 - **THEN** 系统 MUST 记录总经理未付款放行通过并生成项目启动通知业务日志
-- **AND** 日志 MUST 包含 `paymentFlow.status=released` 和 C25 generated file 上下文
+- **AND** 日志 MUST 包含 `paymentFlow.status=released` 和 `generatedFileCode=contract_kickoff_notice` 上下文
 - **WHEN** 总经理选择已付款通过
 - **THEN** 系统 MUST 记录总经理确认已付款通过并生成项目启动通知业务日志
-- **AND** 日志 MUST 包含 `paymentFlow.status=completed` 和 C25 generated file 上下文
+- **AND** 日志 MUST 包含 `paymentFlow.status=completed` 和 `generatedFileCode=contract_kickoff_notice` 上下文
 - **AND** 生成失败时系统 MUST 记录生成失败日志或在失败响应中保留可审计失败原因
 - **AND** 前端操作日志 MUST 将三种预付款最终动作和项目启动通知生成 action type 映射为中文文案
+- **AND** 合同项目启动通知日志 details MUST NOT 使用 `documentCode=C25` 表示合同通知
 
 #### Scenario: 自动推进详细设计日志
-- **WHEN** 预付款最终动作成功生成 C25 项目启动通知并自动推进到详细设计阶段
+- **WHEN** 预付款最终动作成功生成合同 workflow 项目启动通知并自动推进到详细设计阶段
 - **THEN** 系统 MUST 记录自动推进到详细设计阶段业务日志
 - **AND** 自动推进日志 MAY 复用 `stage.advanced` action type
-- **AND** 自动推进日志 details MUST 包含 `triggerAction=contract_signing.advance_payment_generated_kickoff_notice`、预付款动作类型、C25、generated file version 和模板上下文
+- **AND** 自动推进日志 details MUST 包含 `triggerAction=contract_signing.advance_payment_generated_kickoff_notice`、预付款动作类型、`generatedFileCode=contract_kickoff_notice`、generated file version 和模板上下文
+- **AND** 自动推进日志 details MUST NOT 将合同项目启动通知写成 C25 / `4.1` 完成结果
 

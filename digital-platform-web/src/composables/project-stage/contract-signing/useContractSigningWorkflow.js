@@ -6,6 +6,7 @@ import {
   approveContractSigningPreparationFile,
   completeContractSigningAdvancePayment,
   completeContractSigningNode,
+  downloadContractSigningKickoffNoticeGeneratedFile,
   downloadContractSigningWorkflowFile,
   getContractSigningWorkflow,
   requestContractSigningPaymentRelease,
@@ -49,6 +50,11 @@ export function useContractSigningWorkflow({
   const nodes = computed(() => workflow.value?.nodes || []);
   const uploadSlots = computed(() => workflow.value?.uploadSlots || []);
   const paymentFlow = computed(() => workflow.value?.paymentFlow || null);
+  const kickoffNoticeGeneratedFile = computed(() =>
+    workflow.value?.kickoffNoticeGeneratedFile ||
+    paymentFlow.value?.kickoffNoticeGeneratedFile ||
+    null
+  );
   const permissions = computed(() => workflow.value?.permissions || {});
   const blockingReasons = computed(() =>
     nodes.value.flatMap((node) => node.blockingReasons || [])
@@ -143,6 +149,19 @@ export function useContractSigningWorkflow({
         saveContractSigningBlob(download, slot.currentFile?.originalFileName || slot.slotName);
       },
       `${slot.slotName}已开始下载。`,
+      { notify: false }
+    );
+  }
+
+  async function downloadKickoffNoticeGeneratedFile() {
+    const generatedFile = kickoffNoticeGeneratedFile.value;
+    await runAction(
+      'download:kickoff-notice-generated-file',
+      async () => {
+        const download = await downloadContractSigningKickoffNoticeGeneratedFile(id(), token());
+        saveContractSigningBlob(download, generatedFile?.fileName || generatedFile?.downloadableFileName || '项目启动通知.docx');
+      },
+      '项目启动通知已开始下载。',
       { notify: false }
     );
   }
@@ -266,7 +285,7 @@ export function useContractSigningWorkflow({
 
   async function completePayment() {
     try {
-      await ElMessageBox.confirm('确认项目预付款已完成支付吗？', '预付款处理', {
+      await ElMessageBox.confirm('确认项目预付款已完成支付吗？确认后将生成项目启动通知，并自动推进到详细设计阶段。', '预付款处理', {
         type: 'warning',
         confirmButtonText: '完成支付',
         cancelButtonText: '取消'
@@ -278,7 +297,7 @@ export function useContractSigningWorkflow({
     await runAction(
       'payment:complete',
       () => completeContractSigningAdvancePayment(id(), token()),
-      '项目预付款已标记完成。'
+      '项目预付款已完成，项目启动通知已生成。'
     );
   }
 
@@ -302,7 +321,7 @@ export function useContractSigningWorkflow({
 
   async function approvePaymentReleaseUnpaid() {
     try {
-      await ElMessageBox.confirm('确认客户仍未付款，但允许项目继续吗？', '总经理放行', {
+      await ElMessageBox.confirm('确认客户仍未付款，但允许项目继续吗？确认后将生成项目启动通知，并自动推进到详细设计阶段。', '总经理放行', {
         type: 'warning',
         confirmButtonText: '未付款并通过',
         cancelButtonText: '取消'
@@ -314,13 +333,13 @@ export function useContractSigningWorkflow({
     await runAction(
       'payment:approve-release-unpaid',
       () => approveContractSigningPaymentReleaseUnpaid(id(), token()),
-      '总经理已确认未付款并通过。'
+      '总经理已确认未付款并通过，项目启动通知已生成。'
     );
   }
 
   async function approvePaymentReleasePaid() {
     try {
-      await ElMessageBox.confirm('确认等待期间客户已付款，并允许项目继续吗？', '总经理放行', {
+      await ElMessageBox.confirm('确认等待期间客户已付款，并允许项目继续吗？确认后将生成项目启动通知，并自动推进到详细设计阶段。', '总经理放行', {
         type: 'warning',
         confirmButtonText: '已付款通过',
         cancelButtonText: '取消'
@@ -332,7 +351,7 @@ export function useContractSigningWorkflow({
     await runAction(
       'payment:approve-release-paid',
       () => approveContractSigningPaymentReleasePaid(id(), token()),
-      '总经理已确认已付款通过。'
+      '总经理已确认已付款通过，项目启动通知已生成。'
     );
   }
 
@@ -341,6 +360,7 @@ export function useContractSigningWorkflow({
     nodes,
     uploadSlots,
     paymentFlow,
+    kickoffNoticeGeneratedFile,
     permissions,
     blockingReasons,
     loading,
@@ -353,6 +373,7 @@ export function useContractSigningWorkflow({
     runAction,
     handleUpload,
     downloadUpload,
+    downloadKickoffNoticeGeneratedFile,
     approvePreparationSlot,
     returnPreparationSlot,
     returnTechnicalAgreementForCustomer,

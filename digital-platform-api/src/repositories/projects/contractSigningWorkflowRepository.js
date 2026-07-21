@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import fs from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { pool } from '../../db/pool.js';
 import {
   CONTRACT_SIGNING_ERROR,
@@ -27,6 +30,15 @@ import {
   createContractSigningUploadStorageKey,
   writeContractSigningUploadFile
 } from '../../storage/contractSigningUploadStorage.js';
+import {
+  assertStageDocumentGeneratedFileReadable,
+  cleanupStageDocumentGeneratedFile,
+  createStageDocumentGeneratedFileStorageKey,
+  writeStageDocumentGeneratedFile
+} from '../../storage/stageDocumentGeneratedFileStorage.js';
+import { GENERATED_FILE_STATUS } from '../../domain/initiationTemplateFileManifest.js';
+import { updateZipTextEntry } from '../../utils/ooxmlZip.js';
+import { mapGeneratedFile } from '../stageDocuments/generatedFileRepository.js';
 import {
   OPERATION_ACTION_TYPE,
   OPERATION_TARGET_TYPE,
@@ -63,14 +75,29 @@ const SIGNING_SCAN_UPLOAD_SLOT_KEYS = new Set([
 ]);
 const SUPPORTED_UPLOAD_SLOT_KEYS = new Set([
   ...PREPARATION_UPLOAD_SLOT_KEYS,
-  ...SIGNING_SCAN_UPLOAD_SLOT_KEYS,
-  CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE
+  ...SIGNING_SCAN_UPLOAD_SLOT_KEYS
 ]);
+const CURRENT_CONTRACT_SIGNING_NODE_KEYS = new Set(CONTRACT_SIGNING_NODES.map((node) => node.nodeKey));
+const CURRENT_CONTRACT_SIGNING_UPLOAD_SLOT_KEYS = new Set(
+  CONTRACT_SIGNING_UPLOAD_SLOTS.map((slot) => slot.slotKey)
+);
 const PREPARATION_UPLOAD_REPLACEABLE_STATUSES = new Set([
   CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.PENDING,
   CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.RETURNED
 ]);
 const DEFAULT_UPLOAD_MIME_TYPE = 'application/octet-stream';
+const CONTRACT_KICKOFF_NOTICE_DOCUMENT_CODES = Object.freeze(['C25', '4.1']);
+const CONTRACT_KICKOFF_NOTICE_TEMPLATE = Object.freeze({
+  templateKey: 'contract_kickoff_notice_docx',
+  fileType: 'docx',
+  templateVersion: '20260721-contract-kickoff-notice-v1',
+  triggerEvent: 'contract_signing.advance_payment_generated_kickoff_notice',
+  generatedFileNamePrefix: '项目启动通知',
+  mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  templatePath: fileURLToPath(
+    new URL('../../../../智能制造项目管理文件模板/项目启动通知-模板.docx', import.meta.url)
+  )
+});
 const MAX_UPLOAD_TEXT_FIELD_LENGTH = 255;
 const MAX_RETURN_REASON_LENGTH = 1000;
 
@@ -82,6 +109,17 @@ const defaultContractSigningUploadStorage = {
   assertFileReadable: assertContractSigningUploadFileReadable,
   cleanupFile: cleanupContractSigningUploadFile
 };
+
+const defaultContractSigningGeneratedFileStorage = {
+  createStorageKey: createStageDocumentGeneratedFileStorageKey,
+  writeFile: writeStageDocumentGeneratedFile,
+  assertFileReadable: assertStageDocumentGeneratedFileReadable,
+  cleanupFile: cleanupStageDocumentGeneratedFile
+};
+
+function resolveContractSigningGeneratedFileStorage(db, storage) {
+  return storage || db?.generatedFileStorage || defaultContractSigningGeneratedFileStorage;
+}
 
 function normalizeComparableId(value) {
   return value === null || value === undefined ? null : Number(value);
@@ -100,6 +138,50 @@ function sanitizeOriginalFileName(filename) {
 function normalizeUploadMimeType(mimeType) {
   const normalized = String(mimeType || '').trim();
   return normalized || DEFAULT_UPLOAD_MIME_TYPE;
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function sha256(value) {
+  return createHash('sha256')
+    .update(Buffer.isBuffer(value) || typeof value === 'string' ? value : canonicalJson(value))
+    .digest('hex');
+}
+
+function escapeXml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function sanitizeFilePart(value) {
+  return String(value || '')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80);
+}
+
+function formatChineseDate(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
 function throwInvalidUploadFile() {
@@ -337,7 +419,7 @@ async function selectContractSigningNodes(executor, projectId) {
     [projectId]
   );
 
-  return rows;
+  return rows.filter((row) => CURRENT_CONTRACT_SIGNING_NODE_KEYS.has(row.node_key));
 }
 
 async function selectContractSigningNodeForUpdate(executor, projectId, nodeKey) {
@@ -389,7 +471,7 @@ async function selectContractSigningUploadSlots(executor, projectId) {
     [projectId]
   );
 
-  return rows;
+  return rows.filter((row) => CURRENT_CONTRACT_SIGNING_UPLOAD_SLOT_KEYS.has(row.slot_key));
 }
 
 async function selectContractSigningUploadSlotForUpdate(executor, projectId, slotKey) {
@@ -505,6 +587,110 @@ async function selectContractSigningPaymentFlowForUpdate(executor, projectId) {
   );
 
   return rows[0] || null;
+}
+
+async function selectProjectKickoffNoticeStageDocumentForUpdate(executor, projectId) {
+  const [rows] = await executor.execute(
+    `SELECT *
+    FROM project_stage_documents
+    WHERE project_id = ?
+      AND document_code IN (?, ?)
+    ORDER BY CASE WHEN document_code = ? THEN 0 ELSE 1 END ASC, id ASC
+    LIMIT 1
+    FOR UPDATE`,
+    [projectId, ...CONTRACT_KICKOFF_NOTICE_DOCUMENT_CODES, CONTRACT_KICKOFF_NOTICE_DOCUMENT_CODES[0]]
+  );
+
+  const document = rows[0] || null;
+  if (!document) {
+    throw new ContractSigningWorkflowError(
+      CONTRACT_SIGNING_ERROR.NODE_NOT_PROCESSABLE,
+      'Project kickoff notice document is not initialized',
+      409,
+      {
+        documentCodes: CONTRACT_KICKOFF_NOTICE_DOCUMENT_CODES
+      }
+    );
+  }
+
+  return document;
+}
+
+async function selectLatestProjectKickoffNoticeGeneratedFile(executor, projectId) {
+  const [rows] = await executor.execute(
+    `SELECT *
+    FROM project_stage_document_generated_files
+    WHERE project_id = ?
+      AND document_code IN (?, ?)
+    ORDER BY version DESC, id DESC
+    LIMIT 1`,
+    [projectId, ...CONTRACT_KICKOFF_NOTICE_DOCUMENT_CODES]
+  );
+
+  return rows[0] || null;
+}
+
+async function selectLatestDownloadableProjectKickoffNoticeGeneratedFile(executor, projectId) {
+  const [rows] = await executor.execute(
+    `SELECT *
+    FROM project_stage_document_generated_files
+    WHERE project_id = ?
+      AND document_code IN (?, ?)
+      AND status = ?
+      AND storage_key IS NOT NULL
+    ORDER BY version DESC, id DESC
+    LIMIT 1`,
+    [projectId, ...CONTRACT_KICKOFF_NOTICE_DOCUMENT_CODES, GENERATED_FILE_STATUS.GENERATED]
+  );
+
+  return rows[0] || null;
+}
+
+async function selectProjectKickoffNoticeGeneratedFileDto(executor, projectId) {
+  const [latestRow, downloadableRow] = await Promise.all([
+    selectLatestProjectKickoffNoticeGeneratedFile(executor, projectId),
+    selectLatestDownloadableProjectKickoffNoticeGeneratedFile(executor, projectId)
+  ]);
+
+  return latestRow
+    ? {
+        ...mapGeneratedFile(latestRow, { downloadableRow }),
+        documentCode: 'C25',
+        documentName: '项目启动通知',
+        downloadEndpoint: downloadableRow
+          ? `/api/projects/${projectId}/contract-signing-workflow/kickoff-notice/generated-file/download`
+          : null
+      }
+    : {
+        id: null,
+        projectId,
+        stageDocumentId: null,
+        documentCode: 'C25',
+        documentName: '项目启动通知',
+        templateKey: CONTRACT_KICKOFF_NOTICE_TEMPLATE.templateKey,
+        fileType: CONTRACT_KICKOFF_NOTICE_TEMPLATE.fileType,
+        version: null,
+        status: 'not_generated',
+        fileName: null,
+        mimeType: CONTRACT_KICKOFF_NOTICE_TEMPLATE.mimeType,
+        fileSize: null,
+        generatedByUserId: null,
+        generatedAt: null,
+        failureReason: null,
+        failureSummary: null,
+        sourceFormSubmittedAt: null,
+        sourceFormDataHash: null,
+        triggerEvent: CONTRACT_KICKOFF_NOTICE_TEMPLATE.triggerEvent,
+        templateVersion: CONTRACT_KICKOFF_NOTICE_TEMPLATE.templateVersion,
+        templateHash: null,
+        downloadable: false,
+        downloadableVersion: null,
+        downloadableFileName: null,
+        downloadableGeneratedAt: null,
+        downloadEndpoint: null,
+        createdAt: null,
+        updatedAt: null
+      };
 }
 
 async function ensureContractSigningWorkflowState(executor, projectRow) {
@@ -661,10 +847,6 @@ function isSigningScanSlot(slot) {
   return Boolean(slot) && SIGNING_SCAN_UPLOAD_SLOT_KEYS.has(slot.slotKey);
 }
 
-function isProjectKickoffNoticeSlot(slot) {
-  return Boolean(slot) && slot.slotKey === CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE;
-}
-
 function getPreparationSlotKeyForSigningScan(slotKey) {
   if (slotKey === CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN) {
     return CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT;
@@ -800,36 +982,6 @@ function assertAdvancePaymentReadyForBusinessAction(nodeRow, paymentFlow) {
   }
 }
 
-function assertProjectKickoffNoticeReadyForUpload({ nodeRow, slotRow }) {
-  if (nodeRow?.status !== CONTRACT_SIGNING_NODE_STATUS.PENDING) {
-    throw new ContractSigningWorkflowError(
-      CONTRACT_SIGNING_ERROR.NODE_NOT_PROCESSABLE,
-      'Project kickoff notice node is not ready for upload',
-      409,
-      {
-        nodeKey: CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE,
-        nodeStatus: nodeRow?.status ?? null,
-        allowedStatuses: [CONTRACT_SIGNING_NODE_STATUS.PENDING]
-      }
-    );
-  }
-
-  if (
-    hasCurrentFile(slotRow) ||
-    slotRow?.status !== CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.PENDING
-  ) {
-    throw new ContractSigningWorkflowError(
-      CONTRACT_SIGNING_ERROR.UPLOAD_SLOT_NOT_PROCESSABLE,
-      'Project kickoff notice has already been uploaded or is not ready for upload',
-      409,
-      {
-        slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE,
-        slotStatus: slotRow?.status ?? null
-      }
-    );
-  }
-}
-
 function assertAdvancePaymentReadyForGeneralManagerRelease(nodeRow, paymentFlow) {
   if (!isAdvancePaymentWaitingGeneralManager(nodeRow, paymentFlow)) {
     throw new ContractSigningWorkflowError(
@@ -901,9 +1053,27 @@ function assertSupportedUploadSlot(slot) {
   if (!slot || !SUPPORTED_UPLOAD_SLOT_KEYS.has(slot.slotKey)) {
     throw new ContractSigningWorkflowError(
       CONTRACT_SIGNING_ERROR.INVALID_UPLOAD_SLOT,
-      'Contract signing upload action only supports preparation files, signed scan files and project kickoff notice',
+      'Contract signing upload action only supports preparation files and signed scan files',
       400,
       ['slotKey']
+    );
+  }
+}
+
+function assertNotDeprecatedProjectKickoffNoticeUpload(slotKey) {
+  if (slotKey === CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE) {
+    throw new ContractSigningWorkflowError(
+      CONTRACT_SIGNING_ERROR.DEPRECATED_ACTION,
+      'Project kickoff notice is generated by advance payment final actions and cannot be uploaded manually.',
+      410,
+      {
+        deprecatedSlotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE,
+        replacementActions: [
+          '/contract-signing-workflow/payment/complete',
+          '/contract-signing-workflow/payment/approve-release-unpaid',
+          '/contract-signing-workflow/payment/approve-release-paid'
+        ]
+      }
     );
   }
 }
@@ -1015,9 +1185,7 @@ function buildUploadSlotPermissions({
   slots
 }) {
   const hasAssignedRoles = areRequiredContractRolesAssigned(roleState);
-  const nodeAllowsUpload = isProjectKickoffNoticeSlot(slot)
-    ? nodeRow?.status === CONTRACT_SIGNING_NODE_STATUS.PENDING
-    : isNodeProcessable(nodeRow);
+  const nodeAllowsUpload = isNodeProcessable(nodeRow);
   const canWrite =
     !projectEnded &&
     inContractStage &&
@@ -1162,18 +1330,6 @@ function buildNodePermissions({
     };
   }
 
-  if (nodeRow.node_key === CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE) {
-    const kickoffNoticeSlot = getSlotByKey(slots, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE);
-    return {
-      canUploadProjectKickoffNotice:
-        canWrite &&
-        businessOwner &&
-        nodeRow.status === CONTRACT_SIGNING_NODE_STATUS.PENDING &&
-        kickoffNoticeSlot?.status === CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.PENDING &&
-        !hasCurrentFile(kickoffNoticeSlot)
-    };
-  }
-
   return {};
 }
 
@@ -1280,11 +1436,6 @@ function buildNodeBlockingReasons({ nodeRow, roleState, slots, paymentFlow }) {
     return ['等待商务负责人处理项目预付款'];
   }
 
-  if (nodeRow.node_key === CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE) {
-    const kickoffNotice = getSlotByKey(slots, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE);
-    return hasCurrentFile(kickoffNotice) ? [] : ['等待商务负责人上传项目启动通知'];
-  }
-
   return [];
 }
 
@@ -1294,7 +1445,7 @@ function mapNode(row, context) {
     ...context
   });
 
-  return {
+  const mapped = {
     nodeKey: row.node_key,
     nodeName: row.node_name,
     nodeOrder: row.node_order,
@@ -1314,6 +1465,12 @@ function mapNode(row, context) {
     permissions,
     nextActions: buildNextActions(permissions)
   };
+
+  if (row.node_key === CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT) {
+    mapped.kickoffNoticeGeneratedFile = context.kickoffNoticeGeneratedFile || null;
+  }
+
+  return mapped;
 }
 
 function mapUploadSlot(row, context) {
@@ -1362,7 +1519,7 @@ function mapUploadSlot(row, context) {
   };
 }
 
-function mapPaymentFlow(row) {
+function mapPaymentFlow(row, { kickoffNoticeGeneratedFile = null } = {}) {
   const paymentFlow = row || buildVirtualPaymentFlow();
 
   return {
@@ -1383,7 +1540,8 @@ function mapPaymentFlow(row) {
           name: paymentFlow.approved_by_display_name ?? null
         }
       : null,
-    approvedAt: paymentFlow.approved_at ?? null
+    approvedAt: paymentFlow.approved_at ?? null,
+    kickoffNoticeGeneratedFile
   };
 }
 
@@ -1558,116 +1716,6 @@ async function replaceCurrentSigningScanSlotFile(executor, { projectId, slotRow,
       CONTRACT_SIGNING_NODE_STATUS.RETURNED
     ]
   );
-
-  return selectUploadFileWithUploader(executor, result.insertId);
-}
-
-async function replaceCurrentProjectKickoffNoticeSlotFile(
-  executor,
-  { projectId, slotRow, slot, uploadFile, storageKey, userId }
-) {
-  const currentFiles = await selectCurrentUploadFiles(executor, projectId, slot.slotKey);
-  const currentRevision = Math.max(
-    Number(slotRow.revision ?? 0),
-    ...currentFiles.map((file) => Number(file.revision ?? 0))
-  );
-  const nextRevision = currentFiles.length > 0 ? currentRevision + 1 : 1;
-
-  await executor.execute(
-    `UPDATE project_contract_signing_upload_files
-    SET is_current = 0,
-      replaced_at = CURRENT_TIMESTAMP
-    WHERE project_id = ?
-      AND slot_key = ?
-      AND is_current = 1`,
-    [projectId, slot.slotKey]
-  );
-
-  const [result] = await executor.execute(
-    `INSERT INTO project_contract_signing_upload_files (
-      project_id,
-      slot_id,
-      slot_key,
-      revision,
-      original_file_name,
-      storage_key,
-      mime_type,
-      file_size,
-      is_current,
-      uploaded_by_user_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-    [
-      projectId,
-      slotRow.id,
-      slot.slotKey,
-      nextRevision,
-      uploadFile.originalFileName,
-      storageKey,
-      uploadFile.mimeType,
-      uploadFile.size,
-      userId
-    ]
-  );
-
-  const [slotUpdateResult] = await executor.execute(
-    `UPDATE project_contract_signing_upload_slots
-    SET status = ?,
-      review_status = NULL,
-      confirmation_status = NULL,
-      return_reason = NULL,
-      submitted_by_user_id = ?,
-      submitted_at = CURRENT_TIMESTAMP,
-      reviewed_by_user_id = NULL,
-      reviewed_at = NULL,
-      confirmed_by_user_id = NULL,
-      confirmed_at = NULL,
-      revision = ?,
-      updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-      AND status = ?`,
-    [
-      CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.APPROVED,
-      userId,
-      nextRevision,
-      slotRow.id,
-      CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.PENDING
-    ]
-  );
-
-  if (Number(slotUpdateResult?.affectedRows ?? 0) !== 1) {
-    throw new ContractSigningWorkflowError(
-      CONTRACT_SIGNING_ERROR.UPLOAD_SLOT_NOT_PROCESSABLE,
-      'Project kickoff notice slot status changed before upload',
-      409,
-      [slot.slotKey]
-    );
-  }
-
-  const [nodeUpdateResult] = await executor.execute(
-    `UPDATE project_contract_signing_nodes
-    SET status = ?,
-      approved_at = CURRENT_TIMESTAMP,
-      return_reason = NULL,
-      updated_at = CURRENT_TIMESTAMP
-    WHERE project_id = ?
-      AND node_key = ?
-      AND status = ?`,
-    [
-      CONTRACT_SIGNING_NODE_STATUS.APPROVED,
-      projectId,
-      CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE,
-      CONTRACT_SIGNING_NODE_STATUS.PENDING
-    ]
-  );
-
-  if (Number(nodeUpdateResult?.affectedRows ?? 0) !== 1) {
-    throw new ContractSigningWorkflowError(
-      CONTRACT_SIGNING_ERROR.NODE_NOT_PROCESSABLE,
-      'Project kickoff notice node status changed before upload',
-      409,
-      [CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE]
-    );
-  }
 
   return selectUploadFileWithUploader(executor, result.insertId);
 }
@@ -2133,24 +2181,6 @@ async function refreshSigningNodeAfterConfirmation(executor, { projectId }) {
   return true;
 }
 
-async function activateProjectKickoffNoticeNode(executor, { projectId }) {
-  await executor.execute(
-    `UPDATE project_contract_signing_nodes
-    SET status = ?,
-      activated_at = COALESCE(activated_at, CURRENT_TIMESTAMP),
-      updated_at = CURRENT_TIMESTAMP
-    WHERE project_id = ?
-      AND node_key = ?
-      AND status = ?`,
-    [
-      CONTRACT_SIGNING_NODE_STATUS.PENDING,
-      projectId,
-      CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE,
-      CONTRACT_SIGNING_NODE_STATUS.NOT_STARTED
-    ]
-  );
-}
-
 async function markAdvancePaymentNodeApproved(executor, { projectId }) {
   const [updateResult] = await executor.execute(
     `UPDATE project_contract_signing_nodes
@@ -2317,6 +2347,304 @@ async function markAdvancePaymentPaidByGeneralManager(executor, { projectId, act
   }
 }
 
+async function selectNextProjectKickoffNoticeGeneratedVersion(executor, projectId, documentId) {
+  const [rows] = await executor.execute(
+    `SELECT COALESCE(MAX(version), 0) + 1 AS nextVersion
+    FROM project_stage_document_generated_files
+    WHERE project_id = ?
+      AND stage_document_id = ?
+      AND template_key = ?`,
+    [projectId, documentId, CONTRACT_KICKOFF_NOTICE_TEMPLATE.templateKey]
+  );
+
+  return Number(rows[0]?.nextVersion || 1);
+}
+
+function buildProjectKickoffNoticeGeneratedFileName({ projectRow, version }) {
+  const projectName = sanitizeFilePart(projectRow?.project_name || projectRow?.projectName || '未命名项目');
+  return `${CONTRACT_KICKOFF_NOTICE_TEMPLATE.generatedFileNamePrefix}-${projectName}-v${version}.docx`;
+}
+
+export function buildProjectKickoffNoticeDisplayName(projectRow) {
+  const projectCode = String(projectRow?.project_code ?? projectRow?.projectCode ?? '').trim();
+  const customerName = String(projectRow?.customer_name ?? projectRow?.customerName ?? '').trim();
+  const projectName = String(projectRow?.project_name ?? projectRow?.projectName ?? '').trim();
+  const prefix = `${projectCode}${customerName}`;
+
+  if (projectName) {
+    return prefix ? `${prefix}-${projectName}` : projectName;
+  }
+
+  return prefix || '未命名项目';
+}
+
+function buildProjectKickoffNoticeSourceSnapshot({
+  projectRow,
+  documentRow,
+  roleState,
+  nodes,
+  slots,
+  paymentFlow,
+  paymentAction,
+  paymentStatus,
+  actorUserId
+}) {
+  return {
+    project: {
+      id: projectRow.id,
+      projectCode: projectRow.project_code ?? null,
+      projectName: projectRow.project_name ?? null,
+      customerName: projectRow.customer_name ?? null,
+      projectDisplayName: buildProjectKickoffNoticeDisplayName(projectRow),
+      currentStageKey: projectRow.current_stage_key ?? null,
+      currentStageOrder: projectRow.current_stage_order ?? null
+    },
+    document: {
+      id: documentRow.id,
+      documentCode: documentRow.document_code,
+      documentName: '项目启动通知'
+    },
+    contractSigningWorkflow: {
+      nodes: nodes.map((node) => ({
+        nodeKey: node.node_key,
+        nodeName: node.node_name,
+        status: node.status,
+        currentRevision: node.current_revision ?? null
+      })),
+      uploadSlots: slots.map((slot) => ({
+        slotKey: slot.slot_key,
+        slotName: slot.slot_name,
+        nodeKey: slot.node_key,
+        status: slot.status,
+        revision: slot.revision,
+        hasCurrentFile: Boolean(slot.current_file_id)
+      })),
+      paymentFlow: {
+        status: paymentStatus,
+        previousStatus: paymentFlow?.status ?? null,
+        requestedByUserId: paymentFlow?.requested_by_user_id ?? null,
+        requestedAt: paymentFlow?.requested_at ?? null,
+        approvedByUserId: paymentFlow?.approved_by_user_id ?? null,
+        approvedAt: paymentFlow?.approved_at ?? null
+      },
+      roles: {
+        technicalOwnerUserId: roleState[CONTRACT_SIGNING_ROLE_KEY.TECHNICAL_OWNER]?.userId ?? null,
+        businessOwnerUserId: roleState[CONTRACT_SIGNING_ROLE_KEY.BUSINESS_OWNER]?.userId ?? null
+      }
+    },
+    paymentAction,
+    generatedByUserId: actorUserId,
+    capturedAt: new Date().toISOString()
+  };
+}
+
+async function insertProjectKickoffNoticeGeneratingRecord(executor, {
+  projectId,
+  documentRow,
+  fileName,
+  version,
+  userId,
+  sourceSnapshot,
+  sourceHash
+}) {
+  const [result] = await executor.execute(
+    `INSERT INTO project_stage_document_generated_files (
+      project_id,
+      stage_document_id,
+      online_form_id,
+      document_code,
+      template_key,
+      file_type,
+      version,
+      status,
+      file_name,
+      mime_type,
+      generated_by_user_id,
+      source_form_submitted_at,
+      source_form_data_hash,
+      source_snapshot_json,
+      trigger_event,
+      review_snapshot_json,
+      template_version
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      projectId,
+      documentRow.id,
+      null,
+      'C25',
+      CONTRACT_KICKOFF_NOTICE_TEMPLATE.templateKey,
+      CONTRACT_KICKOFF_NOTICE_TEMPLATE.fileType,
+      version,
+      GENERATED_FILE_STATUS.GENERATING,
+      fileName,
+      CONTRACT_KICKOFF_NOTICE_TEMPLATE.mimeType,
+      userId ?? null,
+      null,
+      sourceHash,
+      JSON.stringify(sourceSnapshot),
+      CONTRACT_KICKOFF_NOTICE_TEMPLATE.triggerEvent,
+      null,
+      CONTRACT_KICKOFF_NOTICE_TEMPLATE.templateVersion
+    ]
+  );
+
+  return result.insertId;
+}
+
+async function markProjectKickoffNoticeGenerated(executor, {
+  recordId,
+  projectId,
+  documentId,
+  storageKey,
+  fileSize,
+  templateHash
+}) {
+  await executor.execute(
+    `UPDATE project_stage_document_generated_files
+    SET status = ?
+    WHERE project_id = ?
+      AND stage_document_id = ?
+      AND template_key = ?
+      AND status = ?
+      AND id <> ?`,
+    [
+      GENERATED_FILE_STATUS.SUPERSEDED,
+      projectId,
+      documentId,
+      CONTRACT_KICKOFF_NOTICE_TEMPLATE.templateKey,
+      GENERATED_FILE_STATUS.GENERATED,
+      recordId
+    ]
+  );
+  await executor.execute(
+    `UPDATE project_stage_document_generated_files
+    SET status = ?,
+      storage_key = ?,
+      file_size = ?,
+      generated_at = CURRENT_TIMESTAMP,
+      failure_reason = NULL,
+      template_hash = ?
+    WHERE id = ?`,
+    [GENERATED_FILE_STATUS.GENERATED, storageKey, fileSize, templateHash, recordId]
+  );
+}
+
+async function selectProjectKickoffNoticeGeneratedFileById(executor, recordId) {
+  const [rows] = await executor.execute(
+    `SELECT *
+    FROM project_stage_document_generated_files
+    WHERE id = ?
+    LIMIT 1`,
+    [recordId]
+  );
+
+  return rows[0] || null;
+}
+
+function renderProjectKickoffNoticeTemplate(templateBuffer, sourceSnapshot, now = new Date()) {
+  const projectName = sourceSnapshot.project.projectDisplayName || sourceSnapshot.project.projectName || '未命名项目';
+  const chineseDate = formatChineseDate(now);
+  return updateZipTextEntry(templateBuffer, 'word/document.xml', (documentXml) => {
+    let updatedXml = documentXml.replace(
+      /(<w:t\b[^>]*xml:space="preserve"[^>]*>)\s{8,}(<\/w:t>)/,
+      `$1${escapeXml(projectName)}$2`
+    );
+    if (chineseDate) {
+      updatedXml = updatedXml.replace(
+        /(<w:t\b[^>]*>)2026年7月20日(<\/w:t>)/,
+        `$1${escapeXml(chineseDate)}$2`
+      );
+    }
+    return updatedXml;
+  });
+}
+
+async function generateProjectKickoffNoticeFile(executor, {
+  projectRow,
+  roleState,
+  paymentFlow,
+  paymentAction,
+  paymentStatus,
+  actorUserId,
+  generatedFileStorage = defaultContractSigningGeneratedFileStorage
+}) {
+  const projectId = projectRow.id;
+  let storageKey = null;
+  try {
+    const [documentRow, nodes, slots] = await Promise.all([
+      selectProjectKickoffNoticeStageDocumentForUpdate(executor, projectId),
+      selectContractSigningNodes(executor, projectId),
+      selectContractSigningUploadSlots(executor, projectId)
+    ]);
+    const version = await selectNextProjectKickoffNoticeGeneratedVersion(executor, projectId, documentRow.id);
+    const fileName = buildProjectKickoffNoticeGeneratedFileName({ projectRow, version });
+    const sourceSnapshot = buildProjectKickoffNoticeSourceSnapshot({
+      projectRow,
+      documentRow,
+      roleState,
+      nodes,
+      slots,
+      paymentFlow,
+      paymentAction,
+      paymentStatus,
+      actorUserId
+    });
+    const sourceHash = sha256({
+      sourceSnapshot,
+      template: {
+        templateKey: CONTRACT_KICKOFF_NOTICE_TEMPLATE.templateKey,
+        templateVersion: CONTRACT_KICKOFF_NOTICE_TEMPLATE.templateVersion
+      }
+    });
+    const recordId = await insertProjectKickoffNoticeGeneratingRecord(executor, {
+      projectId,
+      documentRow,
+      fileName,
+      version,
+      userId: actorUserId,
+      sourceSnapshot,
+      sourceHash
+    });
+    const templateBuffer = await fs.readFile(CONTRACT_KICKOFF_NOTICE_TEMPLATE.templatePath);
+    const templateHash = sha256(templateBuffer);
+    const generatedBuffer = renderProjectKickoffNoticeTemplate(templateBuffer, sourceSnapshot);
+    storageKey = generatedFileStorage.createStorageKey({
+      projectId,
+      documentId: documentRow.id,
+      version,
+      fileType: CONTRACT_KICKOFF_NOTICE_TEMPLATE.fileType
+    });
+    const stored = await generatedFileStorage.writeFile(storageKey, generatedBuffer);
+    await markProjectKickoffNoticeGenerated(executor, {
+      recordId,
+      projectId,
+      documentId: documentRow.id,
+      storageKey,
+      fileSize: stored.size,
+      templateHash
+    });
+    const generatedFileRow = await selectProjectKickoffNoticeGeneratedFileById(executor, recordId);
+    const generatedFile = {
+      ...mapGeneratedFile(generatedFileRow, { includePrivate: true }),
+      documentCode: 'C25',
+      documentName: '项目启动通知',
+      downloadEndpoint: `/api/projects/${projectId}/contract-signing-workflow/kickoff-notice/generated-file/download`
+    };
+
+    return {
+      generatedFile,
+      storageKey,
+      documentRow,
+      templateHash
+    };
+  } catch (error) {
+    if (storageKey) {
+      await generatedFileStorage.cleanupFile(storageKey);
+    }
+    throw error;
+  }
+}
+
 function getPreparationUploadActionType(slotKey) {
   return slotKey === CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT
     ? OPERATION_ACTION_TYPE.CONTRACT_SIGNING_TECHNICAL_AGREEMENT_UPLOADED
@@ -2330,10 +2658,6 @@ function getSigningScanUploadActionType(slotKey) {
 }
 
 function getContractSigningUploadActionType(slotKey) {
-  if (slotKey === CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE) {
-    return OPERATION_ACTION_TYPE.CONTRACT_SIGNING_PROJECT_KICKOFF_NOTICE_UPLOADED;
-  }
-
   return isSigningScanSlot({ slotKey })
     ? getSigningScanUploadActionType(slotKey)
     : getPreparationUploadActionType(slotKey);
@@ -2495,7 +2819,10 @@ async function insertContractSigningReviewLog(
   });
 }
 
-async function insertContractSigningPaymentLog(executor, { projectId, actorUserId, actionType, summary, paymentStatus }) {
+async function insertContractSigningPaymentLog(
+  executor,
+  { projectId, actorUserId, actionType, summary, paymentStatus, generatedFile = null, paymentAction = null }
+) {
   await insertOperationLog(executor, {
     projectId,
     actorUserId,
@@ -2507,6 +2834,20 @@ async function insertContractSigningPaymentLog(executor, { projectId, actorUserI
       projectId,
       nodeKey: CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT,
       paymentStatus,
+      paymentAction,
+      generatedKickoffNotice: generatedFile
+        ? {
+            documentCode: 'C25',
+            documentName: '项目启动通知',
+            generatedFileId: generatedFile.id,
+            version: generatedFile.version,
+            fileName: generatedFile.fileName,
+            templateKey: generatedFile.templateKey,
+            templateVersion: generatedFile.templateVersion,
+            templateHash: generatedFile.templateHash,
+            generatedAt: generatedFile.generatedAt
+          }
+        : null,
       actorUserId
     }
   });
@@ -2517,6 +2858,7 @@ function buildWorkflowDto({
   nodes,
   uploadSlots,
   paymentFlow,
+  kickoffNoticeGeneratedFile,
   rolesRow,
   usersById,
   user
@@ -2534,7 +2876,8 @@ function buildWorkflowDto({
     inContractStage,
     nodes: materializedNodes,
     slots: materializedSlots,
-    paymentFlow: materializedPaymentFlow
+    paymentFlow: materializedPaymentFlow,
+    kickoffNoticeGeneratedFile
   };
 
   const workflowPermissions = {
@@ -2559,7 +2902,8 @@ function buildWorkflowDto({
     },
     nodes: materializedNodes.map((node) => mapNode(node, commonContext)),
     uploadSlots: materializedSlots.map((slot) => mapUploadSlot(slot, commonContext)),
-    paymentFlow: mapPaymentFlow(materializedPaymentFlow),
+    paymentFlow: mapPaymentFlow(materializedPaymentFlow, { kickoffNoticeGeneratedFile }),
+    kickoffNoticeGeneratedFile,
     roles: roleState,
     permissions: workflowPermissions,
     isProjectEnded: projectEnded
@@ -2569,13 +2913,17 @@ function buildWorkflowDto({
 async function buildWorkflowDtoForProject(executor, { projectRow, user }) {
   const { nodes, uploadSlots, paymentFlow } = await ensureContractSigningWorkflowState(executor, projectRow);
   const rolesRow = await selectSolutionDesignRoles(executor, projectRow.id);
-  const usersById = await selectUsersByIds(executor, collectRoleUserIds(rolesRow));
+  const [usersById, kickoffNoticeGeneratedFile] = await Promise.all([
+    selectUsersByIds(executor, collectRoleUserIds(rolesRow)),
+    selectProjectKickoffNoticeGeneratedFileDto(executor, projectRow.id)
+  ]);
 
   return buildWorkflowDto({
     projectRow,
     nodes,
     uploadSlots,
     paymentFlow,
+    kickoffNoticeGeneratedFile,
     rolesRow,
     usersById,
     user
@@ -2650,10 +2998,6 @@ function getContractSigningSlotUploadActionText(slot) {
 
   if (slot.slotKey === CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN) {
     return '上传销售合同扫描件';
-  }
-
-  if (slot.slotKey === CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE) {
-    return '上传项目启动通知';
   }
 
   return `上传合同签订文件：${slot.slotName}`;
@@ -2912,11 +3256,55 @@ export async function getContractSigningUploadDownload(
   });
 }
 
+export async function getContractSigningKickoffNoticeGeneratedFileDownload(
+  { projectId, user },
+  db = pool,
+  storage = null
+) {
+  const generatedFileStorage = resolveContractSigningGeneratedFileStorage(db, storage);
+  return withConnection(db, async (connection) => {
+    const projectRow = await selectProjectContext(connection, projectId);
+    const rolesRow = await selectSolutionDesignRoles(connection, projectId);
+    await assertWorkflowViewable(connection, projectId, user, { projectRow, rolesRow });
+    const fileRow = await selectLatestDownloadableProjectKickoffNoticeGeneratedFile(connection, projectId);
+    if (!fileRow) {
+      throw new ContractSigningWorkflowError(
+        CONTRACT_SIGNING_ERROR.UPLOAD_FILE_NOT_FOUND,
+        'Project kickoff notice generated file not found',
+        404,
+        ['C25']
+      );
+    }
+
+    let filePath;
+    try {
+      filePath = await generatedFileStorage.assertFileReadable(fileRow.storage_key);
+    } catch {
+      throw new ContractSigningWorkflowError(
+        CONTRACT_SIGNING_ERROR.UPLOAD_FILE_NOT_FOUND,
+        'Project kickoff notice generated file is missing from local storage',
+        404,
+        ['C25']
+      );
+    }
+
+    return {
+      filePath,
+      fileName: fileRow.file_name,
+      mimeType: fileRow.mime_type || CONTRACT_KICKOFF_NOTICE_TEMPLATE.mimeType,
+      fileSize: Number(fileRow.file_size || 0),
+      documentCode: 'C25',
+      version: Number(fileRow.version || 1)
+    };
+  });
+}
+
 export async function uploadContractSigningWorkflowFile(
   { projectId, slotKey, file, user },
   db = pool,
   storage = defaultContractSigningUploadStorage
 ) {
+  assertNotDeprecatedProjectKickoffNoticeUpload(slotKey);
   const slot = getContractSigningUploadSlotDefinition(slotKey);
   assertSupportedUploadSlot(slot);
   const uploadFile = normalizeUploadFile(file);
@@ -2941,12 +3329,8 @@ export async function uploadContractSigningWorkflowFile(
     const slots = isSigningScanSlot(slot)
       ? await selectContractSigningUploadSlots(connection, projectId)
       : [];
-    if (isProjectKickoffNoticeSlot(slot)) {
-      assertProjectKickoffNoticeReadyForUpload({ nodeRow, slotRow });
-    } else {
-      assertNodeProcessable(nodeRow, slot.nodeKey, 'uploaded');
-      assertUploadSlotReplaceable({ slotRow, slot, slots });
-    }
+    assertNodeProcessable(nodeRow, slot.nodeKey, 'uploaded');
+    assertUploadSlotReplaceable({ slotRow, slot, slots });
 
     const stored = await storage.writeFile(storageKey, uploadFile.buffer);
     fileWritten = true;
@@ -2954,16 +3338,7 @@ export async function uploadContractSigningWorkflowFile(
       throwInvalidUploadFile();
     }
 
-    const fileRow = isProjectKickoffNoticeSlot(slot)
-      ? await replaceCurrentProjectKickoffNoticeSlotFile(connection, {
-          projectId,
-          slotRow,
-          slot,
-          uploadFile,
-          storageKey,
-          userId: user.id
-        })
-      : isSigningScanSlot(slot)
+    const fileRow = isSigningScanSlot(slot)
         ? await replaceCurrentSigningScanSlotFile(connection, {
             projectId,
             slotRow,
@@ -2986,22 +3361,6 @@ export async function uploadContractSigningWorkflowFile(
       slot,
       fileRow
     });
-    if (isProjectKickoffNoticeSlot(slot)) {
-      stageAdvance = await tryAutoAdvanceProjectStage({
-        projectId,
-        user,
-        triggerAction: OPERATION_ACTION_TYPE.CONTRACT_SIGNING_PROJECT_KICKOFF_NOTICE_UPLOADED,
-        expectedStageOrder: CONTRACT_SIGNING_STAGE.STAGE_ORDER,
-        triggerMetadata: {
-          source: OPERATION_TARGET_TYPE.CONTRACT_SIGNING_WORKFLOW,
-          nodeKey: CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE,
-          slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE,
-          documentCode: 'C25',
-          fileId: fileRow.id,
-          revision: fileRow.revision
-        }
-      }, connection);
-    }
     const refreshedProjectRow = await selectProjectContext(connection, projectId);
     const workflow = await buildWorkflowDtoForProject(connection, { projectRow: refreshedProjectRow, user });
 
@@ -3208,8 +3567,22 @@ export async function returnContractSigningPreparationFile({ projectId, slotKey,
   });
 }
 
-export async function completeContractSigningAdvancePayment({ projectId, user }, db = pool) {
-  return withConnection(db, async (connection) => {
+async function completeContractSigningPaymentFinalAction({
+  projectId,
+  user,
+  actorType,
+  paid = false,
+  actionType,
+  paymentAction,
+  paymentStatus,
+  summary
+}, db = pool, generatedFileStorage = null) {
+  const resolvedGeneratedFileStorage = resolveContractSigningGeneratedFileStorage(db, generatedFileStorage);
+  const connection = await db.getConnection();
+  let generatedStorageKey = null;
+  let committed = false;
+  try {
+    await connection.beginTransaction();
     const projectRow = await selectProjectContext(connection, projectId, { forUpdate: true });
     assertContractSigningWriteAllowed(projectRow);
     await ensureContractSigningWorkflowState(connection, projectRow);
@@ -3217,29 +3590,117 @@ export async function completeContractSigningAdvancePayment({ projectId, user },
     await assertWorkflowViewable(connection, projectId, user, { rolesRow });
     const roleState = buildRoleStateWithoutUserDetails(rolesRow);
     assertRequiredRolesAssigned(roleState);
-    assertContractRoleActor(roleState, CONTRACT_SIGNING_ROLE_KEY.BUSINESS_OWNER, user);
+    if (actorType === 'business_owner') {
+      assertContractRoleActor(roleState, CONTRACT_SIGNING_ROLE_KEY.BUSINESS_OWNER, user);
+    } else {
+      assertGeneralManagerActor(user);
+    }
     const nodeRow = await selectContractSigningNodeForUpdate(
       connection,
       projectId,
       CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT
     );
     const paymentFlow = await selectContractSigningPaymentFlowForUpdate(connection, projectId);
-    assertAdvancePaymentReadyForBusinessAction(nodeRow, paymentFlow);
+    if (actorType === 'business_owner') {
+      assertAdvancePaymentReadyForBusinessAction(nodeRow, paymentFlow);
+    } else {
+      assertAdvancePaymentReadyForGeneralManagerRelease(nodeRow, paymentFlow);
+    }
 
     await markAdvancePaymentNodeApproved(connection, { projectId });
-    await markAdvancePaymentCompleted(connection, { projectId });
-    await activateProjectKickoffNoticeNode(connection, { projectId });
+    if (actorType === 'business_owner' || paid) {
+      if (actorType === 'business_owner') {
+        await markAdvancePaymentCompleted(connection, { projectId });
+      } else {
+        await markAdvancePaymentPaidByGeneralManager(connection, {
+          projectId,
+          actorUserId: user.id
+        });
+      }
+    } else {
+      await markAdvancePaymentReleased(connection, {
+        projectId,
+        actorUserId: user.id
+      });
+    }
+
+    const generation = await generateProjectKickoffNoticeFile(connection, {
+      projectRow,
+      roleState,
+      paymentFlow,
+      paymentAction,
+      paymentStatus,
+      actorUserId: user.id,
+      generatedFileStorage: resolvedGeneratedFileStorage
+    });
+    generatedStorageKey = generation.storageKey;
     await insertContractSigningPaymentLog(connection, {
       projectId,
       actorUserId: user.id,
-      actionType: OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_COMPLETED,
-      summary: '项目预付款已完成，进入项目启动通知',
-      paymentStatus: CONTRACT_SIGNING_PAYMENT_STATUS.COMPLETED
+      actionType,
+      summary,
+      paymentStatus,
+      paymentAction,
+      generatedFile: generation.generatedFile
     });
+    const stageAdvance = await tryAutoAdvanceProjectStage({
+      projectId,
+      user,
+      triggerAction: OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_GENERATED_KICKOFF_NOTICE,
+      expectedStageOrder: CONTRACT_SIGNING_STAGE.STAGE_ORDER,
+      triggerMetadata: {
+        source: OPERATION_TARGET_TYPE.CONTRACT_SIGNING_WORKFLOW,
+        nodeKey: CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT,
+        documentCode: 'C25',
+        documentName: '项目启动通知',
+        paymentAction,
+        paymentStatus,
+        generatedFileId: generation.generatedFile.id,
+        generatedFileVersion: generation.generatedFile.version,
+        templateKey: generation.generatedFile.templateKey,
+        templateVersion: generation.generatedFile.templateVersion,
+        templateHash: generation.generatedFile.templateHash
+      }
+    }, connection);
 
     const refreshedProjectRow = await selectProjectContext(connection, projectId);
-    return buildWorkflowDtoForProject(connection, { projectRow: refreshedProjectRow, user });
-  });
+    const workflow = await buildWorkflowDtoForProject(connection, { projectRow: refreshedProjectRow, user });
+
+    await connection.commit();
+    committed = true;
+
+    return {
+      ...workflow,
+      stageAdvance
+    };
+  } catch (error) {
+    if (!committed) {
+      await connection.rollback();
+    }
+    if (generatedStorageKey && !committed) {
+      await resolvedGeneratedFileStorage.cleanupFile(generatedStorageKey);
+    }
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function completeContractSigningAdvancePayment(
+  { projectId, user },
+  db = pool,
+  generatedFileStorage = null
+) {
+  return completeContractSigningPaymentFinalAction({
+    projectId,
+    user,
+    actorType: 'business_owner',
+    paid: true,
+    actionType: OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_COMPLETED,
+    paymentAction: 'complete_payment',
+    paymentStatus: CONTRACT_SIGNING_PAYMENT_STATUS.COMPLETED,
+    summary: '项目预付款已完成，生成项目启动通知并自动推进详细设计'
+  }, db, generatedFileStorage);
 }
 
 export async function requestContractSigningPaymentRelease({ projectId, user }, db = pool) {
@@ -3277,62 +3738,43 @@ export async function requestContractSigningPaymentRelease({ projectId, user }, 
   });
 }
 
-async function approveContractSigningPaymentReleaseWithResult({ projectId, user, paid }, db = pool) {
-  return withConnection(db, async (connection) => {
-    const projectRow = await selectProjectContext(connection, projectId, { forUpdate: true });
-    assertContractSigningWriteAllowed(projectRow);
-    await ensureContractSigningWorkflowState(connection, projectRow);
-    const rolesRow = await selectSolutionDesignRoles(connection, projectId);
-    await assertWorkflowViewable(connection, projectId, user, { rolesRow });
-    const roleState = buildRoleStateWithoutUserDetails(rolesRow);
-    assertRequiredRolesAssigned(roleState);
-    assertGeneralManagerActor(user);
-    const nodeRow = await selectContractSigningNodeForUpdate(
-      connection,
-      projectId,
-      CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT
-    );
-    const paymentFlow = await selectContractSigningPaymentFlowForUpdate(connection, projectId);
-    assertAdvancePaymentReadyForGeneralManagerRelease(nodeRow, paymentFlow);
-
-    await markAdvancePaymentNodeApproved(connection, { projectId });
-    if (paid) {
-      await markAdvancePaymentPaidByGeneralManager(connection, {
-        projectId,
-        actorUserId: user.id
-      });
-    } else {
-      await markAdvancePaymentReleased(connection, {
-        projectId,
-        actorUserId: user.id
-      });
-    }
-    await activateProjectKickoffNoticeNode(connection, { projectId });
-    await insertContractSigningPaymentLog(connection, {
-      projectId,
-      actorUserId: user.id,
-      actionType: paid
-        ? OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED_PAID
-        : OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED_UNPAID,
-      summary: paid
-        ? '总经理确认预付款已付款通过，进入项目启动通知'
-        : '总经理确认未付款并通过，进入项目启动通知',
-      paymentStatus: paid
-        ? CONTRACT_SIGNING_PAYMENT_STATUS.COMPLETED
-        : CONTRACT_SIGNING_PAYMENT_STATUS.RELEASED
-    });
-
-    const refreshedProjectRow = await selectProjectContext(connection, projectId);
-    return buildWorkflowDtoForProject(connection, { projectRow: refreshedProjectRow, user });
-  });
+async function approveContractSigningPaymentReleaseWithResult(
+  { projectId, user, paid },
+  db = pool,
+  generatedFileStorage = null
+) {
+  return completeContractSigningPaymentFinalAction({
+    projectId,
+    user,
+    actorType: 'general_manager',
+    paid,
+    actionType: paid
+      ? OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED_PAID
+      : OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED_UNPAID,
+    paymentAction: paid ? 'approve_release_paid' : 'approve_release_unpaid',
+    paymentStatus: paid
+      ? CONTRACT_SIGNING_PAYMENT_STATUS.COMPLETED
+      : CONTRACT_SIGNING_PAYMENT_STATUS.RELEASED,
+    summary: paid
+      ? '总经理确认预付款已付款通过，生成项目启动通知并自动推进详细设计'
+      : '总经理确认未付款并通过，生成项目启动通知并自动推进详细设计'
+  }, db, generatedFileStorage);
 }
 
-export function approveContractSigningPaymentReleaseUnpaid({ projectId, user }, db = pool) {
-  return approveContractSigningPaymentReleaseWithResult({ projectId, user, paid: false }, db);
+export function approveContractSigningPaymentReleaseUnpaid(
+  { projectId, user },
+  db = pool,
+  generatedFileStorage = null
+) {
+  return approveContractSigningPaymentReleaseWithResult({ projectId, user, paid: false }, db, generatedFileStorage);
 }
 
-export function approveContractSigningPaymentReleasePaid({ projectId, user }, db = pool) {
-  return approveContractSigningPaymentReleaseWithResult({ projectId, user, paid: true }, db);
+export function approveContractSigningPaymentReleasePaid(
+  { projectId, user },
+  db = pool,
+  generatedFileStorage = null
+) {
+  return approveContractSigningPaymentReleaseWithResult({ projectId, user, paid: true }, db, generatedFileStorage);
 }
 
 export function approveContractSigningPaymentRelease({ projectId, user }, db = pool) {

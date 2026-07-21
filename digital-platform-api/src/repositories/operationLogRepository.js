@@ -136,6 +136,8 @@ export const OPERATION_ACTION_TYPE = {
     'contract_signing.advance_payment_release_approved_unpaid',
   CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED_PAID:
     'contract_signing.advance_payment_release_approved_paid',
+  CONTRACT_SIGNING_ADVANCE_PAYMENT_GENERATED_KICKOFF_NOTICE:
+    'contract_signing.advance_payment_generated_kickoff_notice',
   CONTRACT_SIGNING_PROJECT_KICKOFF_NOTICE_UPLOADED: 'contract_signing.project_kickoff_notice_uploaded',
   STAGE_ADVANCED: 'stage.advanced',
   PROJECT_COMPLETED: 'project.completed'

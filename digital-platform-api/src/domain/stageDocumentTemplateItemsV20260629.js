@@ -1069,7 +1069,7 @@ export const V20260629_WORKSPACE_BLUE_MODULES = Object.freeze([
     nodeKey: 'project_start_notice',
     nodeName: '项目启动通知',
     outputCodes: ['C25'],
-    notes: 'C25 由合同签订 workflow 的项目启动通知节点承载，不在详细设计阶段另暴露主流程入口。'
+    notes: 'C25 由合同签订 workflow 的项目预付款支付最终动作生成，不作为独立合同主流程节点或详细设计第二入口。'
   }),
   blueModule({ stageOrder: 4, nodeKey: 'detailed_design_preparation', nodeName: '详细设计准备', outputCodes: ['C26'] }),
   blueModule({ stageOrder: 4, nodeKey: 'detailed_design', nodeName: '详细设计', outputCodes: ['C27', 'C28', 'C29', 'C30', 'C31', 'C32', 'C33', 'C34', 'C35'] }),

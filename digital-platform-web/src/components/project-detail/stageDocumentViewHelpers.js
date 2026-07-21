@@ -66,6 +66,7 @@ export const operationActionText = {
   'contract_signing.advance_payment_release_approved': '总经理预付款放行通过',
   'contract_signing.advance_payment_release_approved_unpaid': '总经理未付款并通过',
   'contract_signing.advance_payment_release_approved_paid': '总经理已付款通过',
+  'contract_signing.advance_payment_generated_kickoff_notice': '预付款确认生成项目启动通知',
   'contract_signing.project_kickoff_notice_uploaded': '项目启动通知上传',
   'stage.advanced': '阶段推进',
   'project.completed': '项目完成'

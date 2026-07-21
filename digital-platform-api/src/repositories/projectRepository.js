@@ -64,6 +64,7 @@ export {
   completeContractSigningNode,
   completeContractSigningAdvancePayment,
   confirmContractSigningScanFile,
+  getContractSigningKickoffNoticeGeneratedFileDownload,
   getContractSigningUploadDownload,
   getContractSigningWorkflow,
   requestContractSigningPaymentRelease,

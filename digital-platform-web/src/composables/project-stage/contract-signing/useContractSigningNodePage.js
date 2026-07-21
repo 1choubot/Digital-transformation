@@ -24,7 +24,7 @@ export function useContractSigningNodePage(props, emit) {
     emit('business-state-changed', {
       source: 'contract-signing',
       nodeKey: nodeKey.value,
-      refreshCurrentDetail: nodeKey.value === 'project_kickoff_notice'
+      refreshCurrentDetail: true
     });
 
   const actions = useContractSigningWorkflow({

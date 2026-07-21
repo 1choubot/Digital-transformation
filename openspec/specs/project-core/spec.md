@@ -3331,13 +3331,18 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **AND** 系统 MUST NOT 将扫描件处理表述为审批或确认线下签署结果通过/不通过
 
 ### Requirement: 项目预付款支付节点
-合同签订 workflow MUST 在 `advance_payment` 节点支持商务负责人处理预付款完成或申请总经理放行，并 MUST 在总经理等待状态区分未付款放行和已付款通过两种结果。
+合同签订 workflow MUST 在 `advance_payment` 节点支持商务负责人处理预付款完成或申请总经理放行，并 MUST 在三个预付款最终动作确认后生成 C25 项目启动通知文件、完成合同阶段并自动推进详细设计。
 
-#### Scenario: 商务负责人完成支付
+#### Scenario: 商务负责人完成支付并生成项目启动通知
 - **WHEN** 商务负责人在项目预付款支付节点选择完成支付
+- **AND** 前端完成用户确认
 - **THEN** 系统 MUST 将项目预付款支付节点置为完成
-- **AND** 系统 MUST 激活项目启动通知节点
 - **AND** 系统 MUST 将 `paymentFlow.status` 置为 `completed`
+- **AND** 系统 MUST 生成 C25 `项目启动通知` 文件
+- **AND** 系统 MUST 将 C25 项目启动通知资料完成结果置为完成
+- **AND** 系统 MUST 将合同签订阶段置为完成
+- **AND** 系统 MUST 自动推进项目到详细设计阶段
+- **AND** 自动推进 MUST 调用统一阶段门禁，不得直接手写项目阶段字段绕过门禁
 - **AND** 完成后系统 MUST NOT 继续返回完成支付或申请总经理放行权限
 
 #### Scenario: 未完成支付等待总经理放行
@@ -3346,71 +3351,83 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **AND** 项目 MUST 停留在项目预付款支付节点直到总经理选择一种通过结果
 - **AND** 系统 MUST 将 `advance_payment` 节点状态和 `paymentFlow.status` 置为 `waiting_general_manager`
 - **AND** 节点阻塞原因 MUST 显示 `等待总经理审批预付款放行`
+- **AND** 系统 MUST NOT 在申请等待时生成 C25 项目启动通知
 
 #### Scenario: 只有总经理可处理等待放行
 - **WHEN** 项目处于总经理放行等待状态
 - **THEN** 只有总经理 MUST 能执行未付款并通过或已付款通过动作
-- **AND** 非总经理用户 MUST NOT 能绕过该等待状态进入项目启动通知节点
+- **AND** 非总经理用户 MUST NOT 能绕过该等待状态进入详细设计阶段
 - **AND** 总经理通过权限 MUST 只在 `advance_payment` 和 `paymentFlow` 均处于 `waiting_general_manager` 时返回
 
-#### Scenario: 总经理未付款并通过
+#### Scenario: 总经理未付款并通过并生成项目启动通知
 - **WHEN** 总经理选择未付款并通过
+- **AND** 前端完成用户确认
 - **THEN** 系统 MUST 将项目预付款支付节点置为完成
-- **AND** 系统 MUST 激活项目启动通知节点
 - **AND** 系统 MUST 将 `paymentFlow.status` 置为 `released`
+- **AND** 系统 MUST 生成 C25 `项目启动通知` 文件
+- **AND** 系统 MUST 将 C25 项目启动通知资料完成结果置为完成
+- **AND** 系统 MUST 将合同签订阶段置为完成
+- **AND** 系统 MUST 自动推进项目到详细设计阶段
 - **AND** 放行后系统 MUST NOT 继续返回总经理放行权限
 
-#### Scenario: 总经理已付款通过
+#### Scenario: 总经理已付款通过并生成项目启动通知
 - **WHEN** 总经理选择已付款通过
+- **AND** 前端完成用户确认
 - **THEN** 系统 MUST 将项目预付款支付节点置为完成
-- **AND** 系统 MUST 激活项目启动通知节点
 - **AND** 系统 MUST 将 `paymentFlow.status` 置为 `completed`
+- **AND** 系统 MUST 生成 C25 `项目启动通知` 文件
+- **AND** 系统 MUST 将 C25 项目启动通知资料完成结果置为完成
+- **AND** 系统 MUST 将合同签订阶段置为完成
+- **AND** 系统 MUST 自动推进项目到详细设计阶段
 - **AND** 通过后系统 MUST NOT 继续返回总经理放行权限
+
+#### Scenario: 生成失败不得部分完成预付款最终动作
+- **WHEN** 任一预付款最终动作触发 C25 项目启动通知生成
+- **AND** 生成文件或文件存储失败
+- **THEN** 系统 MUST 拒绝该最终动作并返回明确错误
+- **AND** 系统 MUST NOT 将 `advance_payment` 节点置为完成
+- **AND** 系统 MUST NOT 完成 C25 资料结果
+- **AND** 系统 MUST NOT 推进到详细设计阶段
+
+#### Scenario: 生成后可下载项目启动通知
+- **WHEN** C25 项目启动通知已由预付款最终动作生成成功
+- **THEN** 有合同 workflow 查看权限且后端授权的用户 MUST 能下载当前生成文件
+- **AND** 下载接口 MUST 返回 generated file 的文件名、MIME 类型和文件内容
+- **AND** 未生成、生成失败或生成文件存储缺失时 MUST 拒绝下载并返回明确错误
+
+#### Scenario: 未执行最终确认不能手工推进
+- **WHEN** 用户手工请求推进合同签订阶段
+- **AND** 项目预付款支付节点尚未完成任一最终动作
+- **THEN** 系统 MUST 拒绝推进到详细设计阶段
+- **AND** 系统 MUST 在门禁详情中返回 `项目启动通知未生成完成` 或等价阻塞原因
+- **AND** 系统 MUST NOT 通过普通资料卡片、旧独立节点、前端状态或 C24 发票资料判断该门禁
 
 #### Scenario: 旧笼统放行入口不能代替总经理选择
 - **WHEN** 系统收到旧的笼统总经理放行动作
 - **THEN** 系统 MUST 拒绝该动作并返回 409 或 410
 - **AND** 错误信息 MUST 提示总经理改用未付款并通过或已付款通过
 - **AND** 系统 MUST NOT 将旧动作默认映射为未付款并通过
-- **AND** 系统 MUST NOT 改变 `advance_payment` 节点状态、`paymentFlow.status` 或项目启动通知节点状态
+- **AND** 系统 MUST NOT 改变 `advance_payment` 节点状态、`paymentFlow.status`、C25 生成文件或项目当前阶段
 
-### Requirement: 项目启动通知节点
-合同签订 workflow MUST 在最后一个业务节点 `project_kickoff_notice` 支持商务负责人上传项目启动通知，并在上传成功后自动推进到详细设计阶段。
-
-#### Scenario: 上传项目启动通知
-- **WHEN** 项目位于项目启动通知节点
-- **THEN** 商务负责人 MUST 能上传业务文件 `项目启动通知`
-- **AND** 上传槽、workflow 节点和资料展示名称 MUST 使用 `项目启动通知`
-- **AND** 系统 MUST 将 C25 展示名修正为 `项目启动通知`
-- **AND** 系统 MUST 仅在项目处于合同签订阶段、项目未结束、`project_kickoff_notice` 节点为 `pending`、上传槽尚未存在 current file 时允许上传
-- **AND** 非商务负责人、节点未激活、重复上传或已结束项目 MUST 被拒绝
-
-#### Scenario: 上传后自动推进详细设计
-- **WHEN** 商务负责人成功上传项目启动通知
-- **THEN** 系统 MUST 将项目启动通知节点置为完成
-- **AND** 系统 MUST 将项目启动通知上传槽置为完成
-- **AND** 系统 MUST 将合同签订阶段置为完成
-- **AND** 系统 MUST 自动推进项目到详细设计阶段
-- **AND** 自动推进 MUST 调用统一阶段门禁，不得直接手写项目阶段字段绕过门禁
-
-#### Scenario: 手工推进不得绕过项目启动通知
-- **WHEN** 用户手工请求推进合同签订阶段
-- **AND** 当前合同阶段资料清单已齐套
-- **AND** `project_kickoff_notice` 节点尚未 `approved`
-- **THEN** 系统 MUST 拒绝推进到详细设计阶段
-- **AND** 系统 MUST 直接检查 `project_contract_signing_nodes` 中的 `project_kickoff_notice` 节点状态
-- **AND** 系统 MUST 在门禁详情中返回 `项目启动通知未上传完成` 阻塞原因
-- **AND** 系统 MUST NOT 通过普通资料卡片、前端状态或 C24 发票资料判断该门禁
+#### Scenario: 合同阶段主流程只有三个节点
+- **WHEN** 系统初始化或查询合同签订 workflow
+- **THEN** 系统 MUST 只返回准备协议和合同、签订协议和合同、项目预付款支付三个主流程节点
+- **AND** 系统 MUST NOT 返回独立项目启动通知主流程节点
+- **AND** 系统 MUST NOT 返回旧蓝图节点作为合同主流程节点
 
 #### Scenario: 项目启动通知不新增资料项
 - **WHEN** 系统同步项目启动通知到阶段资料完成结果
 - **THEN** 系统 MUST 映射到既有 C25 稳定资料编码
+- **AND** 生成文件 MUST 作为 C25 的产出形态
 - **AND** 系统 MUST NOT 新增资料项或改变 v20260629 71 项资料总数
 - **AND** 系统 MUST NOT 新增第 72 项资料
 
-#### Scenario: 项目启动通知不形成双入口
-- **WHEN** 系统返回合同签订阶段或详细设计阶段主流程导航
-- **THEN** `project_kickoff_notice` MUST 只作为合同 workflow 最后一个业务节点出现
-- **AND** C25 MUST NOT 作为详细设计阶段另一套主流程节点出现
-- **AND** 阶段导航主流程 MUST 以合同 workflow DTO 为准
-- **AND** 系统 MUST 同时识别目标编码 C25 和运行资料编码 `4.1`，避免旧编码资料行在合同页面辅助区或主流程入口形成第二入口
+#### Scenario: 项目启动通知项目名称使用组合展示值
+- **WHEN** 系统生成 C25 项目启动通知文件
+- **THEN** 模板内项目名称字段 MUST 使用 `项目编号+客户名称-项目名`
+- **AND** 项目编号、客户名称和项目名均存在时 MUST 生成类似 `KRF25037金风-智能力矩扳手项目` 的展示值
+- **AND** 缺客户名时 MUST 使用 `项目编号-项目名`
+- **AND** 缺项目编号时 MUST 使用 `客户名称-项目名`
+- **AND** 只剩项目名时 MUST 使用项目名
+- **AND** 全缺时 MUST 使用 `未命名项目`
+- **AND** 系统 MUST 去除首尾空白并避免多余 `-`

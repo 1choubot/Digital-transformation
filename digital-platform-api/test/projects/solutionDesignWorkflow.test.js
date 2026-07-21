@@ -8562,10 +8562,10 @@ test('tender path derives stage gate complete and auto advances to contract stag
 
   assert.equal(navigation.currentStageKey, 'contract');
   assert.equal(contractStage.status, NAVIGATION_STATUS.PROCESSING);
-  assert.equal(contractStage.children.length, 4);
+  assert.equal(contractStage.children.length, 3);
   assert.equal(contractPreparationNode.status, NAVIGATION_STATUS.PROCESSING);
   assert.notEqual(contractPreparationNode.status, NAVIGATION_STATUS.PENDING);
-  assert.notEqual(projectKickoffNoticeNode.status, NAVIGATION_STATUS.COMPLETED);
+  assert.equal(projectKickoffNoticeNode, undefined);
 });
 
 test('navigation process nodes respect current, future, and completed stage boundaries', () => {
@@ -8615,8 +8615,14 @@ test('navigation process nodes respect current, future, and completed stage boun
             outputs: []
           },
           {
-            nodeKey: 'project_kickoff_notice',
-            nodeName: '项目启动通知',
+            nodeKey: 'contract_signing',
+            nodeName: '签订协议和合同',
+            nodeStatus: 'not_started',
+            outputs: []
+          },
+          {
+            nodeKey: 'advance_payment',
+            nodeName: '项目预付款支付',
             nodeStatus: 'not_started',
             outputs: []
           }
@@ -8646,17 +8652,17 @@ test('navigation process nodes respect current, future, and completed stage boun
   const contractStage = navigation.children.find((stage) => stage.stageKey === 'contract');
   const futureDetailedDesignStage = navigation.children.find((stage) => stage.stageKey === 'detailedDesign');
   const contractPreparationNode = contractStage.children.find((node) => node.nodeKey === 'contract_preparation');
-  const currentProjectKickoffNoticeNode = contractStage.children.find(
-    (node) => node.nodeKey === 'project_kickoff_notice'
-  );
+  const currentAdvancePaymentNode = contractStage.children.find((node) => node.nodeKey === 'advance_payment');
+  const projectKickoffNoticeNode = contractStage.children.find((node) => node.nodeKey === 'project_kickoff_notice');
   const futureProcessNode = futureDetailedDesignStage.children.find((node) => node.nodeKey === 'detailed_design_preparation');
 
   assert.equal(navigation.currentStageKey, 'contract');
   assert.equal(contractStage.status, NAVIGATION_STATUS.PROCESSING);
   assert.equal(contractPreparationNode.status, NAVIGATION_STATUS.PROCESSING);
   assert.notEqual(contractPreparationNode.status, NAVIGATION_STATUS.PENDING);
-  assert.equal(currentProjectKickoffNoticeNode.status, NAVIGATION_STATUS.PENDING);
-  assert.notEqual(currentProjectKickoffNoticeNode.status, NAVIGATION_STATUS.COMPLETED);
+  assert.equal(currentAdvancePaymentNode.status, NAVIGATION_STATUS.PENDING);
+  assert.notEqual(currentAdvancePaymentNode.status, NAVIGATION_STATUS.COMPLETED);
+  assert.equal(projectKickoffNoticeNode, undefined);
   assert.equal(completedSolutionStage.children[0].status, NAVIGATION_STATUS.COMPLETED);
   assert.equal(futureProcessNode.status, NAVIGATION_STATUS.PENDING);
 });

@@ -22,6 +22,7 @@ import {
   deleteStageDocumentAttachmentHandler,
   deleteStageDocumentOnlineFormImageHandler,
   downloadContractSigningWorkflowFileHandler,
+  downloadContractSigningKickoffNoticeGeneratedFileHandler,
   downloadSolutionDesignWorkflowFileHandler,
   downloadStageDocumentAttachmentHandler,
   downloadStageDocumentGeneratedFileHandler,
@@ -145,6 +146,12 @@ projectsRouter.get(
   '/:projectId/contract-signing-workflow/uploads/:slotKey/download',
   requireAuth,
   asyncHandler(downloadContractSigningWorkflowFileHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/contract-signing-workflow/kickoff-notice/generated-file/download',
+  requireAuth,
+  asyncHandler(downloadContractSigningKickoffNoticeGeneratedFileHandler)
 );
 
 projectsRouter.post(

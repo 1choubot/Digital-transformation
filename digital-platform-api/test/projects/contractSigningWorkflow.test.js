@@ -29,8 +29,10 @@ import {
   approveContractSigningPreparationFile,
   approveContractSigningPaymentReleasePaid,
   approveContractSigningPaymentReleaseUnpaid,
+  buildProjectKickoffNoticeDisplayName,
   completeContractSigningNode,
   completeContractSigningAdvancePayment,
+  getContractSigningKickoffNoticeGeneratedFileDownload,
   getContractSigningUploadDownload,
   getContractSigningWorkflow,
   requestContractSigningPaymentRelease,
@@ -53,6 +55,7 @@ import {
   NAVIGATION_STATUS,
   buildProjectNavigationFromWorkspace
 } from '../../src/services/navigationService.js';
+import { readZipEntries } from '../../src/utils/ooxmlZip.js';
 
 function normalizeSql(sql) {
   return sql.replace(/\s+/g, ' ').trim();
@@ -175,6 +178,41 @@ function fakeStorage() {
   };
 }
 
+function fakeGeneratedFileStorage({ failWrite = false } = {}) {
+  return {
+    written: [],
+    cleaned: [],
+    createStorageKey({ projectId, documentId, version, fileType }) {
+      return `generated/${projectId}/${documentId}/v${version}.${fileType}`;
+    },
+    async writeFile(storageKey, buffer) {
+      if (failWrite) {
+        throw new Error('generated file write failed');
+      }
+
+      this.written.push({ storageKey, buffer });
+      return {
+        storageKey,
+        size: buffer.length
+      };
+    },
+    async assertFileReadable(storageKey) {
+      if (!this.written.some((entry) => entry.storageKey === storageKey)) {
+        throw new Error('missing generated test file');
+      }
+
+      return storageKey;
+    },
+    async cleanupFile(storageKey) {
+      this.cleaned.push(storageKey);
+    }
+  };
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 function buildProjectStages(projectId, currentStageOrder = 3) {
   return SELF_DEVELOPED_PROJECT_STAGES.map((stage) => ({
     id: 2000 + stage.stageOrder,
@@ -252,22 +290,57 @@ class ContractSigningWorkflowFakeConnection {
     this.contractUploadSlots = [];
     this.contractUploadFiles = [];
     this.contractPaymentFlows = [];
+    this.generatedFiles = [];
     this.operationLogs = [];
     this.contractNodeInsertCount = 0;
     this.contractUploadSlotInsertCount = 0;
     this.contractPaymentFlowInsertCount = 0;
     this.committed = false;
     this.rolledBack = false;
+    this.transactionSnapshot = null;
   }
 
-  async beginTransaction() {}
+  async beginTransaction() {
+    this.transactionSnapshot = {
+      project: cloneJson(this.project),
+      stages: cloneJson(this.stages),
+      projectStageDocuments: cloneJson(this.projectStageDocuments),
+      contractNodes: cloneJson(this.contractNodes),
+      contractUploadSlots: cloneJson(this.contractUploadSlots),
+      contractUploadFiles: cloneJson(this.contractUploadFiles),
+      contractPaymentFlows: cloneJson(this.contractPaymentFlows),
+      generatedFiles: cloneJson(this.generatedFiles),
+      operationLogs: cloneJson(this.operationLogs),
+      contractNodeInsertCount: this.contractNodeInsertCount,
+      contractUploadSlotInsertCount: this.contractUploadSlotInsertCount,
+      contractPaymentFlowInsertCount: this.contractPaymentFlowInsertCount
+    };
+  }
 
   async commit() {
     this.committed = true;
+    this.transactionSnapshot = null;
   }
 
   async rollback() {
     this.rolledBack = true;
+    if (!this.transactionSnapshot) {
+      return;
+    }
+
+    this.project = this.transactionSnapshot.project;
+    this.stages = this.transactionSnapshot.stages;
+    this.projectStageDocuments = this.transactionSnapshot.projectStageDocuments;
+    this.contractNodes = this.transactionSnapshot.contractNodes;
+    this.contractUploadSlots = this.transactionSnapshot.contractUploadSlots;
+    this.contractUploadFiles = this.transactionSnapshot.contractUploadFiles;
+    this.contractPaymentFlows = this.transactionSnapshot.contractPaymentFlows;
+    this.generatedFiles = this.transactionSnapshot.generatedFiles;
+    this.operationLogs = this.transactionSnapshot.operationLogs;
+    this.contractNodeInsertCount = this.transactionSnapshot.contractNodeInsertCount;
+    this.contractUploadSlotInsertCount = this.transactionSnapshot.contractUploadSlotInsertCount;
+    this.contractPaymentFlowInsertCount = this.transactionSnapshot.contractPaymentFlowInsertCount;
+    this.transactionSnapshot = null;
   }
 
   release() {}
@@ -343,6 +416,24 @@ class ContractSigningWorkflowFakeConnection {
     };
   }
 
+  kickoffNoticeDocument() {
+    return this.projectStageDocuments.find((document) =>
+      document.document_code === 'C25' || document.document_code === '4.1'
+    ) || null;
+  }
+
+  latestKickoffNoticeGeneratedFile({ downloadable = false } = {}) {
+    const rows = this.generatedFiles
+      .filter((file) =>
+        Number(file.project_id) === Number(this.project.id) &&
+        ['C25', '4.1'].includes(file.document_code) &&
+        (!downloadable || (file.status === 'generated' && Boolean(file.storage_key)))
+      )
+      .sort((left, right) => Number(right.version) - Number(left.version) || Number(right.id) - Number(left.id));
+
+    return rows[0] || null;
+  }
+
   async execute(sql, params = []) {
     const text = normalizeSql(sql);
 
@@ -370,6 +461,13 @@ class ContractSigningWorkflowFakeConnection {
             Number(candidate.project_id) === Number(projectId) && candidate.node_key === nodeKey
         ) || null;
       return [node ? [{ status: node.status }] : []];
+    }
+
+    if (text.startsWith('SELECT status FROM project_contract_signing_payment_flows')) {
+      const [projectId] = params;
+      const flow =
+        this.contractPaymentFlows.find((candidate) => Number(candidate.project_id) === Number(projectId)) || null;
+      return [flow ? [{ status: flow.status }] : []];
     }
 
     if (text.startsWith('SELECT p.id,') && text.includes('LEFT JOIN users pm')) {
@@ -434,6 +532,112 @@ class ContractSigningWorkflowFakeConnection {
             revision_source_document_name: null
           }))
       ];
+    }
+
+    if (
+      text.startsWith('SELECT * FROM project_stage_documents') &&
+      text.includes('document_code IN (?, ?)') &&
+      text.includes('FOR UPDATE')
+    ) {
+      const [projectId, firstCode, secondCode] = params;
+      const codes = new Set([firstCode, secondCode]);
+      const document =
+        this.projectStageDocuments.find((candidate) =>
+          Number(candidate.project_id) === Number(projectId) &&
+          codes.has(candidate.document_code)
+        ) || null;
+      return [document ? [{ ...document }] : []];
+    }
+
+    if (
+      text.startsWith('SELECT COALESCE(MAX(version), 0) + 1 AS nextVersion') &&
+      text.includes('FROM project_stage_document_generated_files')
+    ) {
+      const [projectId, documentId, templateKey] = params;
+      const maxVersion = this.generatedFiles.reduce((max, file) => {
+        if (
+          Number(file.project_id) === Number(projectId) &&
+          Number(file.stage_document_id) === Number(documentId) &&
+          file.template_key === templateKey
+        ) {
+          return Math.max(max, Number(file.version || 0));
+        }
+        return max;
+      }, 0);
+      return [[{ nextVersion: maxVersion + 1 }]];
+    }
+
+    if (
+      text.startsWith('SELECT * FROM project_stage_document_generated_files') &&
+      text.includes('WHERE id = ?')
+    ) {
+      const [id] = params;
+      const file = this.generatedFiles.find((candidate) => Number(candidate.id) === Number(id));
+      return [file ? [{ ...file }] : []];
+    }
+
+    if (
+      text.startsWith('SELECT id FROM project_stage_document_generated_files') &&
+      text.includes('document_code IN (?, ?)') &&
+      text.includes('storage_key IS NOT NULL')
+    ) {
+      const [projectId, firstCode, secondCode, status] = params;
+      const codes = new Set([firstCode, secondCode]);
+      const file =
+        this.generatedFiles
+          .filter((candidate) =>
+            Number(candidate.project_id) === Number(projectId) &&
+            codes.has(candidate.document_code) &&
+            candidate.status === status &&
+            Boolean(candidate.storage_key)
+          )
+          .sort((left, right) => Number(right.version) - Number(left.version) || Number(right.id) - Number(left.id))[0] ||
+        null;
+      return [file ? [{ id: file.id }] : []];
+    }
+
+    if (
+      text.startsWith('SELECT * FROM project_stage_document_generated_files') &&
+      text.includes('project_id IN') &&
+      text.includes('document_code IN (?, ?)') &&
+      text.includes('storage_key IS NOT NULL')
+    ) {
+      const projectIds = params.slice(0, -3).map(Number);
+      const [firstCode, secondCode, status] = params.slice(-3);
+      const projectIdSet = new Set(projectIds);
+      const codes = new Set([firstCode, secondCode]);
+      return [
+        this.generatedFiles
+          .filter((candidate) =>
+            projectIdSet.has(Number(candidate.project_id)) &&
+            codes.has(candidate.document_code) &&
+            candidate.status === status &&
+            Boolean(candidate.storage_key)
+          )
+          .sort((left, right) =>
+            Number(left.project_id) - Number(right.project_id) ||
+            Number(right.version) - Number(left.version) ||
+            Number(right.id) - Number(left.id)
+          )
+          .map((file) => ({ ...file }))
+      ];
+    }
+
+    if (
+      text.startsWith('SELECT * FROM project_stage_document_generated_files') &&
+      text.includes('document_code IN (?, ?)')
+    ) {
+      const [projectId, firstCode, secondCode, status] = params;
+      const codes = new Set([firstCode, secondCode]);
+      const downloadable = text.includes('storage_key IS NOT NULL');
+      const rows = this.generatedFiles
+        .filter((candidate) =>
+          Number(candidate.project_id) === Number(projectId) &&
+          codes.has(candidate.document_code) &&
+          (!downloadable || (candidate.status === status && Boolean(candidate.storage_key)))
+        )
+        .sort((left, right) => Number(right.version) - Number(left.version) || Number(right.id) - Number(left.id));
+      return [rows[0] ? [{ ...rows[0] }] : []];
     }
 
     if (text.startsWith('SELECT * FROM project_solution_design_roles')) {
@@ -1043,6 +1247,97 @@ class ContractSigningWorkflowFakeConnection {
       return [{ affectedRows: stage ? 1 : 0 }];
     }
 
+    if (text.startsWith('INSERT INTO project_stage_document_generated_files')) {
+      const [
+        projectId,
+        stageDocumentId,
+        onlineFormId,
+        documentCode,
+        templateKey,
+        fileType,
+        version,
+        status,
+        fileName,
+        mimeType,
+        generatedByUserId,
+        sourceFormSubmittedAt,
+        sourceFormDataHash,
+        sourceSnapshotJson,
+        triggerEvent,
+        reviewSnapshotJson,
+        templateVersion
+      ] = params;
+      const id = this.generatedFiles.length + 1;
+      this.generatedFiles.push({
+        id,
+        project_id: projectId,
+        stage_document_id: stageDocumentId,
+        online_form_id: onlineFormId,
+        document_code: documentCode,
+        template_key: templateKey,
+        file_type: fileType,
+        version,
+        status,
+        file_name: fileName,
+        mime_type: mimeType,
+        file_size: null,
+        storage_key: null,
+        generated_by_user_id: generatedByUserId,
+        generated_at: null,
+        failure_reason: null,
+        source_form_submitted_at: sourceFormSubmittedAt,
+        source_form_data_hash: sourceFormDataHash,
+        source_snapshot_json: sourceSnapshotJson,
+        trigger_event: triggerEvent,
+        review_snapshot_json: reviewSnapshotJson,
+        template_version: templateVersion,
+        template_hash: null,
+        created_at: '2026-07-21 10:00:00',
+        updated_at: '2026-07-21 10:00:00'
+      });
+      return [{ insertId: id, affectedRows: 1 }];
+    }
+
+    if (
+      text.startsWith('UPDATE project_stage_document_generated_files SET status = ?') &&
+      text.includes('id <> ?')
+    ) {
+      const [status, projectId, documentId, templateKey, expectedStatus, excludedId] = params;
+      let affectedRows = 0;
+      for (const file of this.generatedFiles) {
+        if (
+          Number(file.project_id) === Number(projectId) &&
+          Number(file.stage_document_id) === Number(documentId) &&
+          file.template_key === templateKey &&
+          file.status === expectedStatus &&
+          Number(file.id) !== Number(excludedId)
+        ) {
+          file.status = status;
+          file.updated_at = '2026-07-21 10:05:00';
+          affectedRows += 1;
+        }
+      }
+      return [{ affectedRows }];
+    }
+
+    if (
+      text.startsWith('UPDATE project_stage_document_generated_files SET status = ?') &&
+      text.includes('storage_key = ?')
+    ) {
+      const [status, storageKey, fileSize, templateHash, id] = params;
+      const file = this.generatedFiles.find((candidate) => Number(candidate.id) === Number(id));
+      if (file) {
+        file.status = status;
+        file.storage_key = storageKey;
+        file.file_size = fileSize;
+        file.generated_at = '2026-07-21 10:05:00';
+        file.failure_reason = null;
+        file.template_hash = templateHash;
+        file.updated_at = '2026-07-21 10:05:00';
+      }
+      return [{ affectedRows: file ? 1 : 0 }];
+    }
+
     if (text.startsWith('INSERT INTO business_operation_logs')) {
       const [projectId, actorUserId, actionType, targetType, targetId, summary, detailsJson] = params;
       this.operationLogs.push({
@@ -1065,6 +1360,7 @@ function fakeDb(options = {}) {
   const connection = new ContractSigningWorkflowFakeConnection(options);
   return {
     connection,
+    generatedFileStorage: options.generatedFileStorage || fakeGeneratedFileStorage(),
     async getConnection() {
       return connection;
     }
@@ -1094,6 +1390,12 @@ function findSlot(workflow, slotKey) {
 
 function latestLog(connection, actionType) {
   return [...connection.operationLogs].reverse().find((log) => log.action_type === actionType) || null;
+}
+
+function getDocxDocumentXml(buffer) {
+  const entry = readZipEntries(buffer).find((candidate) => candidate.name === 'word/document.xml');
+  assert.ok(entry, 'word/document.xml should exist in generated docx');
+  return entry.data.toString('utf8');
 }
 
 function todoActionTexts(todos) {
@@ -1201,12 +1503,12 @@ async function assertManualContractAdvanceBlockedByKickoffNotice(db, user) {
     () => advanceProjectStage(200, user, db),
     (error) => {
       assert.equal(error.code, 'PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE');
-      assert.equal(error.message, '项目启动通知未上传完成');
+      assert.equal(error.message, '项目启动通知未生成完成');
       const documents = error.details?.incompleteRequiredDocuments || [];
       const kickoffNoticeDocument = documents.find((document) => document.documentCode === 'C25');
       assert.ok(kickoffNoticeDocument);
       assert.equal(kickoffNoticeDocument.documentName, '项目启动通知');
-      assert.deepEqual(kickoffNoticeDocument.derivedBlockingReasons, ['项目启动通知未上传完成']);
+      assert.deepEqual(kickoffNoticeDocument.derivedBlockingReasons, ['项目启动通知未生成完成']);
       return true;
     }
   );
@@ -1222,7 +1524,79 @@ async function assertManualContractAdvanceBlockedByKickoffNotice(db, user) {
   assert.equal(db.connection.rolledBack, true);
 }
 
-test('contract signing workflow initializes four nodes, five slots, and payment flow in contract stage', async () => {
+async function assertKickoffNoticeGeneratedAndDownloadable(db, user, {
+  expectedPaymentAction,
+  expectedPaymentStatus,
+  expectedProjectDisplayName
+} = {}) {
+  const generatedFile = db.connection.latestKickoffNoticeGeneratedFile({ downloadable: true });
+  assert.ok(generatedFile);
+  assert.equal(generatedFile.document_code, 'C25');
+  assert.equal(generatedFile.status, 'generated');
+  assert.equal(generatedFile.file_name.includes('项目启动通知'), true);
+  assert.equal(Boolean(generatedFile.storage_key), true);
+  if (expectedPaymentAction) {
+    assert.equal(JSON.parse(generatedFile.source_snapshot_json).paymentAction, expectedPaymentAction);
+  }
+  if (expectedPaymentStatus) {
+    assert.equal(JSON.parse(generatedFile.source_snapshot_json).contractSigningWorkflow.paymentFlow.status, expectedPaymentStatus);
+  }
+  if (expectedProjectDisplayName) {
+    const sourceSnapshot = JSON.parse(generatedFile.source_snapshot_json);
+    assert.equal(sourceSnapshot.project.projectDisplayName, expectedProjectDisplayName);
+    assert.equal(sourceSnapshot.project.projectCode, db.connection.project.project_code);
+    assert.equal(sourceSnapshot.project.customerName, db.connection.project.customer_name);
+    assert.equal(sourceSnapshot.project.projectName, db.connection.project.project_name);
+
+    const writtenFile = db.generatedFileStorage.written.find((entry) => entry.storageKey === generatedFile.storage_key);
+    assert.ok(writtenFile, 'generated file should be written to storage');
+    const documentXml = getDocxDocumentXml(writtenFile.buffer);
+    assert.equal(documentXml.includes(expectedProjectDisplayName), true);
+    assert.equal(documentXml.includes(`>${db.connection.project.project_name}<`), false);
+  }
+
+  const download = await getContractSigningKickoffNoticeGeneratedFileDownload({
+    projectId: 200,
+    user
+  }, db);
+  assert.equal(download.fileName, generatedFile.file_name);
+  assert.equal(download.documentCode, 'C25');
+  assert.equal(download.version, Number(generatedFile.version));
+}
+
+test('project kickoff notice display name combines project code, customer, and project name', () => {
+  assert.equal(
+    buildProjectKickoffNoticeDisplayName({
+      project_code: ' KRF25037 ',
+      customer_name: ' 金风 ',
+      project_name: ' 智能力矩扳手项目 '
+    }),
+    'KRF25037金风-智能力矩扳手项目'
+  );
+  assert.equal(
+    buildProjectKickoffNoticeDisplayName({
+      project_code: 'KRF25037',
+      project_name: '智能力矩扳手项目'
+    }),
+    'KRF25037-智能力矩扳手项目'
+  );
+  assert.equal(
+    buildProjectKickoffNoticeDisplayName({
+      customer_name: '金风',
+      project_name: '智能力矩扳手项目'
+    }),
+    '金风-智能力矩扳手项目'
+  );
+  assert.equal(
+    buildProjectKickoffNoticeDisplayName({
+      project_name: '智能力矩扳手项目'
+    }),
+    '智能力矩扳手项目'
+  );
+  assert.equal(buildProjectKickoffNoticeDisplayName({}), '未命名项目');
+});
+
+test('contract signing workflow initializes three nodes, four slots, and payment flow in contract stage', async () => {
   const db = fakeDb();
   const businessOwner = authUser(db.connection.users.get(13));
 
@@ -1233,32 +1607,32 @@ test('contract signing workflow initializes four nodes, five slots, and payment 
 
   assert.equal(workflow.projectId, 200);
   assert.equal(workflow.stageKey, 'contract');
-  assert.equal(workflow.nodes.length, 4);
+  assert.equal(workflow.nodes.length, 3);
   assert.deepEqual(
     workflow.nodes.map((node) => node.nodeKey),
     [
       CONTRACT_SIGNING_NODE_KEY.CONTRACT_PREPARATION,
       CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING,
-      CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT,
-      CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE
+      CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT
     ]
   );
   assert.equal(findNode(workflow, CONTRACT_SIGNING_NODE_KEY.CONTRACT_PREPARATION).status, CONTRACT_SIGNING_NODE_STATUS.PENDING);
   assert.equal(findNode(workflow, CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING).status, CONTRACT_SIGNING_NODE_STATUS.NOT_STARTED);
-  assert.equal(workflow.uploadSlots.length, 5);
+  assert.equal(findNode(workflow, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT).status, CONTRACT_SIGNING_NODE_STATUS.NOT_STARTED);
+  assert.equal(workflow.uploadSlots.length, 4);
   assert.deepEqual(
     workflow.uploadSlots.map((slot) => slot.slotKey),
     [
       CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT,
       CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT,
       CONTRACT_SIGNING_UPLOAD_SLOT_KEY.TECHNICAL_AGREEMENT_SCAN,
-      CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN,
-      CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE
+      CONTRACT_SIGNING_UPLOAD_SLOT_KEY.SALES_CONTRACT_SCAN
     ]
   );
   assert.equal(workflow.paymentFlow.status, CONTRACT_SIGNING_PAYMENT_STATUS.NOT_STARTED);
-  assert.equal(db.connection.contractNodeInsertCount, 4);
-  assert.equal(db.connection.contractUploadSlotInsertCount, 5);
+  assert.equal(workflow.kickoffNoticeGeneratedFile.status, 'not_generated');
+  assert.equal(db.connection.contractNodeInsertCount, 3);
+  assert.equal(db.connection.contractUploadSlotInsertCount, 4);
   assert.equal(db.connection.contractPaymentFlowInsertCount, 1);
 });
 
@@ -1373,8 +1747,8 @@ test('contract workbench todos cover business owner signing, payment, and kickof
   }, db);
 
   businessTodos = await selectContractSigningWorkbenchTodos(businessOwner, db);
-  assert.deepEqual(todoActionTexts(businessTodos), ['上传项目启动通知']);
-  assert.equal(businessTodos[0].nodeKey, CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE);
+  assert.deepEqual(todoActionTexts(businessTodos), []);
+  assert.equal(db.connection.latestKickoffNoticeGeneratedFile({ downloadable: true })?.document_code, 'C25');
 });
 
 test('contract workbench todos cover general manager release only while waiting', async () => {
@@ -2068,7 +2442,7 @@ test('complete signing requires both scans and activates advance payment', async
   assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_COMPLETED));
 });
 
-test('business owner completes advance payment and activates kickoff notice', async () => {
+test('business owner completes advance payment, generates C25, and auto advances to detailed design', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
   const businessOwner = authUser(db.connection.users.get(13));
@@ -2083,11 +2457,14 @@ test('business owner completes advance payment and activates kickoff notice', as
     findNode(workflow, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT).status,
     CONTRACT_SIGNING_NODE_STATUS.APPROVED
   );
-  assert.equal(
-    findNode(workflow, CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE).status,
-    CONTRACT_SIGNING_NODE_STATUS.PENDING
-  );
   assert.equal(workflow.paymentFlow.status, CONTRACT_SIGNING_PAYMENT_STATUS.COMPLETED);
+  assert.equal(workflow.currentStage.stageKey, 'detailedDesign');
+  assert.equal(workflow.stageAdvance.advanced, true);
+  assert.equal(workflow.stageAdvance.nextStage.stageKey, 'detailedDesign');
+  await assertKickoffNoticeGeneratedAndDownloadable(db, businessOwner, {
+    expectedPaymentAction: 'complete_payment',
+    expectedPaymentStatus: CONTRACT_SIGNING_PAYMENT_STATUS.COMPLETED
+  });
   assert.equal(
     findNode(workflow, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT).permissions.canCompletePayment,
     false
@@ -2099,18 +2476,12 @@ test('business owner completes advance payment and activates kickoff notice', as
   assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_COMPLETED));
 });
 
-test('manual contract advance is blocked after completed payment until kickoff notice is uploaded', async () => {
+test('manual contract advance is blocked before C25 generated file exists', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
-  const businessOwner = authUser(db.connection.users.get(13));
   const generalManager = authUser(db.connection.users.get(30));
 
-  markContractStageConditionalInvoiceNotApplicable(db.connection);
   await activateAdvancePaymentNode({ db, storage });
-  await completeContractSigningAdvancePayment({
-    projectId: 200,
-    user: businessOwner
-  }, db);
 
   await assertManualContractAdvanceBlockedByKickoffNotice(db, generalManager);
 });
@@ -2133,10 +2504,7 @@ test('business owner can request general manager release and workflow waits for 
   assert.equal(workflow.paymentFlow.status, CONTRACT_SIGNING_PAYMENT_STATUS.WAITING_GENERAL_MANAGER);
   assert.equal(workflow.paymentFlow.requestedBy.id, 13);
   assert.deepEqual(advancePaymentNode.blockingReasons, ['等待总经理审批预付款放行']);
-  assert.equal(
-    findNode(workflow, CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE).status,
-    CONTRACT_SIGNING_NODE_STATUS.NOT_STARTED
-  );
+  assert.equal(workflow.kickoffNoticeGeneratedFile.status, 'not_generated');
   assert.equal(advancePaymentNode.permissions.canCompletePayment, false);
   assert.equal(advancePaymentNode.permissions.canRequestGeneralManagerRelease, false);
 
@@ -2204,8 +2572,8 @@ test('deprecated generic payment release action is rejected without changing wor
   );
   assert.equal(db.connection.paymentFlowRow().status, CONTRACT_SIGNING_PAYMENT_STATUS.WAITING_GENERAL_MANAGER);
   assert.equal(
-    db.connection.contractNodes.find((node) => node.node_key === CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE).status,
-    CONTRACT_SIGNING_NODE_STATUS.NOT_STARTED
+    db.connection.latestKickoffNoticeGeneratedFile({ downloadable: true }),
+    null
   );
   assert.equal(
     latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED_UNPAID),
@@ -2225,7 +2593,7 @@ test('deprecated generic payment release action is rejected without changing wor
   );
 });
 
-test('general manager approves unpaid payment release and activates kickoff notice', async () => {
+test('general manager approves unpaid payment release, generates C25, and auto advances', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
   const businessOwner = authUser(db.connection.users.get(13));
@@ -2247,10 +2615,12 @@ test('general manager approves unpaid payment release and activates kickoff noti
   );
   assert.equal(workflow.paymentFlow.status, CONTRACT_SIGNING_PAYMENT_STATUS.RELEASED);
   assert.equal(workflow.paymentFlow.approvedBy.id, 30);
-  assert.equal(
-    findNode(workflow, CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE).status,
-    CONTRACT_SIGNING_NODE_STATUS.PENDING
-  );
+  assert.equal(workflow.currentStage.stageKey, 'detailedDesign');
+  assert.equal(workflow.stageAdvance.advanced, true);
+  await assertKickoffNoticeGeneratedAndDownloadable(db, generalManager, {
+    expectedPaymentAction: 'approve_release_unpaid',
+    expectedPaymentStatus: CONTRACT_SIGNING_PAYMENT_STATUS.RELEASED
+  });
   assert.equal(
     findNode(workflow, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT).permissions.canApprovePaymentReleaseUnpaid,
     false
@@ -2262,7 +2632,7 @@ test('general manager approves unpaid payment release and activates kickoff noti
   assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED_UNPAID));
 });
 
-test('general manager approves paid payment release and records completed payment status', async () => {
+test('general manager approves paid payment release, records completed status, generates C25, and auto advances', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
   const businessOwner = authUser(db.connection.users.get(13));
@@ -2284,14 +2654,16 @@ test('general manager approves paid payment release and records completed paymen
   );
   assert.equal(workflow.paymentFlow.status, CONTRACT_SIGNING_PAYMENT_STATUS.COMPLETED);
   assert.equal(workflow.paymentFlow.approvedBy.id, 30);
-  assert.equal(
-    findNode(workflow, CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE).status,
-    CONTRACT_SIGNING_NODE_STATUS.PENDING
-  );
+  assert.equal(workflow.currentStage.stageKey, 'detailedDesign');
+  assert.equal(workflow.stageAdvance.advanced, true);
+  await assertKickoffNoticeGeneratedAndDownloadable(db, generalManager, {
+    expectedPaymentAction: 'approve_release_paid',
+    expectedPaymentStatus: CONTRACT_SIGNING_PAYMENT_STATUS.COMPLETED
+  });
   assert.ok(latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_RELEASE_APPROVED_PAID));
 });
 
-test('manual contract advance is blocked after general manager release until kickoff notice is uploaded', async () => {
+test('manual contract advance is blocked while general manager release is waiting and C25 is not generated', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
   const businessOwner = authUser(db.connection.users.get(13));
@@ -2303,11 +2675,6 @@ test('manual contract advance is blocked after general manager release until kic
     projectId: 200,
     user: businessOwner
   }, db);
-  await approveContractSigningPaymentReleaseUnpaid({
-    projectId: 200,
-    user: generalManager
-  }, db);
-
   await assertManualContractAdvanceBlockedByKickoffNotice(db, generalManager);
 });
 
@@ -2375,34 +2742,32 @@ test('advance payment actions reject wrong actors, inactive nodes, ended project
       projectId: 200,
       user: dbBusinessOwner
     }, db),
-    (error) => error.code === 'CONTRACT_SIGNING_NODE_NOT_PROCESSABLE' && error.statusCode === 409
+    (error) => error instanceof Error && error.statusCode === 409
   );
   await assert.rejects(
     () => requestContractSigningPaymentRelease({
       projectId: 200,
       user: dbBusinessOwner
     }, db),
-    (error) => error.code === 'CONTRACT_SIGNING_NODE_NOT_PROCESSABLE' && error.statusCode === 409
+    (error) => error instanceof Error && error.statusCode === 409
   );
   await assert.rejects(
     () => approveContractSigningPaymentReleaseUnpaid({
       projectId: 200,
       user: generalManager
     }, db),
-    (error) => error.code === 'CONTRACT_SIGNING_NODE_NOT_PROCESSABLE' && error.statusCode === 409
+    (error) => error instanceof Error && error.statusCode === 409
   );
   await assert.rejects(
     () => approveContractSigningPaymentReleasePaid({
       projectId: 200,
       user: generalManager
     }, db),
-    (error) => error.code === 'CONTRACT_SIGNING_NODE_NOT_PROCESSABLE' && error.statusCode === 409
+    (error) => error instanceof Error && error.statusCode === 409
   );
   assert.equal(db.connection.paymentFlowRow().status, CONTRACT_SIGNING_PAYMENT_STATUS.COMPLETED);
-  assert.equal(
-    db.connection.contractNodes.find((node) => node.node_key === CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE).status,
-    CONTRACT_SIGNING_NODE_STATUS.PENDING
-  );
+  assert.equal(db.connection.latestKickoffNoticeGeneratedFile({ downloadable: true })?.status, 'generated');
+  assert.equal(db.connection.generatedFiles.length, 1);
 
   const endedDb = fakeDb({ projectStatus: 'ended' });
   await assert.rejects(
@@ -2435,25 +2800,24 @@ test('advance payment actions reject wrong actors, inactive nodes, ended project
   );
 });
 
-test('business owner uploads kickoff notice, completes contract stage, and auto advances to detailed design', async () => {
+test('complete payment generated C25 completes contract stage and records kickoff generation context', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
   const businessOwner = authUser(db.connection.users.get(13));
+  db.connection.project.project_code = 'KRF25037';
+  db.connection.project.customer_name = '金风';
+  db.connection.project.project_name = '智能力矩扳手项目';
 
-  await activateProjectKickoffNoticeNode({ db, storage });
-  const result = await uploadContractSigningWorkflowFile({
+  await activateAdvancePaymentNode({ db, storage });
+  const workflow = await completeContractSigningAdvancePayment({
     projectId: 200,
-    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE,
-    file: buildPdfFile('项目启动通知.pdf'),
     user: businessOwner
-  }, db, storage);
+  }, db);
 
-  assert.equal(result.slotKey, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE);
-  assert.equal(result.nodeKey, CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE);
-  assert.equal(result.stageAdvance.advanced, true);
-  assert.equal(result.stageAdvance.advancedStage.stageKey, 'contract');
-  assert.equal(result.stageAdvance.nextStage.stageKey, 'detailedDesign');
-  assert.equal(result.workflow.currentStage.stageKey, 'detailedDesign');
+  assert.equal(workflow.stageAdvance.advanced, true);
+  assert.equal(workflow.stageAdvance.advancedStage.stageKey, 'contract');
+  assert.equal(workflow.stageAdvance.nextStage.stageKey, 'detailedDesign');
+  assert.equal(workflow.currentStage.stageKey, 'detailedDesign');
   assert.equal(
     db.connection.stages.find((stage) => stage.stage_key === 'contract').stage_status,
     'completed'
@@ -2463,15 +2827,14 @@ test('business owner uploads kickoff notice, completes contract stage, and auto 
     1
   );
   assert.equal(
-    db.connection.contractNodes.find((node) => node.node_key === CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE).status,
+    db.connection.contractNodes.find((node) => node.node_key === CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT).status,
     CONTRACT_SIGNING_NODE_STATUS.APPROVED
   );
-  assert.equal(
-    db.connection.contractUploadSlots.find(
-      (slot) => slot.slot_key === CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE
-    ).status,
-    CONTRACT_SIGNING_UPLOAD_SLOT_STATUS.APPROVED
-  );
+  await assertKickoffNoticeGeneratedAndDownloadable(db, businessOwner, {
+    expectedPaymentAction: 'complete_payment',
+    expectedPaymentStatus: CONTRACT_SIGNING_PAYMENT_STATUS.COMPLETED,
+    expectedProjectDisplayName: 'KRF25037金风-智能力矩扳手项目'
+  });
 
   const c25 = db.connection.projectStageDocuments.find((document) => document.document_code === '4.1');
   assert.equal(c25.document_name, '项目启动通知');
@@ -2494,28 +2857,52 @@ test('business owner uploads kickoff notice, completes contract stage, and auto 
     false
   );
 
-  const uploadLog = latestLog(
-    db.connection,
-    OPERATION_ACTION_TYPE.CONTRACT_SIGNING_PROJECT_KICKOFF_NOTICE_UPLOADED
-  );
-  assert.ok(uploadLog);
-  assert.equal(JSON.parse(uploadLog.details_json).slotKey, CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE);
+  const paymentLog = latestLog(db.connection, OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_COMPLETED);
+  assert.ok(paymentLog);
+  assert.equal(JSON.parse(paymentLog.details_json).generatedKickoffNotice.documentCode, 'C25');
   const stageAdvanceLog = latestLog(db.connection, OPERATION_ACTION_TYPE.STAGE_ADVANCED);
   assert.ok(stageAdvanceLog);
   const stageAdvanceDetails = JSON.parse(stageAdvanceLog.details_json);
   assert.equal(
     stageAdvanceDetails.triggerAction,
-    OPERATION_ACTION_TYPE.CONTRACT_SIGNING_PROJECT_KICKOFF_NOTICE_UPLOADED
+    OPERATION_ACTION_TYPE.CONTRACT_SIGNING_ADVANCE_PAYMENT_GENERATED_KICKOFF_NOTICE
   );
-  assert.equal(stageAdvanceDetails.nodeKey, CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE);
+  assert.equal(stageAdvanceDetails.nodeKey, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT);
+  assert.equal(stageAdvanceDetails.documentCode, 'C25');
   assert.equal(stageAdvanceDetails.toStageKey, 'detailedDesign');
 });
 
-test('kickoff notice upload rejects non-business users, inactive nodes, ended projects, and repeats', async () => {
-  const inactiveDb = fakeDb();
+test('C25 generation failure rolls back the advance payment final action', async () => {
+  const generatedFileStorage = fakeGeneratedFileStorage({ failWrite: true });
+  const db = fakeDb({ generatedFileStorage });
   const storage = fakeStorage();
-  const businessOwner = authUser(inactiveDb.connection.users.get(13));
-  const technicalOwner = authUser(inactiveDb.connection.users.get(12));
+  const businessOwner = authUser(db.connection.users.get(13));
+
+  await activateAdvancePaymentNode({ db, storage });
+  await assert.rejects(
+    () => completeContractSigningAdvancePayment({
+      projectId: 200,
+      user: businessOwner
+    }, db),
+    (error) => error.message === 'generated file write failed'
+  );
+
+  assert.equal(db.connection.paymentFlowRow().status, CONTRACT_SIGNING_PAYMENT_STATUS.PENDING);
+  assert.equal(
+    db.connection.contractNodes.find((node) => node.node_key === CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT).status,
+    CONTRACT_SIGNING_NODE_STATUS.PENDING
+  );
+  assert.equal(db.connection.generatedFiles.length, 0);
+  assert.equal(db.connection.stages.find((stage) => stage.stage_key === 'contract').stage_status, 'current');
+  assert.equal(db.connection.stages.find((stage) => stage.stage_key === 'detailedDesign').stage_status, 'not_started');
+  assert.equal(generatedFileStorage.cleaned.length, 1);
+});
+
+test('deprecated kickoff notice upload rejects with 410 and does not change workflow state', async () => {
+  const db = fakeDb();
+  const storage = fakeStorage();
+  const businessOwner = authUser(db.connection.users.get(13));
+  const technicalOwner = authUser(db.connection.users.get(12));
 
   await assert.rejects(
     () => uploadContractSigningWorkflowFile({
@@ -2523,12 +2910,10 @@ test('kickoff notice upload rejects non-business users, inactive nodes, ended pr
       slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE,
       file: buildPdfFile('项目启动通知.pdf'),
       user: businessOwner
-    }, inactiveDb, storage),
-    (error) => error.code === 'CONTRACT_SIGNING_NODE_NOT_PROCESSABLE' && error.statusCode === 409
+    }, db, storage),
+    (error) => error.code === CONTRACT_SIGNING_ERROR.DEPRECATED_ACTION && error.statusCode === 410
   );
 
-  const db = fakeDb();
-  await activateProjectKickoffNoticeNode({ db, storage });
   await assert.rejects(
     () => uploadContractSigningWorkflowFile({
       projectId: 200,
@@ -2536,48 +2921,22 @@ test('kickoff notice upload rejects non-business users, inactive nodes, ended pr
       file: buildPdfFile('项目启动通知.pdf'),
       user: technicalOwner
     }, db, storage),
-    (error) => error.code === 'CONTRACT_SIGNING_FORBIDDEN' && error.statusCode === 403
+    (error) => error.code === CONTRACT_SIGNING_ERROR.DEPRECATED_ACTION && error.statusCode === 410
   );
-
-  await uploadContractSigningWorkflowFile({
-    projectId: 200,
-    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE,
-    file: buildPdfFile('项目启动通知.pdf'),
-    user: businessOwner
-  }, db, storage);
-  await assert.rejects(
-    () => uploadContractSigningWorkflowFile({
-      projectId: 200,
-      slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE,
-      file: buildPdfFile('项目启动通知-重复.pdf'),
-      user: businessOwner
-    }, db, storage),
-    (error) => error.code === 'CONTRACT_SIGNING_NOT_IN_STAGE' && error.statusCode === 409
-  );
-
-  const endedDb = fakeDb({ projectStatus: 'ended' });
-  await assert.rejects(
-    () => uploadContractSigningWorkflowFile({
-      projectId: 200,
-      slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE,
-      file: buildPdfFile('项目启动通知.pdf'),
-      user: businessOwner
-    }, endedDb, storage),
-    (error) => error.code === 'CONTRACT_SIGNING_PROJECT_ENDED'
-  );
+  assert.equal(db.connection.contractNodes.length, 0);
+  assert.equal(db.connection.contractUploadSlots.length, 0);
+  assert.equal(db.connection.generatedFiles.length, 0);
 });
 
 test('contract derived completion feeds stage gate for workflow-owned documents', async () => {
   const db = fakeDb();
   const storage = fakeStorage();
 
-  await activateProjectKickoffNoticeNode({ db, storage });
-  await uploadContractSigningWorkflowFile({
+  await activateAdvancePaymentNode({ db, storage });
+  await completeContractSigningAdvancePayment({
     projectId: 200,
-    slotKey: CONTRACT_SIGNING_UPLOAD_SLOT_KEY.PROJECT_KICKOFF_NOTICE,
-    file: buildPdfFile('项目启动通知.pdf'),
     user: authUser(db.connection.users.get(13))
-  }, db, storage);
+  }, db);
 
   const workflowDocumentCodes = new Set(['C20', '3.1', 'C22', '3.2', '4.1']);
   const workflowRows = db.connection.projectStageDocuments.filter((document) =>
@@ -2678,7 +3037,7 @@ test('contract workflow query does not persist workflow before contract stage', 
   const workflow = await getContractSigningWorkflow({ projectId: 200, user: businessOwner }, db);
 
   assert.equal(workflow.currentStage.stageKey, 'solution');
-  assert.equal(workflow.nodes.length, 4);
+  assert.equal(workflow.nodes.length, 3);
   assert.equal(workflow.nodes.every((node) => node.status === CONTRACT_SIGNING_NODE_STATUS.NOT_STARTED), true);
   assert.equal(db.connection.contractNodeInsertCount, 0);
   assert.equal(db.connection.contractUploadSlotInsertCount, 0);
@@ -2733,12 +3092,6 @@ test('contract stage navigation uses workflow nodes and hides old blueprint node
             nodeName: '项目预付款支付',
             nodeStatus: CONTRACT_SIGNING_NODE_STATUS.NOT_STARTED,
             outputs: []
-          },
-          {
-            nodeKey: CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE,
-            nodeName: '项目启动通知',
-            nodeStatus: CONTRACT_SIGNING_NODE_STATUS.NOT_STARTED,
-            outputs: []
           }
         ]
       }
@@ -2751,8 +3104,7 @@ test('contract stage navigation uses workflow nodes and hides old blueprint node
   assert.deepEqual(nodeKeys, [
     CONTRACT_SIGNING_NODE_KEY.CONTRACT_PREPARATION,
     CONTRACT_SIGNING_NODE_KEY.CONTRACT_SIGNING,
-    CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT,
-    CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE
+    CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT
   ]);
   assert.equal(nodeKeys.includes('prepare_technical_agreement'), false);
   assert.equal(nodeKeys.includes('project_start_notice'), false);

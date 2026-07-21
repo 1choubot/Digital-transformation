@@ -44,6 +44,46 @@
         </el-descriptions-item>
       </el-descriptions>
 
+      <section class="solution-subsection">
+        <header>
+          <div>
+            <span class="section-eyebrow">生成文件</span>
+            <strong>项目启动通知</strong>
+          </div>
+          <el-tag :type="kickoffNoticeStatusTagType">
+            {{ kickoffNoticeStatusText }}
+          </el-tag>
+        </header>
+
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="文件名">
+            {{ kickoffNoticeGeneratedFile?.fileName || kickoffNoticeGeneratedFile?.downloadableFileName || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="版本">
+            {{ kickoffNoticeGeneratedFile?.version || kickoffNoticeGeneratedFile?.downloadableVersion || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="生成时间">
+            {{ formatDateTime(kickoffNoticeGeneratedFile?.generatedAt || kickoffNoticeGeneratedFile?.downloadableGeneratedAt) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="失败原因">
+            {{ kickoffNoticeGeneratedFile?.failureSummary || kickoffNoticeGeneratedFile?.failureReason || '-' }}
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <div v-if="kickoffNoticeGeneratedFile?.downloadable" class="solution-actions">
+          <div class="action-row">
+            <el-button
+              type="primary"
+              plain
+              :loading="isPending('download:kickoff-notice-generated-file')"
+              @click="downloadKickoffNoticeGeneratedFile"
+            >
+              下载项目启动通知
+            </el-button>
+          </div>
+        </div>
+      </section>
+
       <div v-if="hasPaymentActions" class="solution-actions">
         <header>
           <span class="section-eyebrow">节点动作</span>
@@ -110,11 +150,13 @@ const {
   paymentFlow,
   loading,
   errorMessage,
+  kickoffNoticeGeneratedFile,
   isPending,
   completePayment,
   requestGeneralManagerRelease,
   approvePaymentReleaseUnpaid,
-  approvePaymentReleasePaid
+  approvePaymentReleasePaid,
+  downloadKickoffNoticeGeneratedFile
 } = useContractSigningNodePage(props, emit);
 
 const hasPaymentActions = computed(() =>
@@ -133,4 +175,26 @@ const paymentStatusTagType = computed(() => ({
   pending: 'primary',
   not_started: 'info'
 })[paymentFlow.value?.status] || 'info');
+
+const kickoffNoticeStatusText = computed(() => {
+  const status = kickoffNoticeGeneratedFile.value?.status || 'not_generated';
+  return {
+    generated: '已生成',
+    generating: '生成中',
+    failed: '生成失败',
+    superseded: '已更新',
+    not_generated: '未生成'
+  }[status] || status;
+});
+
+const kickoffNoticeStatusTagType = computed(() => {
+  const status = kickoffNoticeGeneratedFile.value?.status || 'not_generated';
+  return {
+    generated: 'success',
+    generating: 'primary',
+    failed: 'danger',
+    superseded: 'info',
+    not_generated: 'info'
+  }[status] || 'info';
+});
 </script>

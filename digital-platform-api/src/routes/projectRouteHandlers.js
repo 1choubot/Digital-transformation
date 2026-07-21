@@ -25,6 +25,7 @@ import {
   getProjectDetail,
   getProjectOverviewDashboard,
   getProjectWorkspace,
+  getContractSigningKickoffNoticeGeneratedFileDownload,
   getContractSigningUploadDownload,
   getSolutionDesignAnalysisGeneratedFileDownload,
   getSolutionDesignAnalysisForm,
@@ -387,6 +388,35 @@ export async function downloadContractSigningWorkflowFileHandler(req, res) {
     res.download(
       download.filePath,
       download.originalFileName,
+      {
+        headers: {
+          'Content-Type': download.mimeType,
+          'Content-Length': String(download.fileSize)
+        }
+      },
+      (error) => {
+        if (error && !res.headersSent) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      }
+    );
+  });
+}
+
+export async function downloadContractSigningKickoffNoticeGeneratedFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const download = await getContractSigningKickoffNoticeGeneratedFileDownload({
+    projectId,
+    user: req.auth.user
+  });
+
+  await new Promise((resolve, reject) => {
+    res.download(
+      download.filePath,
+      download.fileName,
       {
         headers: {
           'Content-Type': download.mimeType,

@@ -14,7 +14,6 @@ import SolutionMarketingCostPage from '../pages/project-node/solution-design/Sol
 import SolutionPreparationPage from '../pages/project-node/solution-design/SolutionPreparationPage.vue';
 import SolutionQuotationTenderPage from '../pages/project-node/solution-design/SolutionQuotationTenderPage.vue';
 import ContractAdvancePaymentPage from '../pages/project-node/contract-signing/ContractAdvancePaymentPage.vue';
-import ContractKickoffNoticePage from '../pages/project-node/contract-signing/ContractKickoffNoticePage.vue';
 import ContractPreparationPage from '../pages/project-node/contract-signing/ContractPreparationPage.vue';
 import ContractSigningPage from '../pages/project-node/contract-signing/ContractSigningPage.vue';
 
@@ -35,8 +34,7 @@ export const nodePages = {
   quotation_or_tender: SolutionQuotationTenderPage,
   contract_preparation: ContractPreparationPage,
   contract_signing: ContractSigningPage,
-  advance_payment: ContractAdvancePaymentPage,
-  project_kickoff_notice: ContractKickoffNoticePage
+  advance_payment: ContractAdvancePaymentPage
 };
 
 export function resolveNodePage(nodeCode) {

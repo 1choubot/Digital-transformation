@@ -30,11 +30,13 @@ import { materializeSolutionDesignWorkflow } from './solutionDesignWorkflowMater
 import {
   CONTRACT_SIGNING_NODE_KEY,
   CONTRACT_SIGNING_NODE_STATUS,
+  CONTRACT_SIGNING_PAYMENT_STATUS,
   CONTRACT_SIGNING_STAGE
 } from '../../domain/contractSigningWorkflow.js';
 import { materializeContractSigningWorkflow } from './contractSigningWorkflowMaterialization.js';
 
-const CONTRACT_SIGNING_KICKOFF_NOTICE_BLOCKING_REASON = '项目启动通知未上传完成';
+const CONTRACT_SIGNING_KICKOFF_NOTICE_BLOCKING_REASON = '项目启动通知未生成完成';
+const CONTRACT_SIGNING_ADVANCE_GATE_IGNORED_DOCUMENT_CODES = new Set(['C24', '3.4']);
 
 function assertCanAdvanceProject(projectRow) {
   if (projectRow.status === PROJECT_STATUS.COMPLETED) {
@@ -212,10 +214,19 @@ async function buildCurrentStageGateSummary(connection, projectId, stageOrder) {
     connection,
     rowsWithInitiationReview
   );
-  return buildStageCompletenessSummary(rowsWithDerivedCompletion.map(mapGateDocument));
+  const gateDocuments = rowsWithDerivedCompletion
+    .map(mapGateDocument)
+    .filter((document) => {
+      if (Number(stageOrder) !== CONTRACT_SIGNING_STAGE.STAGE_ORDER) {
+        return true;
+      }
+
+      return !CONTRACT_SIGNING_ADVANCE_GATE_IGNORED_DOCUMENT_CODES.has(document.documentCode);
+    });
+  return buildStageCompletenessSummary(gateDocuments);
 }
 
-async function isContractKickoffNoticeNodeApproved(connection, projectId) {
+async function isContractAdvancePaymentNodeApproved(connection, projectId) {
   const [rows] = await connection.execute(
     `SELECT status
     FROM project_contract_signing_nodes
@@ -223,10 +234,43 @@ async function isContractKickoffNoticeNodeApproved(connection, projectId) {
       AND node_key = ?
     LIMIT 1
     FOR UPDATE`,
-    [projectId, CONTRACT_SIGNING_NODE_KEY.PROJECT_KICKOFF_NOTICE]
+    [projectId, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT]
   );
 
   return rows[0]?.status === CONTRACT_SIGNING_NODE_STATUS.APPROVED;
+}
+
+async function isContractPaymentFlowFinalized(connection, projectId) {
+  const [rows] = await connection.execute(
+    `SELECT status
+    FROM project_contract_signing_payment_flows
+    WHERE project_id = ?
+    LIMIT 1
+    FOR UPDATE`,
+    [projectId]
+  );
+
+  return [
+    CONTRACT_SIGNING_PAYMENT_STATUS.COMPLETED,
+    CONTRACT_SIGNING_PAYMENT_STATUS.RELEASED
+  ].includes(rows[0]?.status);
+}
+
+async function hasContractKickoffNoticeGeneratedFile(connection, projectId) {
+  const [rows] = await connection.execute(
+    `SELECT id
+    FROM project_stage_document_generated_files
+    WHERE project_id = ?
+      AND document_code IN (?, ?)
+      AND status = ?
+      AND storage_key IS NOT NULL
+    ORDER BY version DESC, id DESC
+    LIMIT 1
+    FOR UPDATE`,
+    [projectId, 'C25', '4.1', 'generated']
+  );
+
+  return rows.length > 0;
 }
 
 function buildContractKickoffNoticeGateDocument() {
@@ -295,8 +339,12 @@ async function applyContractSigningStageGate(connection, projectId, currentStage
     return gateSummary;
   }
 
-  const kickoffNoticeApproved = await isContractKickoffNoticeNodeApproved(connection, projectId);
-  if (kickoffNoticeApproved) {
+  const [advancePaymentApproved, paymentFinalized, kickoffNoticeGenerated] = await Promise.all([
+    isContractAdvancePaymentNodeApproved(connection, projectId),
+    isContractPaymentFlowFinalized(connection, projectId),
+    hasContractKickoffNoticeGeneratedFile(connection, projectId)
+  ]);
+  if (advancePaymentApproved && paymentFinalized && kickoffNoticeGenerated) {
     return gateSummary;
   }
 

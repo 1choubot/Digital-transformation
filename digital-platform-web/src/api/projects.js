@@ -85,6 +85,12 @@ export async function downloadContractSigningWorkflowFile(projectId, slotKey, au
   });
 }
 
+export async function downloadContractSigningKickoffNoticeGeneratedFile(projectId, authToken = '') {
+  return requestBlob(`/api/projects/${projectId}/contract-signing-workflow/kickoff-notice/generated-file/download`, {
+    authToken
+  });
+}
+
 export async function approveContractSigningPreparationFile(projectId, slotKey, authToken = '') {
   return request(`/api/projects/${projectId}/contract-signing-workflow/uploads/${slotKey}/approve`, {
     method: 'POST',

@@ -1,5 +1,9 @@
 import { normalizeCreateProjectInput, ValidationError } from '../domain/projects.js';
 import { canCreateProject } from '../domain/organization.js';
+import {
+  CONTRACT_SIGNING_ERROR,
+  ContractSigningWorkflowError
+} from '../domain/contractSigningWorkflow.js';
 import { DOCUMENT_APPLICABILITY_ACTION } from '../domain/stageDocumentApplicability.js';
 import { DOCUMENT_STATUS_ACTION } from '../domain/stageDocumentStatus.js';
 import {
@@ -7,13 +11,22 @@ import {
   assertProjectViewable,
   advanceProjectStage,
   assignSolutionDesignRoles,
+  approveContractSigningPreparationFile,
+  approveContractSigningPaymentReleasePaid,
+  approveContractSigningPaymentReleaseUnpaid,
+  confirmContractSigningScanFile,
+  completeContractSigningNode,
+  getContractSigningWorkflow,
   approveSolutionDesignWorkflowNode,
   approveStageApproval,
   canViewFinanceCostApprovalComment,
   createProject,
+  completeContractSigningAdvancePayment,
   getProjectDetail,
   getProjectOverviewDashboard,
   getProjectWorkspace,
+  getContractSigningKickoffNoticeGeneratedFileDownload,
+  getContractSigningUploadDownload,
   getSolutionDesignAnalysisGeneratedFileDownload,
   getSolutionDesignAnalysisForm,
   getSolutionDesignQuotationForm,
@@ -32,6 +45,10 @@ import {
   ProjectNotFoundError,
   projectExists,
   resubmitStageApproval,
+  returnContractSigningPreparationFile,
+  requestContractSigningPaymentRelease,
+  returnContractSigningSalesContractForCustomer,
+  returnContractSigningTechnicalAgreementForCustomer,
   returnSolutionDesignWorkflowNode,
   returnStageApproval,
   saveSolutionDesignAnalysisForm,
@@ -46,6 +63,7 @@ import {
   submitStageApproval,
   cancelSolutionDesignUploadExemption,
   updateProjectCode,
+  uploadContractSigningWorkflowFile,
   uploadSolutionDesignWorkflowFile
 } from '../repositories/projectRepository.js';
 import {
@@ -81,6 +99,7 @@ import {
   uploadStageDocumentAttachment
 } from '../repositories/stageDocumentAttachmentRepository.js';
 import { readMultipartFile } from '../middleware/multipartFile.js';
+import { CONTRACT_SIGNING_UPLOAD_MAX_FILE_SIZE } from '../storage/contractSigningUploadStorage.js';
 import { SOLUTION_DESIGN_UPLOAD_MAX_FILE_SIZE } from '../storage/solutionDesignUploadStorage.js';
 import { STAGE_DOCUMENT_ONLINE_FORM_IMAGE_MAX_FILE_SIZE } from '../storage/stageDocumentOnlineFormImageStorage.js';
 import { searchActiveProjectsForDailyReports } from '../repositories/dailyReportRepository.js';
@@ -319,6 +338,237 @@ export async function getProjectNavigationHandler(req, res) {
 export async function getSolutionDesignWorkflowHandler(req, res) {
   const projectId = parseProjectId(req.params.projectId);
   const workflow = await getSolutionDesignWorkflow({
+    projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function getContractSigningWorkflowHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await getContractSigningWorkflow({
+    projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function uploadContractSigningWorkflowFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const file = await readMultipartFile(req, {
+    maxFileSize: CONTRACT_SIGNING_UPLOAD_MAX_FILE_SIZE
+  });
+  const result = await uploadContractSigningWorkflowFile({
+    projectId,
+    slotKey: req.params.slotKey,
+    file,
+    user: req.auth.user
+  });
+
+  res.status(201).json({
+    data: result
+  });
+}
+
+export async function downloadContractSigningWorkflowFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const download = await getContractSigningUploadDownload({
+    projectId,
+    slotKey: req.params.slotKey,
+    user: req.auth.user
+  });
+
+  await new Promise((resolve, reject) => {
+    res.download(
+      download.filePath,
+      download.originalFileName,
+      {
+        headers: {
+          'Content-Type': download.mimeType,
+          'Content-Length': String(download.fileSize)
+        }
+      },
+      (error) => {
+        if (error && !res.headersSent) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      }
+    );
+  });
+}
+
+export async function downloadContractSigningKickoffNoticeGeneratedFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const download = await getContractSigningKickoffNoticeGeneratedFileDownload({
+    projectId,
+    user: req.auth.user
+  });
+
+  await new Promise((resolve, reject) => {
+    res.download(
+      download.filePath,
+      download.fileName,
+      {
+        headers: {
+          'Content-Type': download.mimeType,
+          'Content-Length': String(download.fileSize)
+        }
+      },
+      (error) => {
+        if (error && !res.headersSent) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      }
+    );
+  });
+}
+
+export async function approveContractSigningPreparationFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await approveContractSigningPreparationFile({
+    projectId,
+    slotKey: req.params.slotKey,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function returnContractSigningPreparationFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await returnContractSigningPreparationFile({
+    projectId,
+    slotKey: req.params.slotKey,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function confirmContractSigningScanFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await confirmContractSigningScanFile({
+    projectId,
+    slotKey: req.params.slotKey,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function returnContractSigningTechnicalAgreementForCustomerHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await returnContractSigningTechnicalAgreementForCustomer({
+    projectId,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function returnContractSigningSalesContractForCustomerHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await returnContractSigningSalesContractForCustomer({
+    projectId,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function completeContractSigningNodeHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await completeContractSigningNode({
+    projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function completeContractSigningAdvancePaymentHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await completeContractSigningAdvancePayment({
+    projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function requestContractSigningPaymentReleaseHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await requestContractSigningPaymentRelease({
+    projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function rejectDeprecatedContractSigningPaymentReleaseHandler(req, res) {
+  parseProjectId(req.params.projectId);
+  throw new ContractSigningWorkflowError(
+    CONTRACT_SIGNING_ERROR.DEPRECATED_ACTION,
+    'Deprecated payment release endpoint. Use approve-release-unpaid or approve-release-paid.',
+    410,
+    {
+      deprecatedEndpoint: '/contract-signing-workflow/payment/approve-release',
+      replacementEndpoints: [
+        '/contract-signing-workflow/payment/approve-release-unpaid',
+        '/contract-signing-workflow/payment/approve-release-paid'
+      ]
+    }
+  );
+}
+
+export async function approveContractSigningPaymentReleaseUnpaidHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await approveContractSigningPaymentReleaseUnpaid({
+    projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function approveContractSigningPaymentReleasePaidHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await approveContractSigningPaymentReleasePaid({
     projectId,
     user: req.auth.user
   });

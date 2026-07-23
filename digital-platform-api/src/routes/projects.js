@@ -4,9 +4,15 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 import {
   advanceProjectStageHandler,
   assignSolutionDesignRolesHandler,
+  approveContractSigningPreparationFileHandler,
+  approveContractSigningPaymentReleasePaidHandler,
+  approveContractSigningPaymentReleaseUnpaidHandler,
   approveInitiationReviewNodeHandler,
   approveSolutionDesignWorkflowNodeHandler,
   approveStageApprovalHandler,
+  confirmContractSigningScanFileHandler,
+  completeContractSigningAdvancePaymentHandler,
+  completeContractSigningNodeHandler,
   confirmStageDocumentHandler,
   completeStageDocumentRevisionHandler,
   createProjectHandler,
@@ -15,11 +21,14 @@ import {
   downloadSolutionDesignReviewGeneratedFileHandler,
   deleteStageDocumentAttachmentHandler,
   deleteStageDocumentOnlineFormImageHandler,
+  downloadContractSigningWorkflowFileHandler,
+  downloadContractSigningKickoffNoticeGeneratedFileHandler,
   downloadSolutionDesignWorkflowFileHandler,
   downloadStageDocumentAttachmentHandler,
   downloadStageDocumentGeneratedFileHandler,
   downloadStageDocumentOnlineFormImageHandler,
   generateStageDocumentOnlineFormFileHandler,
+  getContractSigningWorkflowHandler,
   getProjectDetailHandler,
   getProjectNavigationHandler,
   getProjectOverviewDashboardHandler,
@@ -41,6 +50,11 @@ import {
   markSolutionDesignUploadExemptionHandler,
   processSolutionDesignQuotationResultHandler,
   restoreStageDocumentApplicableHandler,
+  returnContractSigningPreparationFileHandler,
+  returnContractSigningSalesContractForCustomerHandler,
+  returnContractSigningTechnicalAgreementForCustomerHandler,
+  rejectDeprecatedContractSigningPaymentReleaseHandler,
+  requestContractSigningPaymentReleaseHandler,
   returnStageApprovalHandler,
   returnInitiationReviewNodeHandler,
   returnSolutionDesignWorkflowNodeHandler,
@@ -61,6 +75,7 @@ import {
   submitStageDocumentOnlineFormHandler,
   submitStageApprovalHandler,
   updateProjectCodeHandler,
+  uploadContractSigningWorkflowFileHandler,
   updateStageDocumentResponsibleUserHandler,
   uploadSolutionDesignWorkflowFileHandler,
   uploadStageDocumentAttachmentHandler,
@@ -119,6 +134,96 @@ projectsRouter.get(
   '/:projectId/solution-design-workflow',
   requireAuth,
   asyncHandler(getSolutionDesignWorkflowHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/contract-signing-workflow',
+  requireAuth,
+  asyncHandler(getContractSigningWorkflowHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/contract-signing-workflow/uploads/:slotKey/download',
+  requireAuth,
+  asyncHandler(downloadContractSigningWorkflowFileHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/contract-signing-workflow/kickoff-notice/generated-file/download',
+  requireAuth,
+  asyncHandler(downloadContractSigningKickoffNoticeGeneratedFileHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/uploads/:slotKey',
+  requireAuth,
+  asyncHandler(uploadContractSigningWorkflowFileHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/uploads/:slotKey/approve',
+  requireAuth,
+  asyncHandler(approveContractSigningPreparationFileHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/uploads/:slotKey/return',
+  requireAuth,
+  asyncHandler(returnContractSigningPreparationFileHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/uploads/:slotKey/signing-result',
+  requireAuth,
+  asyncHandler(confirmContractSigningScanFileHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/signing/return-technical-agreement',
+  requireAuth,
+  asyncHandler(returnContractSigningTechnicalAgreementForCustomerHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/signing/return-sales-contract',
+  requireAuth,
+  asyncHandler(returnContractSigningSalesContractForCustomerHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/signing/complete',
+  requireAuth,
+  asyncHandler(completeContractSigningNodeHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/payment/complete',
+  requireAuth,
+  asyncHandler(completeContractSigningAdvancePaymentHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/payment/request-general-manager-release',
+  requireAuth,
+  asyncHandler(requestContractSigningPaymentReleaseHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/payment/approve-release',
+  requireAuth,
+  asyncHandler(rejectDeprecatedContractSigningPaymentReleaseHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/payment/approve-release-unpaid',
+  requireAuth,
+  asyncHandler(approveContractSigningPaymentReleaseUnpaidHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/contract-signing-workflow/payment/approve-release-paid',
+  requireAuth,
+  asyncHandler(approveContractSigningPaymentReleasePaidHandler)
 );
 
 projectsRouter.put(

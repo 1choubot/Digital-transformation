@@ -113,7 +113,7 @@ TBD - created by archiving change define-technical-architecture. Update Purpose 
 
 ### Requirement: 文件管理平台简单归档边界
 
-当前 20260625 在线平台内部资料闭环阶段 MUST 暂停数字化平台与文件管理平台归档联动；在线平台 MUST 自己负责项目、阶段、资料项、适用性、责任人、资料完成状态、精准返工状态、资料审核待办、齐套摘要和阶段推进状态，且当前职责不包含泛化阶段关口审批。
+当前 20260625 在线平台内部资料闭环阶段 MUST 暂停数字化平台与文件管理平台归档联动；在线平台 MUST 自己负责项目、阶段、资料项、适用性、责任人、资料完成状态、精准返工状态、资料审核待办、齐套摘要、阶段推进状态和已启用的专用阶段 workflow，且当前职责不包含泛化阶段关口审批。
 
 #### Scenario: 当前阶段文件平台职责暂停
 - **WHEN** 当前阶段处理项目、阶段、资料、附件、精准返工或阶段推进
@@ -121,12 +121,12 @@ TBD - created by archiving change define-technical-architecture. Update Purpose 
 
 #### Scenario: 数字化平台职责
 - **WHEN** 数字化平台处理阶段资料
-- **THEN** 数字化平台必须负责项目、阶段、资料项、适用性、责任人、资料完成状态、精准返工状态、资料审核待办、齐套摘要和阶段推进状态
+- **THEN** 数字化平台必须负责项目、阶段、资料项、适用性、责任人、资料完成状态、精准返工状态、资料审核待办、齐套摘要、阶段推进状态和已启用的专用阶段 workflow
 - **AND** 数字化平台 MUST NOT 把泛化阶段关口审批作为当前在线平台内部资料闭环的阶段推进前置
 
 #### Scenario: 不通过文件平台实现复杂业务流
-- **WHEN** 系统处理合同审核记录表、采购申请表、采购合同审核记录表、发票、设计变更资料、随机资料移交、资料服务器核查或精准返工
-- **THEN** 系统不得通过文件管理平台实现合同审批流、采购审批流、付款流、发票流转、设计变更流程引擎、随机资料移交流程、资料服务器核查流程或返工流转
+- **WHEN** 系统处理合同签订 workflow、合同审核记录表、采购申请表、采购合同审核记录表、发票、设计变更资料、随机资料移交、资料服务器核查或精准返工
+- **THEN** 系统不得通过文件管理平台实现合同签订 workflow、采购审批流、付款流、发票流转、设计变更流程引擎、随机资料移交流程、资料服务器核查流程或返工流转
 
 #### Scenario: 后续文件平台集成独立实施
 - **WHEN** 后续实现文件管理平台联动
@@ -159,7 +159,7 @@ TBD - created by archiving change define-technical-architecture. Update Purpose 
 
 ### Requirement: 文件平台继续保持文件职责边界
 
-系统 MUST 保持文件管理平台只承担文件能力，不得因 20260625 资料完成规则变化而把文件平台扩展成项目流程或资料审批系统。
+系统 MUST 保持文件管理平台只承担文件能力，不得因 20260625 资料完成规则变化而把文件平台扩展成项目流程或资料审批系统；合同签订专用 workflow MUST 由数字化平台后端模块承载。
 
 #### Scenario: 文件平台不判断资料完成
 - **WHEN** 数字化平台向文件平台归档或读取文件
@@ -167,11 +167,12 @@ TBD - created by archiving change define-technical-architecture. Update Purpose 
 
 #### Scenario: 数字化平台负责完成规则
 - **WHEN** 系统判断资料是否完成、阶段是否齐套或是否允许阶段推进
-- **THEN** 判断 MUST 由数字化平台根据项目、阶段、资料适用性、资料状态和 `completionMode` 完成
+- **THEN** 判断 MUST 由数字化平台根据项目、阶段、资料适用性、资料状态、`completionMode` 和已启用的专用阶段 workflow 完成
 
-#### Scenario: 不新增复杂业务流
+#### Scenario: 不新增无关复杂业务流
 - **WHEN** 系统处理合同、采购、付款、发票、设计变更、随机资料移交或资料服务器核查相关产出
-- **THEN** 技术架构 MUST NOT 因本规划新增合同审批流、采购审批流、付款流、发票流转、设计变更流程引擎、随机资料移交流程或资料服务器核查流程
+- **THEN** 技术架构 MUST NOT 因本规划新增采购审批流、通用付款流、发票流转、设计变更流程引擎、随机资料移交流程或资料服务器核查流程
+- **AND** 合同签订阶段 MAY 使用本 change 定义的数字化平台专用 workflow
 
 ### Requirement: 当前阶段暂停文件平台联动
 
@@ -1916,19 +1917,6 @@ TBD - created by archiving change define-technical-architecture. Update Purpose 
 - **AND** 每项 MUST 使用 `需求1：内容` 等标签加中文冒号格式，并以 Excel 单元格换行分隔
 - **AND** 前端 MUST NOT 维护 Excel 单元格映射
 
-### Requirement: 统一审批卡片接口兼容架构
-技术架构 MUST 通过共享前端控件和向后兼容的审批 payload 扩展实现统一审批处理卡片。
-
-#### Scenario: 阶段和方案设计审批意见 payload
-- **WHEN** 前端提交阶段关口审批通过
-- **THEN** 请求 MAY 携带 `comment`
-- **AND** 非空意见 MUST 写入现有阶段审批历史和操作日志
-- **WHEN** 前端提交方案设计节点审批通过
-- **THEN** 请求 MAY 携带 `comment`
-- **AND** 财务总经理审批 payload MUST 同时支持 `branchType` 和可选 `comment`
-- **AND** 方案设计审批意见 MUST 写入现有操作日志 details
-- **AND** 实现 MUST NOT 新增数据库 migration
-
 ### Requirement: 报价结果按钮 payload 架构
 技术架构 MUST 将报价结果三个按钮映射到现有报价结果 API payload，避免引入新的报价结果状态机。
 
@@ -1942,3 +1930,76 @@ TBD - created by archiving change define-technical-architecture. Update Purpose 
 - **WHEN** 实现报价结果三按钮
 - **THEN** 后端 MUST 继续使用现有报价结果和拒绝动作枚举
 - **AND** 后端 MUST NOT 新增第三套报价审批状态
+
+### Requirement: 合同签订 workflow 架构
+技术架构 MUST 由数字化平台内的合同签订 workflow 后端模块承载合同签订业务，并 MUST 通过仓储、DTO、API、导航、工作台待办、生成文件和 operation log 集成实现；本 change 将 C25 项目启动通知生成并入项目预付款支付节点，不新增第二套流程或资料项。
+
+#### Scenario: 专用模块和 API
+- **WHEN** 实现合同签订阶段业务
+- **THEN** 后端 MUST 使用 `contractSigningWorkflow` 专用模块
+- **AND** API MUST 返回合同节点、上传槽、current file、generated file、revision、审批状态、退回原因、阻塞原因和权限
+- **AND** API MUST 提供按 slot 下载 current file 的只读接口，并按合同 workflow 权限校验下载人
+- **AND** API MUST 为签订协议和合同节点提供客户退回技术协议、客户退回销售合同和签订完成动作
+- **AND** API MUST NOT 为前端继续提供扫描件确认通过/确认不通过权限作为签订节点主动作
+- **AND** API MUST 为项目预付款支付节点提供合同 workflow 命名空间内的完成支付、申请总经理放行、总经理未付款并通过、总经理已付款通过动作
+- **AND** API MUST 在三个预付款最终动作中生成 C25 项目启动通知文件
+- **AND** API MUST 提供 C25 项目启动通知 generated file 下载接口
+- **AND** API MUST 在 DTO 中返回 `paymentFlow.status`、申请人、申请时间、放行人、放行时间、预付款权限、C25 项目启动通知生成文件状态和阻塞原因
+- **AND** 前端 MUST 以该 DTO 作为合同阶段节点导航和节点页面唯一来源
+
+#### Scenario: 正式 migration
+- **WHEN** 调整项目启动通知生成能力
+- **THEN** 实现 MUST 优先复用 `project_stage_document_generated_files` 保存 C25 generated file 版本、状态、源快照和模板信息
+- **AND** 实现 MUST 复用现有 `project_contract_signing_nodes`、`project_contract_signing_upload_slots`、`project_contract_signing_upload_files` 和 `project_contract_signing_payment_flows`
+- **AND** 实现 MUST NOT 因本 change 新增资料项、阶段或第二套流程表
+- **AND** 本 change MUST 增加正式 migration，将 `project_stage_document_generated_files` 表结构固化到正式部署链路，不能只依赖测试库 ensure
+- **AND** schema ensure MUST 与正式 migration 保持一致
+
+#### Scenario: workflow 状态和资料完成分开建模
+- **WHEN** 合同 workflow 上传、审批、客户退回、签订完成、预付款最终动作或项目启动通知生成成功
+- **THEN** 后端 MUST 在合同 workflow 表中保存业务状态
+- **AND** 后端 MUST 从预付款节点状态和 C25 generated file 状态派生或同步既有 71 项资料完成结果
+- **AND** 后端 MUST NOT 以普通资料卡片状态替代合同 workflow 状态
+
+#### Scenario: 事务一致性和失败回滚
+- **WHEN** 预付款最终动作触发项目启动通知生成
+- **THEN** 预付款状态、C25 generated file、资料完成派生、工作台待办、operation log 和自动阶段推进 MUST 保持事务一致
+- **AND** 生成文件或存储失败时，系统 MUST 回滚预付款最终动作和 C25 完成结果
+- **AND** 失败时系统 MUST NOT 推进到详细设计阶段
+
+#### Scenario: 阶段导航来源
+- **WHEN** 后端返回合同签订阶段导航或工作区
+- **THEN** 合同阶段 children MUST 只包含 3 个 contract workflow 主节点
+- **AND** 后端 MUST NOT 将旧蓝图节点作为可点击主流程节点返回
+- **AND** 后端 MUST NOT 返回独立项目启动通知节点造成双入口
+
+#### Scenario: 合同阶段主流程和普通资料分离
+- **WHEN** 后端返回合同签订阶段工作区 DTO
+- **THEN** `nodes` / navigation children MUST 只包含准备协议和合同、签订协议和合同、项目预付款支付 3 个主节点
+- **AND** 旧蓝图节点和 71 项资料 MUST NOT 被提升为合同阶段主流程节点
+- **AND** C20、C22、C21、C23、C25 MUST 由 contract workflow 状态派生或同步资料完成结果
+- **AND** C24 `发票（预付款）` MUST 保留在后端资料体系中作为普通/条件性资料项，且 MUST NOT 成为合同 workflow 节点
+- **AND** 合同 workflow 页面是否展示 C24 MUST NOT 由后端 workflow DTO 主节点承担；本 change 前端不消费 C24 作为合同页面辅助区
+
+#### Scenario: 项目启动通知生成文件
+- **WHEN** 任一预付款最终动作触发项目启动通知生成
+- **THEN** 后端 MUST 使用后端模板渲染生成文件
+- **AND** 生成记录 MUST 关联项目、C25 对应 stage document、document code、模板 key、模板版本或 hash、生成用户、生成时间、源数据 hash 和源快照
+- **AND** 源快照 MUST 在 `project.projectDisplayName` 中记录用于模板渲染的组合项目名称
+- **AND** 源快照 MUST 保留原始 `projectCode`、`customerName` 和 `projectName` 便于审计追溯
+- **AND** 模板渲染 MUST 优先使用 `sourceSnapshot.project.projectDisplayName`
+- **AND** 生成失败 MUST 返回明确错误并保留可审计失败原因或失败日志
+- **AND** 生成成功 MUST 作为 C25 当前有效 generated file 并提供下载入口
+
+#### Scenario: 项目启动通知生成后自动推进
+- **WHEN** 预付款最终动作成功生成 C25 项目启动通知
+- **THEN** 后端 MUST 将该 generated file 映射到 C25 稳定资料编码并完成 C25 资料完成结果
+- **AND** 后端 MUST 调用统一阶段门禁推进到详细设计阶段
+- **AND** 后端 MUST NOT 跳过合同阶段完成状态或直接手写项目阶段字段绕过门禁
+- **AND** 阶段资料派生 MUST 同时支持 C20/C21/C22/C23/C25 目标编码和当前运行资料编码 `3.1`、`3.2`、`4.1`
+
+#### Scenario: 合同阶段手工推进附加门禁
+- **WHEN** 后端执行合同签订阶段的手工 `advanceProjectStage`
+- **THEN** 后端 MUST 在当前阶段资料齐套检查之外，确认 `advance_payment` 节点已完成且 C25 项目启动通知已有当前有效 generated file
+- **AND** 未满足时 MUST 在 `incompleteRequiredDocuments` 或同等门禁详情中返回 `项目启动通知未生成完成`
+- **AND** 该门禁 MUST NOT 查询或依赖 C24 发票、前端 DTO、本地拼接节点、旧独立项目启动通知节点或普通资料卡片状态

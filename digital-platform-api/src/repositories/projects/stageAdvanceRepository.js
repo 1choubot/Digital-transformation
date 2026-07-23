@@ -27,6 +27,16 @@ import { selectProjectDetailWithConnection } from './coreRepository.js';
 import { selectProjectStagesForUpdate } from './stageRepository.js';
 import { SOLUTION_DESIGN_STAGE } from '../../domain/solutionDesignWorkflow.js';
 import { materializeSolutionDesignWorkflow } from './solutionDesignWorkflowMaterialization.js';
+import {
+  CONTRACT_SIGNING_NODE_KEY,
+  CONTRACT_SIGNING_NODE_STATUS,
+  CONTRACT_SIGNING_PAYMENT_STATUS,
+  CONTRACT_SIGNING_STAGE
+} from '../../domain/contractSigningWorkflow.js';
+import { materializeContractSigningWorkflow } from './contractSigningWorkflowMaterialization.js';
+
+const CONTRACT_SIGNING_KICKOFF_NOTICE_BLOCKING_REASON = '项目启动通知未生成完成';
+const CONTRACT_SIGNING_ADVANCE_GATE_IGNORED_DOCUMENT_CODES = new Set(['C24', '3.4']);
 
 function assertCanAdvanceProject(projectRow) {
   if (projectRow.status === PROJECT_STATUS.COMPLETED) {
@@ -204,7 +214,152 @@ async function buildCurrentStageGateSummary(connection, projectId, stageOrder) {
     connection,
     rowsWithInitiationReview
   );
-  return buildStageCompletenessSummary(rowsWithDerivedCompletion.map(mapGateDocument));
+  const gateDocuments = rowsWithDerivedCompletion
+    .map(mapGateDocument)
+    .filter((document) => {
+      if (Number(stageOrder) !== CONTRACT_SIGNING_STAGE.STAGE_ORDER) {
+        return true;
+      }
+
+      return !CONTRACT_SIGNING_ADVANCE_GATE_IGNORED_DOCUMENT_CODES.has(document.documentCode);
+    });
+  return buildStageCompletenessSummary(gateDocuments);
+}
+
+async function isContractAdvancePaymentNodeApproved(connection, projectId) {
+  const [rows] = await connection.execute(
+    `SELECT status
+    FROM project_contract_signing_nodes
+    WHERE project_id = ?
+      AND node_key = ?
+    LIMIT 1
+    FOR UPDATE`,
+    [projectId, CONTRACT_SIGNING_NODE_KEY.ADVANCE_PAYMENT]
+  );
+
+  return rows[0]?.status === CONTRACT_SIGNING_NODE_STATUS.APPROVED;
+}
+
+async function isContractPaymentFlowFinalized(connection, projectId) {
+  const [rows] = await connection.execute(
+    `SELECT status
+    FROM project_contract_signing_payment_flows
+    WHERE project_id = ?
+    LIMIT 1
+    FOR UPDATE`,
+    [projectId]
+  );
+
+  return [
+    CONTRACT_SIGNING_PAYMENT_STATUS.COMPLETED,
+    CONTRACT_SIGNING_PAYMENT_STATUS.RELEASED
+  ].includes(rows[0]?.status);
+}
+
+async function hasContractKickoffNoticeGeneratedFile(connection, projectId) {
+  const [rows] = await connection.execute(
+    `SELECT id
+    FROM project_stage_document_generated_files
+    WHERE project_id = ?
+      AND document_code IN (?, ?)
+      AND status = ?
+      AND storage_key IS NOT NULL
+    ORDER BY version DESC, id DESC
+    LIMIT 1
+    FOR UPDATE`,
+    [projectId, 'C25', '4.1', 'generated']
+  );
+
+  return rows.length > 0;
+}
+
+function buildContractKickoffNoticeGateDocument() {
+  return {
+    id: null,
+    documentCode: 'C25',
+    documentName: '项目启动通知',
+    status: CONTRACT_SIGNING_NODE_STATUS.PENDING,
+    completionMode: 'submit_only',
+    isComplete: false,
+    completionStatus: 'incomplete',
+    derivedCompletionSource: 'contract_signing_workflow',
+    derivedCompletionStatus: 'incomplete',
+    derivedBlockingReasons: [CONTRACT_SIGNING_KICKOFF_NOTICE_BLOCKING_REASON],
+    derivedNotApplicable: false,
+    revisionRequired: false,
+    revisionReason: null,
+    revisionSourceDocumentId: null,
+    revisionSourceDocument: null,
+    revisionResubmittedByUserId: null,
+    revisionResubmittedAt: null,
+    revisionResubmitted: false
+  };
+}
+
+function appendIncompleteGateDocument(gateSummary, document) {
+  const existingIndex = gateSummary.incompleteRequiredDocuments.findIndex((candidate) =>
+    candidate.documentCode === document.documentCode || candidate.documentCode === '4.1'
+  );
+  const incompleteRequiredDocuments = existingIndex >= 0
+    ? gateSummary.incompleteRequiredDocuments.map((candidate, index) =>
+        index === existingIndex
+          ? {
+              ...candidate,
+              derivedCompletionSource: document.derivedCompletionSource,
+              derivedCompletionStatus: document.derivedCompletionStatus,
+              derivedBlockingReasons: [
+                ...new Set([
+                  ...(candidate.derivedBlockingReasons || []),
+                  ...document.derivedBlockingReasons
+                ])
+              ]
+            }
+          : candidate
+      )
+    : [...gateSummary.incompleteRequiredDocuments, document];
+  const requiredTotal = gateSummary.requiredTotal + (existingIndex >= 0 ? 0 : 1);
+  const incompleteRequiredCount = incompleteRequiredDocuments.length;
+  const completedRequiredCount = Math.max(0, requiredTotal - incompleteRequiredCount);
+
+  return {
+    ...gateSummary,
+    requiredTotal,
+    completedRequiredCount,
+    confirmedRequiredCount: completedRequiredCount,
+    incompleteRequiredCount,
+    completionPercent: requiredTotal > 0
+      ? Math.round((completedRequiredCount / requiredTotal) * 100)
+      : 100,
+    incompleteRequiredDocuments
+  };
+}
+
+async function applyContractSigningStageGate(connection, projectId, currentStage, gateSummary) {
+  if (currentStage.stage_key !== CONTRACT_SIGNING_STAGE.STAGE_KEY) {
+    return gateSummary;
+  }
+
+  const [advancePaymentApproved, paymentFinalized, kickoffNoticeGenerated] = await Promise.all([
+    isContractAdvancePaymentNodeApproved(connection, projectId),
+    isContractPaymentFlowFinalized(connection, projectId),
+    hasContractKickoffNoticeGeneratedFile(connection, projectId)
+  ]);
+  if (advancePaymentApproved && paymentFinalized && kickoffNoticeGenerated) {
+    return gateSummary;
+  }
+
+  return appendIncompleteGateDocument(gateSummary, buildContractKickoffNoticeGateDocument());
+}
+
+function getStageGateIncompleteMessage(gateSummary) {
+  const kickoffNoticeDocument = gateSummary.incompleteRequiredDocuments.find((document) =>
+    document.documentCode === 'C25' &&
+    (document.derivedBlockingReasons || []).includes(CONTRACT_SIGNING_KICKOFF_NOTICE_BLOCKING_REASON)
+  );
+
+  return kickoffNoticeDocument
+    ? CONTRACT_SIGNING_KICKOFF_NOTICE_BLOCKING_REASON
+    : 'Current stage has incomplete applicable required documents';
 }
 
 function isSameId(left, right) {
@@ -309,6 +464,11 @@ async function applyProjectStageAdvance(connection, {
       // Keep materialization in this transaction so no partial solution stage is observable.
       await materializeSolutionDesignWorkflow(connection, projectId, { projectAlreadyLocked: true });
     }
+
+    if (nextStage.stage_key === CONTRACT_SIGNING_STAGE.STAGE_KEY) {
+      // Keep contract workflow creation in the same stage-advance transaction.
+      await materializeContractSigningWorkflow(connection, projectId, { projectAlreadyLocked: true });
+    }
   } else {
     await connection.execute('UPDATE projects SET status = ? WHERE id = ?', [PROJECT_STATUS.COMPLETED, projectId]);
   }
@@ -404,12 +564,13 @@ async function advanceCurrentStageIfGateSatisfied(connection, {
     });
   }
 
-  const gateSummary = await buildCurrentStageGateSummary(connection, projectId, currentStage.stage_order);
+  const baseGateSummary = await buildCurrentStageGateSummary(connection, projectId, currentStage.stage_order);
+  const gateSummary = await applyContractSigningStageGate(connection, projectId, currentStage, baseGateSummary);
   if (gateSummary.incompleteRequiredCount > 0) {
     if (throwWhenIncomplete) {
       throw new ProjectStageAdvanceError(
         PROJECT_APPROVAL_ERROR.PROJECT_REQUIRED_DOCUMENTS_INCOMPLETE,
-        'Current stage has incomplete applicable required documents',
+        getStageGateIncompleteMessage(gateSummary),
         {
           completenessSummary: gateSummary,
           incompleteRequiredDocuments: gateSummary.incompleteRequiredDocuments

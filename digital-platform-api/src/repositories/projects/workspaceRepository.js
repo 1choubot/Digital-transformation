@@ -9,13 +9,20 @@ import {
   SOLUTION_DESIGN_NODES,
   SOLUTION_DESIGN_STAGE
 } from '../../domain/solutionDesignWorkflow.js';
+import {
+  CONTRACT_SIGNING_NODE_STATUS,
+  CONTRACT_SIGNING_NODES,
+  CONTRACT_SIGNING_STAGE
+} from '../../domain/contractSigningWorkflow.js';
 import { getProjectStageDocumentChecklist } from '../stageDocuments/checklistRepository.js';
 import { listLatestGeneratedFilesForProject } from '../stageDocuments/generatedFileRepository.js';
 import { getProjectDetail } from './coreRepository.js';
 import { getSolutionDesignWorkflow } from './solutionDesignWorkflowRepository.js';
+import { getContractSigningWorkflow } from './contractSigningWorkflowRepository.js';
 
 const INITIATION_STAGE_KEY = 'initiation';
 const CURRENT_RUNTIME_TEMPLATE_VERSION = V20260629_TARGET_TEMPLATE_VERSION;
+const CONTRACT_SIGNING_WORKFLOW_DOCUMENT_CODES = new Set(['C20', 'C21', '3.1', 'C22', 'C23', '3.2', 'C25', '4.1']);
 
 function buildDocumentActionHints(document, outputConfig) {
   const permissions = document?.permissions || {};
@@ -265,6 +272,28 @@ function buildSolutionDesignWorkflowWorkspaceNodes(solutionDesignWorkflow) {
   });
 }
 
+function buildContractSigningWorkflowWorkspaceNodes(contractSigningWorkflow) {
+  const workflowNodeByKey = new Map(
+    (contractSigningWorkflow?.nodes || []).map((node) => [node.nodeKey, node])
+  );
+
+  return CONTRACT_SIGNING_NODES.map((definition) => {
+    const workflowNode = workflowNodeByKey.get(definition.nodeKey);
+    return {
+      templateVersion: V20260629_TARGET_TEMPLATE_VERSION,
+      nodeKey: definition.nodeKey,
+      nodeName: definition.nodeName,
+      nodeStatus: workflowNode?.status || CONTRACT_SIGNING_NODE_STATUS.NOT_STARTED,
+      nodeOrder: definition.nodeOrder,
+      outputs: [],
+      blockingReasons: workflowNode?.blockingReasons || [],
+      actionHints: workflowNode?.nextActions || [],
+      notes: workflowNode?.notes || '',
+      contractSigningNode: workflowNode || null
+    };
+  });
+}
+
 function isCompatibilityOnlyModule(moduleConfig) {
   if (!moduleConfig.outputCodes.length) {
     return false;
@@ -273,32 +302,50 @@ function isCompatibilityOnlyModule(moduleConfig) {
   return moduleConfig.outputCodes.every((outputCode) => getV20260629TargetOutputByCode(outputCode)?.workspaceCompatibility);
 }
 
+function isContractSigningSupplementalDocument(document) {
+  const documentCode = String(document?.documentCode || '').trim();
+  return Boolean(documentCode) && !CONTRACT_SIGNING_WORKFLOW_DOCUMENT_CODES.has(documentCode);
+}
+
+export function buildContractSigningSupplementalDocuments(documents = []) {
+  return documents.filter(isContractSigningSupplementalDocument);
+}
+
 function buildWorkspaceStage(
   stage,
   documents,
   generatedFilesByDocumentId,
   project,
   runtimeTemplateVersion,
-  solutionDesignWorkflow
+  solutionDesignWorkflow,
+  contractSigningWorkflow
 ) {
   const documentsByCode = new Map(documents.map((document) => [document.documentCode, document]));
   const isSolutionDesignStage = stage.stageKey === SOLUTION_DESIGN_STAGE.STAGE_KEY;
+  const isContractSigningStage = stage.stageKey === CONTRACT_SIGNING_STAGE.STAGE_KEY;
   const nodes = isSolutionDesignStage
     ? buildSolutionDesignWorkflowWorkspaceNodes(solutionDesignWorkflow)
-    : V20260629_WORKSPACE_BLUE_MODULES
-        .filter((module) => {
-          if (module.stageKey !== stage.stageKey) {
-            return false;
-          }
+    : isContractSigningStage
+      ? buildContractSigningWorkflowWorkspaceNodes(contractSigningWorkflow)
+      : V20260629_WORKSPACE_BLUE_MODULES
+          .filter((module) => {
+            if (module.stageKey !== stage.stageKey) {
+              return false;
+            }
 
-          return runtimeTemplateVersion === V20260629_TARGET_TEMPLATE_VERSION
-            ? !isCompatibilityOnlyModule(module)
-            : true;
-        })
-        .map((moduleConfig) =>
-          buildWorkspaceNode(moduleConfig, documentsByCode, generatedFilesByDocumentId, project)
-        );
-  const resolvedNodes = isSolutionDesignStage ? nodes : resolveAutomaticProcessNodeStatuses(nodes);
+            return runtimeTemplateVersion === V20260629_TARGET_TEMPLATE_VERSION
+              ? !isCompatibilityOnlyModule(module)
+              : true;
+          })
+          .map((moduleConfig) =>
+            buildWorkspaceNode(moduleConfig, documentsByCode, generatedFilesByDocumentId, project)
+          );
+  const resolvedNodes = isSolutionDesignStage || isContractSigningStage
+    ? nodes
+    : resolveAutomaticProcessNodeStatuses(nodes);
+  const supplementalDocuments = isContractSigningStage
+    ? buildContractSigningSupplementalDocuments(documents)
+    : [];
 
   return {
     templateVersion: V20260629_TARGET_TEMPLATE_VERSION,
@@ -312,16 +359,18 @@ function buildWorkspaceStage(
     placeholderStatus: null,
     placeholderText: '',
     legacyChecklistAvailable: documents.length > 0,
+    supplementalDocuments,
     nodes: resolvedNodes
   };
 }
 
 export async function getProjectWorkspace(projectId, user) {
-  const [detail, checklist, latestGeneratedFiles, solutionDesignWorkflow] = await Promise.all([
+  const [detail, checklist, latestGeneratedFiles, solutionDesignWorkflow, contractSigningWorkflow] = await Promise.all([
     getProjectDetail(projectId, user),
     getProjectStageDocumentChecklist(projectId, user),
     listLatestGeneratedFilesForProject(projectId),
-    getSolutionDesignWorkflow({ projectId, user })
+    getSolutionDesignWorkflow({ projectId, user }),
+    getContractSigningWorkflow({ projectId, user })
   ]);
   const generatedFilesByDocumentId = new Map(
     latestGeneratedFiles.map((file) => [Number(file.stageDocumentId), file])
@@ -343,7 +392,8 @@ export async function getProjectWorkspace(projectId, user) {
       generatedFilesByDocumentId,
       detail.project,
       runtimeTemplateVersion,
-      solutionDesignWorkflow
+      solutionDesignWorkflow,
+      contractSigningWorkflow
     );
   });
 
@@ -351,6 +401,7 @@ export async function getProjectWorkspace(projectId, user) {
     project: detail.project,
     currentStage: detail.currentStage,
     solutionDesignWorkflow,
+    contractSigningWorkflow,
     templateVersion: runtimeTemplateVersion,
     targetTemplateVersion: V20260629_TARGET_TEMPLATE_VERSION,
     targetTemplate: {

@@ -16,6 +16,7 @@ import {
   ProjectResponsibleUserError,
   ProjectStageNotFoundError,
   ProjectStageAdvanceError,
+  ContractSigningWorkflowError,
   SolutionDesignWorkflowError
 } from '../repositories/projectRepository.js';
 import { OperationLogLimitError } from '../repositories/operationLogRepository.js';
@@ -290,6 +291,17 @@ export function errorHandler(error, req, res, next) {
   }
 
   if (error instanceof SolutionDesignWorkflowError) {
+    res.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      }
+    });
+    return;
+  }
+
+  if (error instanceof ContractSigningWorkflowError) {
     res.status(error.statusCode).json({
       error: {
         code: error.code,

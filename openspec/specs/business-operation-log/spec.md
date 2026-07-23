@@ -576,7 +576,7 @@ TBD - created by archiving change add-business-operation-log. Update Purpose aft
 - **WHEN** 报价被客户接受或投标书经总经理审批通过
 - **THEN** 系统 MUST 将报价/投标节点置为已通过并记录 `solution_design.ready_for_contract` 门禁日志
 - **AND** 日志 MUST 关联报价或投标通过的来源动作
-- **AND** 本 change MUST NOT 将该日志解释为已真实推进到合同签订阶段或已实现合同签订阶段业务
+- **AND** 后续进入合同签订阶段时系统 MUST 由合同签订 workflow 记录独立合同业务日志
 
 ### Requirement: 方案设计业务日志一致性和边界
 系统 MUST 保证方案设计阶段业务日志与对应业务状态变更事务一致，并 MUST 保持日志边界。
@@ -643,19 +643,6 @@ TBD - created by archiving change add-business-operation-log. Update Purpose aft
 - **THEN** 系统 SHALL 写入项目完成日志
 - **AND** 日志 SHALL 标明该完成由自动阶段推进触发
 
-### Requirement: 审批通过意见日志与财务脱敏
-系统 MUST 在现有审批历史或业务日志中记录非空审批通过意见，并继续遵守财务成本信息可见性规则。
-
-#### Scenario: 方案设计审批意见日志
-- **WHEN** 方案设计节点审批通过请求包含非空意见
-- **THEN** 对应成功日志 details MUST 记录 `approvalComment`
-- **AND** 空意见 MUST 归一化为 null 或不展示
-
-#### Scenario: 财务成本审批意见脱敏
-- **WHEN** 无权查看财务成本详情的用户读取项目业务日志
-- **THEN** 财务成本估算审批日志 MUST NOT 返回 `approvalComment`
-- **AND** 有权查看财务成本详情的财务会计、财务负责人和总经理 MAY 查看该意见
-
 ### Requirement: 立项项目开展模式业务日志
 系统 MUST 记录总经理在 `1.2 项目立项审批表` 最终审批通过时选择项目开展模式的业务日志。
 
@@ -665,4 +652,61 @@ TBD - created by archiving change add-business-operation-log. Update Purpose aft
 - **THEN** 系统 MUST 记录项目开展模式选择业务日志
 - **AND** 日志 MUST 包含项目 ID、资料 ID、审批节点、选择值、操作人和操作时间
 - **AND** 日志 MUST 明确该选择不写入 `projects.project_mode`
+
+### Requirement: 合同签订 workflow 日志
+系统 MUST 为合同签订 workflow 的上传、审批、客户退回、签订完成、预付款放行、预付款最终动作生成项目启动通知和自动推进详细设计记录业务日志。
+
+#### Scenario: 技术协议上传日志
+- **WHEN** 技术负责人成功上传技术协议
+- **THEN** 系统 MUST 记录技术协议上传业务日志
+- **AND** 日志 MUST 包含项目 ID、节点、上传槽、文件 revision、操作人和操作时间
+
+#### Scenario: 技术协议审批日志
+- **WHEN** 研发中心负责人审批通过或不通过技术协议
+- **THEN** 系统 MUST 记录技术协议审批通过或不通过业务日志
+- **AND** 不通过日志 MUST 包含退回原因和返回技术协议准备线的上下文
+
+#### Scenario: 销售合同上传日志
+- **WHEN** 商务负责人成功上传销售合同
+- **THEN** 系统 MUST 记录销售合同上传业务日志
+- **AND** 日志 MUST 包含项目 ID、节点、上传槽、文件 revision、操作人和操作时间
+
+#### Scenario: 销售合同审批日志
+- **WHEN** 营销中心负责人审批通过或不通过销售合同
+- **THEN** 系统 MUST 记录销售合同审批通过或不通过业务日志
+- **AND** 不通过日志 MUST 包含退回原因和返回销售合同准备线的上下文
+
+#### Scenario: 扫描件上传日志
+- **WHEN** 商务负责人成功上传技术协议扫描件或销售合同扫描件
+- **THEN** 系统 MUST 分别记录技术协议扫描件上传或销售合同扫描件上传业务日志
+- **AND** 日志 MUST 包含项目 ID、节点、上传槽、文件 revision、操作人和操作时间
+
+#### Scenario: 客户退回源合同日志
+- **WHEN** 商务负责人在签订协议和合同节点退回技术协议或销售合同
+- **THEN** 系统 MUST 分别记录客户退回技术协议或客户退回销售合同业务日志
+- **AND** 日志 MUST 包含只退回对应准备线、对应扫描件失效、操作人和退回原因
+
+#### Scenario: 签订完成日志
+- **WHEN** 商务负责人在两个扫描件已上传且准备线均通过后完成签订节点
+- **THEN** 系统 MUST 记录签订协议和合同完成业务日志
+- **AND** 日志 MUST 包含 C21/C23 派生完成和进入项目预付款支付节点的上下文
+
+#### Scenario: 预付款最终动作和项目启动通知生成日志
+- **WHEN** 商务负责人确认完成支付
+- **THEN** 系统 MUST 记录预付款完成并生成项目启动通知业务日志
+- **AND** 日志 MUST 包含 C25 generated file version、模板 key、模板版本或 hash、操作人和操作时间
+- **WHEN** 总经理选择未付款并通过
+- **THEN** 系统 MUST 记录总经理未付款放行通过并生成项目启动通知业务日志
+- **AND** 日志 MUST 包含 `paymentFlow.status=released` 和 C25 generated file 上下文
+- **WHEN** 总经理选择已付款通过
+- **THEN** 系统 MUST 记录总经理确认已付款通过并生成项目启动通知业务日志
+- **AND** 日志 MUST 包含 `paymentFlow.status=completed` 和 C25 generated file 上下文
+- **AND** 生成失败时系统 MUST 记录生成失败日志或在失败响应中保留可审计失败原因
+- **AND** 前端操作日志 MUST 将三种预付款最终动作和项目启动通知生成 action type 映射为中文文案
+
+#### Scenario: 自动推进详细设计日志
+- **WHEN** 预付款最终动作成功生成 C25 项目启动通知并自动推进到详细设计阶段
+- **THEN** 系统 MUST 记录自动推进到详细设计阶段业务日志
+- **AND** 自动推进日志 MAY 复用 `stage.advanced` action type
+- **AND** 自动推进日志 details MUST 包含 `triggerAction=contract_signing.advance_payment_generated_kickoff_notice`、预付款动作类型、C25、generated file version 和模板上下文
 

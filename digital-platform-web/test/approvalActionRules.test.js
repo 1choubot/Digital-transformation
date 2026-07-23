@@ -37,7 +37,7 @@ test('an incomplete required selection locks the input and every action', () => 
   assert.equal(state.endDisabled, true);
 });
 
-test('only online form submission keeps a secondary confirmation dialog', () => {
+test('only online form submission and explicit contract risks keep confirmation dialogs', () => {
   const roots = [
     new URL('../src/pages/project-node/', import.meta.url),
     new URL('../src/components/project-workspace/', import.meta.url),
@@ -56,6 +56,9 @@ test('only online form submission keeps a secondary confirmation dialog', () => 
       '/SolutionQuotationForm.vue'
     ].some((suffix) => path.endsWith(suffix)))
   ];
+  const contractRiskConfirmationFiles = files.filter(({ path }) =>
+    path.endsWith('/contract-signing/useContractSigningWorkflow.js')
+  );
   const allSources = [...files, projectDetailLayout].map(({ source }) => source).join('\n');
 
   assert.doesNotMatch(allSources, /ElMessageBox\.prompt\s*\(/);
@@ -63,8 +66,14 @@ test('only online form submission keeps a secondary confirmation dialog', () => 
     assert.equal(source.match(/ElMessageBox\.confirm\s*\(/g)?.length, 1);
     assert.match(source, /confirmButtonText:\s*'确认提交'/);
   }
+  assert.equal(contractRiskConfirmationFiles.length, 1);
+  assert.equal(contractRiskConfirmationFiles[0].source.match(/ElMessageBox\.confirm\s*\(/g)?.length, 9);
+  assert.match(contractRiskConfirmationFiles[0].source, /客户退回确认/);
+  assert.match(contractRiskConfirmationFiles[0].source, /签订完成确认/);
+  assert.match(contractRiskConfirmationFiles[0].source, /预付款处理/);
+  assert.match(contractRiskConfirmationFiles[0].source, /总经理放行/);
   for (const { path, source } of [...files, projectDetailLayout]) {
-    if (onlineFormConfirmationFiles.some((item) => item.path === path)) continue;
+    if ([...onlineFormConfirmationFiles, ...contractRiskConfirmationFiles].some((item) => item.path === path)) continue;
     assert.doesNotMatch(source, /ElMessageBox\.confirm\s*\(/);
   }
 

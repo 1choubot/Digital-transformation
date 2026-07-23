@@ -509,6 +509,7 @@ const nodePageContext = computed(() => ({
   solutionDesignUploads: solutionDesignUploads.value,
   solutionDesignLoading: solutionDesignWorkflowLoading.value || solutionDesignUploadsLoading.value,
   solutionDesignErrorMessage: solutionDesignWorkflowErrorMessage.value || solutionDesignUploadsErrorMessage.value,
+  contractSigningWorkflow: workspace.value?.contractSigningWorkflow || null,
   responsibilitySelections,
   returnReasons,
   notApplicableReasons,

@@ -900,7 +900,7 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 
 ### Requirement: 简单阶段推进边界
 
-系统 MUST 使用当前阶段资料 `completionMode` 完成门禁推进项目阶段，并 MUST 不因 20260625 内部资料闭环引入跳阶段、回退、泛化阶段关口审批或复杂工作流引擎；配置的写操作自动推进 MUST 复用同一门禁并且一次最多推进一个阶段。
+系统 MUST 使用当前阶段资料 `completionMode` 完成门禁推进项目阶段，并 MUST 不因 20260625 内部资料闭环引入跳阶段、回退、泛化阶段关口审批或通用工作流引擎；配置的写操作自动推进 MUST 复用同一门禁并且一次最多推进一个阶段。合同签订阶段 MAY 使用本 change 规划的专用 workflow，但该 workflow MUST NOT 成为通用 BPM、任意节点配置器或跨阶段自由编排能力。
 
 #### Scenario: 阶段推进继续基于当前阶段资料门禁
 - **WHEN** 已登录且有推进权限的用户请求推进项目当前阶段
@@ -917,7 +917,8 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 
 #### Scenario: 不新增复杂流程引擎
 - **WHEN** 系统实现阶段资料收集、资料审核或阶段推进
-- **THEN** 系统不得新增可视化流程编排、任意节点配置器、合同审批流、采购审批流、付款流、发票审批流、设计变更流程引擎、自动通知、日报周报或资料服务器核查流程
+- **THEN** 系统不得新增可视化流程编排、任意节点配置器、采购审批流、发票审批流、设计变更流程引擎、自动通知、日报周报或资料服务器核查流程
+- **AND** 合同签订阶段专用 workflow MUST 仅覆盖本 change 定义的合同准备、签订、预付款放行和项目启动通知节点
 
 ### Requirement: 第一版简单资料闭环
 
@@ -2397,14 +2398,14 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 
 #### Scenario: 营销成本估算审批
 - **WHEN** 商务负责人上传营销中心成本估算文件并提交
-- **THEN** 系统 MUST 允许商务负责人下载制造成本估算文件作为制作基础
+- **THEN** 系统 MUST 允许商务负责人下载研发成本估算文件和制造成本估算文件作为制作基础
 - **AND** 系统 MUST 将营销成本估算节点置为待营销中心负责人审批
 - **AND** 营销中心负责人审批通过后系统 MUST 进入财务成本估算节点
 - **AND** 审批不通过时系统 MUST 返回营销成本估算节点重新提交
 
 #### Scenario: 财务成本估算两级审批
 - **WHEN** 财务会计上传财务/运营成本估算文件并提交
-- **THEN** 系统 MUST 允许财务会计下载营销成本估算文件作为制作基础
+- **THEN** 系统 MUST 允许财务会计下载研发成本估算文件、制造成本估算文件和营销成本估算文件作为制作基础
 - **AND** 系统 MUST 先由财务负责人审批
 - **AND** 财务负责人审批通过后系统 MUST 进入总经理审批
 - **AND** 财务负责人审批不通过时系统 MUST 返回财务成本估算节点重新提交
@@ -2647,10 +2648,11 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **AND** 系统 MUST NOT 要求用户再执行手工阶段推进动作
 - **AND** 系统 MUST NOT 跳阶段或回退阶段
 
-#### Scenario: 不实现合同签订阶段业务
+#### Scenario: 进入合同签订阶段后初始化合同 workflow
 - **WHEN** 第 2 阶段齐套满足或 `canAdvanceToContract=true`
-- **THEN** 系统 MUST NOT 将该状态解释为合同签订阶段业务已实现
-- **AND** 系统 MUST NOT 自动创建合同签订阶段业务数据
+- **THEN** 系统 MUST 只将该状态解释为允许进入合同签订阶段
+- **AND** 项目进入第 3 阶段时系统 MUST 初始化或返回合同签订专用 workflow
+- **AND** 系统 MUST NOT 将该状态解释为合同签订阶段业务已完成
 
 ### Requirement: 方案设计旧普通资料入口继续拒绝
 系统 MUST 保持 C04-C19 旧普通资料 submit/confirm/return 入口拒绝，不能通过普通资料入口绕过方案设计专用 workflow。
@@ -3182,20 +3184,6 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **AND** 每项 MUST 使用 Excel 单元格换行分隔
 - **AND** C15 和 C16 MUST 使用各自当前 revision 的结构化计划，不得串用数据
 
-### Requirement: 审批通过意见持久化
-系统 MUST 保存立项审批、方案设计节点审批、阶段关口审批和周报审批中用户提交的非空审批通过意见。
-
-#### Scenario: 可选审批意见兼容
-- **WHEN** 普通审批通过请求未提供意见
-- **THEN** 系统 MUST 保持旧请求兼容并完成审批
-- **WHEN** 请求提供非空意见
-- **THEN** 系统 MUST 将意见写入对应审批记录或业务操作日志
-- **AND** 阶段关口和方案设计审批意见 MUST 不超过 1000 字
-
-#### Scenario: 立项中心负责人评价必填
-- **WHEN** 营销或研发中心负责人处理立项审批表评价
-- **THEN** 无论审批通过或退回整改，评价或原因 MUST 非空
-
 ### Requirement: 报价结果处理三动作口径
 项目核心能力 MUST 将报价结果处理表达为客户接受报价、结束项目、审批不通过三个业务动作，并 MUST 复用现有报价结果状态机。
 
@@ -3218,3 +3206,228 @@ TBD - created by archiving change add-project-core. Update Purpose after archive
 - **WHEN** 结束项目或审批不通过动作需要原因
 - **THEN** 系统 MUST 使用现有 return reason 校验规则
 - **AND** 系统 MUST NOT 引入新的报价结果状态枚举
+
+### Requirement: 合同签订阶段专用 workflow
+项目核心能力 MUST 为合同签订阶段提供专用 workflow，并 MUST 以该 workflow 表达准备协议和合同、签订协议和合同、项目预付款支付、项目启动通知的节点状态、权限、阻塞原因和资料完成派生。
+
+#### Scenario: 合同 workflow 节点定义
+- **WHEN** 系统初始化或查询合同签订阶段 workflow
+- **THEN** 系统 MUST 返回 `contract_preparation`、`contract_signing`、`advance_payment`、`project_kickoff_notice` 4 个节点
+- **AND** 节点名称 MUST 分别为准备协议和合同、签订协议和合同、项目预付款支付、项目启动通知
+- **AND** 节点顺序 MUST 固定为准备协议和合同 -> 签订协议和合同 -> 项目预付款支付 -> 项目启动通知
+
+#### Scenario: 合同 workflow 人员来源
+- **WHEN** 系统计算合同签订 workflow 权限
+- **THEN** 技术负责人和商务负责人 MUST 来自方案设计阶段 role assignment
+- **AND** 研发中心负责人、营销中心负责人和总经理 MUST 按当前组织角色动态判断
+- **AND** 系统 MUST NOT 在合同签订阶段要求重新做人事分配
+
+#### Scenario: 合同 workflow 不改变阶段和资料数量
+- **WHEN** 系统启用合同签订阶段专用 workflow
+- **THEN** 系统 MUST 继续保留立项、方案设计、合同签订、详细设计、生产制作、预验收、终验收和结题 8 大阶段
+- **AND** 系统 MUST 保持 v20260629 71 项资料总数不变
+- **AND** 合同 workflow MUST 通过派生或同步更新既有资料项完成结果，不得新增第 72 项资料
+
+#### Scenario: 合同阶段主导航单一来源
+- **WHEN** 系统返回合同签订阶段工作区或导航
+- **THEN** 合同阶段主流程节点 MUST 只来自 `contractSigningWorkflow` DTO
+- **AND** 系统 MUST 只返回准备协议和合同、签订协议和合同、项目预付款支付、项目启动通知 4 个主流程节点
+- **AND** 系统 MUST NOT 将旧蓝图节点、C20/C21/C22/C23/C25 资料项或 C24 发票资料项作为合同阶段主流程节点返回
+
+#### Scenario: 合同 workflow 派生既有资料完成结果
+- **WHEN** 合同 workflow 写操作完成准备、签订或项目启动通知相关业务结果
+- **THEN** 系统 MUST 将 C20、C22、C21、C23、C25 作为既有资料编码派生或同步完成结果
+- **AND** 系统 MUST NOT 为这些业务结果新增资料项或改变 71 项资料总数
+- **AND** C24 `发票（预付款）` MUST 保持普通/条件性资料项，不得进入合同 workflow 主流程
+
+#### Scenario: 已结束项目禁止合同写操作
+- **WHEN** 项目已结束
+- **THEN** 系统 MUST 拒绝合同 workflow 的上传、提交、审批、退回、签署确认、预付款处理、总经理放行和项目启动通知上传写操作
+
+### Requirement: 准备协议和合同节点
+合同签订 workflow MUST 在 `contract_preparation` 节点支持技术协议和销售合同两条并行准备线。
+
+#### Scenario: 准备节点最终展示名
+- **WHEN** 系统返回准备协议和合同节点 DTO、上传槽、日志上下文或前端展示文案
+- **THEN** 技术协议线的业务文件名 MUST 为 `技术协议`
+- **AND** 销售合同线的业务文件名 MUST 为 `销售合同`
+- **AND** 系统 MUST NOT 将 C20/C22 旧元数据名中的“草稿”作为最终展示名、上传槽名或 workflow 文案
+- **AND** 系统 MUST 保留 C20/C22 稳定编码，不得新增资料项或改变 71 项资料总数
+
+#### Scenario: 技术协议上传和审批
+- **WHEN** 项目位于准备协议和合同节点
+- **THEN** 技术负责人 MUST 能上传技术协议
+- **AND** 研发中心负责人 MUST 能审批通过或不通过技术协议
+- **AND** 研发中心负责人 MUST 能在审批前下载当前技术协议文件
+- **AND** 技术协议不通过后 MUST 停留在技术协议准备线并允许技术负责人重新上传重提
+
+#### Scenario: 销售合同上传和审批
+- **WHEN** 项目位于准备协议和合同节点
+- **THEN** 商务负责人 MUST 能上传销售合同
+- **AND** 营销中心负责人 MUST 能审批通过或不通过销售合同
+- **AND** 营销中心负责人 MUST 能在审批前下载当前销售合同文件
+- **AND** 商务负责人 MUST 能下载自己上传的当前销售合同文件
+- **AND** 销售合同不通过后 MUST 停留在销售合同准备线并允许商务负责人重新上传重提
+
+#### Scenario: 准备节点权限和阻塞原因按 slot 状态返回
+- **WHEN** 技术协议或销售合同已提交待审
+- **THEN** DTO MUST NOT 继续返回对应上传/提交权限
+- **AND** DTO MUST 返回对应审批人可审批、可退回和可下载 current file 的权限
+- **WHEN** 技术协议或销售合同被退回
+- **THEN** DTO MUST 恢复对应负责人上传权限
+- **AND** 节点阻塞原因 MUST 明确等待对应负责人整改并重新上传
+
+#### Scenario: 两条准备线都通过后进入签订节点
+- **WHEN** 技术协议和销售合同都已审批通过
+- **THEN** 系统 MUST 将准备协议和合同节点置为完成
+- **AND** 系统 MUST 激活签订协议和合同节点
+
+#### Scenario: 单线未通过不能进入签订节点
+- **WHEN** 技术协议已通过但销售合同未通过
+- **THEN** 系统 MUST NOT 激活签订协议和合同节点
+- **AND** 销售合同线 MUST 继续显示为待整改或待审批状态
+
+### Requirement: 签订协议和合同节点
+合同签订 workflow MUST 在 `contract_signing` 节点支持商务负责人退回客户不接受的源合同文件、上传扫描件，并在两份扫描件齐备后统一完成签订节点。
+
+#### Scenario: 上传扫描件
+- **WHEN** 项目位于签订协议和合同节点
+- **THEN** 商务负责人 MUST 能上传技术协议扫描件
+- **AND** 商务负责人 MUST 能上传销售合同扫描件
+- **AND** 商务负责人 MUST 能下载已上传的技术协议扫描件和销售合同扫描件 current file
+- **AND** 已完成签订节点后扫描件 MUST NOT 再展示重复上传入口
+
+#### Scenario: 客户退回技术协议只退回技术准备线
+- **WHEN** 商务负责人在签订协议和合同节点选择客户退回技术协议
+- **THEN** 系统 MUST 只退回技术协议准备线
+- **AND** 销售合同准备线 MUST 保持已通过状态
+- **AND** 对应技术协议扫描件 current file 和完成状态 MUST 失效
+- **AND** 技术协议重新上传并经研发中心负责人审批通过前，系统 MUST NOT 允许完成签订节点
+
+#### Scenario: 客户退回销售合同只退回销售准备线
+- **WHEN** 商务负责人在签订协议和合同节点选择客户退回销售合同
+- **THEN** 系统 MUST 只退回销售合同准备线
+- **AND** 技术协议准备线 MUST 保持已通过状态
+- **AND** 对应销售合同扫描件 current file 和完成状态 MUST 失效
+- **AND** 销售合同重新上传并经营销中心负责人审批通过前，系统 MUST NOT 允许完成签订节点
+
+#### Scenario: 签订节点完成
+- **WHEN** 技术协议扫描件和销售合同扫描件都已上传
+- **AND** 技术协议准备线和销售合同准备线都处于已通过状态
+- **THEN** 商务负责人 MUST 能执行签订完成动作
+- **AND** 系统 MUST 将签订协议和合同节点置为完成
+- **AND** 系统 MUST 将 C21 技术协议扫描件和 C23 销售合同扫描件派生为完成
+- **AND** 系统 MUST 激活项目预付款支付节点
+
+#### Scenario: 签订节点未满足条件不能完成
+- **WHEN** 任一扫描件未上传
+- **OR** 任一准备线处于客户退回后待重走状态
+- **THEN** 系统 MUST NOT 允许完成签订协议和合同节点
+- **AND** DTO MUST 返回明确阻塞原因
+
+#### Scenario: 不再暴露扫描件确认权限
+- **WHEN** 系统返回签订协议和合同节点 DTO
+- **THEN** DTO MUST NOT 暴露扫描件确认通过或确认不通过权限
+- **AND** 系统 MUST NOT 将扫描件处理表述为审批或确认线下签署结果通过/不通过
+
+### Requirement: 项目预付款支付节点
+合同签订 workflow MUST 在 `advance_payment` 节点支持商务负责人处理预付款完成或申请总经理放行，并 MUST 在三个预付款最终动作确认后生成 C25 项目启动通知文件、完成合同阶段并自动推进详细设计。
+
+#### Scenario: 商务负责人完成支付并生成项目启动通知
+- **WHEN** 商务负责人在项目预付款支付节点选择完成支付
+- **AND** 前端完成用户确认
+- **THEN** 系统 MUST 将项目预付款支付节点置为完成
+- **AND** 系统 MUST 将 `paymentFlow.status` 置为 `completed`
+- **AND** 系统 MUST 生成 C25 `项目启动通知` 文件
+- **AND** 系统 MUST 将 C25 项目启动通知资料完成结果置为完成
+- **AND** 系统 MUST 将合同签订阶段置为完成
+- **AND** 系统 MUST 自动推进项目到详细设计阶段
+- **AND** 自动推进 MUST 调用统一阶段门禁，不得直接手写项目阶段字段绕过门禁
+- **AND** 完成后系统 MUST NOT 继续返回完成支付或申请总经理放行权限
+
+#### Scenario: 未完成支付等待总经理放行
+- **WHEN** 商务负责人在项目预付款支付节点选择未完成支付，待总经理审批
+- **THEN** 系统 MUST 进入总经理放行等待状态
+- **AND** 项目 MUST 停留在项目预付款支付节点直到总经理选择一种通过结果
+- **AND** 系统 MUST 将 `advance_payment` 节点状态和 `paymentFlow.status` 置为 `waiting_general_manager`
+- **AND** 节点阻塞原因 MUST 显示 `等待总经理审批预付款放行`
+- **AND** 系统 MUST NOT 在申请等待时生成 C25 项目启动通知
+
+#### Scenario: 只有总经理可处理等待放行
+- **WHEN** 项目处于总经理放行等待状态
+- **THEN** 只有总经理 MUST 能执行未付款并通过或已付款通过动作
+- **AND** 非总经理用户 MUST NOT 能绕过该等待状态进入详细设计阶段
+- **AND** 总经理通过权限 MUST 只在 `advance_payment` 和 `paymentFlow` 均处于 `waiting_general_manager` 时返回
+
+#### Scenario: 总经理未付款并通过并生成项目启动通知
+- **WHEN** 总经理选择未付款并通过
+- **AND** 前端完成用户确认
+- **THEN** 系统 MUST 将项目预付款支付节点置为完成
+- **AND** 系统 MUST 将 `paymentFlow.status` 置为 `released`
+- **AND** 系统 MUST 生成 C25 `项目启动通知` 文件
+- **AND** 系统 MUST 将 C25 项目启动通知资料完成结果置为完成
+- **AND** 系统 MUST 将合同签订阶段置为完成
+- **AND** 系统 MUST 自动推进项目到详细设计阶段
+- **AND** 放行后系统 MUST NOT 继续返回总经理放行权限
+
+#### Scenario: 总经理已付款通过并生成项目启动通知
+- **WHEN** 总经理选择已付款通过
+- **AND** 前端完成用户确认
+- **THEN** 系统 MUST 将项目预付款支付节点置为完成
+- **AND** 系统 MUST 将 `paymentFlow.status` 置为 `completed`
+- **AND** 系统 MUST 生成 C25 `项目启动通知` 文件
+- **AND** 系统 MUST 将 C25 项目启动通知资料完成结果置为完成
+- **AND** 系统 MUST 将合同签订阶段置为完成
+- **AND** 系统 MUST 自动推进项目到详细设计阶段
+- **AND** 通过后系统 MUST NOT 继续返回总经理放行权限
+
+#### Scenario: 生成失败不得部分完成预付款最终动作
+- **WHEN** 任一预付款最终动作触发 C25 项目启动通知生成
+- **AND** 生成文件或文件存储失败
+- **THEN** 系统 MUST 拒绝该最终动作并返回明确错误
+- **AND** 系统 MUST NOT 将 `advance_payment` 节点置为完成
+- **AND** 系统 MUST NOT 完成 C25 资料结果
+- **AND** 系统 MUST NOT 推进到详细设计阶段
+
+#### Scenario: 生成后可下载项目启动通知
+- **WHEN** C25 项目启动通知已由预付款最终动作生成成功
+- **THEN** 有合同 workflow 查看权限且后端授权的用户 MUST 能下载当前生成文件
+- **AND** 下载接口 MUST 返回 generated file 的文件名、MIME 类型和文件内容
+- **AND** 未生成、生成失败或生成文件存储缺失时 MUST 拒绝下载并返回明确错误
+
+#### Scenario: 未执行最终确认不能手工推进
+- **WHEN** 用户手工请求推进合同签订阶段
+- **AND** 项目预付款支付节点尚未完成任一最终动作
+- **THEN** 系统 MUST 拒绝推进到详细设计阶段
+- **AND** 系统 MUST 在门禁详情中返回 `项目启动通知未生成完成` 或等价阻塞原因
+- **AND** 系统 MUST NOT 通过普通资料卡片、旧独立节点、前端状态或 C24 发票资料判断该门禁
+
+#### Scenario: 旧笼统放行入口不能代替总经理选择
+- **WHEN** 系统收到旧的笼统总经理放行动作
+- **THEN** 系统 MUST 拒绝该动作并返回 409 或 410
+- **AND** 错误信息 MUST 提示总经理改用未付款并通过或已付款通过
+- **AND** 系统 MUST NOT 将旧动作默认映射为未付款并通过
+- **AND** 系统 MUST NOT 改变 `advance_payment` 节点状态、`paymentFlow.status`、C25 生成文件或项目当前阶段
+
+#### Scenario: 合同阶段主流程只有三个节点
+- **WHEN** 系统初始化或查询合同签订 workflow
+- **THEN** 系统 MUST 只返回准备协议和合同、签订协议和合同、项目预付款支付三个主流程节点
+- **AND** 系统 MUST NOT 返回独立项目启动通知主流程节点
+- **AND** 系统 MUST NOT 返回旧蓝图节点作为合同主流程节点
+
+#### Scenario: 项目启动通知不新增资料项
+- **WHEN** 系统同步项目启动通知到阶段资料完成结果
+- **THEN** 系统 MUST 映射到既有 C25 稳定资料编码
+- **AND** 生成文件 MUST 作为 C25 的产出形态
+- **AND** 系统 MUST NOT 新增资料项或改变 v20260629 71 项资料总数
+- **AND** 系统 MUST NOT 新增第 72 项资料
+
+#### Scenario: 项目启动通知项目名称使用组合展示值
+- **WHEN** 系统生成 C25 项目启动通知文件
+- **THEN** 模板内项目名称字段 MUST 使用 `项目编号+客户名称-项目名`
+- **AND** 项目编号、客户名称和项目名均存在时 MUST 生成类似 `KRF25037金风-智能力矩扳手项目` 的展示值
+- **AND** 缺客户名时 MUST 使用 `项目编号-项目名`
+- **AND** 缺项目编号时 MUST 使用 `客户名称-项目名`
+- **AND** 只剩项目名时 MUST 使用项目名
+- **AND** 全缺时 MUST 使用 `未命名项目`
+- **AND** 系统 MUST 去除首尾空白并避免多余 `-`

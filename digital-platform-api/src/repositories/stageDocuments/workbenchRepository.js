@@ -35,12 +35,17 @@ import {
   SOLUTION_DESIGN_WORKBENCH_TODO_TYPE,
   selectSolutionDesignWorkbenchTodos
 } from '../projects/solutionDesignWorkflowRepository.js';
+import {
+  CONTRACT_SIGNING_WORKBENCH_TODO_TYPE,
+  selectContractSigningWorkbenchTodos
+} from '../projects/contractSigningWorkflowRepository.js';
 
 const WORKBENCH_TODO_TYPES = [
   'document_responsibility',
   'document_review',
   INITIATION_REVIEW_TODO_TYPE,
-  SOLUTION_DESIGN_WORKBENCH_TODO_TYPE
+  SOLUTION_DESIGN_WORKBENCH_TODO_TYPE,
+  CONTRACT_SIGNING_WORKBENCH_TODO_TYPE
 ];
 
 const SOLUTION_DESIGN_DEDICATED_DOCUMENT_PLACEHOLDERS = SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES
@@ -754,7 +759,7 @@ async function selectStageAdvanceCompletenessByStage(rows, user) {
   ]));
 }
 
-function buildSummary(items) {
+export function buildWorkbenchSummary(items) {
   const byType = Object.fromEntries(WORKBENCH_TODO_TYPES.map((type) => [type, 0]));
   for (const item of items) {
     byType[item.type] = (byType[item.type] || 0) + 1;
@@ -796,7 +801,8 @@ async function selectMyWorkbenchTodoGroups(user) {
     selectInitiationNoticeSyntheticTodos(user),
     selectDocumentReviewTodos(user),
     selectInitiationReviewWorkbenchTodos(pool, user),
-    selectSolutionDesignWorkbenchTodos(user)
+    selectSolutionDesignWorkbenchTodos(user),
+    selectContractSigningWorkbenchTodos(user)
   ]);
 }
 
@@ -823,7 +829,7 @@ export async function getMyWorkbench(user) {
   const items = sortWorkbenchItems(groups.flat());
 
   return {
-    summary: buildSummary(items),
+    summary: buildWorkbenchSummary(items),
     items
   };
 }

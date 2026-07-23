@@ -5,6 +5,11 @@ import {
   SOLUTION_DESIGN_NODES,
   SOLUTION_DESIGN_STAGE
 } from '../domain/solutionDesignWorkflow.js';
+import {
+  CONTRACT_SIGNING_NODE_STATUS,
+  CONTRACT_SIGNING_NODES,
+  CONTRACT_SIGNING_STAGE
+} from '../domain/contractSigningWorkflow.js';
 
 export const NAVIGATION_STATUS = Object.freeze({
   PENDING: 'PENDING',
@@ -26,7 +31,8 @@ function normalizeNodeStatus(
   if ([
     SOLUTION_DESIGN_NODE_STATUS.APPROVED,
     SOLUTION_DESIGN_NODE_STATUS.SKIPPED,
-    SOLUTION_DESIGN_NODE_STATUS.ENDED
+    SOLUTION_DESIGN_NODE_STATUS.ENDED,
+    CONTRACT_SIGNING_NODE_STATUS.APPROVED
   ].includes(status)) {
     return NAVIGATION_STATUS.COMPLETED;
   }
@@ -34,7 +40,9 @@ function normalizeNodeStatus(
   if ([
     'pending_review',
     SOLUTION_DESIGN_NODE_STATUS.PENDING_REVIEW,
-    SOLUTION_DESIGN_NODE_STATUS.PENDING_GENERAL_REVIEW
+    SOLUTION_DESIGN_NODE_STATUS.PENDING_GENERAL_REVIEW,
+    CONTRACT_SIGNING_NODE_STATUS.PENDING_REVIEW,
+    CONTRACT_SIGNING_NODE_STATUS.WAITING_GENERAL_MANAGER
   ].includes(status)) {
     return NAVIGATION_STATUS.WAIT_APPROVAL;
   }
@@ -42,7 +50,8 @@ function normalizeNodeStatus(
   if ([
     'returned_for_rework',
     'blocked_by_rework',
-    SOLUTION_DESIGN_NODE_STATUS.RETURNED
+    SOLUTION_DESIGN_NODE_STATUS.RETURNED,
+    CONTRACT_SIGNING_NODE_STATUS.RETURNED
   ].includes(status)) {
     return NAVIGATION_STATUS.RETURNED;
   }
@@ -51,11 +60,15 @@ function normalizeNodeStatus(
     return NAVIGATION_STATUS.FAILED;
   }
 
-  if (['in_progress', SOLUTION_DESIGN_NODE_STATUS.PENDING].includes(status)) {
+  if ([
+    'in_progress',
+    SOLUTION_DESIGN_NODE_STATUS.PENDING,
+    CONTRACT_SIGNING_NODE_STATUS.PENDING
+  ].includes(status)) {
     return NAVIGATION_STATUS.PROCESSING;
   }
 
-  if (status === SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED) {
+  if ([SOLUTION_DESIGN_NODE_STATUS.NOT_STARTED, CONTRACT_SIGNING_NODE_STATUS.NOT_STARTED].includes(status)) {
     return isCompletedStage ? NAVIGATION_STATUS.COMPLETED : NAVIGATION_STATUS.PENDING;
   }
 
@@ -174,9 +187,29 @@ function normalizeSolutionDesignStageNodes(nodes = []) {
   });
 }
 
+function normalizeContractSigningStageNodes(nodes = []) {
+  const nodeByKey = new Map(nodes.map((node) => [node.nodeKey, node]));
+  return CONTRACT_SIGNING_NODES.map((definition) => {
+    const node = nodeByKey.get(definition.nodeKey) || {};
+    return {
+      ...node,
+      nodeKey: definition.nodeKey,
+      nodeName: definition.nodeName,
+      nodeStatus: node.nodeStatus || CONTRACT_SIGNING_NODE_STATUS.NOT_STARTED,
+      nodeOrder: definition.nodeOrder,
+      outputs: Array.isArray(node.outputs) ? node.outputs : [],
+      actionHints: node.actionHints || [],
+      blockingReasons: node.blockingReasons || [],
+      notes: node.notes || ''
+    };
+  });
+}
+
 function buildStage(projectId, stage) {
   const stageNodes = stage.stageKey === SOLUTION_DESIGN_STAGE.STAGE_KEY
     ? normalizeSolutionDesignStageNodes(stage.nodes || [])
+    : stage.stageKey === CONTRACT_SIGNING_STAGE.STAGE_KEY
+      ? normalizeContractSigningStageNodes(stage.nodes || [])
     : stage.nodes || [];
   const firstWaitingSubmissionIndex = stageNodes.findIndex((node) => node.nodeStatus === 'waiting_submission');
   const firstWaitingSubmissionIsReachable =

@@ -7,89 +7,63 @@
     :loading="loading"
     :error-message="errorMessage"
   >
-    <section v-if="hasCustomerReturnActions" class="solution-section">
-      <header>
-        <div>
-          <span class="section-eyebrow">客户退回</span>
-          <strong>源合同文件处理</strong>
-        </div>
-      </header>
-
-      <div class="slot-list">
-        <article
+    <ContractSigningSection
+      v-if="hasCustomerReturnActions"
+      eyebrow="客户退回"
+      title="源合同文件处理"
+      tone="danger"
+    >
+      <div class="contract-customer-return-list">
+        <ApprovalActionCard
           v-if="currentNode?.permissions?.canReturnTechnicalAgreementForCustomer"
-          class="slot-card"
-        >
-          <div class="slot-heading">
-            <strong>技术协议</strong>
-          </div>
-          <div class="return-box">
-            <el-input
-              :model-value="returnReasons.technical_agreement || ''"
-              type="textarea"
-              :rows="3"
-              placeholder="客户退回原因 *"
-              @update:model-value="value => { returnReasons.technical_agreement = value; }"
-            />
-            <el-button
-              type="danger"
-              plain
-              :loading="isPending('signing:return-technical-agreement')"
-              @click="returnTechnicalAgreementForCustomer"
-            >
-              退回技术协议
-            </el-button>
-          </div>
-        </article>
+          title="技术协议客户退回"
+          description="根据客户意见将技术协议返回准备节点整改。"
+          status-text="客户退回处理"
+          status-type="danger"
+          :comment="returnReasons.technical_agreement || ''"
+          comment-label="客户退回原因"
+          :comment-max-length="1000"
+          :can-return="true"
+          :busy="isPending('signing:return-technical-agreement')"
+          :pending-action="isPending('signing:return-technical-agreement') ? 'return' : ''"
+          return-text="退回技术协议"
+          @update:comment="returnReasons.technical_agreement = $event"
+          @return="handleTechnicalAgreementReturn"
+        />
 
-        <article
+        <ApprovalActionCard
           v-if="currentNode?.permissions?.canReturnSalesContractForCustomer"
-          class="slot-card"
-        >
-          <div class="slot-heading">
-            <strong>销售合同</strong>
-          </div>
-          <div class="return-box">
-            <el-input
-              :model-value="returnReasons.sales_contract || ''"
-              type="textarea"
-              :rows="3"
-              placeholder="客户退回原因 *"
-              @update:model-value="value => { returnReasons.sales_contract = value; }"
-            />
-            <el-button
-              type="danger"
-              plain
-              :loading="isPending('signing:return-sales-contract')"
-              @click="returnSalesContractForCustomer"
-            >
-              退回销售合同
-            </el-button>
-          </div>
-        </article>
+          title="销售合同客户退回"
+          description="根据客户意见将销售合同返回准备节点整改。"
+          status-text="客户退回处理"
+          status-type="danger"
+          :comment="returnReasons.sales_contract || ''"
+          comment-label="客户退回原因"
+          :comment-max-length="1000"
+          :can-return="true"
+          :busy="isPending('signing:return-sales-contract')"
+          :pending-action="isPending('signing:return-sales-contract') ? 'return' : ''"
+          return-text="退回销售合同"
+          @update:comment="returnReasons.sales_contract = $event"
+          @return="handleSalesContractReturn"
+        />
       </div>
-    </section>
+    </ContractSigningSection>
 
     <ContractUploadSlots
       :slots="slots"
-      mode="signing"
-      section-eyebrow="签订协议和合同"
       section-title="技术协议扫描件 / 销售合同扫描件"
-      :return-reasons="returnReasons"
       :is-pending="isPending"
       @upload="handleUpload"
       @download="downloadUpload"
     />
 
-    <section v-if="currentNode?.permissions?.canCompleteSigning" class="solution-section">
-      <header>
-        <div>
-          <span class="section-eyebrow">节点动作</span>
-          <strong>签订完成</strong>
-        </div>
-      </header>
-      <div class="solution-actions">
-        <div class="action-row">
+    <ContractSigningSection
+      v-if="currentNode?.permissions?.canCompleteSigning"
+      eyebrow="节点动作"
+      title="签订完成"
+    >
+      <template #actions>
           <el-button
             type="primary"
             :loading="isPending('signing:complete')"
@@ -97,15 +71,16 @@
           >
             完成
           </el-button>
-        </div>
-      </div>
-    </section>
+      </template>
+    </ContractSigningSection>
   </ContractSigningNodeLayout>
 </template>
 
 <script setup>
 import { computed } from 'vue';
+import ApprovalActionCard from '../../../components/approval/ApprovalActionCard.vue';
 import ContractSigningNodeLayout from '../../../components/project-workspace/contract-signing/ContractSigningNodeLayout.vue';
+import ContractSigningSection from '../../../components/project-workspace/contract-signing/ContractSigningSection.vue';
 import ContractUploadSlots from '../../../components/project-workspace/contract-signing/ContractUploadSlots.vue';
 import {
   contractSigningNodePageProps,
@@ -135,4 +110,29 @@ const hasCustomerReturnActions = computed(() =>
     currentNode.value?.permissions?.canReturnSalesContractForCustomer
   )
 );
+
+function handleTechnicalAgreementReturn(comment) {
+  returnReasons.technical_agreement = comment;
+  returnTechnicalAgreementForCustomer();
+}
+
+function handleSalesContractReturn(comment) {
+  returnReasons.sales_contract = comment;
+  returnSalesContractForCustomer();
+}
 </script>
+
+<style scoped>
+.contract-customer-return-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--app-space-3);
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .contract-customer-return-list {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

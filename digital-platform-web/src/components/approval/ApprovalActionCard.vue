@@ -14,12 +14,13 @@
       </div>
 
       <div class="approval-review-card__form">
-        <label class="approval-review-card__field-label">
+        <label v-if="showComment" class="approval-review-card__field-label">
           <strong>{{ commentLabel }}</strong>
           <span v-if="approveCommentRequired">*</span>
-          <small v-else>审批通过选填，退回整改{{ canEnd ? '或结束项目' : '' }}必填</small>
+          <small v-else>{{ commentHint }}</small>
         </label>
         <el-input
+          v-if="showComment"
           :model-value="comment"
           type="textarea"
           :rows="3"
@@ -80,6 +81,7 @@ const props = defineProps({
   commentLabel: { type: String, default: '评价/退回原因' },
   commentPlaceholder: { type: String, default: '可填写审批意见；退回整改时请明确填写原因和修改要求' },
   commentMaxLength: { type: Number, default: 0 },
+  showComment: { type: Boolean, default: true },
   approveCommentRequired: Boolean,
   selectionRequired: Boolean,
   selectionComplete: { type: Boolean, default: true },
@@ -101,4 +103,12 @@ defineEmits(['update:comment', 'approve', 'return', 'end']);
 
 const hasActions = computed(() => props.canApprove || props.canReturn || props.canEnd);
 const actionState = computed(() => buildApprovalActionState(props));
+const commentHint = computed(() => {
+  if (props.canApprove && (props.canReturn || props.canEnd)) {
+    return `审批通过选填，${props.canReturn ? '退回整改' : ''}${props.canReturn && props.canEnd ? '或' : ''}${props.canEnd ? '结束项目' : ''}必填`;
+  }
+  if (props.canReturn) return '退回原因必填';
+  if (props.canEnd) return '结束原因必填';
+  return '审批意见选填';
+});
 </script>

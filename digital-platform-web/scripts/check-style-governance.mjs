@@ -7,13 +7,18 @@ const PROJECT_ROOT = path.resolve(SCRIPT_DIR, '..');
 
 export const DEFAULT_STYLE_POLICY = Object.freeze({
   allowedScopedStyleFiles: new Set([
+    'src/components/project-workspace/contract-signing/ContractSigningNodeLayout.vue',
+    'src/components/project-workspace/contract-signing/ContractSigningSection.vue',
+    'src/components/project-workspace/contract-signing/ContractUploadSlots.vue',
     'src/components/project-workspace/solution-design/SolutionFormFields.vue',
     'src/components/project-workspace/solution-design/SolutionNodeActions.vue',
     'src/components/project-workspace/solution-design/SolutionRepeatableItems.vue',
     'src/components/project-workspace/solution-design/SolutionReviewFormTable.vue',
     'src/components/project-workspace/solution-design/SolutionReviewNodePage.vue',
     'src/pages/project-node/solution-design/SolutionFinanceCostPage.vue',
-    'src/pages/project-node/solution-design/SolutionPreparationPage.vue'
+    'src/pages/project-node/solution-design/SolutionPreparationPage.vue',
+    'src/pages/project-node/contract-signing/ContractAdvancePaymentPage.vue',
+    'src/pages/project-node/contract-signing/ContractSigningPage.vue'
   ]),
   allowedDeepRoots: new Map([
     ['src/components/project-workspace/solution-design/SolutionReviewFormTable.vue', '.review-form-table'],

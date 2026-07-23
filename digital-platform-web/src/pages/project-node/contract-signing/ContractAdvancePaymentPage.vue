@@ -7,55 +7,51 @@
     :loading="loading"
     :error-message="errorMessage"
   >
-    <section class="solution-section">
-      <header>
-        <div>
-          <span class="section-eyebrow">预付款状态</span>
-          <strong>项目预付款支付</strong>
-        </div>
-        <el-tag :type="paymentStatusTagType">
-          {{ contractPaymentStatusText[paymentFlow?.status] || paymentFlow?.status || '-' }}
-        </el-tag>
-      </header>
+    <div class="contract-payment-page">
+      <section class="contract-payment-section">
+        <header class="contract-payment-section__header">
+          <h4>项目预付款支付</h4>
+          <el-tag :type="paymentStatusTagType">
+            {{ contractPaymentStatusText[paymentFlow?.status] || paymentFlow?.status || '-' }}
+          </el-tag>
+        </header>
 
-      <el-alert
-        v-if="paymentFlow?.status === 'waiting_general_manager'"
-        title="等待总经理审批预付款放行"
-        type="warning"
-        show-icon
-        :closable="false"
-      />
+        <el-alert
+          v-if="paymentFlow?.status === 'waiting_general_manager'"
+          title="等待总经理审批预付款放行"
+          type="warning"
+          show-icon
+          :closable="false"
+        />
 
-      <el-descriptions :column="2" border>
-        <el-descriptions-item label="当前状态">
-          {{ contractPaymentStatusText[paymentFlow?.status] || paymentFlow?.status || '-' }}
-        </el-descriptions-item>
-        <el-descriptions-item label="申请人">
-          {{ formatUser(paymentFlow?.requestedBy) }}
-        </el-descriptions-item>
-        <el-descriptions-item label="申请时间">
-          {{ formatDateTime(paymentFlow?.requestedAt) }}
-        </el-descriptions-item>
-        <el-descriptions-item label="放行人">
-          {{ formatUser(paymentFlow?.approvedBy) }}
-        </el-descriptions-item>
-        <el-descriptions-item label="放行时间">
-          {{ formatDateTime(paymentFlow?.approvedAt) }}
-        </el-descriptions-item>
-      </el-descriptions>
+        <el-descriptions class="contract-payment-table" :column="2" border>
+          <el-descriptions-item label="当前状态">
+            {{ contractPaymentStatusText[paymentFlow?.status] || paymentFlow?.status || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="申请人">
+            {{ formatUser(paymentFlow?.requestedBy) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="申请时间">
+            {{ formatDateTime(paymentFlow?.requestedAt) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="放行人">
+            {{ formatUser(paymentFlow?.approvedBy) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="放行时间">
+            {{ formatDateTime(paymentFlow?.approvedAt) }}
+          </el-descriptions-item>
+        </el-descriptions>
+      </section>
 
-      <section class="solution-subsection">
-        <header>
-          <div>
-            <span class="section-eyebrow">生成文件</span>
-            <strong>项目启动通知</strong>
-          </div>
+      <section class="contract-payment-section">
+        <header class="contract-payment-section__header">
+          <h4>项目启动通知</h4>
           <el-tag :type="kickoffNoticeStatusTagType">
             {{ kickoffNoticeStatusText }}
           </el-tag>
         </header>
 
-        <el-descriptions :column="2" border>
+        <el-descriptions class="contract-payment-table" :column="2" border>
           <el-descriptions-item label="文件名">
             {{ kickoffNoticeGeneratedFile?.fileName || kickoffNoticeGeneratedFile?.downloadableFileName || '-' }}
           </el-descriptions-item>
@@ -70,26 +66,21 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <div v-if="kickoffNoticeGeneratedFile?.downloadable" class="solution-actions">
-          <div class="action-row">
-            <el-button
-              type="primary"
-              plain
-              :loading="isPending('download:kickoff-notice-generated-file')"
-              @click="downloadKickoffNoticeGeneratedFile"
-            >
-              下载项目启动通知
-            </el-button>
-          </div>
+        <div v-if="kickoffNoticeGeneratedFile?.downloadable" class="contract-payment-section__actions">
+          <el-button
+            type="primary"
+            plain
+            :loading="isPending('download:kickoff-notice-generated-file')"
+            @click="downloadKickoffNoticeGeneratedFile"
+          >
+            下载项目启动通知
+          </el-button>
         </div>
       </section>
 
-      <div v-if="hasPaymentActions" class="solution-actions">
-        <header>
-          <span class="section-eyebrow">节点动作</span>
-          <strong>预付款处理</strong>
-        </header>
-        <div class="action-row">
+      <section v-if="hasBusinessPaymentActions" class="contract-payment-section">
+        <h4>预付款处理</h4>
+        <div class="contract-payment-section__actions">
           <el-button
             v-if="currentNode?.permissions?.canCompletePayment"
             type="primary"
@@ -107,30 +98,48 @@
           >
             未完成支付，待总经理审批
           </el-button>
-          <el-button
-            v-if="currentNode?.permissions?.canApprovePaymentReleaseUnpaid"
-            type="primary"
-            :loading="isPending('payment:approve-release-unpaid')"
-            @click="approvePaymentReleaseUnpaid"
-          >
-            未付款并通过
-          </el-button>
-          <el-button
-            v-if="currentNode?.permissions?.canApprovePaymentReleasePaid"
-            type="success"
-            :loading="isPending('payment:approve-release-paid')"
-            @click="approvePaymentReleasePaid"
-          >
-            已付款通过
-          </el-button>
         </div>
-      </div>
-    </section>
+      </section>
+
+      <ApprovalActionCard
+        v-if="hasPaymentApprovalActions"
+        title="预付款放行审批"
+        description="请选择客户实际付款状态，再确认是否允许项目继续。"
+        :status-text="contractPaymentStatusText[paymentFlow?.status] || paymentFlow?.status || '待审批'"
+        status-type="warning"
+        :show-comment="false"
+        :selection-required="true"
+        :selection-complete="Boolean(paymentApprovalDecision)"
+        :can-approve="true"
+        :busy="paymentApprovalBusy"
+        :pending-action="paymentApprovalBusy ? 'approve' : ''"
+        approve-text="确认放行"
+        @approve="handlePaymentReleaseApproval"
+      >
+        <template #selection="{ disabled }">
+          <el-radio-group v-model="paymentApprovalDecision" :disabled="disabled">
+            <el-radio
+              v-if="currentNode?.permissions?.canApprovePaymentReleasePaid"
+              value="paid"
+            >
+              客户已付款
+            </el-radio>
+            <el-radio
+              v-if="currentNode?.permissions?.canApprovePaymentReleaseUnpaid"
+              value="unpaid"
+            >
+              客户未付款
+            </el-radio>
+          </el-radio-group>
+        </template>
+      </ApprovalActionCard>
+    </div>
   </ContractSigningNodeLayout>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
+import ApprovalActionCard from '../../../components/approval/ApprovalActionCard.vue';
 import ContractSigningNodeLayout from '../../../components/project-workspace/contract-signing/ContractSigningNodeLayout.vue';
 import {
   contractSigningNodePageProps,
@@ -159,14 +168,40 @@ const {
   downloadKickoffNoticeGeneratedFile
 } = useContractSigningNodePage(props, emit);
 
-const hasPaymentActions = computed(() =>
+const paymentApprovalDecision = ref('');
+
+const hasBusinessPaymentActions = computed(() =>
   Boolean(
     currentNode.value?.permissions?.canCompletePayment ||
-    currentNode.value?.permissions?.canRequestGeneralManagerRelease ||
+    currentNode.value?.permissions?.canRequestGeneralManagerRelease
+  )
+);
+
+const hasPaymentApprovalActions = computed(() =>
+  Boolean(
     currentNode.value?.permissions?.canApprovePaymentReleaseUnpaid ||
     currentNode.value?.permissions?.canApprovePaymentReleasePaid
   )
 );
+
+const paymentApprovalBusy = computed(() =>
+  isPending('payment:approve-release-unpaid') || isPending('payment:approve-release-paid')
+);
+
+watch(
+  () => [currentNode.value?.nodeKey, currentNode.value?.status, paymentFlow.value?.status],
+  () => { paymentApprovalDecision.value = ''; }
+);
+
+function handlePaymentReleaseApproval() {
+  if (paymentApprovalDecision.value === 'paid') {
+    approvePaymentReleasePaid();
+    return;
+  }
+  if (paymentApprovalDecision.value === 'unpaid') {
+    approvePaymentReleaseUnpaid();
+  }
+}
 
 const paymentStatusTagType = computed(() => ({
   completed: 'success',
@@ -198,3 +233,54 @@ const kickoffNoticeStatusTagType = computed(() => {
   }[status] || 'info';
 });
 </script>
+
+<style scoped>
+.contract-payment-page {
+  display: grid;
+  gap: var(--app-space-4);
+  min-width: 0;
+}
+
+.contract-payment-section {
+  display: grid;
+  gap: var(--app-space-4);
+}
+
+.contract-payment-section h4 {
+  margin: 0;
+}
+
+.contract-payment-section__header,
+.contract-payment-section__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+}
+
+.contract-payment-section__header {
+  justify-content: space-between;
+}
+
+.contract-payment-table {
+  width: 90%;
+  margin-inline: auto;
+}
+
+.contract-payment-section__actions {
+  justify-content: flex-end;
+  width: 90%;
+  margin-inline: auto;
+}
+
+@media (max-width: 640px) {
+  .contract-payment-table,
+  .contract-payment-section__actions {
+    width: 100%;
+  }
+
+  .contract-payment-section__actions {
+    justify-content: flex-start;
+  }
+}
+</style>

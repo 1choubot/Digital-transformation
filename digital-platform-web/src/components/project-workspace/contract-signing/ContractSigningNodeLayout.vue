@@ -1,5 +1,5 @@
 <template>
-  <section class="solution-node-page" v-loading="loading">
+  <section class="contract-signing-node-page" v-loading="loading">
     <el-alert
       v-if="errorMessage"
       :title="errorMessage"
@@ -12,16 +12,7 @@
       description="当前项目未返回该合同签订节点"
     />
     <template v-else-if="workflow && node">
-      <section class="solution-node-card">
-        <header class="solution-node-header">
-          <div>
-            <span class="section-eyebrow">合同签订 workflow</span>
-            <h3>{{ node.nodeName }}</h3>
-          </div>
-          <el-tag :type="contractNodeStatusTagType(node.status)">
-            {{ contractNodeStatusText[node.status] || node.status }}
-          </el-tag>
-        </header>
+      <section class="contract-signing-node-card">
 
         <el-alert
           v-if="workflow.isProjectEnded"
@@ -81,3 +72,47 @@ defineProps({
   }
 });
 </script>
+
+<style scoped>
+.contract-signing-node-page,
+.contract-signing-node-card {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+
+.contract-signing-node-page {
+  display: grid;
+  gap: var(--app-space-4);
+  min-height: 180px;
+}
+
+.contract-signing-node-card {
+  display: grid;
+  align-content: start;
+  gap: var(--app-space-4);
+}
+
+.contract-signing-node-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--app-space-3);
+  padding-bottom: var(--app-space-3);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.contract-signing-node-header > div {
+  display: grid;
+  gap: var(--app-space-1);
+  min-width: 0;
+}
+
+.contract-signing-node-header h3 {
+  margin: 0;
+  color: var(--app-text-primary);
+  font-size: 20px;
+  line-height: 1.35;
+}
+</style>

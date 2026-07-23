@@ -37,6 +37,43 @@ test('an incomplete required selection locks the input and every action', () => 
   assert.equal(state.endDisabled, true);
 });
 
+test('contract approvals use the shared approval card for review, customer return, and payment release', () => {
+  const approvalCard = readFileSync(
+    new URL('../src/components/approval/ApprovalActionCard.vue', import.meta.url),
+    'utf8'
+  );
+  const uploadSlots = readFileSync(
+    new URL('../src/components/project-workspace/contract-signing/ContractUploadSlots.vue', import.meta.url),
+    'utf8'
+  );
+  const preparationPage = readFileSync(
+    new URL('../src/pages/project-node/contract-signing/ContractPreparationPage.vue', import.meta.url),
+    'utf8'
+  );
+  const signingPage = readFileSync(
+    new URL('../src/pages/project-node/contract-signing/ContractSigningPage.vue', import.meta.url),
+    'utf8'
+  );
+  const paymentPage = readFileSync(
+    new URL('../src/pages/project-node/contract-signing/ContractAdvancePaymentPage.vue', import.meta.url),
+    'utf8'
+  );
+
+  assert.match(approvalCard, /showComment:\s*\{\s*type:\s*Boolean,\s*default:\s*true\s*\}/);
+  assert.match(approvalCard, /v-if="showComment"/);
+  assert.match(approvalCard, /if \(props\.canReturn\) return '退回原因必填'/);
+  assert.doesNotMatch(uploadSlots, /<ApprovalActionCard/);
+  assert.doesNotMatch(uploadSlots, /@click="\$emit\('approve'/);
+  assert.match(preparationPage, /<ApprovalActionCard/);
+  assert.ok(preparationPage.indexOf('<ApprovalActionCard') > preparationPage.indexOf('<ContractUploadSlots'));
+  assert.equal(signingPage.match(/<ApprovalActionCard/g)?.length, 2);
+  assert.doesNotMatch(signingPage, /<el-input/);
+  assert.match(paymentPage, /:show-comment="false"/);
+  assert.match(paymentPage, /:selection-required="true"/);
+  assert.match(paymentPage, /v-model="paymentApprovalDecision"/);
+  assert.match(paymentPage, /handlePaymentReleaseApproval/);
+});
+
 test('only online form submission and explicit contract risks keep confirmation dialogs', () => {
   const roots = [
     new URL('../src/pages/project-node/', import.meta.url),

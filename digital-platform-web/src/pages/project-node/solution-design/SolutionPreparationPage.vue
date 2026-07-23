@@ -39,15 +39,16 @@
           type="error"
           :closable="false"
         />
-        <el-button
-          class="role-save-button"
-          type="primary"
-          native-type="submit"
-          :loading="isPending('roles')"
-          :disabled="context.solutionDesignRoleCandidatesLoading"
-        >
-          保存分配
-        </el-button>
+        <div class="solution-role-actions">
+          <el-button
+            type="primary"
+            native-type="submit"
+            :loading="isPending('roles')"
+            :disabled="context.solutionDesignRoleCandidatesLoading"
+          >
+            保存分配
+          </el-button>
+        </div>
       </el-form>
 
       <el-descriptions v-else class="solution-role-table" :column="2" border>
@@ -130,9 +131,18 @@ function roleCandidates(role) {
   margin-top: 16px;
 }
 
-.role-save-button {
+.solution-role-actions {
+  display: flex;
+  justify-content: flex-end;
+  width: 90%;
   margin-top: 16px;
-  display: block;
-  margin-left: auto;
+  margin-inline: auto;
+}
+
+@media (max-width: 640px) {
+  .solution-role-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 </style>

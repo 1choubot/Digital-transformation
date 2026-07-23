@@ -7,6 +7,7 @@ const PROJECT_ROOT = path.resolve(SCRIPT_DIR, '..');
 
 export const DEFAULT_STYLE_POLICY = Object.freeze({
   allowedScopedStyleFiles: new Set([
+    'src/components/approval/ApprovalBusinessSelection.vue',
     'src/components/project-workspace/contract-signing/ContractSigningNodeLayout.vue',
     'src/components/project-workspace/contract-signing/ContractSigningSection.vue',
     'src/components/project-workspace/contract-signing/ContractUploadSlots.vue',
@@ -15,14 +16,13 @@ export const DEFAULT_STYLE_POLICY = Object.freeze({
     'src/components/project-workspace/solution-design/SolutionRepeatableItems.vue',
     'src/components/project-workspace/solution-design/SolutionReviewFormTable.vue',
     'src/components/project-workspace/solution-design/SolutionReviewNodePage.vue',
-    'src/pages/project-node/solution-design/SolutionFinanceCostPage.vue',
     'src/pages/project-node/solution-design/SolutionPreparationPage.vue',
     'src/pages/project-node/contract-signing/ContractAdvancePaymentPage.vue',
     'src/pages/project-node/contract-signing/ContractSigningPage.vue'
   ]),
   allowedDeepRoots: new Map([
+    ['src/components/approval/ApprovalBusinessSelection.vue', '.approval-business-selection__options'],
     ['src/components/project-workspace/solution-design/SolutionReviewFormTable.vue', '.review-form-table'],
-    ['src/pages/project-node/solution-design/SolutionFinanceCostPage.vue', '.finance-approval-flow__options']
   ]),
   expectedNativeButtons: new Map([
     ['src/layouts/MainLayout.vue', 4],

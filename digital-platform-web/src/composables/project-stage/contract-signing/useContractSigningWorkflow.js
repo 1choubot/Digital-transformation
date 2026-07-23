@@ -167,16 +167,6 @@ export function useContractSigningWorkflow({
   }
 
   async function approvePreparationSlot(slot) {
-    try {
-      await ElMessageBox.confirm(`确认通过“${slot.slotName}”吗？`, '审批确认', {
-        type: 'warning',
-        confirmButtonText: '审批通过',
-        cancelButtonText: '取消'
-      });
-    } catch {
-      return;
-    }
-
     await runAction(
       `approve:${slot.slotKey}`,
       () => approveContractSigningPreparationFile(id(), slot.slotKey, token()),
@@ -188,16 +178,6 @@ export function useContractSigningWorkflow({
     const reason = String(returnReasons[slot.slotKey] || '').trim();
     if (!reason) {
       ElMessage.error('请填写退回原因。');
-      return;
-    }
-
-    try {
-      await ElMessageBox.confirm(`确认退回“${slot.slotName}”吗？`, '退回确认', {
-        type: 'warning',
-        confirmButtonText: '确认退回',
-        cancelButtonText: '取消'
-      });
-    } catch {
       return;
     }
 

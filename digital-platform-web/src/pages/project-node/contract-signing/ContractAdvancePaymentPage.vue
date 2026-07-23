@@ -115,20 +115,12 @@
         @approve="handlePaymentReleaseApproval"
       >
         <template #selection="{ disabled }">
-          <el-radio-group v-model="paymentApprovalDecision" :disabled="disabled">
-            <el-radio
-              v-if="currentNode?.permissions?.canApprovePaymentReleasePaid"
-              value="paid"
-            >
-              客户已付款
-            </el-radio>
-            <el-radio
-              v-if="currentNode?.permissions?.canApprovePaymentReleaseUnpaid"
-              value="unpaid"
-            >
-              客户未付款
-            </el-radio>
-          </el-radio-group>
+          <ApprovalBusinessSelection
+            v-model="paymentApprovalDecision"
+            label="客户付款状态"
+            :options="paymentApprovalOptions"
+            :disabled="disabled"
+          />
         </template>
       </ApprovalActionCard>
     </div>
@@ -139,6 +131,7 @@
 import { computed, ref, watch } from 'vue';
 import GeneratedFormFileCard from '../../../components/GeneratedFormFileCard.vue';
 import ApprovalActionCard from '../../../components/approval/ApprovalActionCard.vue';
+import ApprovalBusinessSelection from '../../../components/approval/ApprovalBusinessSelection.vue';
 import ContractSigningNodeLayout from '../../../components/project-workspace/contract-signing/ContractSigningNodeLayout.vue';
 import {
   contractSigningNodePageProps,
@@ -168,6 +161,14 @@ const {
 } = useContractSigningNodePage(props, emit);
 
 const paymentApprovalDecision = ref('');
+const paymentApprovalOptions = computed(() => [
+  currentNode.value?.permissions?.canApprovePaymentReleasePaid
+    ? { label: '客户已付款', value: 'paid' }
+    : null,
+  currentNode.value?.permissions?.canApprovePaymentReleaseUnpaid
+    ? { label: '客户未付款', value: 'unpaid' }
+    : null
+].filter(Boolean));
 
 const kickoffNoticeDownloadFile = computed(() => {
   const generatedFile = kickoffNoticeGeneratedFile.value;

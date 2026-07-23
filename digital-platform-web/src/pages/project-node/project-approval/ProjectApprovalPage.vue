@@ -69,20 +69,12 @@
           @end="endReviewNode(reviewNode, $event)"
         >
           <template v-if="!isEvaluationNode(reviewNode)" #selection="{ disabled }">
-            <div class="initiation-review-general-mode">
-              <label class="initiation-review-field-label">
-                <strong>项目开展模式</strong>
-                <span class="required-mark">*</span>
-                <small>选择后才能处理审批</small>
-              </label>
-              <el-select
-                v-model="nodeProjectExecutionModes[reviewNode.nodeKey]"
-                placeholder="请选择项目开展模式"
-                :disabled="disabled"
-              >
-                <el-option v-for="option in projectExecutionModeOptions" :key="option" :label="option" :value="option" />
-              </el-select>
-            </div>
+            <ApprovalBusinessSelection
+              v-model="nodeProjectExecutionModes[reviewNode.nodeKey]"
+              label="项目开展模式"
+              :options="projectExecutionModeOptions"
+              :disabled="disabled"
+            />
           </template>
         </ApprovalActionCard>
       </div>
@@ -95,6 +87,7 @@
 <script setup>
 import { computed, reactive } from 'vue';
 import ApprovalActionCard from '../../../components/approval/ApprovalActionCard.vue';
+import ApprovalBusinessSelection from '../../../components/approval/ApprovalBusinessSelection.vue';
 import GeneratedFormFileCard from '../../../components/GeneratedFormFileCard.vue';
 import NodeOnlineFormEditor from '../../../components/node/NodeOnlineFormEditor.vue';
 import {
@@ -204,7 +197,10 @@ const hasActionableEvaluationNode = computed(() => actionableReviewNodes.value.s
 const nodeComments = reactive({});
 const nodeProjectExecutionModes = reactive({});
 const pendingReturnKinds = reactive({});
-const projectExecutionModeOptions = ['自研模式', '供应链模式'];
+const projectExecutionModeOptions = [
+  { label: '自研模式', value: '自研模式' },
+  { label: '供应链模式', value: '供应链模式' }
+];
 
 function downloadMarketResearchFile() {
   if (!marketResearchCompleted.value || !marketResearchGeneratedFile.value.canDownload) return;

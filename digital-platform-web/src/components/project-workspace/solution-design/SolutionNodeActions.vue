@@ -91,8 +91,16 @@ watch(
 .solution-node-submit-action {
   display: flex;
   justify-content: flex-end;
-  width: 100%;
+  width: 90%;
   min-width: 0;
+  margin-inline: auto;
+}
+
+@media (max-width: 640px) {
+  .solution-node-submit-action {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 
 </style>

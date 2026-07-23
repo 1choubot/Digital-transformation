@@ -13,14 +13,13 @@
         <slot name="selection" :disabled="busy" />
       </div>
 
-      <div class="approval-review-card__form">
-        <label v-if="showComment" class="approval-review-card__field-label">
+      <div v-if="showComment" class="approval-review-card__form">
+        <label class="approval-review-card__field-label">
           <strong>{{ commentLabel }}</strong>
           <span v-if="approveCommentRequired">*</span>
           <small v-else>{{ commentHint }}</small>
         </label>
         <el-input
-          v-if="showComment"
           :model-value="comment"
           type="textarea"
           :rows="3"
@@ -59,6 +58,36 @@
             {{ returnText }}
           </el-button>
         </div>
+      </div>
+
+      <div v-else class="approval-review-card__footer">
+        <el-button
+          v-if="canApprove"
+          type="primary"
+          :loading="pendingAction === 'approve'"
+          :disabled="actionState.approveDisabled"
+          @click="$emit('approve', actionState.normalizedComment)"
+        >
+          {{ approveText }}
+        </el-button>
+        <el-button
+          v-if="canEnd"
+          type="danger"
+          :loading="pendingAction === 'end'"
+          :disabled="actionState.endDisabled"
+          @click="$emit('end', actionState.normalizedComment)"
+        >
+          {{ endText }}
+        </el-button>
+        <el-button
+          v-if="canReturn"
+          type="warning"
+          :loading="pendingAction === 'return'"
+          :disabled="actionState.returnDisabled"
+          @click="$emit('return', actionState.normalizedComment)"
+        >
+          {{ returnText }}
+        </el-button>
       </div>
     </div>
 

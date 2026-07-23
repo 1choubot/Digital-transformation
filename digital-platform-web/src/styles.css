@@ -2191,10 +2191,6 @@ p {
   min-width: 0;
 }
 
-.project-approval-node-page .initiation-review-general-mode .el-select {
-  width: 100%;
-}
-
 .initiation-review-action-panel .initiation-review-nodes {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -2203,30 +2199,6 @@ p {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 10px;
-}
-
-.initiation-review-general-mode {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-}
-
-.initiation-review-field-label {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  color: #334252;
-  font-size: 13px;
-}
-
-.initiation-review-field-label small {
-  color: #7a8998;
-  font-size: 12px;
-  font-weight: 400;
-}
-
-.initiation-review-field-label .required-mark {
-  color: #f56c6c;
 }
 
 .project-workspace__stage-nav {
@@ -2452,11 +2424,6 @@ p {
 .online-form-review-opinions {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: stretch;
-}
-
-.initiation-review-general-mode {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
 }
 
 .online-form-review-opinions--two-column {

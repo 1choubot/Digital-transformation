@@ -46,6 +46,10 @@ test('contract approvals use the shared approval card for review, customer retur
     new URL('../src/components/project-workspace/contract-signing/ContractUploadSlots.vue', import.meta.url),
     'utf8'
   );
+  const solutionUploadSlots = readFileSync(
+    new URL('../src/components/project-workspace/solution-design/SolutionUploadSlots.vue', import.meta.url),
+    'utf8'
+  );
   const preparationPage = readFileSync(
     new URL('../src/pages/project-node/contract-signing/ContractPreparationPage.vue', import.meta.url),
     'utf8'
@@ -64,6 +68,14 @@ test('contract approvals use the shared approval card for review, customer retur
   assert.match(approvalCard, /if \(props\.canReturn\) return '退回原因必填'/);
   assert.doesNotMatch(uploadSlots, /<ApprovalActionCard/);
   assert.doesNotMatch(uploadSlots, /@click="\$emit\('approve'/);
+  assert.match(uploadSlots, /\{\{\s*uploadButtonText\(slot\)\s*\}\}/);
+  assert.match(uploadSlots, /slot\.status === 'returned' \? '整改重传' : '上传\/替换'/);
+  assert.match(solutionUploadSlots, /\{\{\s*uploadButtonText\(slot\)\s*\}\}/);
+  assert.match(solutionUploadSlots, /slot\.isReturnedForRework \? '整改重传' : '上传\/替换'/);
+  assert.match(uploadSlots, /canDownload[\s\S]{0,180}type="primary"/);
+  assert.doesNotMatch(uploadSlots, /canDownload[\s\S]{0,180}type="primary"\s+plain/);
+  assert.match(uploadSlots, /\.contract-upload-table__actions\s*\{[\s\S]*?gap:\s*var\(--app-space-3\)/);
+  assert.match(uploadSlots, /\.contract-upload-table__actions\s*>\s*\*\s*\{[\s\S]*?width:\s*auto/);
   assert.match(preparationPage, /<ApprovalActionCard/);
   assert.ok(preparationPage.indexOf('<ApprovalActionCard') > preparationPage.indexOf('<ContractUploadSlots'));
   assert.equal(signingPage.match(/<ApprovalActionCard/g)?.length, 2);

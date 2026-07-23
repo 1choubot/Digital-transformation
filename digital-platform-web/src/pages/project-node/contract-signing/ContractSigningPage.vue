@@ -1,78 +1,33 @@
 <template>
-  <ContractSigningNodeLayout
-    :project-id="projectId"
-    :workflow="workflow"
-    :node="currentNode"
-    :stage="stage"
-    :loading="loading"
-    :error-message="errorMessage"
-  >
-    <ContractSigningSection
-      v-if="hasCustomerReturnActions"
-      eyebrow="客户退回"
-      title="源合同文件处理"
-      tone="danger"
-    >
+  <ContractSigningNodeLayout :project-id="projectId" :workflow="workflow" :node="currentNode" :stage="stage"
+    :loading="loading" :error-message="errorMessage">
+    <ContractSigningSection v-if="hasCustomerReturnActions" eyebrow="客户退回" title="源合同文件处理" tone="danger">
       <div class="contract-customer-return-list">
-        <ApprovalActionCard
-          v-if="currentNode?.permissions?.canReturnTechnicalAgreementForCustomer"
-          title="技术协议客户退回"
-          description="根据客户意见将技术协议返回准备节点整改。"
-          status-text="客户退回处理"
-          status-type="danger"
-          :comment="returnReasons.technical_agreement || ''"
-          comment-label="客户退回原因"
-          :comment-max-length="1000"
-          :can-return="true"
-          :busy="isPending('signing:return-technical-agreement')"
-          :pending-action="isPending('signing:return-technical-agreement') ? 'return' : ''"
-          return-text="退回技术协议"
-          @update:comment="returnReasons.technical_agreement = $event"
-          @return="handleTechnicalAgreementReturn"
-        />
+        <ApprovalActionCard v-if="currentNode?.permissions?.canReturnTechnicalAgreementForCustomer" title="技术协议客户退回"
+          description="根据客户意见将技术协议返回准备节点整改。" status-text="客户退回处理" status-type="danger"
+          :comment="returnReasons.technical_agreement || ''" comment-label="客户退回原因" :comment-max-length="1000"
+          :can-return="true" :busy="isPending('signing:return-technical-agreement')"
+          :pending-action="isPending('signing:return-technical-agreement') ? 'return' : ''" return-text="退回技术协议"
+          @update:comment="returnReasons.technical_agreement = $event" @return="handleTechnicalAgreementReturn" />
 
-        <ApprovalActionCard
-          v-if="currentNode?.permissions?.canReturnSalesContractForCustomer"
-          title="销售合同客户退回"
-          description="根据客户意见将销售合同返回准备节点整改。"
-          status-text="客户退回处理"
-          status-type="danger"
-          :comment="returnReasons.sales_contract || ''"
-          comment-label="客户退回原因"
-          :comment-max-length="1000"
-          :can-return="true"
-          :busy="isPending('signing:return-sales-contract')"
-          :pending-action="isPending('signing:return-sales-contract') ? 'return' : ''"
-          return-text="退回销售合同"
-          @update:comment="returnReasons.sales_contract = $event"
-          @return="handleSalesContractReturn"
-        />
+        <ApprovalActionCard v-if="currentNode?.permissions?.canReturnSalesContractForCustomer" title="销售合同客户退回"
+          description="根据客户意见将销售合同返回准备节点整改。" status-text="客户退回处理" status-type="danger"
+          :comment="returnReasons.sales_contract || ''" comment-label="客户退回原因" :comment-max-length="1000"
+          :can-return="true" :busy="isPending('signing:return-sales-contract')"
+          :pending-action="isPending('signing:return-sales-contract') ? 'return' : ''" return-text="退回销售合同"
+          @update:comment="returnReasons.sales_contract = $event" @return="handleSalesContractReturn" />
       </div>
     </ContractSigningSection>
 
-    <ContractUploadSlots
-      :slots="slots"
-      section-title="技术协议扫描件 / 销售合同扫描件"
-      :is-pending="isPending"
-      @upload="handleUpload"
-      @download="downloadUpload"
-    />
-
-    <ContractSigningSection
-      v-if="currentNode?.permissions?.canCompleteSigning"
-      eyebrow="节点动作"
-      title="签订完成"
-    >
-      <template #actions>
-          <el-button
-            type="primary"
-            :loading="isPending('signing:complete')"
-            @click="completeSigning"
-          >
-            完成
-          </el-button>
-      </template>
-    </ContractSigningSection>
+    <ContractUploadSlots :slots="slots" section-title="技术协议扫描件 / 销售合同扫描件" :is-pending="isPending" @upload="handleUpload"
+      @download="downloadUpload" />
+    <div class="actions">
+      <el-button v-if="currentNode?.permissions?.canCompleteSigning" type="primary"
+        :loading="isPending('signing:complete')" @click="completeSigning">
+        完成
+      </el-button>
+    </div>
+  
   </ContractSigningNodeLayout>
 </template>
 
@@ -134,5 +89,11 @@ function handleSalesContractReturn(comment) {
   .contract-customer-return-list {
     grid-template-columns: 1fr;
   }
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--app-space-3);
 }
 </style>

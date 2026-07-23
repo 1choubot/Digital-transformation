@@ -36,6 +36,9 @@ export function hasCurrentProductFunctionDiagram(slots = []) {
 export function buildNodeUploadSlots(allSlots, nodeKey, workflow = null) {
   const slots = Array.isArray(allSlots) ? allSlots : [];
   const costSlotKeys = costSlotKeysByNode[nodeKey];
+  const nodeReturned = workflow?.nodes?.some(
+    (node) => node.nodeKey === nodeKey && node.status === 'returned'
+  ) === true;
   const visibleSlots = costSlotKeys
     ? slots.filter((item) => costSlotKeys.includes(item.slotKey))
     : slots.filter((item) => item.nodeKey === nodeKey);
@@ -46,6 +49,9 @@ export function buildNodeUploadSlots(allSlots, nodeKey, workflow = null) {
       item.slotKey === 'quotation_file' &&
       workflow?.quotationTender?.branchType === 'quotation'
     ))
-    .map((item) => costSlotKeys && item.nodeKey !== nodeKey ? asReadOnlyDownloadSlot(item) : item)
+    .map((item) => ({
+      ...(costSlotKeys && item.nodeKey !== nodeKey ? asReadOnlyDownloadSlot(item) : item),
+      isReturnedForRework: nodeReturned && item.nodeKey === nodeKey
+    }))
     .sort((a, b) => Number(a.slotOrder || 0) - Number(b.slotOrder || 0));
 }

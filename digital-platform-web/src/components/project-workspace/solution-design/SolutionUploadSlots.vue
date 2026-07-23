@@ -15,7 +15,9 @@
         <div class="slot-actions" role="cell">
           <el-upload v-if="slot.permissions?.canUpload" :show-file-list="false" :auto-upload="true"
             :http-request="options => requestUpload(slot, options)">
-            <el-button type="primary" :loading="isPending(`upload:${slot.slotKey}`)">上传/替换</el-button>
+            <el-button type="primary" :loading="isPending(`upload:${slot.slotKey}`)">
+              {{ uploadButtonText(slot) }}
+            </el-button>
           </el-upload>
           <el-button v-if="slot.permissions?.canMarkExemption" plain
             :loading="isPending(`exemption:mark:${slot.slotKey}`)"
@@ -51,5 +53,9 @@ function displayFileName(slot) {
   }
 
   return slot.currentFileHidden ? '文件信息已隐藏' : '-';
+}
+
+function uploadButtonText(slot) {
+  return slot.isReturnedForRework ? '整改重传' : '上传/替换';
 }
 </script>

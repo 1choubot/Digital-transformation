@@ -61,6 +61,16 @@ test('the immediate predecessor is read-only while the current slot keeps its pe
   assert.deepEqual(currentSlot.permissions, costSlots[2].permissions);
 });
 
+test('a returned node marks only its own upload slot for rework', () => {
+  const slots = buildNodeUploadSlots(costSlots, 'marketing_cost_estimation', {
+    nodes: [{ nodeKey: 'marketing_cost_estimation', status: 'returned' }]
+  });
+  const [previousSlot, currentSlot] = slots;
+
+  assert.equal(previousSlot.isReturnedForRework, false);
+  assert.equal(currentSlot.isReturnedForRework, true);
+});
+
 test('product function diagram gate only accepts a slot with a current file', () => {
   assert.equal(hasCurrentProductFunctionDiagram([]), false);
   assert.equal(hasCurrentProductFunctionDiagram([

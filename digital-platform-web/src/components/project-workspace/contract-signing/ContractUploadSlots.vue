@@ -5,7 +5,6 @@
       <div class="contract-upload-table__head" role="row">
         <span role="columnheader">上传内容</span>
         <span role="columnheader">文件信息</span>
-        <span role="columnheader">状态</span>
         <span role="columnheader">操作</span>
       </div>
 
@@ -22,11 +21,6 @@
               {{ formatDateTime(slot.currentFile.uploadedAt) }}
             </small>
           </div>
-          <div class="contract-upload-table__status" role="cell">
-            <el-tag size="small" :type="contractSlotStatusTagType(slot.status)">
-              {{ contractUploadSlotStatusText[slot.status] || slot.status }} · v{{ slot.revision || 1 }}
-            </el-tag>
-          </div>
           <div class="contract-upload-table__actions" role="cell">
             <el-upload
               v-if="slot.permissions?.canUpload"
@@ -41,7 +35,6 @@
             <el-button
               v-if="slot.currentFile && slot.permissions?.canDownload"
               type="primary"
-              plain
               :loading="isPending(`download:${slot.slotKey}`)"
               @click="$emit('download', slot)"
             >
@@ -49,18 +42,6 @@
             </el-button>
           </div>
         </div>
-
-        <div v-if="slot.returnReason" class="contract-upload-table__feedback" role="row">
-          <div role="cell">
-            <el-alert
-              :title="`退回原因：${slot.returnReason}`"
-              type="warning"
-              show-icon
-              :closable="false"
-            />
-          </div>
-        </div>
-
       </div>
     </div>
   </section>
@@ -68,8 +49,6 @@
 
 <script setup>
 import {
-  contractSlotStatusTagType,
-  contractUploadSlotStatusText,
   formatDateTime,
   formatFileSize,
   formatUser
@@ -86,13 +65,6 @@ defineProps({
   isPending: { type: Function, required: true }
 });
 
-function uploadButtonText(slot) {
-  if (slot.status === 'returned') {
-    return '整改重传';
-  }
-  return slot.currentFile ? '重新上传' : '上传';
-}
-
 function requestUpload(slot, options) {
   emit('upload', slot, { target: { files: [options.file], value: '' } });
   options.onSuccess?.({});
@@ -100,7 +72,11 @@ function requestUpload(slot, options) {
 }
 
 function displayFileName(slot) {
-  return slot.currentFile?.originalFileName || '暂无当前有效文件';
+  return slot.currentFile?.originalFileName || '-';
+}
+
+function uploadButtonText(slot) {
+  return slot.status === 'returned' ? '整改重传' : '上传/替换';
 }
 
 </script>
@@ -128,7 +104,7 @@ function displayFileName(slot) {
 .contract-upload-table__head,
 .contract-upload-table__row {
   display: grid;
-  grid-template-columns: minmax(140px, 0.8fr) minmax(220px, 1.4fr) minmax(130px, 0.7fr) minmax(240px, 1.2fr);
+  grid-template-columns: 200px minmax(260px, 1fr) 264px;
   align-items: center;
   gap: var(--app-space-3);
   min-width: 0;
@@ -175,8 +151,14 @@ function displayFileName(slot) {
 .contract-upload-table__actions {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   flex-wrap: wrap;
-  gap: var(--app-space-2);
+  gap: var(--app-space-3);
+}
+
+.contract-upload-table__actions > * {
+  width: auto;
+  flex: 0 0 auto;
 }
 
 .contract-upload-table__feedback {
@@ -194,13 +176,16 @@ function displayFileName(slot) {
     grid-template-columns: minmax(100px, 0.8fr) minmax(0, 1.2fr);
   }
 
-  .contract-upload-table__head > :nth-child(n + 3) {
+  .contract-upload-table__head > :last-child {
     display: none;
   }
 
-  .contract-upload-table__status,
   .contract-upload-table__actions {
     grid-column: 1 / -1;
+  }
+
+  .contract-upload-table__actions {
+    justify-content: flex-start;
   }
 
 }

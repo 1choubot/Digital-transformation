@@ -25,7 +25,7 @@ function scoreText(report) {
     parts.push(`参考评分 ${aiScore.totalScore}${aiScore.grade ? ` / ${aiScore.grade}` : ''}`);
   }
   if (report.finalScore !== undefined && report.finalScore !== null) {
-    parts.push(`最终评分 ${report.finalScore}${report.finalGrade ? ` / ${report.finalGrade}` : ''}`);
+    parts.push(`最终评分 ${report.finalScore}`);
   }
   return parts.join('；') || '-';
 }
@@ -84,7 +84,6 @@ function buildWeeklyReportRows({ report, user }) {
     ['参考评分时间', report.aiEvaluatedAt || '-'],
     ['参考评分失败原因', report.aiEvaluationError || '-'],
     ['最终评分', report.finalScore ?? '-'],
-    ['最终等级', report.finalGrade || '-'],
     ['最终评语', report.finalComment || '-'],
     ['最终评审人', report.finalReviewedByName || '-'],
     ['最终评审时间', report.finalReviewedAt || '-']

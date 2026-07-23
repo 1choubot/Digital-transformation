@@ -91,7 +91,6 @@ export function mapWeeklyReportRow(row) {
     aiEvaluationSource: row.ai_evaluation_source,
     aiEvaluationError: row.ai_evaluation_error,
     finalScore: row.final_score === null || row.final_score === undefined ? null : Number(row.final_score),
-    finalGrade: row.final_grade,
     finalComment: row.final_comment,
     finalReviewedByUserId: row.final_reviewed_by_user_id,
     finalReviewedByName: row.final_reviewer_display_name || row.final_reviewer_account || null,
@@ -1037,14 +1036,13 @@ export async function saveWeeklyReportFinalReview({ reportId, evaluatorUser, fin
   await pool.execute(
     `UPDATE weekly_reports
     SET final_score = ?,
-      final_grade = ?,
+      final_grade = NULL,
       final_comment = ?,
       final_reviewed_by_user_id = ?,
       final_reviewed_at = NOW()
     WHERE id = ?`,
     [
       finalReview.finalScore,
-      finalReview.finalGrade,
       finalReview.finalComment,
       evaluatorUser.id,
       reportId
@@ -1181,7 +1179,6 @@ export async function listWeeklyComparisonOverview({ weekStart, weekEnd, departm
       wr.ai_evaluated_at,
       wr.ai_evaluation_source,
       wr.final_score,
-      wr.final_grade,
       wr.final_comment,
       wr.final_reviewed_by_user_id,
       wr.final_reviewed_at,
@@ -1229,7 +1226,6 @@ export async function listWeeklyComparisonOverview({ weekStart, weekEnd, departm
       evaluationSource: row.ai_evaluation_source,
       evaluatedAt: dateTime(row.ai_evaluated_at),
       finalScore: row.final_score === null || row.final_score === undefined ? null : Number(row.final_score),
-      finalGrade: row.final_grade,
       finalComment: row.final_comment,
       finalReviewedByUserId: row.final_reviewed_by_user_id,
       finalReviewedByName: row.final_reviewer_display_name || row.final_reviewer_account || null,

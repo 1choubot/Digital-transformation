@@ -335,7 +335,6 @@ test('weekly report export writes scoring fields and reports controlled export f
         aiScore: { totalScore: 86, grade: 'B' },
         aiEvaluationSource: 'fallback_rule',
         finalScore: 88,
-        finalGrade: 'B',
         finalComment: '符合预期'
       },
       user: { account: 'employee', name: '员工', department: 'rd_center', role: '工程师' }
@@ -345,6 +344,7 @@ test('weekly report export writes scoring fields and reports controlled export f
 
     assert.match(worksheet, /周绩效考核表/);
     assert.match(worksheet, /最终评分/);
+    assert.doesNotMatch(worksheet, /最终等级/);
     assert.match(worksheet, /符合预期/);
     await cleanupReportExportFile(download.filePath);
   });
@@ -659,21 +659,27 @@ test('weekly scoring and final review permissions follow current organization ro
   assert.equal(canFinalizeWeeklyReport(generalManager, targetCenterManager), true);
 });
 
-test('weekly final review payload validates score and grade boundaries', () => {
+test('weekly final review payload keeps only score and comment', () => {
   assert.deepEqual(normalizeWeeklyFinalReviewPayload({ finalScore: 88.456, finalGrade: 'B', finalComment: '通过' }), {
     finalScore: 88.46,
-    finalGrade: 'B',
     finalComment: '通过'
   });
 
   assert.throws(
-    () => normalizeWeeklyFinalReviewPayload({ finalScore: 101, finalGrade: 'A' }),
+    () => normalizeWeeklyFinalReviewPayload({ finalScore: 101 }),
     (error) => error.code === WEEKLY_REPORT_ERROR.INVALID_FINAL_REVIEW
   );
-  assert.throws(
-    () => normalizeWeeklyFinalReviewPayload({ finalScore: 80, finalGrade: 'S' }),
-    (error) => error.code === WEEKLY_REPORT_ERROR.INVALID_FINAL_REVIEW
+});
+
+test('weekly final review persistence clears the legacy grade column', async () => {
+  const source = await fs.readFile(
+    new URL('../../src/repositories/weeklyReportRepository.js', import.meta.url),
+    'utf8'
   );
+  const saveBlock = /export async function saveWeeklyReportFinalReview[\s\S]+?return getWeeklyReportByIdForSystem\(reportId\);/m.exec(source)?.[0] || '';
+
+  assert.match(saveBlock, /final_grade\s*=\s*NULL/);
+  assert.doesNotMatch(saveBlock, /finalReview\.finalGrade/);
 });
 
 test('weekly return and content update paths invalidate cached scoring fields', async () => {

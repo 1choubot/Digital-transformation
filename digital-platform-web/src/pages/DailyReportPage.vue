@@ -179,10 +179,16 @@
         <section class="daily-section daily-attachments" @paste="handlePaste">
           <div class="daily-section__heading">
             <h3>进展照片</h3>
-            <el-upload :show-file-list="false" accept="image/*" :disabled="uploading || saving" :http-request="uploadAttachment">
-              <el-button :loading="uploading" :disabled="saving">上传照片</el-button>
-            </el-upload>
           </div>
+          <el-upload
+            class="daily-attachment-upload"
+            :show-file-list="false"
+            accept="image/*"
+            :disabled="uploading || saving"
+            :http-request="uploadAttachment"
+          >
+            <el-button type="primary" :loading="uploading" :disabled="saving">上传图片</el-button>
+          </el-upload>
 
           <div v-if="savedReport">
             <ul v-if="savedReport.attachments?.length" class="daily-attachment-list">

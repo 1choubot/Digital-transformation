@@ -210,7 +210,7 @@ TBD - created by archiving change integrate-daily-weekly-reporting-from-legacy-b
 #### Scenario: 最终人工评分
 - **WHEN** 有最终评审权限的用户保存最终评分
 - **THEN** 后端 MUST 校验评分权限和周报状态
-- **AND** 后端 MUST 保存最终分数、等级、评语、评审人和评审时间
+- **AND** 后端 MUST 保存最终分数、评语、评审人和评审时间
 - **AND** 前端 MUST 展示最终评分和最终评审信息
 
 #### Scenario: 打回和再提交后的评分处理

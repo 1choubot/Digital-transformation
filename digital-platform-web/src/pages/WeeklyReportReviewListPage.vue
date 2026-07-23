@@ -61,7 +61,7 @@
             <span>最终评分</span>
             <span>参考评分</span>
             <span>审批人</span>
-            <span class="text-right">操作</span>
+            <span>操作</span>
           </div>
           <div v-for="row in overviewRows" :key="row.reportId" class="weekly-overview-table__row">
             <strong>{{ row.userName }}</strong>
@@ -70,7 +70,7 @@
             <span>{{ overviewFinalScoreText(row) }}</span>
             <span>{{ overviewReferenceScoreText(row) }}</span>
             <span>{{ row.approvalReviewedByName || '-' }}</span>
-            <el-button link type="primary" @click="navigate(`/weekly-report-review/${row.reportId}?from=overview`)">审核</el-button>
+            <el-button type="primary" @click="navigate(`/weekly-report-review/${row.reportId}?from=overview`)">审核</el-button>
           </div>
         </div>
       </div>
@@ -154,7 +154,7 @@ function overviewFinalScoreText(row) {
   if (row.finalScore === null || row.finalScore === undefined) {
     return '待最终评分';
   }
-  return `${row.finalScore}${row.finalGrade ? ` / ${row.finalGrade}` : ''}`;
+  return String(row.finalScore);
 }
 
 function overviewReferenceScoreText(row) {

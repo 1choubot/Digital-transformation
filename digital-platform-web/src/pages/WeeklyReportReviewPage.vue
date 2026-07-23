@@ -11,15 +11,22 @@
     <template v-else-if="report">
       <!-- 周报摘要信息（包含被考评人 + 操作按钮） -->
       <section class="panel weekly-review-summary">
-        <div class="panel-toolbar">
-          <div class="toolbar-info">
-            <span class="evaluatee-name">被考评人：{{ targetUserName }}</span>
-            <span class="divider">|</span>
-            <strong class="toolbar-title">{{ report.weekStart }} 至 {{ report.weekEnd }}</strong>
-            <el-tag :type="approvalStatusTagType(report.approvalStatus)">
-              {{ approvalStatusLabel(report.approvalStatus) }}
-            </el-tag>
-            <span class="toolbar-subtitle">评分：{{ finalScoreText }}</span>
+        <div class="panel-toolbar weekly-review-summary__toolbar">
+          <div class="weekly-review-summary__identity">
+            <span class="weekly-review-summary__eyebrow">被考评人</span>
+            <div class="weekly-review-summary__title-row">
+              <strong class="weekly-review-summary__name">{{ targetUserName }}</strong>
+              <span class="weekly-review-summary__period">{{ report.weekStart }} 至 {{ report.weekEnd }}</span>
+            </div>
+            <div class="weekly-review-summary__badges">
+              <el-tag :type="approvalStatusTagType(report.approvalStatus)">
+                {{ approvalStatusLabel(report.approvalStatus) }}
+              </el-tag>
+              <span class="weekly-review-score">
+                <span>最终评分</span>
+                <strong>{{ finalScoreText }}</strong>
+              </span>
+            </div>
           </div>
           <div class="toolbar-actions">
             <el-button @click="navigate(returnPath)">返回列表</el-button>
@@ -33,36 +40,40 @@
           </div>
         </div>
         <div class="panel-body">
-          <div class="weekly-review-meta">
+          <dl class="weekly-review-meta">
             <div class="meta-item">
-              <span class="meta-label">审批状态</span>
-              <strong class="meta-value">{{ approvalStatusLabel(report.approvalStatus) }}</strong>
+              <dt>审批状态</dt>
+              <dd>{{ approvalStatusLabel(report.approvalStatus) }}</dd>
             </div>
             <div class="meta-item">
-              <span class="meta-label">审批人</span>
-              <strong class="meta-value">{{ approvalReviewerText }}</strong>
+              <dt>审批人</dt>
+              <dd>{{ approvalReviewerText }}</dd>
             </div>
             <div class="meta-item">
-              <span class="meta-label">审批时间</span>
-              <strong class="meta-value">{{ formatDateTime(report.approvalReviewedAt) }}</strong>
+              <dt>审批时间</dt>
+              <dd>{{ formatDateTime(report.approvalReviewedAt) }}</dd>
             </div>
             <div class="meta-item">
-              <span class="meta-label">评分人</span>
-              <strong class="meta-value">{{ finalReviewerText }}</strong>
+              <dt>评分人</dt>
+              <dd>{{ finalReviewerText }}</dd>
             </div>
             <div class="meta-item">
-              <span class="meta-label">评分时间</span>
-              <strong class="meta-value">{{ formatDateTime(report.finalReviewedAt) }}</strong>
+              <dt>评分时间</dt>
+              <dd>{{ formatDateTime(report.finalReviewedAt) }}</dd>
             </div>
-            <div class="meta-item">
-              <span class="meta-label">等级</span>
-              <strong class="meta-value">{{ report.finalGrade || '-' }}</strong>
-            </div>
+          </dl>
+          <el-alert
+            v-if="report.approvalComment"
+            class="weekly-review-return-alert"
+            :title="`打回原因：${report.approvalComment}`"
+            type="warning"
+            show-icon
+            :closable="false"
+          />
+          <div v-if="report.finalComment" class="weekly-review-final-comment">
+            <strong>最终评语</strong>
+            <p>{{ report.finalComment }}</p>
           </div>
-          <p v-if="report.approvalComment" class="final-comment final-comment--approval">
-            打回原因：{{ report.approvalComment }}
-          </p>
-          <p v-if="report.finalComment" class="final-comment">{{ report.finalComment }}</p>
         </div>
       </section>
 
@@ -76,6 +87,7 @@
         </div>
         <div class="table-container report-table-scroll">
           <el-table :data="report.summaries" :row-key="row => row.id || row.sortOrder" class="report-data-table report-data-table--review-summaries">
+            <template #empty><el-empty description="暂无本周工作总结" :image-size="64" /></template>
             <el-table-column label="项目" min-width="220"><template #default="{ row: summary }">
               <div class="summary-project-cell">
                 <div class="source-chip-row source-chip-row--readonly">
@@ -109,6 +121,7 @@
         </div>
         <div class="table-container report-table-scroll">
           <el-table :data="report.plans" :row-key="row => row.id || row.sortOrder" class="report-data-table report-data-table--review-plans">
+            <template #empty><el-empty description="暂无下周工作计划" :image-size="64" /></template>
             <el-table-column label="工作任务" min-width="260"><template #default="{ row }"><strong>{{ row.workTask }}</strong></template></el-table-column>
             <el-table-column prop="workTarget" label="工作目标" min-width="240" />
             <el-table-column prop="plannedDate" label="计划日期" min-width="160" />
@@ -258,12 +271,6 @@
                 controls-position="right"
               />
             </div>
-            <div class="form-field">
-              <span class="field-label">等级</span>
-              <el-select v-model="finalReviewForm.finalGrade" :disabled="!canEditFinalReview" clearable placeholder="请选择">
-                <el-option v-for="grade in finalGradeOptions" :key="grade" :label="grade" :value="grade" />
-              </el-select>
-            </div>
             <div class="form-field form-field--full">
               <span class="field-label">评语</span>
               <el-input
@@ -298,7 +305,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import ApprovalActionCard from '../components/approval/ApprovalActionCard.vue';
-import { OrganizationRole, ReportStatus, WeeklyApprovalStatus } from '../constants/reports.js';
+import { OrganizationRole, WeeklyApprovalStatus } from '../constants/reports.js';
 import {
   exportWeeklyReport,
   getWeeklyReport,
@@ -306,7 +313,6 @@ import {
   saveWeeklyReportFinalReview,
   toReadableApiError
 } from '../api/weeklyReports.js';
-import { formatBusinessDepartment } from '../utils/format.js';
 
 const props = defineProps({
   authToken: {
@@ -348,25 +354,15 @@ const targetUser = ref(null);
 const errorMessage = ref('');
 const finalReviewForm = reactive({
   finalScore: null,
-  finalGrade: '',
   finalComment: ''
 });
 const approvalForm = reactive({
   comment: ''
 });
 const approvalPendingAction = ref('');
-const finalGradeOptions = ['A', 'B', 'C', 'D', 'E'];
-
 const targetUserName = computed(() => targetUser.value?.displayName || targetUser.value?.account || '-');
-const targetDepartment = computed(() => formatBusinessDepartment(targetUser.value?.department));
 const isEmployeeTarget = computed(() => targetUser.value?.organizationRole === OrganizationRole.EMPLOYEE);
 const isCenterManagerTarget = computed(() => targetUser.value?.organizationRole === OrganizationRole.CENTER_MANAGER);
-
-// 页面标题显示“被考评人：xxx”（已移至摘要面板，此处保留以备他用）
-const pageTitleDisplay = computed(() => {
-  const name = targetUserName.value || '用户';
-  return `被考评人：${name}`;
-});
 
 const showEmployeeReviewTools = computed(
   () => props.currentUser.organizationRole === OrganizationRole.CENTER_MANAGER && isEmployeeTarget.value
@@ -392,7 +388,7 @@ const finalScoreText = computed(() => {
   if (report.value?.finalScore === null || report.value?.finalScore === undefined) {
     return '待评分';
   }
-  return `${report.value.finalScore}${report.value.finalGrade ? ` / ${report.value.finalGrade}` : ''}`;
+  return String(report.value.finalScore);
 });
 const finalReviewerText = computed(() => {
   if (report.value?.finalReviewedByName) {
@@ -407,14 +403,6 @@ const approvalReviewerText = computed(() => {
   return report.value?.approvalReviewedByUserId ? `用户 ${report.value.approvalReviewedByUserId}` : '-';
 });
 
-function statusLabel(status) {
-  return status === ReportStatus.SUBMITTED ? '已提交' : '草稿';
-}
-
-function statusClass(status) {
-  return status === ReportStatus.SUBMITTED ? 'status-badge--done' : 'status-badge--draft';
-}
-
 // Approval state is the business status shown on review pages.
 function approvalStatusLabel(status) {
   const labels = {
@@ -424,17 +412,6 @@ function approvalStatusLabel(status) {
     [WeeklyApprovalStatus.RETURNED]: '已打回'
   };
   return labels[status] || labels[WeeklyApprovalStatus.NOT_SUBMITTED];
-}
-
-// Approval status classes share the existing compact badge component.
-function approvalStatusClass(status) {
-  const classes = {
-    [WeeklyApprovalStatus.NOT_SUBMITTED]: 'status-badge--draft',
-    [WeeklyApprovalStatus.PENDING]: 'status-badge--pending',
-    [WeeklyApprovalStatus.APPROVED]: 'status-badge--done',
-    [WeeklyApprovalStatus.RETURNED]: 'status-badge--returned'
-  };
-  return classes[status] || classes[WeeklyApprovalStatus.NOT_SUBMITTED];
 }
 
 function approvalStatusTagType(status) {
@@ -520,7 +497,6 @@ function applyReport(result) {
   report.value = result.report;
   targetUser.value = result.targetUser;
   finalReviewForm.finalScore = result.report.finalScore ?? null;
-  finalReviewForm.finalGrade = result.report.finalGrade || '';
   finalReviewForm.finalComment = result.report.finalComment || '';
   approvalForm.comment = result.report.approvalComment || '';
 }
@@ -566,7 +542,6 @@ async function saveFinalReview() {
       props.reportId,
       {
         finalScore: finalReviewForm.finalScore,
-        finalGrade: finalReviewForm.finalGrade,
         finalComment: finalReviewForm.finalComment
       },
       props.authToken

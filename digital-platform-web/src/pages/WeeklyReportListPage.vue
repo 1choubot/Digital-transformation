@@ -226,7 +226,7 @@ function finalScoreText(report) {
   if (report.finalScore === null || report.finalScore === undefined) {
     return '待最终评分';
   }
-  return `${report.finalScore}${report.finalGrade ? ` / ${report.finalGrade}` : ''}`;
+  return String(report.finalScore);
 }
 
 function saveBlob(download, fallbackName) {

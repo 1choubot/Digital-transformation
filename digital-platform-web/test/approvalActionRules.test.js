@@ -187,11 +187,11 @@ test('only online form submission and explicit contract risks keep confirmation 
     assert.match(source, /confirmButtonText:\s*'确认提交'/);
   }
   assert.equal(contractRiskConfirmationFiles.length, 1);
-  assert.equal(contractRiskConfirmationFiles[0].source.match(/ElMessageBox\.confirm\s*\(/g)?.length, 7);
+  assert.equal(contractRiskConfirmationFiles[0].source.match(/ElMessageBox\.confirm\s*\(/g)?.length, 6);
   assert.doesNotMatch(contractRiskConfirmationFiles[0].source, /,\s*'审批确认'\s*,/);
   assert.doesNotMatch(contractRiskConfirmationFiles[0].source, /,\s*'退回确认'\s*,/);
   assert.match(contractRiskConfirmationFiles[0].source, /客户退回确认/);
-  assert.match(contractRiskConfirmationFiles[0].source, /签订完成确认/);
+  assert.doesNotMatch(contractRiskConfirmationFiles[0].source, /签订完成确认/);
   assert.match(contractRiskConfirmationFiles[0].source, /预付款处理/);
   assert.match(contractRiskConfirmationFiles[0].source, /总经理放行/);
   for (const { path, source } of [...files, projectDetailLayout]) {

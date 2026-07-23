@@ -246,16 +246,6 @@ export function useContractSigningWorkflow({
   }
 
   async function completeSigning() {
-    try {
-      await ElMessageBox.confirm('确认两份扫描件已齐备，并完成签订协议和合同节点吗？', '签订完成确认', {
-        type: 'warning',
-        confirmButtonText: '完成',
-        cancelButtonText: '取消'
-      });
-    } catch {
-      return;
-    }
-
     await runAction(
       'signing:complete',
       () => completeContractSigningNode(id(), token()),

@@ -85,8 +85,17 @@ function handleSalesContractReturn(comment) {
 }
 
 .actions {
+  width: 90%;
+  margin-inline: auto;
   display: flex;
   justify-content: flex-end;
   margin-top: var(--app-space-3);
+}
+
+@media (max-width: 640px) {
+  .actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 </style>

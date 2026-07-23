@@ -30,7 +30,7 @@ export const DEFAULT_STYLE_POLICY = Object.freeze({
     ['src/components/project-workspace/ProjectWorkspaceNodeList.vue', 1],
     ['src/components/project-workspace/ProjectWorkspaceStageNav.vue', 1]
   ]),
-  maxStylesCssLines: 7141,
+  maxStylesCssLines: 6710,
   maxStylesCssImportant: 16
 });
 

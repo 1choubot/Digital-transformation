@@ -2,11 +2,11 @@
   <el-container class="app-shell">
     <el-header class="app-header">
       <div class="brand-logo-area">
-        <img class="company-logo" :src="companyLogo" alt="重庆凯尔夫智能测控技术有限责任公司 Logo" />
-        <div class="brand-text">
+        <div class="brand-primary-row">
+          <img class="company-logo" :src="companyLogo" alt="重庆凯尔夫智能测控技术有限责任公司 Logo" />
           <span class="brand-title">数字化管理平台</span>
-          <span class="brand-subtitle">重庆凯尔夫智能测控技术</span>
         </div>
+        <span class="brand-subtitle">重庆凯尔夫智能测控技术有限责任公司</span>
       </div>
 
       <div class="header-main">

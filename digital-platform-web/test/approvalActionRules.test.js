@@ -68,13 +68,21 @@ test('contract approvals use the shared approval card for review, customer retur
   assert.match(approvalCard, /if \(props\.canReturn\) return '退回原因必填'/);
   assert.doesNotMatch(uploadSlots, /<ApprovalActionCard/);
   assert.doesNotMatch(uploadSlots, /@click="\$emit\('approve'/);
+  assert.match(uploadSlots, /<span role="columnheader">文件名<\/span>/);
+  assert.doesNotMatch(uploadSlots, /<span role="columnheader">文件信息<\/span>/);
+  assert.doesNotMatch(uploadSlots, /formatFileSize|formatUser|formatDateTime/);
   assert.match(uploadSlots, /\{\{\s*uploadButtonText\(slot\)\s*\}\}/);
   assert.match(uploadSlots, /slot\.status === 'returned' \? '整改重传' : '上传\/替换'/);
   assert.match(solutionUploadSlots, /\{\{\s*uploadButtonText\(slot\)\s*\}\}/);
   assert.match(solutionUploadSlots, /slot\.isReturnedForRework \? '整改重传' : '上传\/替换'/);
   assert.match(uploadSlots, /canDownload[\s\S]{0,180}type="primary"/);
   assert.doesNotMatch(uploadSlots, /canDownload[\s\S]{0,180}type="primary"\s+plain/);
-  assert.match(uploadSlots, /\.contract-upload-table__actions\s*\{[\s\S]*?gap:\s*var\(--app-space-3\)/);
+  assert.match(uploadSlots, /grid-template-columns:\s*200px minmax\(260px,\s*1fr\) 264px/);
+  assert.match(uploadSlots, /min-height:\s*52px/);
+  assert.match(uploadSlots, /padding:\s*8px 14px/);
+  assert.match(uploadSlots, /\.contract-upload-table__filename\s*\{[\s\S]*?color:\s*var\(--color-text-secondary,\s*var\(--app-text-muted\)\)/);
+  assert.match(uploadSlots, /@media \(max-width:\s*640px\)/);
+  assert.match(uploadSlots, /grid-template-columns:\s*minmax\(100px,\s*0\.8fr\) minmax\(0,\s*1\.2fr\)/);
   assert.match(uploadSlots, /\.contract-upload-table__actions\s*>\s*\*\s*\{[\s\S]*?width:\s*auto/);
   assert.match(preparationPage, /<ApprovalActionCard/);
   assert.ok(preparationPage.indexOf('<ApprovalActionCard') > preparationPage.indexOf('<ContractUploadSlots'));
@@ -84,6 +92,14 @@ test('contract approvals use the shared approval card for review, customer retur
   assert.match(paymentPage, /:selection-required="true"/);
   assert.match(paymentPage, /v-model="paymentApprovalDecision"/);
   assert.match(paymentPage, /handlePaymentReleaseApproval/);
+  assert.match(paymentPage, /import GeneratedFormFileCard/);
+  assert.match(paymentPage, /<GeneratedFormFileCard/);
+  assert.match(paymentPage, /:generated-file="kickoffNoticeDownloadFile"/);
+  assert.match(paymentPage, /button-text="查看项目启动通知"/);
+  assert.match(paymentPage, /:pending="isPending\('download:kickoff-notice-generated-file'\)"/);
+  assert.match(paymentPage, /@download="downloadKickoffNoticeGeneratedFile"/);
+  assert.match(paymentPage, /canDownload:\s*generatedFile\.downloadable === true/);
+  assert.doesNotMatch(paymentPage, /下载项目启动通知/);
 });
 
 test('only online form submission and explicit contract risks keep confirmation dialogs', () => {

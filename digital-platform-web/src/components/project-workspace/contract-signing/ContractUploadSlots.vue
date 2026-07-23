@@ -4,43 +4,36 @@
     <div class="contract-upload-table" role="table" :aria-label="sectionTitle">
       <div class="contract-upload-table__head" role="row">
         <span role="columnheader">上传内容</span>
-        <span role="columnheader">文件信息</span>
+        <span role="columnheader">文件名</span>
         <span role="columnheader">操作</span>
       </div>
 
-      <div v-for="slot in slots" :key="slot.slotKey" class="contract-upload-table__group" role="rowgroup">
-        <div class="contract-upload-table__row" role="row">
-          <strong class="contract-upload-table__title" role="cell" :title="slot.slotName">
-            {{ slot.slotName }}
-          </strong>
-          <div class="contract-upload-table__file" role="cell" :title="displayFileName(slot)">
-            <span>{{ displayFileName(slot) }}</span>
-            <small v-if="slot.currentFile">
-              {{ formatFileSize(slot.currentFile.fileSize) }} ·
-              {{ formatUser(slot.currentFile.uploadedByUser) }} ·
-              {{ formatDateTime(slot.currentFile.uploadedAt) }}
-            </small>
-          </div>
-          <div class="contract-upload-table__actions" role="cell">
-            <el-upload
-              v-if="slot.permissions?.canUpload"
-              :show-file-list="false"
-              :auto-upload="true"
-              :http-request="options => requestUpload(slot, options)"
-            >
-              <el-button type="primary" :loading="isPending(`upload:${slot.slotKey}`)">
-                {{ uploadButtonText(slot) }}
-              </el-button>
-            </el-upload>
-            <el-button
-              v-if="slot.currentFile && slot.permissions?.canDownload"
-              type="primary"
-              :loading="isPending(`download:${slot.slotKey}`)"
-              @click="$emit('download', slot)"
-            >
-              下载
+      <div v-for="slot in slots" :key="slot.slotKey" class="contract-upload-table__row" role="row">
+        <strong class="contract-upload-table__title" role="cell" :title="slot.slotName">
+          {{ slot.slotName }}
+        </strong>
+        <span class="contract-upload-table__filename" role="cell" :title="displayFileName(slot)">
+          {{ displayFileName(slot) }}
+        </span>
+        <div class="contract-upload-table__actions" role="cell">
+          <el-upload
+            v-if="slot.permissions?.canUpload"
+            :show-file-list="false"
+            :auto-upload="true"
+            :http-request="options => requestUpload(slot, options)"
+          >
+            <el-button type="primary" :loading="isPending(`upload:${slot.slotKey}`)">
+              {{ uploadButtonText(slot) }}
             </el-button>
-          </div>
+          </el-upload>
+          <el-button
+            v-if="slot.currentFile && slot.permissions?.canDownload"
+            type="primary"
+            :loading="isPending(`download:${slot.slotKey}`)"
+            @click="$emit('download', slot)"
+          >
+            下载
+          </el-button>
         </div>
       </div>
     </div>
@@ -48,12 +41,6 @@
 </template>
 
 <script setup>
-import {
-  formatDateTime,
-  formatFileSize,
-  formatUser
-} from '../../../composables/project-stage/contract-signing/contractSigningFormatters.js';
-
 const emit = defineEmits([
   'upload',
   'download'
@@ -93,12 +80,11 @@ function uploadButtonText(slot) {
 
 .contract-upload-table {
   width: 90%;
-  min-width: 0;
   margin-inline: auto;
   overflow: hidden;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-md);
-  background: var(--app-surface);
+  border: 1px solid var(--color-border, var(--app-border));
+  border-radius: var(--radius-md, var(--app-radius-md));
+  background: var(--el-bg-color, var(--app-surface));
 }
 
 .contract-upload-table__head,
@@ -106,46 +92,33 @@ function uploadButtonText(slot) {
   display: grid;
   grid-template-columns: 200px minmax(260px, 1fr) 264px;
   align-items: center;
-  gap: var(--app-space-3);
-  min-width: 0;
-  padding: 10px 14px;
+  gap: var(--space-3, 12px);
+  min-height: 52px;
+  padding: 8px 14px;
 }
 
 .contract-upload-table__head {
   min-height: 42px;
-  color: var(--app-text-muted);
+  color: var(--color-text-secondary, var(--app-text-muted));
   background: var(--app-page-bg-soft);
-  font-size: 13px;
+  border-bottom: 1px solid var(--color-border, var(--app-border));
   font-weight: 600;
 }
 
-.contract-upload-table__group + .contract-upload-table__group,
-.contract-upload-table__feedback {
-  border-top: 1px solid var(--app-border);
+.contract-upload-table__row + .contract-upload-table__row {
+  border-top: 1px solid var(--color-border, var(--app-border));
 }
 
 .contract-upload-table__title,
-.contract-upload-table__file {
+.contract-upload-table__filename {
   min-width: 0;
-}
-
-.contract-upload-table__title,
-.contract-upload-table__file span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.contract-upload-table__file {
-  display: grid;
-  gap: var(--app-space-1);
-}
-
-.contract-upload-table__file small {
-  overflow: hidden;
-  color: var(--app-text-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.contract-upload-table__filename {
+  color: var(--color-text-secondary, var(--app-text-muted));
 }
 
 .contract-upload-table__actions {
@@ -153,17 +126,7 @@ function uploadButtonText(slot) {
   align-items: center;
   justify-content: flex-start;
   flex-wrap: wrap;
-  gap: var(--app-space-3);
-}
-
-.contract-upload-table__actions > * {
-  width: auto;
-  flex: 0 0 auto;
-}
-
-.contract-upload-table__feedback {
-  padding: var(--app-space-3) 14px;
-  background: var(--app-page-bg-soft);
+  gap: var(--space-3, 12px);
 }
 
 @media (max-width: 640px) {
@@ -176,7 +139,7 @@ function uploadButtonText(slot) {
     grid-template-columns: minmax(100px, 0.8fr) minmax(0, 1.2fr);
   }
 
-  .contract-upload-table__head > :last-child {
+  .contract-upload-table__head > [role="columnheader"]:last-child {
     display: none;
   }
 
@@ -184,9 +147,8 @@ function uploadButtonText(slot) {
     grid-column: 1 / -1;
   }
 
-  .contract-upload-table__actions {
-    justify-content: flex-start;
+  .contract-upload-table__actions > * {
+    width: auto;
   }
-
 }
 </style>

@@ -7,6 +7,14 @@
     :loading="loading"
     :error-message="errorMessage"
   >
+
+    <GeneratedFormFileCard
+          :generated-file="kickoffNoticeDownloadFile"
+          :pending="isPending('download:kickoff-notice-generated-file')"
+          button-text="查看项目启动通知"
+          @download="downloadKickoffNoticeGeneratedFile"
+        />
+
     <div class="contract-payment-page">
       <section class="contract-payment-section">
         <header class="contract-payment-section__header">
@@ -66,16 +74,6 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <div v-if="kickoffNoticeGeneratedFile?.downloadable" class="contract-payment-section__actions">
-          <el-button
-            type="primary"
-            plain
-            :loading="isPending('download:kickoff-notice-generated-file')"
-            @click="downloadKickoffNoticeGeneratedFile"
-          >
-            下载项目启动通知
-          </el-button>
-        </div>
       </section>
 
       <section v-if="hasBusinessPaymentActions" class="contract-payment-section">
@@ -139,6 +137,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue';
+import GeneratedFormFileCard from '../../../components/GeneratedFormFileCard.vue';
 import ApprovalActionCard from '../../../components/approval/ApprovalActionCard.vue';
 import ContractSigningNodeLayout from '../../../components/project-workspace/contract-signing/ContractSigningNodeLayout.vue';
 import {
@@ -169,6 +168,16 @@ const {
 } = useContractSigningNodePage(props, emit);
 
 const paymentApprovalDecision = ref('');
+
+const kickoffNoticeDownloadFile = computed(() => {
+  const generatedFile = kickoffNoticeGeneratedFile.value;
+  if (!generatedFile) return null;
+
+  return {
+    ...generatedFile,
+    canDownload: generatedFile.downloadable === true
+  };
+});
 
 const hasBusinessPaymentActions = computed(() =>
   Boolean(

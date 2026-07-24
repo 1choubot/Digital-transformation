@@ -19,7 +19,7 @@ import {
   OPERATION_TARGET_TYPE,
   insertOperationLog
 } from '../operationLogRepository.js';
-import { ProjectNotFoundError } from '../projectRepository.js';
+import { ProjectNotFoundError } from '../projects/shared.js';
 import { canViewStageDocumentItem } from './accessControl.js';
 import { StageDocumentNotFoundError } from './shared.js';
 import {

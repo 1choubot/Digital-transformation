@@ -123,6 +123,11 @@ import {
   formatStatus
 } from '../utils/format.js';
 import { findProjectNavigationTarget } from '../utils/projectNavigation.js';
+import {
+  formatDetailedDesignWorkbenchStatus,
+  formatWorkbenchTodoType,
+  isDetailedDesignWorkbenchTodo
+} from '../components/project-detail/workbenchTodoViewHelpers.js';
 
 const props = defineProps({
   authToken: {
@@ -145,7 +150,8 @@ const typeOptions = [
   { value: 'document_responsibility', label: '待我填写资料' },
   { value: 'document_review', label: '待我评价/审批' },
   { value: 'solution_design_workflow', label: '方案设计待办' },
-  { value: 'contract_signing_workflow', label: '合同签订待办' }
+  { value: 'contract_signing_workflow', label: '合同签订待办' },
+  { value: 'detailed_design_workflow', label: '详细设计待办' }
 ];
 
 const solutionDesignStatusText = {
@@ -222,15 +228,7 @@ function itemKey(item) {
 }
 
 function formatTodoType(type, item = null) {
-  if (type === 'initiation_review') {
-    return '待我评价/审批';
-  }
-
-  if (item?.revisionRequired && type === 'document_responsibility') {
-    return '待我填写资料';
-  }
-
-  return typeOptions.find((option) => option.value === type)?.label || type || '-';
+  return formatWorkbenchTodoType(type, item);
 }
 
 function isSolutionDesignTodo(item) {
@@ -241,8 +239,12 @@ function isContractSigningTodo(item) {
   return item?.type === 'contract_signing_workflow' || item?.taskType === 'contract_signing_workflow';
 }
 
+function isDetailedDesignTodo(item) {
+  return isDetailedDesignWorkbenchTodo(item);
+}
+
 function isWorkflowTodo(item) {
-  return isSolutionDesignTodo(item) || isContractSigningTodo(item);
+  return isSolutionDesignTodo(item) || isContractSigningTodo(item) || isDetailedDesignTodo(item);
 }
 
 function formatTodoSubject(item) {
@@ -272,6 +274,10 @@ function formatTodoStatus(item) {
 
   if (isContractSigningTodo(item)) {
     return contractSigningStatusText[item.status] || formatStatus(item.status);
+  }
+
+  if (isDetailedDesignTodo(item)) {
+    return formatDetailedDesignWorkbenchStatus(item.status);
   }
 
   return formatStatus(item.status);

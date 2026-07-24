@@ -13,6 +13,7 @@ export {
 } from './projects/shared.js';
 export { SolutionDesignWorkflowError } from '../domain/solutionDesignWorkflow.js';
 export { ContractSigningWorkflowError } from '../domain/contractSigningWorkflow.js';
+export { DetailedDesignWorkflowError } from '../domain/detailedDesignWorkflow.js';
 export {
   assertProjectAuditViewable,
   assertProjectViewable,
@@ -73,6 +74,27 @@ export {
   returnContractSigningPreparationFile,
   uploadContractSigningWorkflowFile
 } from './projects/contractSigningWorkflowRepository.js';
+export {
+  approveDetailedDesignDrawingReview,
+  approveDetailedDesignWorkflowNode,
+  assignDetailedDesignRoles,
+  cancelDetailedDesignUploadNoUpload,
+  getDetailedDesignDrawingReviewRecordDownload,
+  getDetailedDesignReviewForm,
+  getDetailedDesignReviewGeneratedFileDownload,
+  getDetailedDesignUploadDownload,
+  getDetailedDesignWorkflow,
+  markDetailedDesignUploadNoUpload,
+  passDetailedDesignDrawingReview,
+  returnDetailedDesignDrawingReview,
+  returnDetailedDesignDrawingReviewApproval,
+  returnDetailedDesignWorkflowNode,
+  saveDetailedDesignReviewForm,
+  submitDetailedDesignReviewForm,
+  submitDetailedDesignWorkflowNode,
+  uploadDetailedDesignDrawingReviewRecord,
+  uploadDetailedDesignWorkflowFile
+} from './projects/detailedDesignWorkflowRepository.js';
 export {
   approveStageApproval,
   listStageApprovalHistory,

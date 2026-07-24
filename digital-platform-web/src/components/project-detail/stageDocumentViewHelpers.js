@@ -68,6 +68,31 @@ export const operationActionText = {
   'contract_signing.advance_payment_release_approved_paid': '总经理已付款通过',
   'contract_signing.advance_payment_generated_kickoff_notice': '预付款确认生成项目启动通知',
   'contract_signing.project_kickoff_notice_uploaded': '项目启动通知上传',
+  'detailed_design.roles_assigned': '详细设计角色分配',
+  'detailed_design.project_kickoff_book_uploaded': '上传项目启动书',
+  'detailed_design.work_plan_uploaded': '上传详细设计工作计划',
+  'detailed_design.file_uploaded': '上传详细设计资料',
+  'detailed_design.node_submitted': '提交详细设计节点',
+  'detailed_design.file_upload_exempted': '标记详细设计资料无需上传',
+  'detailed_design.file_upload_exemption_cancelled': '取消详细设计资料无需上传',
+  'detailed_design.internal_review_form_saved': '保存内部设计评审表',
+  'detailed_design.internal_review_form_submitted': '提交内部设计评审表',
+  'detailed_design.internal_review_form_generated': '生成内部设计评审记录表',
+  'detailed_design.internal_review_form_generation_failed': '内部设计评审记录表生成失败',
+  'detailed_design.internal_review_approved': '内部设计评审通过',
+  'detailed_design.internal_review_returned': '内部设计评审退回',
+  'detailed_design.customer_review_form_saved': '保存客户设计评审表',
+  'detailed_design.customer_review_form_submitted': '提交客户设计评审表',
+  'detailed_design.customer_review_form_generated': '生成客户设计评审记录表',
+  'detailed_design.customer_review_form_generation_failed': '客户设计评审记录表生成失败',
+  'detailed_design.customer_review_approved': '客户设计评审通过',
+  'detailed_design.customer_review_returned': '客户设计评审退回',
+  'detailed_design.drawing_review_record_uploaded': '上传图纸审查记录',
+  'detailed_design.drawing_review_passed': '图纸审查通过',
+  'detailed_design.drawing_review_returned': '图纸审查退回',
+  'detailed_design.drawing_review_rd_approved': '研发图纸审查审批通过',
+  'detailed_design.drawing_review_rd_returned': '研发图纸审查审批退回',
+  'detailed_design.customer_drawing_countersign_uploaded': '上传客户会签图纸扫描件',
   'stage.advanced': '阶段推进',
   'project.completed': '项目完成'
 };
@@ -109,6 +134,20 @@ export function isSubmitCompletionMode(document) {
 
 export function isInitiationOnlineFormDocument(document) {
   return ['1.1', '1.2', '1.3'].includes(document?.documentCode ?? document?.document_code);
+}
+
+export function isDetailedDesignWorkflowStageDocument(document) {
+  const source =
+    document?.derivedCompletionSource ??
+    document?.derived_completion_source ??
+    document?.detailedDesignDerivedCompletion?.source ??
+    document?.detailed_design_derived_completion?.source ??
+    null;
+  return source === 'detailed_design_workflow';
+}
+
+export function canUseOrdinaryStageDocumentWriteAction(document) {
+  return !isDetailedDesignWorkflowStageDocument(document);
 }
 
 export function getCompletionStatus(document) {

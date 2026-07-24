@@ -68,6 +68,155 @@ export async function getContractSigningWorkflow(projectId, authToken = '') {
   return request(`/api/projects/${projectId}/contract-signing-workflow`, { authToken });
 }
 
+export async function getDetailedDesignWorkflow(projectId, authToken = '') {
+  return request(`/api/projects/${projectId}/detailed-design-workflow`, { authToken });
+}
+
+export async function assignDetailedDesignRoles(projectId, payload, authToken = '') {
+  return request(`/api/projects/${projectId}/detailed-design-workflow/roles`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function uploadDetailedDesignWorkflowFile(projectId, slotKey, file, authToken = '') {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  return request(`/api/projects/${projectId}/detailed-design-workflow/uploads/${slotKey}`, {
+    method: 'POST',
+    authToken,
+    body: formData
+  });
+}
+
+export async function markDetailedDesignUploadNoUpload(projectId, slotKey, authToken = '') {
+  return request(`/api/projects/${projectId}/detailed-design-workflow/uploads/${slotKey}/exemption`, {
+    method: 'PUT',
+    authToken,
+    body: JSON.stringify({})
+  });
+}
+
+export async function cancelDetailedDesignUploadNoUpload(projectId, slotKey, authToken = '') {
+  return request(`/api/projects/${projectId}/detailed-design-workflow/uploads/${slotKey}/exemption`, {
+    method: 'DELETE',
+    authToken
+  });
+}
+
+export async function submitDetailedDesignWorkflowNode(projectId, nodeKey, authToken = '') {
+  return request(`/api/projects/${projectId}/detailed-design-workflow/nodes/${nodeKey}/submit`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({})
+  });
+}
+
+export async function downloadDetailedDesignWorkflowFile(projectId, slotKey, authToken = '') {
+  return requestBlob(`/api/projects/${projectId}/detailed-design-workflow/uploads/${slotKey}/download`, {
+    authToken
+  });
+}
+
+export async function getDetailedDesignReviewForm(projectId, nodeKey, authToken = '') {
+  return request(`/api/projects/${projectId}/detailed-design-workflow/nodes/${nodeKey}/review-form`, { authToken });
+}
+
+export async function saveDetailedDesignReviewForm(projectId, nodeKey, formData, authToken = '') {
+  return request(`/api/projects/${projectId}/detailed-design-workflow/nodes/${nodeKey}/review-form`, {
+    method: 'PUT',
+    authToken,
+    body: JSON.stringify({ formData })
+  });
+}
+
+export async function submitDetailedDesignReviewForm(projectId, nodeKey, formData, authToken = '') {
+  return request(`/api/projects/${projectId}/detailed-design-workflow/nodes/${nodeKey}/review-form/submit`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ formData })
+  });
+}
+
+export async function downloadDetailedDesignReviewGeneratedFile(projectId, nodeKey, authToken = '') {
+  return requestBlob(
+    `/api/projects/${projectId}/detailed-design-workflow/nodes/${nodeKey}/review-form/generated-file/download`,
+    { authToken }
+  );
+}
+
+export async function uploadDetailedDesignDrawingReviewRecord(projectId, file, authToken = '') {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  return request(`/api/projects/${projectId}/detailed-design-workflow/nodes/drawing_review/drawing-review-record`, {
+    method: 'POST',
+    authToken,
+    body: formData
+  });
+}
+
+export async function downloadDetailedDesignDrawingReviewRecord(projectId, recordId, authToken = '') {
+  return requestBlob(
+    `/api/projects/${projectId}/detailed-design-workflow/nodes/drawing_review/drawing-review-records/${recordId}/download`,
+    { authToken }
+  );
+}
+
+export async function passDetailedDesignDrawingReview(projectId, payload = {}, authToken = '') {
+  return request(`/api/projects/${projectId}/detailed-design-workflow/nodes/drawing_review/drawing-review/pass`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function returnDetailedDesignDrawingReview(projectId, returnReason, authToken = '') {
+  return request(`/api/projects/${projectId}/detailed-design-workflow/nodes/drawing_review/drawing-review/return`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ returnReason })
+  });
+}
+
+export async function approveDetailedDesignDrawingReview(projectId, payload = {}, authToken = '') {
+  return request(`/api/projects/${projectId}/detailed-design-workflow/nodes/drawing_review/drawing-review/approve`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function returnDetailedDesignDrawingReviewApproval(projectId, returnReason, authToken = '') {
+  return request(`/api/projects/${projectId}/detailed-design-workflow/nodes/drawing_review/drawing-review/rd-return`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ returnReason })
+  });
+}
+
+export async function approveDetailedDesignWorkflowNode(projectId, nodeKey, commentOrPayload = '', authToken = '') {
+  const payload =
+    commentOrPayload && typeof commentOrPayload === 'object'
+      ? commentOrPayload
+      : { comment: commentOrPayload };
+  return request(`/api/projects/${projectId}/detailed-design-workflow/nodes/${nodeKey}/approve`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function returnDetailedDesignWorkflowNode(projectId, nodeKey, returnReason, authToken = '') {
+  return request(`/api/projects/${projectId}/detailed-design-workflow/nodes/${nodeKey}/return`, {
+    method: 'POST',
+    authToken,
+    body: JSON.stringify({ returnReason })
+  });
+}
+
 export async function uploadContractSigningWorkflowFile(projectId, slotKey, file, authToken = '') {
   const formData = new FormData();
   formData.append('file', file);

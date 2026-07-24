@@ -3,7 +3,10 @@ import { requireAuth, requireReportProjectSearchUser } from '../middleware/auth.
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import {
   advanceProjectStageHandler,
+  assignDetailedDesignRolesHandler,
   assignSolutionDesignRolesHandler,
+  approveDetailedDesignDrawingReviewHandler,
+  approveDetailedDesignWorkflowNodeHandler,
   approveContractSigningPreparationFileHandler,
   approveContractSigningPaymentReleasePaidHandler,
   approveContractSigningPaymentReleaseUnpaidHandler,
@@ -16,6 +19,7 @@ import {
   confirmStageDocumentHandler,
   completeStageDocumentRevisionHandler,
   createProjectHandler,
+  cancelDetailedDesignUploadNoUploadHandler,
   downloadSolutionDesignAnalysisGeneratedFileHandler,
   downloadSolutionDesignQuotationGeneratedFileHandler,
   downloadSolutionDesignReviewGeneratedFileHandler,
@@ -23,12 +27,17 @@ import {
   deleteStageDocumentOnlineFormImageHandler,
   downloadContractSigningWorkflowFileHandler,
   downloadContractSigningKickoffNoticeGeneratedFileHandler,
+  downloadDetailedDesignDrawingReviewRecordHandler,
+  downloadDetailedDesignReviewGeneratedFileHandler,
+  downloadDetailedDesignWorkflowFileHandler,
   downloadSolutionDesignWorkflowFileHandler,
   downloadStageDocumentAttachmentHandler,
   downloadStageDocumentGeneratedFileHandler,
   downloadStageDocumentOnlineFormImageHandler,
   generateStageDocumentOnlineFormFileHandler,
   getContractSigningWorkflowHandler,
+  getDetailedDesignReviewFormHandler,
+  getDetailedDesignWorkflowHandler,
   getProjectDetailHandler,
   getProjectNavigationHandler,
   getProjectOverviewDashboardHandler,
@@ -46,13 +55,18 @@ import {
   listSolutionDesignUploadsHandler,
   listMyActiveProjectsHandler,
   listStageDocumentAttachmentsHandler,
+  markDetailedDesignUploadNoUploadHandler,
   markStageDocumentNotApplicableHandler,
   markSolutionDesignUploadExemptionHandler,
   processSolutionDesignQuotationResultHandler,
+  passDetailedDesignDrawingReviewHandler,
   restoreStageDocumentApplicableHandler,
   returnContractSigningPreparationFileHandler,
   returnContractSigningSalesContractForCustomerHandler,
   returnContractSigningTechnicalAgreementForCustomerHandler,
+  returnDetailedDesignDrawingReviewApprovalHandler,
+  returnDetailedDesignDrawingReviewHandler,
+  returnDetailedDesignWorkflowNodeHandler,
   rejectDeprecatedContractSigningPaymentReleaseHandler,
   requestContractSigningPaymentReleaseHandler,
   returnStageApprovalHandler,
@@ -61,6 +75,7 @@ import {
   returnStageDocumentHandler,
   resubmitStageApprovalHandler,
   cancelSolutionDesignUploadExemptionHandler,
+  saveDetailedDesignReviewFormHandler,
   saveStageDocumentOnlineFormHandler,
   saveSolutionDesignAnalysisFormHandler,
   saveSolutionDesignQuotationFormHandler,
@@ -69,13 +84,17 @@ import {
   submitSolutionDesignAnalysisFormHandler,
   submitSolutionDesignQuotationFormHandler,
   submitSolutionDesignQuotationHandler,
+  submitDetailedDesignReviewFormHandler,
+  submitDetailedDesignWorkflowNodeHandler,
   submitSolutionDesignReviewFormHandler,
   submitSolutionDesignWorkflowNodeHandler,
   submitStageDocumentHandler,
   submitStageDocumentOnlineFormHandler,
   submitStageApprovalHandler,
   updateProjectCodeHandler,
+  uploadDetailedDesignDrawingReviewRecordHandler,
   uploadContractSigningWorkflowFileHandler,
+  uploadDetailedDesignWorkflowFileHandler,
   updateStageDocumentResponsibleUserHandler,
   uploadSolutionDesignWorkflowFileHandler,
   uploadStageDocumentAttachmentHandler,
@@ -140,6 +159,120 @@ projectsRouter.get(
   '/:projectId/contract-signing-workflow',
   requireAuth,
   asyncHandler(getContractSigningWorkflowHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/detailed-design-workflow',
+  requireAuth,
+  asyncHandler(getDetailedDesignWorkflowHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/detailed-design-workflow/roles',
+  requireAuth,
+  asyncHandler(assignDetailedDesignRolesHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/detailed-design-workflow/nodes/:nodeKey/review-form',
+  requireAuth,
+  asyncHandler(getDetailedDesignReviewFormHandler)
+);
+
+projectsRouter.put(
+  '/:projectId/detailed-design-workflow/nodes/:nodeKey/review-form',
+  requireAuth,
+  asyncHandler(saveDetailedDesignReviewFormHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/detailed-design-workflow/nodes/:nodeKey/review-form/submit',
+  requireAuth,
+  asyncHandler(submitDetailedDesignReviewFormHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/detailed-design-workflow/nodes/:nodeKey/review-form/generated-file/download',
+  requireAuth,
+  asyncHandler(downloadDetailedDesignReviewGeneratedFileHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/detailed-design-workflow/nodes/drawing_review/drawing-review-record',
+  requireAuth,
+  asyncHandler(uploadDetailedDesignDrawingReviewRecordHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/detailed-design-workflow/nodes/drawing_review/drawing-review-records/:recordId/download',
+  requireAuth,
+  asyncHandler(downloadDetailedDesignDrawingReviewRecordHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/detailed-design-workflow/nodes/drawing_review/drawing-review/pass',
+  requireAuth,
+  asyncHandler(passDetailedDesignDrawingReviewHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/detailed-design-workflow/nodes/drawing_review/drawing-review/return',
+  requireAuth,
+  asyncHandler(returnDetailedDesignDrawingReviewHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/detailed-design-workflow/nodes/drawing_review/drawing-review/approve',
+  requireAuth,
+  asyncHandler(approveDetailedDesignDrawingReviewHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/detailed-design-workflow/nodes/drawing_review/drawing-review/rd-return',
+  requireAuth,
+  asyncHandler(returnDetailedDesignDrawingReviewApprovalHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/detailed-design-workflow/nodes/:nodeKey/approve',
+  requireAuth,
+  asyncHandler(approveDetailedDesignWorkflowNodeHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/detailed-design-workflow/nodes/:nodeKey/return',
+  requireAuth,
+  asyncHandler(returnDetailedDesignWorkflowNodeHandler)
+);
+
+projectsRouter.get(
+  '/:projectId/detailed-design-workflow/uploads/:slotKey/download',
+  requireAuth,
+  asyncHandler(downloadDetailedDesignWorkflowFileHandler)
+);
+
+projectsRouter.put(
+  '/:projectId/detailed-design-workflow/uploads/:slotKey/exemption',
+  requireAuth,
+  asyncHandler(markDetailedDesignUploadNoUploadHandler)
+);
+
+projectsRouter.delete(
+  '/:projectId/detailed-design-workflow/uploads/:slotKey/exemption',
+  requireAuth,
+  asyncHandler(cancelDetailedDesignUploadNoUploadHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/detailed-design-workflow/nodes/:nodeKey/submit',
+  requireAuth,
+  asyncHandler(submitDetailedDesignWorkflowNodeHandler)
+);
+
+projectsRouter.post(
+  '/:projectId/detailed-design-workflow/uploads/:slotKey',
+  requireAuth,
+  asyncHandler(uploadDetailedDesignWorkflowFileHandler)
 );
 
 projectsRouter.get(

@@ -215,6 +215,15 @@ const designChangeCandidates = computed(() => props.document.designChangeCandida
 const reworkClass = computed(() => props.document.reworkClass || props.document.rework_class || 'b_class');
 const isAClassReturn = computed(() => reworkClass.value === 'a_class');
 const isCClassReturn = computed(() => props.document.documentCode === '5.12' || reworkClass.value === 'c_class');
+const isDetailedDesignWorkflowDocument = computed(() => {
+  const source =
+    props.document?.derivedCompletionSource ??
+    props.document?.derived_completion_source ??
+    props.document?.detailedDesignDerivedCompletion?.source ??
+    props.document?.detailed_design_derived_completion?.source ??
+    null;
+  return source === 'detailed_design_workflow';
+});
 const isOnlineFormOnlyDocument = computed(() => isInitiationOnlineFormDocument(props.document));
 const selectedRevisionTargetIds = computed(() => revisionTargetSelections[props.document.id] || []);
 const selectedDesignChangeTargetIds = computed(() => designChangeTargetSelections[props.document.id] || []);
@@ -255,6 +264,10 @@ const submitButtonText = computed(() => {
 });
 
 const emptyActionText = computed(() => {
+  if (isDetailedDesignWorkflowDocument.value) {
+    return '请通过详细设计专用节点处理该资料。';
+  }
+
   if (!isApplicable(props.document)) {
     return '条件未触发/不适用';
   }

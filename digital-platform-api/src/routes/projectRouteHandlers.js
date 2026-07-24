@@ -10,13 +10,18 @@ import {
   assertProjectAuditViewable,
   assertProjectViewable,
   advanceProjectStage,
+  assignDetailedDesignRoles,
   assignSolutionDesignRoles,
   approveContractSigningPreparationFile,
   approveContractSigningPaymentReleasePaid,
   approveContractSigningPaymentReleaseUnpaid,
+  approveDetailedDesignDrawingReview,
+  approveDetailedDesignWorkflowNode,
+  cancelDetailedDesignUploadNoUpload,
   confirmContractSigningScanFile,
   completeContractSigningNode,
   getContractSigningWorkflow,
+  getDetailedDesignWorkflow,
   approveSolutionDesignWorkflowNode,
   approveStageApproval,
   canViewFinanceCostApprovalComment,
@@ -27,6 +32,10 @@ import {
   getProjectWorkspace,
   getContractSigningKickoffNoticeGeneratedFileDownload,
   getContractSigningUploadDownload,
+  getDetailedDesignDrawingReviewRecordDownload,
+  getDetailedDesignReviewForm,
+  getDetailedDesignReviewGeneratedFileDownload,
+  getDetailedDesignUploadDownload,
   getSolutionDesignAnalysisGeneratedFileDownload,
   getSolutionDesignAnalysisForm,
   getSolutionDesignQuotationForm,
@@ -40,6 +49,8 @@ import {
   listStageApprovalHistory,
   listProjects,
   normalizeProjectOverviewDashboardFilters,
+  markDetailedDesignUploadNoUpload,
+  passDetailedDesignDrawingReview,
   processSolutionDesignQuotationResult,
   ProjectAuthorizationError,
   ProjectNotFoundError,
@@ -49,21 +60,29 @@ import {
   requestContractSigningPaymentRelease,
   returnContractSigningSalesContractForCustomer,
   returnContractSigningTechnicalAgreementForCustomer,
+  returnDetailedDesignDrawingReview,
+  returnDetailedDesignDrawingReviewApproval,
+  returnDetailedDesignWorkflowNode,
   returnSolutionDesignWorkflowNode,
   returnStageApproval,
   saveSolutionDesignAnalysisForm,
+  saveDetailedDesignReviewForm,
   saveSolutionDesignQuotationForm,
   saveSolutionDesignReviewForm,
   selectSolutionDesignQuotationTenderBranch,
   submitSolutionDesignAnalysisForm,
   submitSolutionDesignQuotation,
   submitSolutionDesignQuotationForm,
+  submitDetailedDesignReviewForm,
+  submitDetailedDesignWorkflowNode,
   submitSolutionDesignReviewForm,
   submitSolutionDesignWorkflowNode,
   submitStageApproval,
   cancelSolutionDesignUploadExemption,
   updateProjectCode,
   uploadContractSigningWorkflowFile,
+  uploadDetailedDesignDrawingReviewRecord,
+  uploadDetailedDesignWorkflowFile,
   uploadSolutionDesignWorkflowFile
 } from '../repositories/projectRepository.js';
 import {
@@ -100,6 +119,7 @@ import {
 } from '../repositories/stageDocumentAttachmentRepository.js';
 import { readMultipartFile } from '../middleware/multipartFile.js';
 import { CONTRACT_SIGNING_UPLOAD_MAX_FILE_SIZE } from '../storage/contractSigningUploadStorage.js';
+import { DETAILED_DESIGN_UPLOAD_MAX_FILE_SIZE } from '../storage/detailedDesignUploadStorage.js';
 import { SOLUTION_DESIGN_UPLOAD_MAX_FILE_SIZE } from '../storage/solutionDesignUploadStorage.js';
 import { STAGE_DOCUMENT_ONLINE_FORM_IMAGE_MAX_FILE_SIZE } from '../storage/stageDocumentOnlineFormImageStorage.js';
 import { searchActiveProjectsForDailyReports } from '../repositories/dailyReportRepository.js';
@@ -351,6 +371,315 @@ export async function getContractSigningWorkflowHandler(req, res) {
   const projectId = parseProjectId(req.params.projectId);
   const workflow = await getContractSigningWorkflow({
     projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function getDetailedDesignWorkflowHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await getDetailedDesignWorkflow({
+    projectId,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function assignDetailedDesignRolesHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await assignDetailedDesignRoles({
+    projectId,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function uploadDetailedDesignWorkflowFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const file = await readMultipartFile(req, {
+    maxFileSize: DETAILED_DESIGN_UPLOAD_MAX_FILE_SIZE
+  });
+  const workflow = await uploadDetailedDesignWorkflowFile({
+    projectId,
+    slotKey: req.params.slotKey,
+    file,
+    user: req.auth.user
+  });
+
+  res.status(201).json({
+    data: workflow
+  });
+}
+
+export async function markDetailedDesignUploadNoUploadHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await markDetailedDesignUploadNoUpload({
+    projectId,
+    slotKey: req.params.slotKey,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function cancelDetailedDesignUploadNoUploadHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await cancelDetailedDesignUploadNoUpload({
+    projectId,
+    slotKey: req.params.slotKey,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function submitDetailedDesignWorkflowNodeHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await submitDetailedDesignWorkflowNode({
+    projectId,
+    nodeKey: req.params.nodeKey,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function downloadDetailedDesignWorkflowFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const download = await getDetailedDesignUploadDownload({
+    projectId,
+    slotKey: req.params.slotKey,
+    user: req.auth.user
+  });
+
+  await new Promise((resolve, reject) => {
+    res.download(
+      download.filePath,
+      download.originalFileName,
+      {
+        headers: {
+          'Content-Type': download.mimeType,
+          'Content-Length': String(download.fileSize)
+        }
+      },
+      (error) => {
+        if (error && !res.headersSent) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      }
+    );
+  });
+}
+
+export async function uploadDetailedDesignDrawingReviewRecordHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const file = await readMultipartFile(req, {
+    maxFileSize: DETAILED_DESIGN_UPLOAD_MAX_FILE_SIZE
+  });
+  const workflow = await uploadDetailedDesignDrawingReviewRecord({
+    projectId,
+    file,
+    user: req.auth.user
+  });
+
+  res.status(201).json({
+    data: workflow
+  });
+}
+
+export async function downloadDetailedDesignDrawingReviewRecordHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const recordId = parsePositiveId(req.params.recordId, 'recordId');
+  const download = await getDetailedDesignDrawingReviewRecordDownload({
+    projectId,
+    recordId,
+    user: req.auth.user
+  });
+
+  await new Promise((resolve, reject) => {
+    res.download(
+      download.filePath,
+      download.originalFileName,
+      {
+        headers: {
+          'Content-Type': download.mimeType,
+          'Content-Length': String(download.fileSize)
+        }
+      },
+      (error) => {
+        if (error && !res.headersSent) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      }
+    );
+  });
+}
+
+export async function passDetailedDesignDrawingReviewHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await passDetailedDesignDrawingReview({
+    projectId,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function returnDetailedDesignDrawingReviewHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await returnDetailedDesignDrawingReview({
+    projectId,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function approveDetailedDesignDrawingReviewHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await approveDetailedDesignDrawingReview({
+    projectId,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function returnDetailedDesignDrawingReviewApprovalHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await returnDetailedDesignDrawingReviewApproval({
+    projectId,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function getDetailedDesignReviewFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const reviewForm = await getDetailedDesignReviewForm({
+    projectId,
+    nodeKey: req.params.nodeKey,
+    user: req.auth.user
+  });
+
+  res.json({
+    data: reviewForm
+  });
+}
+
+export async function saveDetailedDesignReviewFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const reviewForm = await saveDetailedDesignReviewForm({
+    projectId,
+    nodeKey: req.params.nodeKey,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: reviewForm
+  });
+}
+
+export async function submitDetailedDesignReviewFormHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const reviewForm = await submitDetailedDesignReviewForm({
+    projectId,
+    nodeKey: req.params.nodeKey,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: reviewForm
+  });
+}
+
+export async function downloadDetailedDesignReviewGeneratedFileHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const download = await getDetailedDesignReviewGeneratedFileDownload({
+    projectId,
+    nodeKey: req.params.nodeKey,
+    user: req.auth.user
+  });
+
+  await new Promise((resolve, reject) => {
+    res.download(
+      download.filePath,
+      download.fileName,
+      {
+        headers: {
+          'Content-Type': download.mimeType,
+          'Content-Length': String(download.fileSize)
+        }
+      },
+      (error) => {
+        if (error && !res.headersSent) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      }
+    );
+  });
+}
+
+export async function approveDetailedDesignWorkflowNodeHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await approveDetailedDesignWorkflowNode({
+    projectId,
+    nodeKey: req.params.nodeKey,
+    payload: req.body || {},
+    user: req.auth.user
+  });
+
+  res.json({
+    data: workflow
+  });
+}
+
+export async function returnDetailedDesignWorkflowNodeHandler(req, res) {
+  const projectId = parseProjectId(req.params.projectId);
+  const workflow = await returnDetailedDesignWorkflowNode({
+    projectId,
+    nodeKey: req.params.nodeKey,
+    payload: req.body || {},
     user: req.auth.user
   });
 

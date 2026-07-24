@@ -100,8 +100,10 @@ import NodePageRouter from '../project-node/project-approval/NodePageRouter.vue'
 import ProjectProcessTree from '../../components/project-workspace/ProjectProcessTree.vue';
 import {
   actionKey,
+  canUseOrdinaryStageDocumentWriteAction,
   getCompletionMode,
   getSelectedResponsibleUserId,
+  isDetailedDesignWorkflowStageDocument,
   isInitiationOnlineFormDocument
 } from '../../components/project-detail/stageDocumentViewHelpers.js';
 import {
@@ -221,6 +223,7 @@ const solutionDesignDedicatedDocumentCodes = new Set([
   'C18',
   'C19'
 ]);
+
 const solutionDesignWorkflowNodeKeys = new Set([
   'solution_preparation',
   'solution_analysis',
@@ -498,6 +501,8 @@ const nodePageContext = computed(() => ({
   onlineFormSubmitting: onlineFormSubmitting.value,
   onlineFormErrorMessage: onlineFormErrorMessage.value,
   onlineFormImageState,
+  workspaceLoading: workspaceLoading.value,
+  workspaceErrorMessage: workspaceErrorMessage.value,
   responsibilityCandidates: visibleResponsibilityCandidates.value,
   responsibilityCandidatesLoading: responsibilityCandidatesLoading.value,
   responsibilityCandidatesErrorMessage: responsibilityCandidatesErrorMessage.value,
@@ -510,6 +515,7 @@ const nodePageContext = computed(() => ({
   solutionDesignLoading: solutionDesignWorkflowLoading.value || solutionDesignUploadsLoading.value,
   solutionDesignErrorMessage: solutionDesignWorkflowErrorMessage.value || solutionDesignUploadsErrorMessage.value,
   contractSigningWorkflow: workspace.value?.contractSigningWorkflow || null,
+  detailedDesignWorkflow: workspace.value?.detailedDesignWorkflow || null,
   responsibilitySelections,
   returnReasons,
   notApplicableReasons,
@@ -663,6 +669,10 @@ function isSolutionDesignDedicatedStageDocument(document) {
   return hasReachedSolutionDesignStage.value && solutionDesignDedicatedDocumentCodes.has(documentCode);
 }
 
+function isDetailedDesignWorkflowDedicatedStageDocument(document) {
+  return isDetailedDesignWorkflowStageDocument(document);
+}
+
 function getDocumentPermissions(document) {
   return document?.permissions || {};
 }
@@ -673,19 +683,35 @@ function documentPermission(document, key, fallback) {
 }
 
 function canConfirmReturnDocument(document) {
-  return !isProjectEnded.value && documentPermission(document, 'canReviewDocument', false);
+  return (
+    !isProjectEnded.value &&
+    canUseOrdinaryStageDocumentWriteAction(document) &&
+    documentPermission(document, 'canReviewDocument', false)
+  );
 }
 
 function canManageResponsibility(document) {
-  return !isProjectEnded.value && documentPermission(document, 'canManageResponsibility', false);
+  return (
+    !isProjectEnded.value &&
+    canUseOrdinaryStageDocumentWriteAction(document) &&
+    documentPermission(document, 'canManageResponsibility', false)
+  );
 }
 
 function canSubmitDocument(document) {
-  return !isProjectEnded.value && documentPermission(document, 'canSubmitDocument', false);
+  return (
+    !isProjectEnded.value &&
+    canUseOrdinaryStageDocumentWriteAction(document) &&
+    documentPermission(document, 'canSubmitDocument', false)
+  );
 }
 
 function canChangeApplicability(document) {
-  return !isProjectEnded.value && documentPermission(document, 'canChangeApplicability', false);
+  return (
+    !isProjectEnded.value &&
+    canUseOrdinaryStageDocumentWriteAction(document) &&
+    documentPermission(document, 'canChangeApplicability', false)
+  );
 }
 
 function canViewDocumentAttachments(document) {
@@ -693,7 +719,11 @@ function canViewDocumentAttachments(document) {
 }
 
 function canUploadDocumentAttachment(document) {
-  return !isProjectEnded.value && documentPermission(document, 'canUploadAttachment', false);
+  return (
+    !isProjectEnded.value &&
+    canUseOrdinaryStageDocumentWriteAction(document) &&
+    documentPermission(document, 'canUploadAttachment', false)
+  );
 }
 
 function canDownloadDocumentAttachment(document, attachment) {
@@ -703,6 +733,10 @@ function canDownloadDocumentAttachment(document, attachment) {
 
 function canDeleteDocumentAttachment(document, attachment) {
   if (isProjectEnded.value) {
+    return false;
+  }
+
+  if (isDetailedDesignWorkflowDedicatedStageDocument(document)) {
     return false;
   }
 
@@ -1259,6 +1293,11 @@ async function submitDocument(document) {
     return;
   }
 
+  if (isDetailedDesignWorkflowDedicatedStageDocument(document)) {
+    actionErrorMessage.value = '请通过详细设计专用节点处理该资料。';
+    return;
+  }
+
   const completionMode = getCompletionMode(document);
   const requiresReview = completionMode === 'approval_required' || completionMode === 'conditional_approval';
   const isSubmitOnlyMode = completionMode === 'submit_only' || completionMode === 'conditional_submit';
@@ -1294,6 +1333,11 @@ async function completeRevisionDocument(document) {
     return;
   }
 
+  if (isDetailedDesignWorkflowDedicatedStageDocument(document)) {
+    actionErrorMessage.value = '请通过详细设计专用节点处理该资料。';
+    return;
+  }
+
   await runDocumentAction(
     document,
     'complete-revision',
@@ -1305,6 +1349,11 @@ async function completeRevisionDocument(document) {
 async function confirmDocument(document) {
   if (isSolutionDesignDedicatedStageDocument(document)) {
     actionErrorMessage.value = '请通过方案设计专用节点审批该资料。';
+    return;
+  }
+
+  if (isDetailedDesignWorkflowDedicatedStageDocument(document)) {
+    actionErrorMessage.value = '请通过详细设计专用节点处理该资料。';
     return;
   }
 
@@ -1321,6 +1370,11 @@ async function returnDocument(payload) {
   const document = payload?.document || payload;
   if (isSolutionDesignDedicatedStageDocument(document)) {
     actionErrorMessage.value = '请通过方案设计专用节点退回该资料。';
+    return;
+  }
+
+  if (isDetailedDesignWorkflowDedicatedStageDocument(document)) {
+    actionErrorMessage.value = '请通过详细设计专用节点处理该资料。';
     return;
   }
 
@@ -1424,6 +1478,11 @@ async function returnInitiationNode({ document, node, returnReason, returnAction
 /* ── 不适用标记 ── */
 async function markNotApplicable(document) {
   clearActionState();
+  if (isDetailedDesignWorkflowDedicatedStageDocument(document)) {
+    actionErrorMessage.value = '请通过详细设计专用节点处理该资料。';
+    return;
+  }
+
   const reason = String(notApplicableReasons[document.id] || '').trim();
 
   if (!reason) {
@@ -1443,6 +1502,11 @@ async function markNotApplicable(document) {
 }
 
 async function restoreApplicable(document) {
+  if (isDetailedDesignWorkflowDedicatedStageDocument(document)) {
+    actionErrorMessage.value = '请通过详细设计专用节点处理该资料。';
+    return;
+  }
+
   await runDocumentAction(
     document,
     'restore-applicable',
@@ -1457,6 +1521,11 @@ async function restoreApplicable(document) {
 /* ── 责任人 ── */
 async function saveResponsibleUser(document) {
   clearActionState();
+
+  if (isDetailedDesignWorkflowDedicatedStageDocument(document)) {
+    actionErrorMessage.value = '请通过详细设计专用节点处理该资料。';
+    return;
+  }
 
   let responsibleUserId;
   try {
@@ -1480,6 +1549,11 @@ async function saveResponsibleUser(document) {
 }
 
 async function clearResponsibleUser(document) {
+  if (isDetailedDesignWorkflowDedicatedStageDocument(document)) {
+    actionErrorMessage.value = '请通过详细设计专用节点处理该资料。';
+    return;
+  }
+
   responsibilitySelections[document.id] = '';
 
   await runDocumentAction(
@@ -1535,6 +1609,12 @@ async function refreshWorkspaceAfterAttachmentMutation() {
 async function uploadAttachment({ document, file }) {
   clearActionState();
   const state = getAttachmentState(document.id);
+
+  if (isDetailedDesignWorkflowDedicatedStageDocument(document)) {
+    state.errorMessage = '请通过详细设计专用节点处理该资料。';
+    actionErrorMessage.value = state.errorMessage;
+    return;
+  }
 
   if (!canUploadDocumentAttachment(document)) {
     state.errorMessage = '当前账号无权上传该资料项附件。';
@@ -1640,6 +1720,12 @@ async function downloadGeneratedFile(output) {
 async function deleteAttachment({ document, attachment }) {
   clearActionState();
   const state = getAttachmentState(document.id);
+
+  if (isDetailedDesignWorkflowDedicatedStageDocument(document)) {
+    state.errorMessage = '请通过详细设计专用节点处理该资料。';
+    actionErrorMessage.value = state.errorMessage;
+    return;
+  }
 
   if (!canDeleteDocumentAttachment(document, attachment)) {
     state.errorMessage = '当前账号无权删除该资料项附件。';

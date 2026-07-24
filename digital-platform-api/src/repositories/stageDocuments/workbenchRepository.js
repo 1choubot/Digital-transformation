@@ -13,6 +13,7 @@ import {
   isInitiationOnlineFormDocument
 } from '../../domain/initiationReview.js';
 import { SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES } from '../../domain/solutionDesignWorkflow.js';
+import { DETAILED_DESIGN_WORKFLOW_DOCUMENT_CODES } from '../../domain/detailedDesignWorkflow.js';
 import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import { attachStageDocumentPermissions } from './accessControl.js';
 import {
@@ -39,16 +40,28 @@ import {
   CONTRACT_SIGNING_WORKBENCH_TODO_TYPE,
   selectContractSigningWorkbenchTodos
 } from '../projects/contractSigningWorkflowRepository.js';
+import {
+  DETAILED_DESIGN_WORKBENCH_TODO_TYPE,
+  selectDetailedDesignWorkbenchTodos
+} from '../projects/detailedDesignWorkflowRepository.js';
 
 const WORKBENCH_TODO_TYPES = [
   'document_responsibility',
   'document_review',
   INITIATION_REVIEW_TODO_TYPE,
   SOLUTION_DESIGN_WORKBENCH_TODO_TYPE,
-  CONTRACT_SIGNING_WORKBENCH_TODO_TYPE
+  CONTRACT_SIGNING_WORKBENCH_TODO_TYPE,
+  DETAILED_DESIGN_WORKBENCH_TODO_TYPE
 ];
 
-const SOLUTION_DESIGN_DEDICATED_DOCUMENT_PLACEHOLDERS = SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES
+const WORKFLOW_DEDICATED_DOCUMENT_CODES = [
+  ...new Set([
+    ...SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES,
+    ...DETAILED_DESIGN_WORKFLOW_DOCUMENT_CODES
+  ])
+];
+
+const WORKFLOW_DEDICATED_DOCUMENT_PLACEHOLDERS = WORKFLOW_DEDICATED_DOCUMENT_CODES
   .map(() => '?')
   .join(', ');
 
@@ -304,7 +317,7 @@ async function selectDocumentResponsibilityTodos(user) {
       AND d.is_applicable = 1
       AND d.document_code <> ?
       AND d.document_code <> ?
-      AND d.document_code NOT IN (${SOLUTION_DESIGN_DEDICATED_DOCUMENT_PLACEHOLDERS})
+      AND d.document_code NOT IN (${WORKFLOW_DEDICATED_DOCUMENT_PLACEHOLDERS})
       AND (
         d.status IN (?, ?)
         OR (
@@ -329,7 +342,7 @@ async function selectDocumentResponsibilityTodos(user) {
       PROJECT_STATUS.ENDED,
       INITIATION_REVIEW_DOCUMENT_CODE,
       INITIATION_NOTICE_DOCUMENT_CODE,
-      ...SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES,
+      ...WORKFLOW_DEDICATED_DOCUMENT_CODES,
       DOCUMENT_STATUS.NOT_SUBMITTED,
       DOCUMENT_STATUS.RETURNED,
       COMPLETION_MODE.APPROVAL_REQUIRED,
@@ -569,7 +582,7 @@ async function selectDocumentReviewTodos(user) {
     WHERE d.is_applicable = 1
       AND p.status <> ?
       AND d.document_code <> '1.2'
-      AND d.document_code NOT IN (${SOLUTION_DESIGN_DEDICATED_DOCUMENT_PLACEHOLDERS})
+      AND d.document_code NOT IN (${WORKFLOW_DEDICATED_DOCUMENT_PLACEHOLDERS})
       AND d.status = ?
       AND d.completion_mode = ?
       AND (
@@ -594,7 +607,7 @@ async function selectDocumentReviewTodos(user) {
       d.id ASC`,
     [
       PROJECT_STATUS.ENDED,
-      ...SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES,
+      ...WORKFLOW_DEDICATED_DOCUMENT_CODES,
       DOCUMENT_STATUS.SUBMITTED,
       COMPLETION_MODE.APPROVAL_REQUIRED,
       user.department,
@@ -802,7 +815,8 @@ async function selectMyWorkbenchTodoGroups(user) {
     selectDocumentReviewTodos(user),
     selectInitiationReviewWorkbenchTodos(pool, user),
     selectSolutionDesignWorkbenchTodos(user),
-    selectContractSigningWorkbenchTodos(user)
+    selectContractSigningWorkbenchTodos(user),
+    selectDetailedDesignWorkbenchTodos(user)
   ]);
 }
 

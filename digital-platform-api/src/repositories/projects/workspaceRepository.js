@@ -10,6 +10,11 @@ import {
   SOLUTION_DESIGN_STAGE
 } from '../../domain/solutionDesignWorkflow.js';
 import {
+  DETAILED_DESIGN_NODE_STATUS,
+  DETAILED_DESIGN_NODES,
+  DETAILED_DESIGN_STAGE
+} from '../../domain/detailedDesignWorkflow.js';
+import {
   CONTRACT_SIGNING_NODE_STATUS,
   CONTRACT_SIGNING_NODES,
   CONTRACT_SIGNING_STAGE
@@ -19,6 +24,7 @@ import { listLatestGeneratedFilesForProject } from '../stageDocuments/generatedF
 import { getProjectDetail } from './coreRepository.js';
 import { getSolutionDesignWorkflow } from './solutionDesignWorkflowRepository.js';
 import { getContractSigningWorkflow } from './contractSigningWorkflowRepository.js';
+import { getDetailedDesignWorkflow } from './detailedDesignWorkflowRepository.js';
 
 const INITIATION_STAGE_KEY = 'initiation';
 const CURRENT_RUNTIME_TEMPLATE_VERSION = V20260629_TARGET_TEMPLATE_VERSION;
@@ -295,6 +301,28 @@ function buildContractSigningWorkflowWorkspaceNodes(contractSigningWorkflow) {
   });
 }
 
+function buildDetailedDesignWorkflowWorkspaceNodes(detailedDesignWorkflow) {
+  const workflowNodeByKey = new Map(
+    (detailedDesignWorkflow?.nodes || []).map((node) => [node.nodeKey, node])
+  );
+
+  return DETAILED_DESIGN_NODES.map((definition) => {
+    const workflowNode = workflowNodeByKey.get(definition.nodeKey);
+    return {
+      templateVersion: V20260629_TARGET_TEMPLATE_VERSION,
+      nodeKey: definition.nodeKey,
+      nodeName: definition.nodeName,
+      nodeStatus: workflowNode?.status || DETAILED_DESIGN_NODE_STATUS.NOT_STARTED,
+      nodeOrder: definition.nodeOrder,
+      outputs: [],
+      blockingReasons: workflowNode?.blockingReasons || [],
+      actionHints: workflowNode?.nextActions || [],
+      notes: workflowNode?.notes || '',
+      detailedDesignNode: workflowNode || null
+    };
+  });
+}
+
 function isCompatibilityOnlyModule(moduleConfig) {
   if (!moduleConfig.outputCodes.length) {
     return false;
@@ -321,15 +349,19 @@ function buildWorkspaceStage(
   project,
   runtimeTemplateVersion,
   solutionDesignWorkflow,
-  contractSigningWorkflow
+  contractSigningWorkflow,
+  detailedDesignWorkflow
 ) {
   const documentsByCode = new Map(documents.map((document) => [document.documentCode, document]));
   const isSolutionDesignStage = stage.stageKey === SOLUTION_DESIGN_STAGE.STAGE_KEY;
   const isContractSigningStage = stage.stageKey === CONTRACT_SIGNING_STAGE.STAGE_KEY;
+  const isDetailedDesignStage = stage.stageKey === DETAILED_DESIGN_STAGE.STAGE_KEY;
   const nodes = isSolutionDesignStage
     ? buildSolutionDesignWorkflowWorkspaceNodes(solutionDesignWorkflow)
     : isContractSigningStage
       ? buildContractSigningWorkflowWorkspaceNodes(contractSigningWorkflow)
+      : isDetailedDesignStage
+        ? buildDetailedDesignWorkflowWorkspaceNodes(detailedDesignWorkflow)
       : V20260629_WORKSPACE_BLUE_MODULES
           .filter((module) => {
             if (module.stageKey !== stage.stageKey) {
@@ -343,7 +375,7 @@ function buildWorkspaceStage(
           .map((moduleConfig) =>
             buildWorkspaceNode(moduleConfig, documentsByCode, generatedFilesByDocumentId, project)
           );
-  const resolvedNodes = isSolutionDesignStage || isContractSigningStage
+  const resolvedNodes = isSolutionDesignStage || isContractSigningStage || isDetailedDesignStage
     ? nodes
     : resolveAutomaticProcessNodeStatuses(nodes);
   const supplementalDocuments = isContractSigningStage
@@ -368,12 +400,20 @@ function buildWorkspaceStage(
 }
 
 export async function getProjectWorkspace(projectId, user) {
-  const [detail, checklist, latestGeneratedFiles, solutionDesignWorkflow, contractSigningWorkflow] = await Promise.all([
+  const [
+    detail,
+    checklist,
+    latestGeneratedFiles,
+    solutionDesignWorkflow,
+    contractSigningWorkflow,
+    detailedDesignWorkflow
+  ] = await Promise.all([
     getProjectDetail(projectId, user),
     getProjectStageDocumentChecklist(projectId, user),
     listLatestGeneratedFilesForProject(projectId),
     getSolutionDesignWorkflow({ projectId, user }),
-    getContractSigningWorkflow({ projectId, user })
+    getContractSigningWorkflow({ projectId, user }),
+    getDetailedDesignWorkflow({ projectId, user })
   ]);
   const generatedFilesByDocumentId = new Map(
     latestGeneratedFiles.map((file) => [Number(file.stageDocumentId), file])
@@ -392,12 +432,13 @@ export async function getProjectWorkspace(projectId, user) {
     return buildWorkspaceStage(
       stage,
       documents,
-      generatedFilesByDocumentId,
-      detail.project,
-      runtimeTemplateVersion,
-      solutionDesignWorkflow,
-      contractSigningWorkflow
-    );
+        generatedFilesByDocumentId,
+        detail.project,
+        runtimeTemplateVersion,
+        solutionDesignWorkflow,
+        contractSigningWorkflow,
+        detailedDesignWorkflow
+      );
   });
 
   return {
@@ -405,6 +446,7 @@ export async function getProjectWorkspace(projectId, user) {
     currentStage: detail.currentStage,
     solutionDesignWorkflow,
     contractSigningWorkflow,
+    detailedDesignWorkflow,
     templateVersion: runtimeTemplateVersion,
     targetTemplateVersion: V20260629_TARGET_TEMPLATE_VERSION,
     targetTemplate: {

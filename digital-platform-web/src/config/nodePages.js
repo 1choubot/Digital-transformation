@@ -16,6 +16,15 @@ import SolutionQuotationTenderPage from '../pages/project-node/solution-design/S
 import ContractAdvancePaymentPage from '../pages/project-node/contract-signing/ContractAdvancePaymentPage.vue';
 import ContractPreparationPage from '../pages/project-node/contract-signing/ContractPreparationPage.vue';
 import ContractSigningPage from '../pages/project-node/contract-signing/ContractSigningPage.vue';
+import DetailedCustomerReviewPage from '../pages/project-node/detailed-design/DetailedCustomerReviewPage.vue';
+import DetailedCustomerDrawingCountersignPage from '../pages/project-node/detailed-design/DetailedCustomerDrawingCountersignPage.vue';
+import DetailedDesignFilesPage from '../pages/project-node/detailed-design/DetailedDesignFilesPage.vue';
+import DetailedDesignPreparationPage from '../pages/project-node/detailed-design/DetailedDesignPreparationPage.vue';
+import DetailedDrawingReviewPage from '../pages/project-node/detailed-design/DetailedDrawingReviewPage.vue';
+import DetailedInternalReviewPage from '../pages/project-node/detailed-design/DetailedInternalReviewPage.vue';
+import DetailedPartsListPage from '../pages/project-node/detailed-design/DetailedPartsListPage.vue';
+import DetailedProductPlanDrawingPage from '../pages/project-node/detailed-design/DetailedProductPlanDrawingPage.vue';
+import DetailedProjectKickoffMeetingPage from '../pages/project-node/detailed-design/DetailedProjectKickoffMeetingPage.vue';
 
 export const nodePages = {
   project_input: ProjectInputPage,
@@ -34,7 +43,16 @@ export const nodePages = {
   quotation_or_tender: SolutionQuotationTenderPage,
   contract_preparation: ContractPreparationPage,
   contract_signing: ContractSigningPage,
-  advance_payment: ContractAdvancePaymentPage
+  advance_payment: ContractAdvancePaymentPage,
+  project_kickoff_meeting: DetailedProjectKickoffMeetingPage,
+  detailed_design_preparation: DetailedDesignPreparationPage,
+  detailed_design: DetailedDesignFilesPage,
+  internal_design_review: DetailedInternalReviewPage,
+  customer_design_review: DetailedCustomerReviewPage,
+  product_plan_drawing: DetailedProductPlanDrawingPage,
+  parts_list: DetailedPartsListPage,
+  drawing_review: DetailedDrawingReviewPage,
+  customer_drawing_countersign: DetailedCustomerDrawingCountersignPage
 };
 
 export function resolveNodePage(nodeCode) {

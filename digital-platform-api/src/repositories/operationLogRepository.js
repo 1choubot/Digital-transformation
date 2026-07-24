@@ -139,6 +139,36 @@ export const OPERATION_ACTION_TYPE = {
   CONTRACT_SIGNING_ADVANCE_PAYMENT_GENERATED_KICKOFF_NOTICE:
     'contract_signing.advance_payment_generated_kickoff_notice',
   CONTRACT_SIGNING_PROJECT_KICKOFF_NOTICE_UPLOADED: 'contract_signing.project_kickoff_notice_uploaded',
+  DETAILED_DESIGN_ROLES_ASSIGNED: 'detailed_design.roles_assigned',
+  DETAILED_DESIGN_PROJECT_KICKOFF_BOOK_UPLOADED: 'detailed_design.project_kickoff_book_uploaded',
+  DETAILED_DESIGN_WORK_PLAN_UPLOADED: 'detailed_design.work_plan_uploaded',
+  DETAILED_DESIGN_FILE_UPLOADED: 'detailed_design.file_uploaded',
+  DETAILED_DESIGN_NODE_SUBMITTED: 'detailed_design.node_submitted',
+  DETAILED_DESIGN_FILE_UPLOAD_EXEMPTED: 'detailed_design.file_upload_exempted',
+  DETAILED_DESIGN_FILE_UPLOAD_EXEMPTION_CANCELLED:
+    'detailed_design.file_upload_exemption_cancelled',
+  DETAILED_DESIGN_INTERNAL_REVIEW_FORM_SAVED: 'detailed_design.internal_review_form_saved',
+  DETAILED_DESIGN_INTERNAL_REVIEW_FORM_SUBMITTED: 'detailed_design.internal_review_form_submitted',
+  DETAILED_DESIGN_INTERNAL_REVIEW_FORM_GENERATED: 'detailed_design.internal_review_form_generated',
+  DETAILED_DESIGN_INTERNAL_REVIEW_FORM_GENERATION_FAILED:
+    'detailed_design.internal_review_form_generation_failed',
+  DETAILED_DESIGN_INTERNAL_REVIEW_APPROVED: 'detailed_design.internal_review_approved',
+  DETAILED_DESIGN_INTERNAL_REVIEW_RETURNED: 'detailed_design.internal_review_returned',
+  DETAILED_DESIGN_CUSTOMER_REVIEW_FORM_SAVED: 'detailed_design.customer_review_form_saved',
+  DETAILED_DESIGN_CUSTOMER_REVIEW_FORM_SUBMITTED: 'detailed_design.customer_review_form_submitted',
+  DETAILED_DESIGN_CUSTOMER_REVIEW_FORM_GENERATED: 'detailed_design.customer_review_form_generated',
+  DETAILED_DESIGN_CUSTOMER_REVIEW_FORM_GENERATION_FAILED:
+    'detailed_design.customer_review_form_generation_failed',
+  DETAILED_DESIGN_CUSTOMER_REVIEW_APPROVED: 'detailed_design.customer_review_approved',
+  DETAILED_DESIGN_CUSTOMER_REVIEW_RETURNED: 'detailed_design.customer_review_returned',
+  DETAILED_DESIGN_DRAWING_REVIEW_RECORD_UPLOADED:
+    'detailed_design.drawing_review_record_uploaded',
+  DETAILED_DESIGN_DRAWING_REVIEW_PASSED: 'detailed_design.drawing_review_passed',
+  DETAILED_DESIGN_DRAWING_REVIEW_RETURNED: 'detailed_design.drawing_review_returned',
+  DETAILED_DESIGN_DRAWING_REVIEW_RD_APPROVED: 'detailed_design.drawing_review_rd_approved',
+  DETAILED_DESIGN_DRAWING_REVIEW_RD_RETURNED: 'detailed_design.drawing_review_rd_returned',
+  DETAILED_DESIGN_CUSTOMER_DRAWING_COUNTERSIGN_UPLOADED:
+    'detailed_design.customer_drawing_countersign_uploaded',
   STAGE_ADVANCED: 'stage.advanced',
   PROJECT_COMPLETED: 'project.completed'
 };
@@ -151,7 +181,8 @@ export const OPERATION_TARGET_TYPE = {
   INITIATION_REVIEW: 'initiation_review',
   ONLINE_FORM: 'online_form',
   SOLUTION_DESIGN_WORKFLOW: 'solution_design_workflow',
-  CONTRACT_SIGNING_WORKFLOW: 'contract_signing_workflow'
+  CONTRACT_SIGNING_WORKFLOW: 'contract_signing_workflow',
+  DETAILED_DESIGN_WORKFLOW: 'detailed_design_workflow'
 };
 
 export class OperationLogLimitError extends Error {

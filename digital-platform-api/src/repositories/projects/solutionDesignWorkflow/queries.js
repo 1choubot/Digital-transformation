@@ -18,6 +18,24 @@ export async function selectProjectContext(executor, projectId, { forUpdate = fa
       pm.is_enabled AS project_manager_is_enabled,
       pm.is_platform_admin AS project_manager_is_platform_admin,
       pm.file_platform_user_id AS project_manager_file_platform_user_id,
+      p.business_responsible_user_id,
+      br.account AS business_responsible_account,
+      br.display_name AS business_responsible_display_name,
+      br.department AS business_responsible_department,
+      br.organization_role AS business_responsible_organization_role,
+      br.role AS business_responsible_role,
+      br.is_enabled AS business_responsible_is_enabled,
+      br.is_platform_admin AS business_responsible_is_platform_admin,
+      br.file_platform_user_id AS business_responsible_file_platform_user_id,
+      p.technical_responsible_user_id,
+      tr.account AS technical_responsible_account,
+      tr.display_name AS technical_responsible_display_name,
+      tr.department AS technical_responsible_department,
+      tr.organization_role AS technical_responsible_organization_role,
+      tr.role AS technical_responsible_role,
+      tr.is_enabled AS technical_responsible_is_enabled,
+      tr.is_platform_admin AS technical_responsible_is_platform_admin,
+      tr.file_platform_user_id AS technical_responsible_file_platform_user_id,
       s.id AS current_stage_id,
       s.stage_order AS current_stage_order,
       s.stage_key AS current_stage_key,
@@ -26,6 +44,10 @@ export async function selectProjectContext(executor, projectId, { forUpdate = fa
     FROM projects p
     LEFT JOIN users pm
       ON pm.id = p.project_manager_user_id
+    LEFT JOIN users br
+      ON br.id = p.business_responsible_user_id
+    LEFT JOIN users tr
+      ON tr.id = p.technical_responsible_user_id
     LEFT JOIN project_stages s
       ON s.project_id = p.id AND s.is_current = 1
     WHERE p.id = ?

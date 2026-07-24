@@ -48,6 +48,26 @@ export function buildProjectVisibilityCondition(user, projectAlias = 'p') {
         visible_solution_design_roles.finance_owner_user_id
       )
   )`;
+  const detailedDesignRoleCondition = `EXISTS (
+    SELECT 1
+    FROM project_detailed_design_roles visible_detailed_design_roles
+    WHERE visible_detailed_design_roles.project_id = ${projectAlias}.id
+      AND ? IN (
+        visible_detailed_design_roles.project_manager_user_id,
+        visible_detailed_design_roles.business_owner_user_id,
+        visible_detailed_design_roles.technical_owner_user_id,
+        visible_detailed_design_roles.procurement_owner_user_id,
+        visible_detailed_design_roles.finance_accountant_user_id,
+        visible_detailed_design_roles.drawing_review_owner_user_id
+      )
+  )`;
+  const detailedDesignProfessionalGroupCondition = `EXISTS (
+    SELECT 1
+    FROM project_detailed_design_professional_group_members visible_detailed_design_group_members
+    WHERE visible_detailed_design_group_members.project_id = ${projectAlias}.id
+      AND visible_detailed_design_group_members.is_active = 1
+      AND visible_detailed_design_group_members.user_id = ?
+  )`;
   const responsibleUserCondition = `EXISTS (
     SELECT 1
     FROM project_stage_documents visible_user_documents
@@ -56,8 +76,8 @@ export function buildProjectVisibilityCondition(user, projectAlias = 'p') {
   )`;
 
   return {
-    sql: `(${projectCreatorCondition} OR ${projectManagerCondition} OR ${businessResponsibleCondition} OR ${technicalResponsibleCondition} OR ${solutionDesignRoleCondition} OR ${responsibleUserCondition})`,
-    params: [user.id, user.id, user.id, user.id, user.id, user.id]
+    sql: `(${projectCreatorCondition} OR ${projectManagerCondition} OR ${businessResponsibleCondition} OR ${technicalResponsibleCondition} OR ${solutionDesignRoleCondition} OR ${detailedDesignRoleCondition} OR ${detailedDesignProfessionalGroupCondition} OR ${responsibleUserCondition})`,
+    params: [user.id, user.id, user.id, user.id, user.id, user.id, user.id, user.id]
   };
 }
 

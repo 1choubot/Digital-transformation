@@ -10,6 +10,11 @@ import {
   CONTRACT_SIGNING_NODES,
   CONTRACT_SIGNING_STAGE
 } from '../domain/contractSigningWorkflow.js';
+import {
+  DETAILED_DESIGN_NODE_STATUS,
+  DETAILED_DESIGN_NODES,
+  DETAILED_DESIGN_STAGE
+} from '../domain/detailedDesignWorkflow.js';
 
 export const NAVIGATION_STATUS = Object.freeze({
   PENDING: 'PENDING',
@@ -205,12 +210,32 @@ function normalizeContractSigningStageNodes(nodes = []) {
   });
 }
 
+function normalizeDetailedDesignStageNodes(nodes = []) {
+  const nodeByKey = new Map(nodes.map((node) => [node.nodeKey, node]));
+  return DETAILED_DESIGN_NODES.map((definition) => {
+    const node = nodeByKey.get(definition.nodeKey) || {};
+    return {
+      ...node,
+      nodeKey: definition.nodeKey,
+      nodeName: definition.nodeName,
+      nodeStatus: node.nodeStatus || DETAILED_DESIGN_NODE_STATUS.NOT_STARTED,
+      nodeOrder: definition.nodeOrder,
+      outputs: Array.isArray(node.outputs) ? node.outputs : [],
+      actionHints: node.actionHints || [],
+      blockingReasons: node.blockingReasons || [],
+      notes: node.notes || ''
+    };
+  });
+}
+
 function buildStage(projectId, stage) {
   const stageNodes = stage.stageKey === SOLUTION_DESIGN_STAGE.STAGE_KEY
     ? normalizeSolutionDesignStageNodes(stage.nodes || [])
     : stage.stageKey === CONTRACT_SIGNING_STAGE.STAGE_KEY
       ? normalizeContractSigningStageNodes(stage.nodes || [])
-    : stage.nodes || [];
+      : stage.stageKey === DETAILED_DESIGN_STAGE.STAGE_KEY
+        ? normalizeDetailedDesignStageNodes(stage.nodes || [])
+      : stage.nodes || [];
   const firstWaitingSubmissionIndex = stageNodes.findIndex((node) => node.nodeStatus === 'waiting_submission');
   const firstWaitingSubmissionIsReachable =
     firstWaitingSubmissionIndex >= 0 &&

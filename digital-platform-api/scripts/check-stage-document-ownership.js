@@ -7,6 +7,7 @@ import {
   ensureProjectWorkspaceSchema,
   inspectProjectWorkspaceSchema
 } from '../src/db/projectWorkspaceSchema.js';
+import { ensureDetailedDesignWorkflowSchema } from '../src/db/detailedDesignWorkflowSchema.js';
 import { ensureContractSigningWorkflowSchema } from '../src/db/contractSigningWorkflowSchema.js';
 import { ensureSolutionDesignWorkflowSchema } from '../src/db/solutionDesignWorkflowSchema.js';
 import { ensureStageDocumentSchema } from '../src/db/stageDocumentSchema.js';
@@ -14,6 +15,9 @@ import {
   SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES,
   SOLUTION_DESIGN_NODES
 } from '../src/domain/solutionDesignWorkflow.js';
+import {
+  DETAILED_DESIGN_COMPATIBILITY_DOCUMENT_CODES
+} from '../src/domain/detailedDesignWorkflow.js';
 import {
   BUSINESS_DEPARTMENT,
   ORGANIZATION_ROLE,
@@ -2054,7 +2058,8 @@ async function runInitiationReviewSmoke({
     V20260629_TARGET_TEMPLATE_OUTPUT_COUNT -
     SOLUTION_DESIGN_DEDICATED_DOCUMENT_CODES.length -
     CONTRACT_SIGNING_WORKFLOW_DOCUMENT_CODES.size -
-    CONTRACT_STAGE_NON_WORKFLOW_BLUEPRINT_OUTPUT_CODES.size;
+    CONTRACT_STAGE_NON_WORKFLOW_BLUEPRINT_OUTPUT_CODES.size -
+    DETAILED_DESIGN_COMPATIBILITY_DOCUMENT_CODES.size;
   assert.equal(
     workspaceOutputCodes.size,
     workspaceManagedOutputCount
@@ -2082,6 +2087,13 @@ async function runInitiationReviewSmoke({
       workspaceOutputCodes.has(nonWorkflowContractOutputCode),
       false,
       `Contract stage ordinary/conditional document must not be counted as a contract workflow document: ${nonWorkflowContractOutputCode}`
+    );
+  }
+  for (const detailedDesignCompatibilityOutputCode of DETAILED_DESIGN_COMPATIBILITY_DOCUMENT_CODES) {
+    assert.equal(
+      workspaceOutputCodes.has(detailedDesignCompatibilityOutputCode),
+      false,
+      `Detailed design workflow document must not be exposed as an old blueprint output: ${detailedDesignCompatibilityOutputCode}`
     );
   }
   for (const compatibilityOutputCode of LEGACY_CONTRACT_REVIEW_COMPATIBILITY_OUTPUT_CODES) {
@@ -6528,6 +6540,7 @@ assert.deepEqual(projectWorkspaceSchemaStatus, {
 });
 await ensureStageDocumentSchema(pool);
 await ensureSolutionDesignWorkflowSchema(pool);
+await ensureDetailedDesignWorkflowSchema(pool);
 await ensureContractSigningWorkflowSchema(pool);
 await upsertStageDocumentTemplates(pool, items);
 await initializeInitiationReviewNodesForExistingProjects(pool);

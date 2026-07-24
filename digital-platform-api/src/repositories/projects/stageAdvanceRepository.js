@@ -7,6 +7,7 @@ import {
 import { PROJECT_STATUS } from '../../domain/projects.js';
 import { PROJECT_APPROVAL_ERROR } from '../../domain/projectApproval.js';
 import { STANDARD_PROJECT_STAGES, STAGE_STATUS } from '../../domain/stages.js';
+import { COMPLETION_MODE, DOCUMENT_STATUS } from '../../domain/stageDocumentTemplates.js';
 import {
   attachSolutionDesignDerivedCompletionToStageDocumentRows,
   buildStageCompletenessSummary,
@@ -34,10 +35,16 @@ import {
   CONTRACT_SIGNING_STAGE
 } from '../../domain/contractSigningWorkflow.js';
 import { materializeContractSigningWorkflow } from './contractSigningWorkflowMaterialization.js';
+import {
+  DETAILED_DESIGN_NODE_STATUS,
+  DETAILED_DESIGN_STAGE
+} from '../../domain/detailedDesignWorkflow.js';
+import { getDetailedDesignWorkflow } from './detailedDesignWorkflowRepository.js';
 
 const CONTRACT_SIGNING_KICKOFF_NOTICE_BLOCKING_REASON = '项目启动通知未生成完成';
 const CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE = 'contract_kickoff_notice';
 const CONTRACT_SIGNING_ADVANCE_GATE_IGNORED_DOCUMENT_CODES = new Set(['C24', '3.4']);
+const DETAILED_DESIGN_WORKFLOW_BLOCKING_REASON = '详细设计 workflow 未完成';
 
 function assertCanAdvanceProject(projectRow) {
   if (projectRow.status === PROJECT_STATUS.COMPLETED) {
@@ -227,6 +234,66 @@ async function buildCurrentStageGateSummary(connection, projectId, stageOrder) {
   return buildStageCompletenessSummary(gateDocuments);
 }
 
+function mapDetailedDesignWorkflowNodeStatusToDocumentStatus(status) {
+  switch (status) {
+    case DETAILED_DESIGN_NODE_STATUS.APPROVED:
+      return DOCUMENT_STATUS.CONFIRMED;
+    case DETAILED_DESIGN_NODE_STATUS.PENDING_REVIEW:
+    case DETAILED_DESIGN_NODE_STATUS.WAITING_CHECKER:
+    case DETAILED_DESIGN_NODE_STATUS.WAITING_RD_APPROVAL:
+      return DOCUMENT_STATUS.SUBMITTED;
+    case DETAILED_DESIGN_NODE_STATUS.RETURNED:
+      return DOCUMENT_STATUS.RETURNED;
+    default:
+      return DOCUMENT_STATUS.NOT_SUBMITTED;
+  }
+}
+
+function buildDetailedDesignWorkflowGateSummary(workflow) {
+  const gateDocuments = (workflow?.nodes || []).map((node) => {
+    const isComplete = node.status === DETAILED_DESIGN_NODE_STATUS.APPROVED;
+    const blockingReasons = isComplete
+      ? []
+      : Array.isArray(node.blockingReasons) && node.blockingReasons.length > 0
+        ? node.blockingReasons
+        : [`${node.nodeName}未完成`];
+
+    return {
+      id: null,
+      documentCode: node.nodeKey,
+      documentName: node.nodeName,
+      isRequired: true,
+      isApplicable: true,
+      status: mapDetailedDesignWorkflowNodeStatusToDocumentStatus(node.status),
+      completionMode: COMPLETION_MODE.APPROVAL_REQUIRED,
+      initiationReview: null,
+      completionStatus: isComplete ? 'completed' : 'incomplete',
+      isComplete,
+      solutionDesignDerivedCompletion: null,
+      contractSigningDerivedCompletion: null,
+      derivedCompletionSource: 'detailed_design_workflow',
+      derivedCompletionStatus: isComplete ? 'completed' : 'incomplete',
+      derivedBlockingReasons: blockingReasons,
+      derivedNotApplicable: false,
+      revisionRequired: false,
+      revisionReason: null,
+      revisionSourceDocumentId: null,
+      revisionSourceDocument: null,
+      revisionRequestedAt: null,
+      revisionResubmittedByUserId: null,
+      revisionResubmittedAt: null,
+      revisionResubmitted: false
+    };
+  });
+
+  return buildStageCompletenessSummary(gateDocuments);
+}
+
+async function buildDetailedDesignStageGateSummary(connection, projectId, user) {
+  const workflow = await getDetailedDesignWorkflow({ projectId, user }, connection);
+  return buildDetailedDesignWorkflowGateSummary(workflow);
+}
+
 async function isContractAdvancePaymentNodeApproved(connection, projectId) {
   const [rows] = await connection.execute(
     `SELECT status
@@ -354,6 +421,16 @@ async function applyContractSigningStageGate(connection, projectId, currentStage
 }
 
 function getStageGateIncompleteMessage(gateSummary) {
+  const detailedDesignWorkflowDocument = gateSummary.incompleteRequiredDocuments.find((document) =>
+    document.derivedCompletionSource === 'detailed_design_workflow'
+  );
+  if (detailedDesignWorkflowDocument) {
+    return (
+      detailedDesignWorkflowDocument.derivedBlockingReasons?.[0] ||
+      DETAILED_DESIGN_WORKFLOW_BLOCKING_REASON
+    );
+  }
+
   const kickoffNoticeDocument = gateSummary.incompleteRequiredDocuments.find((document) =>
     document.documentCode === CONTRACT_KICKOFF_NOTICE_GENERATED_FILE_CODE &&
     (document.derivedBlockingReasons || []).includes(CONTRACT_SIGNING_KICKOFF_NOTICE_BLOCKING_REASON)
@@ -566,8 +643,14 @@ async function advanceCurrentStageIfGateSatisfied(connection, {
     });
   }
 
-  const baseGateSummary = await buildCurrentStageGateSummary(connection, projectId, currentStage.stage_order);
-  const gateSummary = await applyContractSigningStageGate(connection, projectId, currentStage, baseGateSummary);
+  const gateSummary = currentStage.stage_key === DETAILED_DESIGN_STAGE.STAGE_KEY
+    ? await buildDetailedDesignStageGateSummary(connection, projectId, user)
+    : await applyContractSigningStageGate(
+        connection,
+        projectId,
+        currentStage,
+        await buildCurrentStageGateSummary(connection, projectId, currentStage.stage_order)
+      );
   if (gateSummary.incompleteRequiredCount > 0) {
     if (throwWhenIncomplete) {
       throw new ProjectStageAdvanceError(
